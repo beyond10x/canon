@@ -1,0 +1,20 @@
+version: '3'
+
+env:
+  CARGO_TARGET_DIR: '{{.HOME}}/.cache/b10x-target/canon'
+
+tasks:
+  default:
+    cmds: [{task: check}]
+
+  check:
+    desc: Format, lint, test.
+    cmds:
+      - cargo fmt --all --check
+      - cargo clippy --workspace --all-targets --locked -- -D warnings
+      - cargo test --workspace --locked
+
+  plan:
+    desc: Validate the AEP planning store.
+    cmds:
+      - aep plan artifact validate
