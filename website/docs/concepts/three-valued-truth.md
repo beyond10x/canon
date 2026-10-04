@@ -40,9 +40,15 @@ evidence situations.
 
 :::
 
-:::caution[Planned: the rows about revisions and age]
+:::note[Shipped: the row about revisions]
 
-The last two rows of the table above need revision binding and freshness, which are not built yet:
-today a record counts whatever revision it names, and records carry no time.
+A record bound to a revision of its artifact that is not the case's current one is left out of
+claim evaluation, so the R1/R2 row is `UNKNOWN` as shown.
+
+:::
+
+:::caution[Planned: the row about age]
+
+The last row needs freshness, which is not built yet: records carry no time.
 
 :::

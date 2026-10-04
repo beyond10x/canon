@@ -37,8 +37,9 @@ Read by `canon evaluate`. The [JSON Schema](https://beyond10x.github.io/canon/sc
 
 ### `EvidenceRecord`
 
-One `canon-evidence/1` record as written. `subject` and `subject_revision` are read and
-type-checked; they do not yet affect evaluation.
+One `canon-evidence/1` record as written. `subject` and `subject_revision` bind it: the
+evaluator refuses a record whose subject the protocol does not declare, and applies a record
+only while its subject revision is the case's current revision of that subject.
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|

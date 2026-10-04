@@ -3,7 +3,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://beyond10x.github.io/canon/schemas/evidence-1.schema.json",
   "title": "canon-evidence/1",
-  "description": "One `canon-evidence/1` record as written. `subject` and `subject_revision` are read and type-checked; they do not yet affect evaluation.",
+  "description": "One `canon-evidence/1` record as written. `subject` and `subject_revision` bind it: the evaluator refuses a record whose subject the protocol does not declare, and applies a record only while its subject revision is the case's current revision of that subject.",
   "$ref": "#/$defs/EvidenceRecord",
   "$defs": {
     "Identifier": {
@@ -13,7 +13,7 @@
       "pattern": "^\\S+$"
     },
     "EvidenceRecord": {
-      "description": "One `canon-evidence/1` record as written. `subject` and `subject_revision` are read and type-checked; they do not yet affect evaluation.",
+      "description": "One `canon-evidence/1` record as written. `subject` and `subject_revision` bind it: the evaluator refuses a record whose subject the protocol does not declare, and applies a record only while its subject revision is the case's current revision of that subject.",
       "type": "object",
       "additionalProperties": false,
       "properties": {

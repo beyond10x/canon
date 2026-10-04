@@ -17,7 +17,7 @@ hold everything marked shipped below. Nothing has been released; build from sour
 | [Evaluation documents](../reference/documents.md) | Shipped | `canon-case/1`, `canon-evidence/1` and `canon-decision/1`. |
 | [`canon conform run`](../reference/conformance.md) | Shipped | Runs scenarios that compile a fixture and evaluate a case. |
 | ESS specification of the data model | Shipped | The model is specified under `ess/` and held to a hard gate; a test fails when the two differ. |
-| Evidence bound to revisions | Planned | Evidence applies only to the revision it was observed on. Records name a revision today, but it does not affect the result. |
+| [Evidence bound to revisions](../reference/evaluation.md) | Shipped | Evidence applies only to the current revision of the artifact it names; a record bound to another revision is listed as excluded under each claim that reaches its kind, and one about an undeclared artifact is refused. |
 | Evidence freshness | Planned | Evidence expires against the evaluation instant. |
 | Obligations | Planned | Each obligation evaluated as open or discharged. |
 | Action admissibility | Planned | From preconditions and authority decisions. |
@@ -25,7 +25,7 @@ hold everything marked shipped below. Nothing has been released; build from sour
 | Invalidation rules | Planned | An upstream artifact change invalidates dependent claims. |
 | Structured explanation | Planned | A deterministic account of why each value is what it is. |
 | Semantic diff | Planned | Classify a protocol change as tightening, relaxation, breaking, expansion or no semantic change. |
-| Normative conformance suite | Started | The requirements below as runnable scenarios; the first scenario covers `CANON-CLAIM-001` and `-002`. |
+| Normative conformance suite | Started | The requirements below as runnable scenarios; scenarios cover `CANON-CLAIM-001`, `-002` and `CANON-EVIDENCE-001`. |
 | Protocol composition, a shared evidence envelope | Open question | Listed as open in the design; no decision yet. |
 
 ## Commands that are not built
@@ -35,8 +35,9 @@ The design proposes `canon frontier`, `canon diff`, `canon inspect` and `canon c
 
 ## Normative requirements
 
-From the design document. Each is meant to become a conformance scenario. Today one scenario in
-`conformance/scenarios` covers `CANON-CLAIM-001` and `CANON-CLAIM-002`; the others have none yet.
+From the design document. Each is meant to become a conformance scenario. Today two scenarios in
+`conformance/scenarios` cover `CANON-CLAIM-001`, `CANON-CLAIM-002` and `CANON-EVIDENCE-001`; the
+others have none yet.
 
 | Requirement | Statement |
 |---|---|

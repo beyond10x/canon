@@ -231,8 +231,8 @@ types:
       - name: revision
         type: canon.protocol.Revision
 
-  # One canon-evidence/1 record. Here subject and subject_revision are read and type-checked but
-  # do not affect evaluation; story:evidence-revision-binding makes them binding.
+  # One canon-evidence/1 record. subject and subject_revision bind it to one revision of one
+  # declared artifact; story:evidence-revision-binding makes the evaluator apply it only there.
   # read from: .engineering/planning/story/three-valued-claims.md:59-61
   - name: canon.protocol.EvidenceRecord
     kind: struct

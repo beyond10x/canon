@@ -247,7 +247,7 @@ and `canon evaluate --ir investigation.ir.json --case case.yaml --evidence evide
 }
 ```
 
-Only claims are evaluated today: obligations, actions and outcomes are not, and a record's subject and subject revision are read but do not yet affect the result.
+Only claims are evaluated today: obligations, actions and outcomes are not. Both records are bound to `explanation` at its current revision; a record bound to any other revision would be listed under the claim as excluded and would not count.
 
 ## Broken variants
 
