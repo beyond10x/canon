@@ -74,15 +74,7 @@ impl Walk<'_> {
             Predicate::Any(members) => any(&self.members(members)?),
             Predicate::Not(inner) => not(self.predicate(inner)?),
             Predicate::Evidence(matching) => evidence_match(matching, self.evidence),
-            Predicate::Claim(test) => {
-                let value = self.value_of(&test.claim)?;
-                match test.is {
-                    Truth::True => value,
-                    Truth::False => not(value),
-                    Truth::Unknown if value == Truth::Unknown => Truth::True,
-                    Truth::Unknown => Truth::False,
-                }
-            }
+            Predicate::Claim(test) => tested(self.value_of(&test.claim)?, test.is),
         })
     }
 
@@ -91,6 +83,44 @@ impl Walk<'_> {
             .iter()
             .map(|member| self.predicate(member))
             .collect()
+    }
+}
+
+/// A predicate's value over claim values already decided and the evidence a section may read: the
+/// one evaluator the `obligations`, `actions` and `outcomes` sections use, with the rules claims
+/// are evaluated by (the module docs of [`super`]). A claim `claims` does not hold is `unknown`.
+#[allow(dead_code)] // The section stubs do not evaluate anything yet; their stories call this.
+pub(super) fn predicate(
+    predicate: &Predicate,
+    claims: &BTreeMap<ClaimId, Truth>,
+    evidence: &[EvidenceRecord],
+) -> Truth {
+    let members = |members: &[Predicate]| -> Vec<Truth> {
+        members
+            .iter()
+            .map(|member| self::predicate(member, claims, evidence))
+            .collect()
+    };
+    match predicate {
+        Predicate::All(members_of) => all(&members(members_of)),
+        Predicate::Any(members_of) => any(&members(members_of)),
+        Predicate::Not(inner) => not(self::predicate(inner, claims, evidence)),
+        Predicate::Evidence(matching) => evidence_match(matching, evidence),
+        Predicate::Claim(test) => tested(
+            claims.get(&test.claim).copied().unwrap_or(Truth::Unknown),
+            test.is,
+        ),
+    }
+}
+
+/// A claim test: `is: true` is the claim's value, `is: false` its negation, and `is: unknown`
+/// whether it is undecided, which is itself decided.
+fn tested(value: Truth, is: Truth) -> Truth {
+    match is {
+        Truth::True => value,
+        Truth::False => not(value),
+        Truth::Unknown if value == Truth::Unknown => Truth::True,
+        Truth::Unknown => Truth::False,
     }
 }
 
@@ -232,5 +262,52 @@ mod tests {
         assert_eq!(not(T), F);
         assert_eq!(not(F), T);
         assert_eq!(not(U), U);
+    }
+
+    /// The section evaluator gives each claim's own predicate the value claim evaluation gave the
+    /// claim, for every evidence set: one set of rules, two callers.
+    #[test]
+    fn the_section_evaluator_agrees_with_claim_evaluation() {
+        let protocol = crate::model::parse(
+            "format: protocol/1\nprotocol: {id: p, revision: 1}\nevidence_kinds: {k: {}, l: {}}\n\
+             claims:\n\
+             \x20\x20a: {true_when: {any: [{evidence: {kind: k, result: pass}}, {not: {evidence: {kind: l}}}]}}\n\
+             \x20\x20b: {true_when: {all: [{claim: a}, {claim: a, is: unknown}]}}\n\
+             \x20\x20c: {true_when: {not: {claim: b, is: false}}}\n\
+             \x20\x20d: {true_when: {any: [{claim: c, is: unknown}, {evidence: {kind: l}}]}}\n",
+        )
+        .expect("parses");
+        let ir = crate::ir::compile(&protocol).expect("compiles");
+        for evidence in [
+            vec![],
+            vec![record("k", Some("pass"))],
+            vec![record("k", Some("fail")), record("l", None)],
+            vec![record("k", Some("pass")), record("k", Some("fail"))],
+            vec![record("l", None)],
+        ] {
+            let claims = values(&ir, &evidence).expect("acyclic");
+            for (id, claim) in &ir.claims {
+                assert_eq!(
+                    predicate(&claim.true_when, &claims, &evidence),
+                    claims[id],
+                    "{id:?} over {evidence:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_section_evaluator_reads_a_claim_it_was_not_given_as_unknown() {
+        let test = |is| {
+            Predicate::Claim(crate::model::ClaimTest {
+                claim: ClaimId::new("missing"),
+                is,
+            })
+        };
+        let none = BTreeMap::new();
+        assert_eq!(predicate(&test(Truth::True), &none, &[]), Truth::Unknown);
+        assert_eq!(predicate(&test(Truth::Unknown), &none, &[]), Truth::True);
+        let given = BTreeMap::from([(ClaimId::new("missing"), Truth::False)]);
+        assert_eq!(predicate(&test(Truth::False), &given, &[]), Truth::True);
     }
 }

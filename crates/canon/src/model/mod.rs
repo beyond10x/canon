@@ -23,7 +23,9 @@ use serde::de::{MapAccess, Visitor};
 use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 
 pub use case::{CASE_FORMAT, Case, CaseArtifact};
-pub use decision::{ClaimDecision, DECISION_FORMAT, Decision};
+pub use decision::{
+    ClaimDecision, DECISION_FORMAT, Decision, EvidenceExclusion, ExclusionReason, Json,
+};
 pub use evidence::{EVIDENCE_FORMAT, EvidenceRecord};
 pub use ids::{
     ActionId, ArtifactId, CapabilityId, CaseId, ClaimId, EffectClass, EvidenceId, EvidenceKindId,
@@ -89,12 +91,14 @@ pub struct Claim {
     pub true_when: Predicate,
 }
 
-/// Something that must be done before the case can be complete.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+/// Something that must be done before the case can be complete. It is discharged only when its
+/// discharge predicate, over claim values, evaluates true (design § 8).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Obligation {
     #[serde(default, deserialize_with = "present::optional")]
     pub description: Option<String>,
+    pub discharged_when: Predicate,
 }
 
 /// A semantically named possibility: what it needs, what authority it requires, what effect it

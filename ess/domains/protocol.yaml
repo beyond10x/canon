@@ -320,19 +320,22 @@ types:
       # read from: .engineering/planning/story/three-valued-claims.md:62-63
       - name: claims
         type: Map<canon.protocol.ClaimId, canon.protocol.ClaimDecision>
-      # The four section slots. Each is an untyped payload until its story gives it a type in its
-      # own ESS change; absent until that story fills it, and not serialized when absent.
+      # The four section slots stay untyped Json. Each section's shape is fixed by its story's
+      # conformance scenarios, not here; typing these slots in ESS is a later model story, not
+      # story:obligations, story:action-admissibility or story:outcomes. A slot is absent until its
+      # story fills it, and not serialized when absent.
       # read from: .engineering/planning/story/evaluator-skeleton.md:72-75
-      # Typed by story:obligations.
+      # Filled by story:obligations; its shape is fixed by that story's conformance scenarios.
       - name: obligations
         type: Optional<Json>
-      # Typed by story:action-admissibility.
+      # Filled by story:action-admissibility; its shape is fixed by that story's conformance
+      # scenarios.
       - name: actions
         type: Optional<Json>
-      # Typed by story:outcomes.
+      # Filled by story:outcomes; its shape is fixed by that story's conformance scenarios.
       - name: outcomes
         type: Optional<Json>
-      # Typed by story:explanation.
+      # Filled by story:explanation; its shape is fixed by that story's conformance scenarios.
       - name: explanation
         type: Optional<Json>
 

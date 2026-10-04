@@ -1,14 +1,19 @@
 #![forbid(unsafe_code)]
 
 //! `canon`: a thin command-line shell over the Canon library. It reads files and prints results;
-//! every semantic decision is the library's.
+//! every semantic decision is the library's. This file holds the subcommands and their dispatch,
+//! and `validate` and `compile`; every other subcommand is in its own file.
+
+mod conform;
+mod diff;
+mod evaluate;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
-use b10x_canon::{conform, eval, ir, model, validate};
+use b10x_canon::{ir, model, validate};
 
 /// A document was read and rejected.
 const REJECTED: u8 = 1;
@@ -52,6 +57,22 @@ enum Command {
         /// A directory holding only `canon-evidence/1` records, one per `*.yaml` or `*.json` file.
         #[arg(long)]
         evidence: PathBuf,
+        /// A `canon-authority/1` document of authority decisions. Read and passed through; not
+        /// supported yet.
+        #[arg(long)]
+        authority: Option<PathBuf>,
+        /// The evaluation instant. Passed through as written; not supported yet.
+        #[arg(long)]
+        at: Option<String>,
+    },
+    /// The semantic difference between two compiled protocol revisions. Not built yet.
+    Diff {
+        /// The earlier revision, as `canon compile` prints it.
+        #[arg(long)]
+        from: PathBuf,
+        /// The later revision, as `canon compile` prints it.
+        #[arg(long)]
+        to: PathBuf,
     },
     /// Conformance scenarios.
     Conform {
@@ -76,8 +97,15 @@ fn main() -> ExitCode {
         Command::Compile { path } => compile_command(&path),
         Command::Conform {
             command: ConformCommand::Run { scenarios },
-        } => conform_run_command(&scenarios),
-        Command::Evaluate { ir, case, evidence } => evaluate_command(&ir, &case, &evidence),
+        } => conform::run(&scenarios),
+        Command::Evaluate {
+            ir,
+            case,
+            evidence,
+            authority,
+            at,
+        } => evaluate::run(&ir, &case, &evidence, authority.as_deref(), at.as_deref()),
+        Command::Diff { from, to } => diff::run(&from, &to),
     }
 }
 
@@ -90,69 +118,6 @@ fn unreadable(path: &Path, why: impl std::fmt::Display) -> ExitCode {
     ExitCode::from(UNREADABLE)
 }
 
-/// Whether a file name is an evidence record's: `*.yaml` or `*.json`.
-fn is_record_name(name: &std::ffi::OsStr) -> bool {
-    Path::new(name)
-        .extension()
-        .is_some_and(|ext| ext == "yaml" || ext == "json")
-}
-
-/// Reads the compiled protocol, the case snapshot and every evidence record of the evidence
-/// directory, and hands them to the library, which decides everything else. The directory holds
-/// only records: every entry must be a regular file (a symbolic link to one counts) named `*.yaml`
-/// or `*.json`, read in sorted file-name order. Any other entry — another file, a subdirectory —
-/// is refused as unreadable, naming it, rather than skipped, so no evidence the operator put
-/// there is silently dropped. A file that cannot be read exits 2; a refusal exits 1 naming its
-/// code.
-fn evaluate_command(ir_path: &Path, case_path: &Path, evidence_dir: &Path) -> ExitCode {
-    let read = |path: &Path| read_text(path).map_err(|error| unreadable(path, error));
-    let inputs = (|| {
-        let ir = read(ir_path)?;
-        let case = read(case_path)?;
-        let mut names = Vec::new();
-        for entry in std::fs::read_dir(evidence_dir).map_err(|e| unreadable(evidence_dir, e))? {
-            names.push(entry.map_err(|e| unreadable(evidence_dir, e))?.file_name());
-        }
-        names.sort();
-        let mut evidence = Vec::with_capacity(names.len());
-        for name in &names {
-            let path = evidence_dir.join(name);
-            let metadata = std::fs::metadata(&path).map_err(|e| unreadable(&path, e))?;
-            if !metadata.is_file() || !is_record_name(name) {
-                return Err(unreadable(
-                    &path,
-                    "not an evidence record: the evidence directory holds only `*.yaml` and \
-                     `*.json` files",
-                ));
-            }
-            evidence.push(read(&path)?);
-        }
-        Ok((ir, case, evidence))
-    })();
-    let (ir, case, evidence) = match inputs {
-        Ok(inputs) => inputs,
-        Err(code) => return code,
-    };
-    let decision = eval::read_ir(&ir).and_then(|ir| {
-        let case = eval::read_case(&case)?;
-        let evidence = evidence
-            .iter()
-            .map(|text| eval::read_evidence(text))
-            .collect::<Result<Vec<_>, _>>()?;
-        eval::evaluate(&ir, &case, &evidence)
-    });
-    match decision {
-        Ok(decision) => {
-            print!("{}", eval::render(&decision));
-            ExitCode::SUCCESS
-        }
-        Err(refusal) => {
-            eprintln!("error[{}]: {refusal}", refusal.code());
-            ExitCode::from(REJECTED)
-        }
-    }
-}
-
 /// Reads a text file. One leading byte-order mark is not part of the document (YAML 1.2 § 5.2)
 /// and is dropped.
 fn read_text(path: &Path) -> std::io::Result<String> {
@@ -161,72 +126,6 @@ fn read_text(path: &Path) -> std::io::Result<String> {
         Some(rest) => rest.to_owned(),
         None => source,
     })
-}
-
-/// Reads every `*.yaml` file of the registry directory in sorted file-name order, and hands the
-/// texts and a fixture reader to the library, which decides every verdict.
-fn conform_run_command(scenarios: &Path) -> ExitCode {
-    // The directory as given, rendered as the report renders every path.
-    let shown = model::one_line(&scenarios.display().to_string());
-    let entries = match std::fs::read_dir(scenarios) {
-        Ok(entries) => entries,
-        Err(error) => {
-            eprintln!("error[unreadable]: {shown}: {error}");
-            return ExitCode::from(UNREADABLE);
-        }
-    };
-    let mut names = Vec::new();
-    for entry in entries {
-        match entry {
-            Ok(entry) => names.push(entry.file_name()),
-            Err(error) => {
-                eprintln!("error[unreadable]: {shown}: {error}");
-                return ExitCode::from(UNREADABLE);
-            }
-        }
-    }
-    names.retain(|name| Path::new(name).extension().is_some_and(|ext| ext == "yaml"));
-    names.sort();
-
-    let files: Vec<conform::ScenarioFile> = names
-        .iter()
-        .map(|name| {
-            let path = scenarios.join(name);
-            conform::ScenarioFile {
-                path: path.display().to_string(),
-                text: read_text(&path).map_err(|error| error.to_string()),
-            }
-        })
-        .collect();
-    let working_directory = std::env::current_dir().and_then(|dir| dir.canonicalize());
-    let report = conform::run_registry(&files, |fixture| read_fixture(&working_directory, fixture));
-    print!("{}", report.render());
-    if report.all_passed() {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(REJECTED)
-    }
-}
-
-/// Reads a fixture a scenario names. The library has already refused a path that leaves the
-/// working directory as written; this is the second check, against the filesystem: the path is
-/// resolved (every symbolic link followed) and refused, unread, unless the result lies below the
-/// resolved working directory. The resolved path is the one read.
-fn read_fixture(
-    working_directory: &std::io::Result<PathBuf>,
-    fixture: &str,
-) -> Result<String, conform::FixtureError> {
-    let unreadable = |error: std::io::Error| conform::FixtureError::Unreadable(error.to_string());
-    let root = working_directory.as_ref().map_err(|error| {
-        conform::FixtureError::Unreadable(format!(
-            "the working directory cannot be resolved: {error}"
-        ))
-    })?;
-    let resolved = Path::new(fixture).canonicalize().map_err(unreadable)?;
-    if !resolved.starts_with(root) {
-        return Err(conform::FixtureError::Outside);
-    }
-    read_text(&resolved).map_err(unreadable)
 }
 
 /// Reads and parses a `protocol/1` document, reporting why when it cannot. One leading byte-order

@@ -1,9 +1,11 @@
 //! The canonical JSON a `canon-decision/1` document is written in: the same rules as `canon-ir/1`'s
-//! serialization (`crate::ir`'s `json` module), for the values a decision holds. Object keys are
-//! sorted by Unicode code point, members are indented by two spaces, an empty object is written
-//! `{}`, and the document ends with one newline. Strings escape `"` and `\`, write U+0008, U+0009,
-//! U+000A, U+000C and U+000D as `\b`, `\t`, `\n`, `\f` and `\r`, every other character below
-//! U+0020 as `\u00xx` with lowercase hex, and every other character as itself.
+//! serialization (`crate::ir`'s `json` module), for the values a decision holds, including any
+//! JSON value a section slot carries. Object keys are sorted by Unicode code point, members are
+//! indented by two spaces, an empty array or object is written `[]` or `{}`, and the document ends
+//! with one newline. A number is written as `serde_json` writes it. Strings escape `"` and `\`,
+//! write U+0008, U+0009, U+000A, U+000C and U+000D as `\b`, `\t`, `\n`, `\f` and `\r`, every
+//! other character below U+0020 as `\u00xx` with lowercase hex, and every other character as
+//! itself.
 //!
 //! The `tests` below hold this writer's string escaping equal to `canon-ir/1`'s.
 
@@ -11,8 +13,13 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Value {
+    Null,
+    Bool(bool),
     Integer(u64),
+    /// Any other number, as `serde_json` writes it.
+    Number(String),
     String(String),
+    Array(Vec<Value>),
     Object(BTreeMap<String, Value>),
 }
 
@@ -31,6 +38,27 @@ impl Value {
         )
     }
 
+    /// A section slot's JSON value, every object re-keyed in canonical order.
+    pub(super) fn json(value: &serde_json::Value) -> Self {
+        use serde_json::Value as Json;
+        match value {
+            Json::Null => Value::Null,
+            Json::Bool(flag) => Value::Bool(*flag),
+            Json::Number(number) => match number.as_u64() {
+                Some(integer) => Value::Integer(integer),
+                None => Value::Number(number.to_string()),
+            },
+            Json::String(text) => Value::string(text.as_str()),
+            Json::Array(items) => Value::Array(items.iter().map(Value::json).collect()),
+            Json::Object(entries) => Value::Object(
+                entries
+                    .iter()
+                    .map(|(key, item)| (key.clone(), Value::json(item)))
+                    .collect(),
+            ),
+        }
+    }
+
     /// The canonical rendering, ending with a newline.
     pub(super) fn render(&self) -> String {
         let mut out = String::new();
@@ -42,8 +70,26 @@ impl Value {
 
 fn write(value: &Value, indent: usize, out: &mut String) {
     match value {
+        Value::Null => out.push_str("null"),
+        Value::Bool(flag) => out.push_str(if *flag { "true" } else { "false" }),
         Value::Integer(number) => out.push_str(&number.to_string()),
+        Value::Number(number) => out.push_str(number),
         Value::String(text) => write_string(text, out),
+        Value::Array(items) if items.is_empty() => out.push_str("[]"),
+        Value::Array(items) => {
+            out.push('[');
+            for (index, item) in items.iter().enumerate() {
+                if index > 0 {
+                    out.push(',');
+                }
+                out.push('\n');
+                out.extend(std::iter::repeat_n(' ', indent + 2));
+                write(item, indent + 2, out);
+            }
+            out.push('\n');
+            out.extend(std::iter::repeat_n(' ', indent));
+            out.push(']');
+        }
         Value::Object(entries) if entries.is_empty() => out.push_str("{}"),
         Value::Object(entries) => {
             out.push('{');
@@ -127,6 +173,19 @@ mod tests {
         assert_eq!(
             value.render(),
             "{\n  \"a\": {\n    \"B\": \"x\",\n    \"é\": {}\n  },\n  \"b\": 1\n}\n"
+        );
+    }
+
+    /// A section slot's JSON value: arrays, null, booleans and numbers, objects re-keyed.
+    #[test]
+    fn a_section_slot_value_renders_canonically() {
+        let slot: serde_json::Value = serde_json::from_str(
+            r#"{"z": [1, {"y": null, "x": true}, []], "a": -1.5, "m": false, "e": {}}"#,
+        )
+        .expect("json");
+        assert_eq!(
+            Value::json(&slot).render(),
+            "{\n  \"a\": -1.5,\n  \"e\": {},\n  \"m\": false,\n  \"z\": [\n    1,\n    {\n      \"x\": true,\n      \"y\": null\n    },\n    []\n  ]\n}\n"
         );
     }
 }

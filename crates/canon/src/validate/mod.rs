@@ -8,7 +8,9 @@
 //!    claims, obligations, actions and outcomes, in that section order, then the capabilities and
 //!    effect classes actions name, in action order;
 //! 3. duplicate identifiers, in the same section order;
-//! 4. unresolved references: those in claims first, then those in actions, then those in outcomes;
+//! 4. unresolved references: those in claims first, then those in obligations (their discharge
+//!    predicates, each followed by every evidence match it holds, which a discharge predicate may
+//!    not: it tests only claim values), then those in actions, then those in outcomes;
 //!    within a section, in the order its declarations are written, and within a declaration, in
 //!    the order its references are written;
 //! 5. cycles between claims.
@@ -20,8 +22,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use crate::model::{
-    ActionId, ClaimId, EvidenceKindId, FORMAT, OutcomeId, Predicate, Protocol, is_identifier,
-    one_line,
+    ActionId, ClaimId, EvidenceKindId, FORMAT, ObligationId, OutcomeId, Predicate, Protocol,
+    is_identifier, one_line,
 };
 
 /// What an identifier names: the protocol itself, a declaration section (named by the singular noun
@@ -59,6 +61,7 @@ impl fmt::Display for Section {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Referrer {
     Claim(ClaimId),
+    Obligation(ObligationId),
     Action(ActionId),
     Outcome(OutcomeId),
 }
@@ -67,6 +70,7 @@ impl fmt::Display for Referrer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Referrer::Claim(id) => write!(f, "claim `{}`", one_line(id.as_str())),
+            Referrer::Obligation(id) => write!(f, "obligation `{}`", one_line(id.as_str())),
             Referrer::Action(id) => write!(f, "action `{}`", one_line(id.as_str())),
             Referrer::Outcome(id) => write!(f, "outcome `{}`", one_line(id.as_str())),
         }
@@ -89,6 +93,13 @@ pub enum Problem {
         referrer: Referrer,
         kind: EvidenceKindId,
     },
+    /// A discharge predicate tests evidence; it may test only claim values. `path` locates the
+    /// evidence match inside the predicate, as `discharged_when.all[1].evidence`.
+    EvidenceInDischarge {
+        obligation: ObligationId,
+        kind: EvidenceKindId,
+        path: String,
+    },
     /// Claims whose predicates test each other in a cycle; the first claim is repeated at the end.
     ClaimCycle { claims: Vec<ClaimId> },
 }
@@ -102,6 +113,7 @@ impl Problem {
             Problem::DuplicateIdentifier { .. } => "duplicate-identifier",
             Problem::UndeclaredClaim { .. } => "undeclared-claim",
             Problem::UndeclaredEvidenceKind { .. } => "undeclared-evidence-kind",
+            Problem::EvidenceInDischarge { .. } => "evidence-in-discharge",
             Problem::ClaimCycle { .. } => "claim-cycle",
         }
     }
@@ -129,6 +141,16 @@ impl fmt::Display for Problem {
             Problem::UndeclaredEvidenceKind { referrer, kind } => write!(
                 f,
                 "{referrer} references evidence kind `{}`, which is not declared",
+                one_line(kind.as_str())
+            ),
+            Problem::EvidenceInDischarge {
+                obligation,
+                kind,
+                path,
+            } => write!(
+                f,
+                "obligation `{}` tests evidence kind `{}` at `{path}`; a discharge predicate tests only claim values",
+                one_line(obligation.as_str()),
                 one_line(kind.as_str())
             ),
             Problem::ClaimCycle { claims } => {
@@ -196,6 +218,15 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
             &mut problems,
         );
     }
+    for (id, obligation) in protocol.obligations.iter() {
+        references(
+            protocol,
+            &Referrer::Obligation(id.clone()),
+            &obligation.discharged_when,
+            &mut problems,
+        );
+        evidence_in_discharge(id, &obligation.discharged_when, &mut problems);
+    }
     for (id, action) in protocol.actions.iter() {
         let referrer = Referrer::Action(id.clone());
         if let Some(precondition) = &action.precondition {
@@ -225,6 +256,37 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         Ok(())
     } else {
         Err(problems)
+    }
+}
+
+/// Reports every evidence match in an obligation's discharge predicate, in the order written,
+/// with its path from `discharged_when`.
+fn evidence_in_discharge(
+    obligation: &ObligationId,
+    discharged_when: &Predicate,
+    problems: &mut Vec<Problem>,
+) {
+    let mut pending = vec![(discharged_when, "discharged_when".to_owned())];
+    while let Some((predicate, path)) = pending.pop() {
+        match predicate {
+            Predicate::All(members) | Predicate::Any(members) => {
+                let form = if matches!(predicate, Predicate::All(_)) {
+                    "all"
+                } else {
+                    "any"
+                };
+                for (index, member) in members.iter().enumerate().rev() {
+                    pending.push((member, format!("{path}.{form}[{index}]")));
+                }
+            }
+            Predicate::Not(inner) => pending.push((inner, format!("{path}.not"))),
+            Predicate::Evidence(matching) => problems.push(Problem::EvidenceInDischarge {
+                obligation: obligation.clone(),
+                kind: matching.kind.clone(),
+                path: format!("{path}.evidence"),
+            }),
+            Predicate::Claim(_) => {}
+        }
     }
 }
 
@@ -323,5 +385,52 @@ fn claim_cycles(protocol: &Protocol, problems: &mut Vec<Problem>) {
         if !marks.contains_key(claim) {
             visit(protocol, claim, &mut marks, &mut Vec::new(), problems);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn problems(source: &str) -> Vec<String> {
+        let protocol = crate::model::parse(source).expect("parses");
+        match validate(&protocol) {
+            Ok(()) => Vec::new(),
+            Err(problems) => problems
+                .iter()
+                .map(|problem| format!("{}: {problem}", problem.code()))
+                .collect(),
+        }
+    }
+
+    /// A discharge predicate tests claim values only: each evidence match in it is refused, in the
+    /// order written, naming the obligation and where the match is; after the obligation's
+    /// unresolved references and before the actions'.
+    #[test]
+    fn evidence_in_a_discharge_predicate_is_refused_with_its_path() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            evidence_kinds: {k: {}}\nclaims: {c: {true_when: {evidence: {kind: k}}}}\n\
+            actions: {a: {precondition: {claim: y}}}\n\
+            obligations:\n  o:\n    discharged_when:\n      all:\n        - {claim: c}\n        - {not: {evidence: {kind: k}}}\n        - {any: [{claim: x}, {evidence: {kind: z}}]}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "undeclared-claim: obligation `o` references claim `x`, which is not declared",
+                "undeclared-evidence-kind: obligation `o` references evidence kind `z`, which is not declared",
+                "evidence-in-discharge: obligation `o` tests evidence kind `k` at `discharged_when.all[1].not.evidence`; a discharge predicate tests only claim values",
+                "evidence-in-discharge: obligation `o` tests evidence kind `z` at `discharged_when.all[2].any[1].evidence`; a discharge predicate tests only claim values",
+                "undeclared-claim: action `a` references claim `y`, which is not declared",
+            ]
+        );
+        assert_eq!(
+            problems(
+                &source
+                    .replace("{not: {evidence: {kind: k}}}", "{claim: c}")
+                    .replace("{evidence: {kind: z}}", "{claim: c}")
+                    .replace("{claim: x}", "{claim: c}")
+                    .replace("{claim: y}", "{claim: c}")
+            ),
+            Vec::<String>::new()
+        );
     }
 }

@@ -1,13 +1,15 @@
-//! Reading the evaluator's inputs from text or from YAML values. Pure: the caller supplies them.
+//! Reading the compiled protocol, and the YAML helpers every input reader shares. Pure: the caller
+//! supplies the text. The case snapshot and evidence readers are in `case.rs` and `evidence.rs`.
 //!
 //! - [`read_ir`] accepts exactly the bytes `canon compile` prints: it parses the text as JSON,
 //!   rebuilds the protocol the `canon-ir/1` text describes, compiles it, and refuses the text
 //!   unless compiling gives the same bytes back. So an IR that is not canonical, or that describes
 //!   a protocol the validator rejects (an undeclared reference, a claim cycle), is refused before
 //!   evaluation.
-//! - [`read_case`] and [`read_evidence`] read one `canon-case/1` or `canon-evidence/1` document;
-//!   [`case_from_value`] and [`evidence_from_value`] read one already parsed as YAML, as a
-//!   conformance scenario holds it. The text readers parse the text as YAML and then read the
+//! - [`read_case`](super::read_case) and [`read_evidence`](super::read_evidence) read one
+//!   `canon-case/1` or `canon-evidence/1` document; [`case_from_value`](super::case_from_value)
+//!   and [`evidence_from_value`](super::evidence_from_value) read one already parsed as YAML, as
+//!   a conformance scenario holds it. The text readers parse the text as YAML and then read the
 //!   value exactly as the value readers do, so one document gets one answer on both paths. JSON is
 //!   YAML, so either document may be written as JSON. Every identifier, revision and result is a
 //!   string: one written as a number or a boolean (`id: 18`, `revision: 1`) is refused as
@@ -19,47 +21,24 @@ use serde_yaml_ng::Value;
 use super::Refusal;
 use crate::ir::{self, Ir};
 use crate::model::{
-    self, Action, Artifact, CapabilityId, CapabilityRequirement, Case, Claim, ClaimId, ClaimTest,
+    self, Action, Artifact, CapabilityId, CapabilityRequirement, Claim, ClaimId, ClaimTest,
     Declarations, EffectClass, EvidenceKind, EvidenceKindId, EvidenceMatch, EvidenceProduction,
-    EvidenceRecord, Obligation, Outcome, Predicate, Protocol, ProtocolHeader, ProtocolId, Truth,
-    one_line,
+    Obligation, Outcome, Predicate, Protocol, ProtocolHeader, ProtocolId, Truth, one_line,
 };
 
-fn malformed(what: &str, why: impl std::fmt::Display) -> Refusal {
+/// A `malformed-input` refusal: `what` is not a document of its format, and why.
+pub(super) fn malformed(what: &str, why: impl std::fmt::Display) -> Refusal {
     Refusal::new(
         "malformed-input",
         format!("{what}: {}", one_line(&why.to_string())),
     )
 }
 
-/// Reads one `canon-case/1` document: parsed as YAML, then read as [`case_from_value`] reads it.
-pub fn read_case(text: &str) -> Result<Case, Refusal> {
-    case_from_value(&yaml(text, "case is not a canon-case/1 document")?)
-}
-
-/// Reads one `canon-evidence/1` document: parsed as YAML, then read as [`evidence_from_value`]
-/// reads it.
-pub fn read_evidence(text: &str) -> Result<EvidenceRecord, Refusal> {
-    evidence_from_value(&yaml(text, "evidence is not a canon-evidence/1 document")?)
-}
-
 /// Text parsed as YAML first, so the text readers and the value readers see the same values: a
 /// scalar YAML reads as a number (`18`, `1.0`) or a boolean is one on either path, and an
 /// identifier, revision or result written as one is refused.
-fn yaml(text: &str, what: &str) -> Result<Value, Refusal> {
+pub(super) fn yaml(text: &str, what: &str) -> Result<Value, Refusal> {
     serde_yaml_ng::from_str(text).map_err(|error| malformed(what, error))
-}
-
-/// Reads one `canon-case/1` document already parsed as YAML.
-pub fn case_from_value(value: &Value) -> Result<Case, Refusal> {
-    serde_yaml_ng::from_value(value.clone())
-        .map_err(|error| malformed("case is not a canon-case/1 document", error))
-}
-
-/// Reads one `canon-evidence/1` document already parsed as YAML.
-pub fn evidence_from_value(value: &Value) -> Result<EvidenceRecord, Refusal> {
-    serde_yaml_ng::from_value(value.clone())
-        .map_err(|error| malformed("evidence is not a canon-evidence/1 document", error))
 }
 
 /// Reads `canon-ir/1` text as `canon compile` prints it.
@@ -224,6 +203,7 @@ fn protocol(value: &Json) -> Shape<Protocol> {
         obligations: declarations(value, "obligations", model::ObligationId::new, |entry| {
             Ok(Obligation {
                 description: optional_text(entry, "description")?,
+                discharged_when: predicate(required(entry, "discharged_when")?)?,
             })
         })?,
         actions: declarations(value, "actions", model::ActionId::new, action)?,
@@ -303,6 +283,7 @@ fn predicate(value: &Json) -> Shape<Predicate> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::eval::{case_from_value, evidence_from_value, read_case, read_evidence};
 
     const PROTOCOL: &str = "format: protocol/1\n\
         protocol: {id: p, revision: 7, description: \"Quote \\\" and tab\\t.\"}\n\
@@ -311,7 +292,7 @@ mod tests {
         claims:\n\
           \x20\x20c: {true_when: {any: [{evidence: {kind: k, result: pass}}, {not: {evidence: {kind: l}}}]}}\n\
           \x20\x20d: {true_when: {all: [{claim: c, is: unknown}, {claim: c}]}}\n\
-        obligations: {o: {}}\n\
+        obligations: {o: {discharged_when: {claim: d}}}\n\
         actions:\n\
           \x20\x20act: {precondition: {claim: d}, requires: [{capability: cap}], effect: write, may_produce: [{evidence: k}]}\n\
           \x20\x20idle: {}\n\

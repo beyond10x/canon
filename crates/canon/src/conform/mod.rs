@@ -80,18 +80,37 @@
 //! standard output. The same registry produces byte-identical output on every run.
 //!
 //! An evaluate step compiles the fixture, reads `case` as a `canon-case/1` document and each
-//! `evidence` entry as a `canon-evidence/1` document, and calls [`eval::evaluate`]. A step expecting
-//! `decision` passes when the evaluation gives a decision whose canonical JSON ([`eval::render`])
-//! equals the expectation byte for byte; otherwise `<what differed>` is `canon-decision/1 differs
-//! from the expectation at line <n>`, or `evaluation refused: <code>: <why>`. A step expecting
-//! `refusal` passes when the evaluation is refused with exactly that code (a case or evidence entry
-//! that is not a document of its format is refused as `malformed-input`); otherwise `<what
-//! differed>` is `expected refusal `<code>`, the evaluation gave a decision` or `expected refusal
-//! `<code>`, the evaluation refused with `<code>`: <why>`. The inputs `authority` and `at` are not
-//! read yet: a step that gives either fails as `` `authority` is not supported yet `` (or `` `at`
-//! ``).
+//! `evidence` entry as a `canon-evidence/1` document, and calls [`eval::evaluate_with`], passing
+//! `authority` (as YAML text) and `at` through unread: the evaluator decides what they mean, and
+//! refuses one it does not read yet as `unsupported-input`. The `authority` list is written back
+//! as YAML that reads as the same list (in flow style where block style cannot write an entry); a
+//! list that cannot be fails the step as `authority entry <n> cannot be serialized: <why>`, and the
+//! registry run goes on.
+//!
+//! A step expecting `decision` compares section by section. The expectation's top-level keys are
+//! the sections it lists; only those are compared, each on its own and byte for byte: written one
+//! section per top-level member, as canonical JSON writes them, in any order, the step passes when
+//! each listed section's lines equal the decision's for that section (the comma that separates
+//! members aside). An expectation not laid out that way passes only when it equals, byte for byte,
+//! the decision's canonical JSON holding only the listed sections ([`eval::render_sections`]). A
+//! section the decision carries and the expectation does not list is not compared, so a later
+//! story that adds a section leaves earlier expectations passing; a listed section the decision
+//! does not carry is a difference. An expectation that is not a JSON
+//! object is compared with the whole decision ([`eval::render`]); one that lists no section fails
+//! as `the expected canon-decision/1 lists no section`. Otherwise `<what differed>` is
+//! `canon-decision/1 section `<section>` differs from the expectation at line <n>`: `<section>` is
+//! the first section the expectation writes whose lines differ from the decision's, and `<n>` the
+//! expectation's line, counted from 1, where it first differs (the line that opens it, when the
+//! decision does not carry it). When no single section differs, as when the expectation is not
+//! laid out as canonical JSON, it is `canon-decision/1 differs from the expectation at line <n>`,
+//! `<n>` the first differing line. A refused evaluation is `evaluation refused: <code>: <why>`.
+//!
+//! A step expecting `refusal` passes when the evaluation is refused with exactly that code (a case
+//! or evidence entry that is not a document of its format is refused as `malformed-input`);
+//! otherwise `<what differed>` is `expected refusal `<code>`, the evaluation gave a decision` or
+//! `expected refusal `<code>`, the evaluation refused with `<code>`: <why>`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use serde::de::Error as _;
@@ -469,24 +488,26 @@ fn evaluate_step(
         Ok(compiled) => compiled,
         Err(why) => return Some(why),
     };
-    if inputs.authority.is_some() {
-        return Some("`authority` is not supported yet".to_owned());
-    }
-    if inputs.at.is_some() {
-        return Some("`at` is not supported yet".to_owned());
-    }
+    let authority = match inputs.authority.as_deref().map(authority_text).transpose() {
+        Ok(authority) => authority,
+        Err(why) => return Some(why),
+    };
+    let supplied = eval::Supplied {
+        authority: authority.as_deref(),
+        at: inputs.at.as_deref(),
+        decisions: None,
+    };
     let evaluation = eval::case_from_value(&inputs.case).and_then(|case| {
         let evidence = inputs
             .evidence
             .iter()
             .map(eval::evidence_from_value)
             .collect::<Result<Vec<_>, _>>()?;
-        eval::evaluate(&compiled, &case, &evidence)
+        eval::evaluate_with(&compiled, &case, &evidence, supplied)
     });
     match (expected, evaluation) {
         (EvaluateExpectation::Decision(expected), Ok(decision)) => {
-            first_difference(&eval::render(&decision), expected)
-                .map(|line| format!("canon-decision/1 differs from the expectation at line {line}"))
+            decision_difference(&decision, expected)
         }
         (EvaluateExpectation::Decision(_), Err(refusal)) => {
             Some(format!("evaluation refused: {}: {refusal}", refusal.code()))
@@ -535,6 +556,212 @@ fn parse_failure(
         Some(at) => format!("{kind} at line {} column {}", at.line(), at.column()),
         None => kind.to_owned(),
     }
+}
+
+/// A step's `authority` list as the YAML text the evaluator reads: what `serde_yaml_ng` writes, or,
+/// where it cannot write an entry (a mapping key that is itself a mapping), the list in flow style.
+/// Either is used only when it reads back as the list the scenario holds; otherwise the step fails
+/// as `authority entry <n> cannot be serialized: <why>`, `<n>` counted from 1.
+fn authority_text(authority: &[serde_yaml_ng::Value]) -> Result<String, String> {
+    let reads_back = |text: &str| {
+        serde_yaml_ng::from_str::<Vec<serde_yaml_ng::Value>>(text)
+            .is_ok_and(|back| back == authority)
+    };
+    if let Some(text) = serde_yaml_ng::to_string(authority)
+        .ok()
+        .filter(|text| reads_back(text))
+    {
+        return Ok(text);
+    }
+    let flow = format!(
+        "[{}]\n",
+        authority
+            .iter()
+            .map(flow_yaml)
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    if reads_back(&flow) {
+        return Ok(flow);
+    }
+    let (entry, why) = authority
+        .iter()
+        .enumerate()
+        .find_map(|(index, value)| {
+            let why = match serde_yaml_ng::to_string(value) {
+                Err(error) => error.to_string(),
+                Ok(_)
+                    if serde_yaml_ng::from_str::<serde_yaml_ng::Value>(&flow_yaml(value))
+                        .is_ok_and(|back| back == *value) =>
+                {
+                    return None;
+                }
+                Ok(_) => "it does not read back as written".to_owned(),
+            };
+            Some((index + 1, why))
+        })
+        .unwrap_or((
+            authority.len(),
+            "it does not read back as written".to_owned(),
+        ));
+    Err(format!(
+        "authority entry {entry} cannot be serialized: {}",
+        model::one_line(&why)
+    ))
+}
+
+/// One YAML value in flow style, on one line: strings double-quoted (JSON string syntax is a YAML
+/// double-quoted scalar), collections in `[…]` and `{…}`, a mapping key written as any value is.
+fn flow_yaml(value: &serde_yaml_ng::Value) -> String {
+    use serde_yaml_ng::Value;
+    match value {
+        Value::Null => "null".to_owned(),
+        Value::Bool(flag) => flag.to_string(),
+        Value::Number(number) => serde_yaml_ng::to_string(number)
+            .map(|text| text.trim_end().to_owned())
+            .unwrap_or_else(|_| number.to_string()),
+        Value::String(text) => serde_json::to_string(text).expect("a string serializes as JSON"),
+        Value::Sequence(items) => format!(
+            "[{}]",
+            items.iter().map(flow_yaml).collect::<Vec<_>>().join(", ")
+        ),
+        Value::Mapping(entries) => format!(
+            "{{{}}}",
+            entries
+                .iter()
+                .map(|(key, item)| format!("{}: {}", flow_yaml(key), flow_yaml(item)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        Value::Tagged(tagged) => format!("{} {}", tagged.tag, flow_yaml(&tagged.value)),
+    }
+}
+
+/// How `decision` differs from an expected `canon-decision/1`, comparing only the sections the
+/// expectation lists (see the module docs), or `None` when it does not.
+fn decision_difference(decision: &model::Decision, expected: &str) -> Option<String> {
+    let listed: Option<BTreeSet<String>> =
+        serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(expected)
+            .ok()
+            .map(|sections| sections.keys().cloned().collect());
+    let Some(listed) = listed else {
+        return first_difference(&eval::render(decision), expected)
+            .map(|line| format!("canon-decision/1 differs from the expectation at line {line}"));
+    };
+    if listed.is_empty() {
+        return Some("the expected canon-decision/1 lists no section".to_owned());
+    }
+    let actual = eval::render_sections(decision, &listed);
+    if laid_out_by_section(expected, &listed) {
+        // Each listed section on its own, byte for byte, in whatever order the expectation
+        // writes them.
+        return differing_section(&actual, expected).map(|(section, line)| {
+            format!(
+                "canon-decision/1 section `{}` differs from the expectation at line {line}",
+                model::one_line(&section)
+            )
+        });
+    }
+    let line = first_difference(&actual, expected)?;
+    Some(match differing_section(&actual, expected) {
+        Some((section, line)) => format!(
+            "canon-decision/1 section `{}` differs from the expectation at line {line}",
+            model::one_line(&section)
+        ),
+        None => format!("canon-decision/1 differs from the expectation at line {line}"),
+    })
+}
+
+/// Whether the expectation is laid out one listed section per top-level member, as canonical JSON
+/// writes them: `{` on the first line, `}` and a newline at the end, and every line in between in
+/// exactly one member, each listed key opening exactly one member. The members may come in any
+/// order.
+fn laid_out_by_section(expected: &str, listed: &BTreeSet<String>) -> bool {
+    let Some(body) = expected
+        .strip_prefix("{\n")
+        .and_then(|rest| rest.strip_suffix("}\n"))
+    else {
+        return false;
+    };
+    let members = members(expected);
+    let keys: BTreeSet<&String> = members.iter().map(|(key, _, _)| key).collect();
+    let lines: usize = members.iter().map(|(_, _, lines)| lines.len()).sum();
+    keys.len() == members.len()
+        && keys.len() == listed.len()
+        && keys.iter().all(|key| listed.contains(*key))
+        && lines == body.split_inclusive('\n').count()
+}
+
+/// The first section the expectation writes, in its order, whose lines differ from the same
+/// section of `actual`, with the expectation's line, counted from 1, where it first differs (the
+/// section's first line when `actual` does not carry it). `None` when every section the
+/// expectation writes as a top-level member matches, as when the expectation is not laid out as
+/// canonical JSON.
+fn differing_section(actual: &str, expected: &str) -> Option<(String, usize)> {
+    let actual: BTreeMap<String, Vec<&str>> = members(actual)
+        .into_iter()
+        .map(|(key, _, lines)| (key, lines))
+        .collect();
+    for (key, start, lines) in members(expected) {
+        let Some(found) = actual.get(&key) else {
+            return Some((key, start));
+        };
+        if *found != lines {
+            let offset = found.iter().zip(&lines).take_while(|(a, e)| a == e).count();
+            return Some((key, start + offset));
+        }
+    }
+    None
+}
+
+/// The top-level members of JSON laid out canonically: each key, the number of the line that opens
+/// it (counted from 1), and its lines, the separating comma after the last one removed. A line ends
+/// at `\n` only: every other byte, a `\r` before the newline included, is part of the line, so a
+/// line that differs in any byte differs.
+fn members(text: &str) -> Vec<(String, usize, Vec<&str>)> {
+    let mut members: Vec<(String, usize, Vec<&str>)> = Vec::new();
+    let mut open = false;
+    let written = text
+        .split_inclusive('\n')
+        .map(|line| line.strip_suffix('\n').unwrap_or(line));
+    for (index, line) in written.enumerate() {
+        if let Some(key) = top_level_key(line) {
+            members.push((key, index + 1, vec![line]));
+            open = true;
+        } else if line == "}" {
+            open = false;
+        } else if let Some((_, _, lines)) = members.last_mut().filter(|_| open) {
+            lines.push(line);
+        }
+    }
+    for (_, _, lines) in &mut members {
+        if let Some(last) = lines.last_mut() {
+            *last = last.strip_suffix(',').unwrap_or(last);
+        }
+    }
+    members
+}
+
+/// The key a line opens when it is a top-level member of canonical JSON: indented by exactly two
+/// spaces, then a JSON string, then `:`.
+fn top_level_key(line: &str) -> Option<String> {
+    let rest = line.strip_prefix("  \"")?;
+    let mut escaped = false;
+    let end = rest.char_indices().find_map(|(at, c)| {
+        if escaped {
+            escaped = false;
+            None
+        } else if c == '\\' {
+            escaped = true;
+            None
+        } else {
+            (c == '"').then_some(at)
+        }
+    })?;
+    if !rest[end + 1..].starts_with(':') {
+        return None;
+    }
+    serde_json::from_str(&format!("\"{}\"", &rest[..end])).ok()
 }
 
 /// The first line, counted from 1, at which two texts differ, or `None` when they are equal. A
@@ -859,7 +1086,7 @@ mod tests {
                     DECISION.replace("\"c\"", "\"other\"")
                 )
             ),
-            failed("canon-decision/1 differs from the expectation at line 2")
+            failed("canon-decision/1 section `case` differs from the expectation at line 2")
         );
         assert_eq!(
             evaluate_verdict(
@@ -906,16 +1133,128 @@ mod tests {
     }
 
     #[test]
-    fn an_evaluate_step_giving_authority_or_an_instant_fails_as_unsupported() {
+    fn an_evaluate_step_compares_only_the_sections_its_expectation_lists() {
+        let inputs = format!("      case: {CASE}\n      evidence: []\n");
+        let decision = |text: &str| {
+            let indented: String = text.lines().map(|l| format!("        {l}\n")).collect();
+            format!("      decision: |\n{indented}")
+        };
+        // Sections the decision carries and the expectation leaves out are not compared.
+        assert_eq!(
+            evaluate_verdict(&inputs, &decision("{\n  \"claims\": {}\n}")),
+            Verdict::Passed
+        );
+        // A listed section that differs is named, at the expectation's line.
+        assert_eq!(
+            evaluate_verdict(
+                &inputs,
+                &decision("{\n  \"claims\": {},\n  \"protocol\": \"q\"\n}")
+            ),
+            failed("canon-decision/1 section `protocol` differs from the expectation at line 3")
+        );
+        // A listed section the decision does not carry is a difference, named.
+        assert_eq!(
+            evaluate_verdict(
+                &inputs,
+                &decision("{\n  \"claims\": {},\n  \"obligations\": {}\n}")
+            ),
+            failed("canon-decision/1 section `obligations` differs from the expectation at line 3")
+        );
+        // An expectation listing no section passes nothing.
+        assert_eq!(
+            evaluate_verdict(&inputs, &decision("{}")),
+            failed("the expected canon-decision/1 lists no section")
+        );
+        // An expectation that is not a JSON object is compared with the whole decision.
+        assert_eq!(
+            evaluate_verdict(&inputs, &decision("not json")),
+            failed("canon-decision/1 differs from the expectation at line 1")
+        );
+    }
+
+    /// An authority list is written back as YAML that reads as the same list: block style where
+    /// it can be, flow style where block style cannot write an entry (a mapping key that is a
+    /// mapping). The refusal, for a list neither style writes back, guards against a value no
+    /// known YAML input produces.
+    #[test]
+    fn an_authority_list_is_written_back_as_yaml_that_reads_the_same() {
+        use serde_yaml_ng::Value;
+        let list = |text: &str| -> Vec<Value> { serde_yaml_ng::from_str(text).expect("yaml") };
+        for written in [
+            "[]",
+            "[{capability: c, decision: granted}]",
+            "[{{x: 1}: c}, \"quoted \\\" and \\n\", !custom {a: [1, .nan]}]",
+        ] {
+            let authority = list(written);
+            let text = authority_text(&authority).expect(written);
+            assert_eq!(list(&text), authority, "{written} as {text}");
+        }
+    }
+
+    /// Each listed section is compared on its own, so the order the expectation writes them in
+    /// does not matter; a section that differs is still named, at its own line.
+    #[test]
+    fn listed_sections_are_compared_each_on_its_own_in_any_order() {
+        let inputs = format!("      case: {CASE}\n      evidence: []\n");
+        let decision = |text: &str| {
+            let indented: String = text.lines().map(|l| format!("        {l}\n")).collect();
+            format!("      decision: |\n{indented}")
+        };
+        assert_eq!(
+            evaluate_verdict(
+                &inputs,
+                &decision(
+                    "{\n  \"protocol_revision\": 1,\n  \"claims\": {},\n  \"case\": \"c\"\n}"
+                )
+            ),
+            Verdict::Passed
+        );
+        assert_eq!(
+            evaluate_verdict(
+                &inputs,
+                &decision(
+                    "{\n  \"protocol_revision\": 1,\n  \"case\": \"d\",\n  \"claims\": {}\n}"
+                )
+            ),
+            failed("canon-decision/1 section `case` differs from the expectation at line 3")
+        );
+        // A section written twice is not one section per member: compared as a whole, it fails.
+        assert_eq!(
+            evaluate_verdict(
+                &inputs,
+                &decision("{\n  \"case\": \"c\",\n  \"case\": \"c\"\n}")
+            ),
+            failed("canon-decision/1 differs from the expectation at line 2")
+        );
+    }
+
+    #[test]
+    fn a_top_level_key_is_read_from_a_two_space_member_line_only() {
+        assert_eq!(top_level_key("  \"claims\": {"), Some("claims".to_owned()));
+        assert_eq!(top_level_key("  \"a\\\"b\": 1,"), Some("a\"b".to_owned()));
+        assert_eq!(top_level_key("    \"value\": \"true\""), None);
+        assert_eq!(top_level_key("  \"unterminated"), None);
+        assert_eq!(top_level_key("{"), None);
+    }
+
+    #[test]
+    fn an_evaluate_step_passes_authority_and_an_instant_to_the_evaluator() {
         let base = format!("      case: {CASE}\n      evidence: []\n");
         let expect = format!("      decision: |\n{DECISION}");
         assert_eq!(
             evaluate_verdict(&format!("{base}      authority: []\n"), &expect),
-            failed("`authority` is not supported yet")
+            failed("evaluation refused: unsupported-input: `--authority` is not supported yet")
         );
         assert_eq!(
             evaluate_verdict(&format!("{base}      at: 2026-10-04T00:00:00Z\n"), &expect),
-            failed("`at` is not supported yet")
+            failed("evaluation refused: unsupported-input: `--at` is not supported yet")
+        );
+        assert_eq!(
+            evaluate_verdict(
+                &format!("{base}      at: 2026-10-04T00:00:00Z\n"),
+                "      refusal: unsupported-input\n"
+            ),
+            Verdict::Passed
         );
     }
 

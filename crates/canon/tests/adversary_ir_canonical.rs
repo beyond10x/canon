@@ -38,12 +38,12 @@ fn each_truth_value_compiles_to_its_own_name() {
 #[test]
 fn a_declared_obligation_compiles_with_its_description() {
     let source = format!(
-        "{HEADER}obligations:\n  sign_off: {{description: Someone signs off.}}\n  archive: {{}}\n"
+        "{HEADER}obligations:\n  sign_off: {{description: Someone signs off., discharged_when: {{all: []}}}}\n  archive: {{discharged_when: {{any: []}}}}\n"
     );
     let compiled = ir(&source);
     assert!(
         compiled.contains(
-            "  \"obligations\": {\n    \"archive\": {\n      \"description\": null\n    },\n    \"sign_off\": {\n      \"description\": \"Someone signs off.\"\n    }\n  },\n"
+            "  \"obligations\": {\n    \"archive\": {\n      \"description\": null,\n      \"discharged_when\": {\n        \"any\": []\n      }\n    },\n    \"sign_off\": {\n      \"description\": \"Someone signs off.\",\n      \"discharged_when\": {\n        \"all\": []\n      }\n    }\n  },\n"
         ),
         "{compiled}"
     );
