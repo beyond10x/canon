@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T03:44:05Z",
+  "actor": "human:timo",
+  "artifact": "story:three-valued-claims",
+  "kind": "story",
+  "revision": 9,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "CANON-CLAIM-001 and three_valued_claims: phase-1 commit 4c33a4d vs treatment 565d1de",
+    "reference": "ga-wave-2026-10-04-w4/canon-three-valued-claims/scratch/phase1-red.log: phase 1 ess_model_matches and three_valued_claims red, conform run exit 1; treatment conform 1 passed; VERIFIED"
+  }
+}

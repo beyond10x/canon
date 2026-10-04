@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:three-valued-claims
 kind: story
-status: proposed
+status: implemented
 title: Evaluate claims in three-valued truth
 refs:
 - provider: taskboard
@@ -29,9 +29,11 @@ scope:
   path: ess/
 - confidence: cited
   path: fixtures/investigation/three-valued-claims.yaml
-revision: 8
+revision: 10
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:51Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "proposed", to: "active", at: "2026-10-04T02:55:57Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "active", to: "implemented", at: "2026-10-04T03:44:05Z", actor: "human:timo", revision: 10, decided_on: {"recorded":{"test_result":1,"review_outcome":5,"verification":1}}}
 ---
 ## Outcome
 

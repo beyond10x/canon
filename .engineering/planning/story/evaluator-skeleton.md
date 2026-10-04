@@ -40,7 +40,7 @@ scope:
   path: fixtures/investigation/evaluator-skeleton.yaml
 - confidence: cited
   path: fixtures/investigation/invalid/undeclared-discharge-claim.yaml
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T02:12:47Z", actor: "human:timo", revision: 3}
 ---
@@ -147,3 +147,12 @@ is refused naming the undeclared claim. `task ess-gate` stays green.
 Re-plan brief 2026-10-04 (wider waves); story:obligations § Outcome (discharge predicate);
 story:outcomes § Extends (termination field); story:action-admissibility and
 story:evidence-freshness § Extends (`--authority`, `--at`); Atlas ADR 0080 (draft).
+
+
+## From wave 2026-10-04-w4 (three-valued-claims, adversary pass 2, F5)
+
+Evaluate steps in `canon conform run` compare the whole decision byte for byte. A new slot inside
+each `claims` entry (such as `excluded_evidence`) breaks every existing expectation unless the slot
+is left out when empty. This story keeps CANON-CLAIM-001 unedited by omitting empty slots, and says
+so in the decision format. The claim-value memo in `eval/claims.rs` must survive the split into
+per-concept files (a pass-2 adversary case pins it).
