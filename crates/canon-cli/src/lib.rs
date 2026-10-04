@@ -74,6 +74,11 @@ pub enum Command {
         /// granted.
         #[arg(long)]
         authority: Option<PathBuf>,
+        /// A `canon-decisions/1` document: the explicit decisions taken, each naming the decision,
+        /// the outcome, the principal and the case revision it was taken at. An outcome that requires
+        /// a decision is legitimate only with one taken at the case snapshot's revision.
+        #[arg(long)]
+        decisions: Option<PathBuf>,
         /// The evaluation instant, in UTC as `YYYY-MM-DDTHH:MM:SSZ`. Evidence older than its kind's
         /// `max_age` at this instant does not apply; without it, no evidence expires.
         #[arg(long)]

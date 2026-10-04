@@ -21,6 +21,7 @@
 //!       case: { ... a canon-case/1 document ... }
 //!       evidence: [ ... canon-evidence/1 records ... ]
 //!       authority: [ ... canon-authority/1 decisions ... ]  # optional
+//!       decisions: [ ... canon-decisions/1 decisions ... ]  # optional
 //!       at: 2026-10-04T00:00:00Z                           # optional evaluation instant
 //!     expect:
 //!       decision: |
@@ -81,12 +82,13 @@
 //!
 //! An evaluate step compiles the fixture, reads `case` as a `canon-case/1` document and each
 //! `evidence` entry as a `canon-evidence/1` document, and calls [`eval::evaluate_with`], passing
-//! `authority` (as YAML text) and `at` through unread: the evaluator reads them as
-//! `canon-authority/1` decisions and the evaluation instant, and refuses either when it is not
-//! one (`malformed-input`, `invalid-instant`, …). The `authority` list is written back
-//! as YAML that reads as the same list (in flow style where block style cannot write an entry); a
-//! list that cannot be fails the step as `authority entry <n> cannot be serialized: <why>`, and the
-//! registry run goes on.
+//! `authority` and `decisions` (each as YAML text) and `at` through unread: the evaluator reads
+//! them as `canon-authority/1` decisions, `canon-decisions/1` explicit decisions and the evaluation
+//! instant, and refuses each when it is not one (`malformed-input`, `invalid-instant`, …). The
+//! `authority` and `decisions` lists are each written back as YAML that reads as the same list (in
+//! flow style where block style cannot write an entry); a list that cannot be fails the step as
+//! `<list> entry <n> cannot be serialized: <why>` (`authority entry 2 …`, `decisions entry 1 …`),
+//! and the registry run goes on.
 //!
 //! A step expecting `decision` compares section by section. The expectation's top-level keys are
 //! the sections it lists; only those are compared, each on its own and byte for byte: written one
@@ -159,6 +161,7 @@ pub struct EvaluateInputs {
     pub case: serde_yaml_ng::Value,
     pub evidence: Vec<serde_yaml_ng::Value>,
     pub authority: Option<Vec<serde_yaml_ng::Value>>,
+    pub decisions: Option<Vec<serde_yaml_ng::Value>>,
     pub at: Option<String>,
 }
 
@@ -248,6 +251,8 @@ struct RawEvaluate {
     evidence: Vec<serde_yaml_ng::Value>,
     #[serde(default, deserialize_with = "optional")]
     authority: Option<Vec<serde_yaml_ng::Value>>,
+    #[serde(default, deserialize_with = "optional")]
+    decisions: Option<Vec<serde_yaml_ng::Value>>,
     #[serde(default, deserialize_with = "optional")]
     at: Option<String>,
 }
@@ -404,6 +409,7 @@ fn step_kind(
                     case: evaluate.case,
                     evidence: evaluate.evidence,
                     authority: evaluate.authority,
+                    decisions: evaluate.decisions,
                     at: evaluate.at,
                 },
                 expected,
@@ -489,14 +495,23 @@ fn evaluate_step(
         Ok(compiled) => compiled,
         Err(why) => return Some(why),
     };
-    let authority = match inputs.authority.as_deref().map(authority_text).transpose() {
+    let written = |list: &Option<Vec<serde_yaml_ng::Value>>, name: &str| {
+        list.as_deref()
+            .map(|list| list_text(name, list))
+            .transpose()
+    };
+    let authority = match written(&inputs.authority, "authority") {
         Ok(authority) => authority,
+        Err(why) => return Some(why),
+    };
+    let decisions = match written(&inputs.decisions, "decisions") {
+        Ok(decisions) => decisions,
         Err(why) => return Some(why),
     };
     let supplied = eval::Supplied {
         authority: authority.as_deref(),
         at: inputs.at.as_deref(),
-        decisions: None,
+        decisions: decisions.as_deref(),
     };
     let evaluation = eval::case_from_value(&inputs.case).and_then(|case| {
         let evidence = inputs
@@ -559,16 +574,16 @@ fn parse_failure(
     }
 }
 
-/// A step's `authority` list as the YAML text the evaluator reads: what `serde_yaml_ng` writes, or,
-/// where it cannot write an entry (a mapping key that is itself a mapping), the list in flow style.
-/// Either is used only when it reads back as the list the scenario holds; otherwise the step fails
-/// as `authority entry <n> cannot be serialized: <why>`, `<n>` counted from 1.
-fn authority_text(authority: &[serde_yaml_ng::Value]) -> Result<String, String> {
+/// A step's `authority` or `decisions` list (`name`) as the YAML text the evaluator reads: what
+/// `serde_yaml_ng` writes, or, where it cannot write an entry (a mapping key that is itself a
+/// mapping), the list in flow style. Either is used only when it reads back as the list the
+/// scenario holds; otherwise the step fails as `<name> entry <n> cannot be serialized: <why>`, `<n>`
+/// counted from 1.
+fn list_text(name: &str, list: &[serde_yaml_ng::Value]) -> Result<String, String> {
     let reads_back = |text: &str| {
-        serde_yaml_ng::from_str::<Vec<serde_yaml_ng::Value>>(text)
-            .is_ok_and(|back| back == authority)
+        serde_yaml_ng::from_str::<Vec<serde_yaml_ng::Value>>(text).is_ok_and(|back| back == list)
     };
-    if let Some(text) = serde_yaml_ng::to_string(authority)
+    if let Some(text) = serde_yaml_ng::to_string(list)
         .ok()
         .filter(|text| reads_back(text))
     {
@@ -576,16 +591,12 @@ fn authority_text(authority: &[serde_yaml_ng::Value]) -> Result<String, String> 
     }
     let flow = format!(
         "[{}]\n",
-        authority
-            .iter()
-            .map(flow_yaml)
-            .collect::<Vec<_>>()
-            .join(", ")
+        list.iter().map(flow_yaml).collect::<Vec<_>>().join(", ")
     );
     if reads_back(&flow) {
         return Ok(flow);
     }
-    let (entry, why) = authority
+    let (entry, why) = list
         .iter()
         .enumerate()
         .find_map(|(index, value)| {
@@ -601,12 +612,9 @@ fn authority_text(authority: &[serde_yaml_ng::Value]) -> Result<String, String> 
             };
             Some((index + 1, why))
         })
-        .unwrap_or((
-            authority.len(),
-            "it does not read back as written".to_owned(),
-        ));
+        .unwrap_or((list.len(), "it does not read back as written".to_owned()));
     Err(format!(
-        "authority entry {entry} cannot be serialized: {}",
+        "{name} entry {entry} cannot be serialized: {}",
         model::one_line(&why)
     ))
 }
@@ -1187,7 +1195,7 @@ mod tests {
             "[{{x: 1}: c}, \"quoted \\\" and \\n\", !custom {a: [1, .nan]}]",
         ] {
             let authority = list(written);
-            let text = authority_text(&authority).expect(written);
+            let text = list_text("authority", &authority).expect(written);
             assert_eq!(list(&text), authority, "{written} as {text}");
         }
     }
@@ -1273,6 +1281,22 @@ mod tests {
             ),
             Verdict::Passed
         );
+    }
+
+    /// A `decisions` list reaches the evaluator as YAML text, as `authority` does: an entry that is
+    /// not a `canon-decisions/1` decision is refused by the evaluator, not dropped by the runner, so
+    /// the step that expects a decision fails as a refused evaluation.
+    #[test]
+    fn an_evaluate_step_passes_decisions_to_the_evaluator() {
+        let base = format!("      case: {CASE}\n      evidence: []\n");
+        let expect = format!("      decision: |\n{DECISION}");
+        assert_eq!(evaluate_verdict(&base, &expect), Verdict::Passed);
+        let Verdict::Failed { reason, .. } =
+            evaluate_verdict(&format!("{base}      decisions: [1]\n"), &expect)
+        else {
+            panic!("a decisions entry that is not a decision reaches the evaluator and is refused");
+        };
+        assert!(reason.starts_with("evaluation refused: "), "{reason}");
     }
 
     #[test]

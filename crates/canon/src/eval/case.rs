@@ -29,6 +29,9 @@ pub(super) fn check(ir: &Ir, case: &Case) -> Result<(), Refusal> {
     }
     identifier("case identifier", case.id.as_str())?;
     identifier("case protocol identifier", case.protocol.as_str())?;
+    if let Some(revision) = &case.revision {
+        identifier("case revision", revision.as_str())?;
+    }
     for (artifact, entry) in case.artifacts.iter() {
         identifier("case artifact identifier", artifact.as_str())?;
         identifier("artifact revision", entry.revision.as_str())?;

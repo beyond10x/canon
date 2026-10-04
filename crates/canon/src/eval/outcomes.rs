@@ -5,7 +5,12 @@
 //! Every declared outcome gets an entry, keyed by outcome id:
 //!
 //! - `{"status": "legitimate"}` when its `requires` predicate, evaluated over the claim values
-//!   and the evidence left after the exclusion stages, is `true`;
+//!   and the evidence left after the exclusion stages, is `true`; or, for an outcome that requires
+//!   an explicit decision (`requires: decision: <name>`), when a `canon-decisions/1` decision of
+//!   that name, for that outcome, taken at the case snapshot's `revision` is given. Such an entry
+//!   also records who decided (design § 37), `{"status": "legitimate", "decided_by": {"decision":
+//!   <name>, "principals": [<principal>, ...]}}`: every principal whose decision applied, sorted
+//!   by Unicode code point (CANON-OUTCOME-002);
 //! - `{"status": "blocked", "reasons": [...]}` otherwise (`false` or `unknown`). The reasons are
 //!   the tests that decide the requirement against it, each named once: walking from `requires`
 //!   with the wanted value `true`, `not` flips the wanted value, `all` and `any` descend only into
@@ -18,15 +23,22 @@
 //!   present under `not`. Claims come first, in claim-id order, then evidence kinds, in kind
 //!   order. A blocked outcome always states at least one reason: a requirement no test decides
 //!   against is one that cannot be met (it is blocked only by an empty `any`, or a `not` over an
-//!   empty `all`), and gives `{"requirement": "unsatisfiable"}`.
+//!   empty `all`), and gives `{"requirement": "unsatisfiable"}`. An outcome that requires an
+//!   explicit decision and has none applying states the one reason
+//!   `{"decision": <name>, "present": false}`: no decision was given, or each one given for it was
+//!   taken at a superseded case revision.
 //!
 //! A case snapshot whose `termination` names an outcome the protocol does not declare is refused
-//! as `undeclared-outcome`, naming the outcome. One that names a declared outcome which is blocked
-//! is refused as `illegitimate-termination`, naming the outcome and its status: an outcome is a
-//! declared legitimate terminal interpretation of a case (design § 4.6).
+//! as `undeclared-outcome`, naming the outcome; so, after it, is an explicit decision taken for an
+//! outcome the protocol does not declare, naming the decision and the outcome, and one taken for a
+//! declared outcome that does not require a decision of its name as `undeclared-decision`, naming
+//! the decision and the outcome; both whatever case revision the decision names, entry by entry
+//! in the order given. A `termination` that names a declared outcome which is blocked is refused
+//! as `illegitimate-termination`, naming the outcome and its status: an outcome is a declared
+//! legitimate terminal interpretation of a case (design § 4.6). That holds for an outcome that requires a decision too: a case terminated through it
+//! with no decision applying at its revision is refused.
 //!
-//! A protocol that declares no outcome leaves the section out. Outcomes whose requirement is an
-//! explicit decision are story:decision-outcomes; `decisions` is not read here.
+//! A protocol that declares no outcome leaves the section out.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -35,7 +47,8 @@ use super::claims::predicate;
 use super::decisions::Decisions;
 use crate::ir::Ir;
 use crate::model::{
-    Case, ClaimId, EvidenceKindId, EvidenceRecord, Json, Predicate, Truth, one_line,
+    Case, ClaimId, EvidenceKindId, EvidenceRecord, Json, OutcomeRequirement, Predicate, Truth,
+    one_line,
 };
 
 /// The section, or `None` to leave the slot empty; or a refusal of the case snapshot. `evidence`
@@ -46,7 +59,7 @@ pub(super) fn section(
     case: &Case,
     claims: &BTreeMap<ClaimId, Truth>,
     evidence: &[EvidenceRecord],
-    _decisions: Option<&Decisions>,
+    decisions: Option<&Decisions>,
 ) -> Result<Option<Json>, Refusal> {
     if let Some(outcome) = &case.termination
         && !ir.outcomes.contains_key(outcome)
@@ -60,12 +73,47 @@ pub(super) fn section(
             ),
         ));
     }
+    for decision in decisions.map(Decisions::entries).unwrap_or_default() {
+        if !ir.outcomes.contains_key(&decision.outcome) {
+            return Err(Refusal::new(
+                "undeclared-outcome",
+                format!(
+                    "decision `{}` is taken for outcome `{}`, which the protocol does not declare",
+                    one_line(decision.decision.as_str()),
+                    one_line(decision.outcome.as_str())
+                ),
+            ));
+        }
+        let required = ir.outcomes[&decision.outcome].requires.decision();
+        if required != Some(&decision.decision) {
+            return Err(Refusal::new(
+                "undeclared-decision",
+                format!(
+                    "decision `{}` is taken for outcome `{}`, which does not require it",
+                    one_line(decision.decision.as_str()),
+                    one_line(decision.outcome.as_str())
+                ),
+            ));
+        }
+    }
     if ir.outcomes.is_empty() {
         return Ok(None);
     }
     let mut entries = serde_json::Map::new();
     for (id, outcome) in &ir.outcomes {
-        let legitimate = predicate(&outcome.requires, claims, evidence) == Truth::True;
+        let decided_by = match &outcome.requires {
+            OutcomeRequirement::Predicate(_) => None,
+            OutcomeRequirement::Decision(name) => decisions
+                .map(|decisions| decisions.decided_by(name, id, case.revision.as_ref()))
+                .filter(|principals| !principals.is_empty())
+                .map(|principals| (name, principals)),
+        };
+        let legitimate = match &outcome.requires {
+            OutcomeRequirement::Predicate(requires) => {
+                predicate(requires, claims, evidence) == Truth::True
+            }
+            OutcomeRequirement::Decision(_) => decided_by.is_some(),
+        };
         if !legitimate && case.termination.as_ref() == Some(id) {
             return Err(Refusal::new(
                 "illegitimate-termination",
@@ -76,12 +124,23 @@ pub(super) fn section(
                 ),
             ));
         }
-        let entry = if legitimate {
+        let entry = if let Some((name, principals)) = decided_by {
+            let principals: Vec<&str> = principals.iter().map(|p| p.as_str()).collect();
+            serde_json::json!({
+                "status": "legitimate",
+                "decided_by": {"decision": name.as_str(), "principals": principals},
+            })
+        } else if legitimate {
             serde_json::json!({"status": "legitimate"})
         } else {
             serde_json::json!({
                 "status": "blocked",
-                "reasons": reasons(&outcome.requires, claims, evidence),
+                "reasons": match &outcome.requires {
+                    OutcomeRequirement::Predicate(requires) => reasons(requires, claims, evidence),
+                    OutcomeRequirement::Decision(name) => {
+                        vec![serde_json::json!({"decision": name.as_str(), "present": false})]
+                    }
+                },
             })
         };
         entries.insert(id.as_str().to_owned(), entry);
@@ -350,6 +409,101 @@ mod tests {
             decided["absent"],
             serde_json::json!({"status": "blocked", "reasons": [{"evidence": "k", "present": false}]})
         );
+    }
+
+    /// `done` requires the claim `c`; `inconclusive` requires the decision `stop`.
+    fn decided_ir() -> Ir {
+        crate::ir::compile(
+            &crate::model::parse(&format!(
+                "{PROTOCOL}  inconclusive: {{requires: {{decision: stop}}}}\n"
+            ))
+            .expect("parses"),
+        )
+        .expect("compiles")
+    }
+
+    fn with_decisions(
+        case: &crate::model::Case,
+        decisions: &str,
+    ) -> Result<crate::model::Decision, super::Refusal> {
+        super::super::evaluate_with(
+            &decided_ir(),
+            case,
+            &[],
+            super::super::Supplied {
+                decisions: Some(decisions),
+                ..super::super::Supplied::default()
+            },
+        )
+    }
+
+    const STOP_AT_C2: &str =
+        "[{decision: stop, outcome: inconclusive, principal: p, case_revision: c2}]";
+
+    /// A case terminates through an outcome that requires a decision only with one applying at its
+    /// revision; without one the termination is refused like any blocked outcome's.
+    #[test]
+    fn a_termination_through_a_decided_outcome_needs_the_decision_at_the_case_revision() {
+        let at = |revision: &str| {
+            read_case(&format!(
+                "format: canon-case/1\nid: C-1\nprotocol: p\nrevision: {revision}\nartifacts: {{a: {{revision: r1}}}}\ntermination: inconclusive\n"
+            ))
+            .expect("case reads")
+        };
+        let decided = with_decisions(&at("c2"), STOP_AT_C2).expect("decided at c2");
+        assert_eq!(
+            decided.outcomes.expect("outcomes")["inconclusive"],
+            serde_json::json!({
+                "status": "legitimate",
+                "decided_by": {"decision": "stop", "principals": ["p"]},
+            })
+        );
+        let refusal = with_decisions(&at("c3"), STOP_AT_C2).expect_err("superseded at c3");
+        assert_eq!(refusal.code(), "illegitimate-termination", "{refusal}");
+        let refusal = evaluate(&decided_ir(), &at("c2"), &[]).expect_err("no decision given");
+        assert_eq!(refusal.code(), "illegitimate-termination", "{refusal}");
+    }
+
+    /// A decision taken for an outcome the protocol does not declare is refused as
+    /// `undeclared-outcome`, and one for a declared outcome that does not require a decision of its
+    /// name as `undeclared-decision`, each naming the decision and the outcome, at any case revision.
+    #[test]
+    fn a_decision_for_an_undeclared_outcome_or_an_unrequired_decision_is_refused() {
+        let case = read_case(
+            "format: canon-case/1\nid: C-1\nprotocol: p\nrevision: c2\nartifacts: {a: {revision: r1}}\n",
+        )
+        .expect("case reads");
+        let refusal = with_decisions(
+            &case,
+            "[{decision: stop, outcome: abandoned, principal: p, case_revision: c2}]",
+        )
+        .expect_err("undeclared outcome");
+        assert_eq!(refusal.code(), "undeclared-outcome", "{refusal}");
+        assert_eq!(
+            refusal.to_string(),
+            "decision `stop` is taken for outcome `abandoned`, which the protocol does not declare"
+        );
+        for (given, code, message) in [
+            (
+                "[{decision: stop, outcome: abandoned, principal: p, case_revision: c1}]",
+                "undeclared-outcome",
+                "decision `stop` is taken for outcome `abandoned`, which the protocol does not declare",
+            ),
+            (
+                "[{decision: stop, outcome: done, principal: p, case_revision: c2}]",
+                "undeclared-decision",
+                "decision `stop` is taken for outcome `done`, which does not require it",
+            ),
+            (
+                "[{decision: go, outcome: inconclusive, principal: p, case_revision: c1}]",
+                "undeclared-decision",
+                "decision `go` is taken for outcome `inconclusive`, which does not require it",
+            ),
+        ] {
+            let refusal = with_decisions(&case, given).expect_err(given);
+            assert_eq!(refusal.code(), code, "{given}: {refusal}");
+            assert_eq!(refusal.to_string(), message);
+        }
     }
 
     /// A protocol that declares no outcome leaves the section out.

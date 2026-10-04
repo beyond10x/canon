@@ -1,0 +1,162 @@
+format: canon-conformance/1
+id: CANON-OUTCOME-002
+covers: [CANON-OUTCOME-002]
+fixture: fixtures/investigation/decision-outcomes.yaml
+# `inconclusive` requires the explicit decision `explicitly_inconclusive` rather than a claim. It is
+# legitimate only with a canon-decisions/1 decision of that name, for `inconclusive`, taken at the
+# case snapshot's current revision; otherwise it is blocked, naming the decision and whether one
+# applies (`present`). `supported` is the claim-based outcome of CANON-OUTCOME-001: no evidence
+# leaves its claim UNKNOWN, so it stays blocked in each step that is evaluated, and an explicit
+# decision for it is refused (step `decided-for-another-outcome`). A legitimate decided outcome
+# records who decided (`decided_by`).
+steps:
+  # No decision input: `inconclusive` is blocked, naming `explicitly_inconclusive`.
+  - id: no-decision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        revision: c2
+        artifacts:
+          explanation: {revision: r1}
+      evidence: []
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "inconclusive": {
+              "reasons": [
+                {
+                  "decision": "explicitly_inconclusive",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            },
+            "supported": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # The lead investigator decided the case inconclusive at its current revision `c2`:
+  # `inconclusive` is legitimate, with no reasons, and its entry records who decided: the decision
+  # and every principal whose decision applied, sorted by code point (`decided_by`). Added by
+  # adversary pass 1 (wave 2026-10-04-w8, finding F4, coordinator decision): the first
+  # specification left the principal out of the decision, so a legitimate outcome did not say whose
+  # decision made it so, which design § 37 asks an evaluation to record; under Atlas ADR 0080 that
+  # is a specification change, made here. Adversary pass 2 (finding F5, coordinator decision) made
+  # it a list: recording one principal when several decided drops the others, and design § 37 asks
+  # for every input that made the result, not a chosen one.
+  - id: decided-at-current-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        revision: c2
+        artifacts:
+          explanation: {revision: r1}
+      evidence: []
+      decisions:
+        - decision: explicitly_inconclusive
+          outcome: inconclusive
+          principal: lead-investigator
+          case_revision: c2
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "inconclusive": {
+              "decided_by": {
+                "decision": "explicitly_inconclusive",
+                "principals": [
+                  "lead-investigator"
+                ]
+              },
+              "status": "legitimate"
+            },
+            "supported": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # The same decision, but the case has moved on to revision `c3`: a decision taken at the
+  # superseded revision `c2` does not apply, so `inconclusive` is blocked again, as with no
+  # decision at all.
+  - id: decided-at-superseded-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        revision: c3
+        artifacts:
+          explanation: {revision: r1}
+      evidence: []
+      decisions:
+        - decision: explicitly_inconclusive
+          outcome: inconclusive
+          principal: lead-investigator
+          case_revision: c2
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "inconclusive": {
+              "reasons": [
+                {
+                  "decision": "explicitly_inconclusive",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            },
+            "supported": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # The decision `explicitly_inconclusive` at the current revision `c2`, but taken for `supported`,
+  # which requires a claim, not that decision. A decision applies only to the outcome it names, and
+  # one taken for an outcome that does not require it is refused, naming the decision and the
+  # outcome, rather than silently applying to nothing (adversary pass 1, finding F5, coordinator
+  # decision).
+  - id: decided-for-another-outcome
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        revision: c2
+        artifacts:
+          explanation: {revision: r1}
+      evidence: []
+      decisions:
+        - decision: explicitly_inconclusive
+          outcome: supported
+          principal: lead-investigator
+          case_revision: c2
+    expect:
+      refusal: undeclared-decision

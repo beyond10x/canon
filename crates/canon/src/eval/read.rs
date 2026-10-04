@@ -23,7 +23,8 @@ use crate::ir::{self, Ir};
 use crate::model::{
     self, Action, Age, Artifact, CapabilityId, CapabilityRequirement, Claim, ClaimId, ClaimTest,
     Declarations, EffectClass, EvidenceKind, EvidenceKindId, EvidenceMatch, EvidenceProduction,
-    Obligation, Outcome, Predicate, Protocol, ProtocolHeader, ProtocolId, Truth, one_line,
+    Obligation, Outcome, OutcomeRequirement, Predicate, Protocol, ProtocolHeader, ProtocolId,
+    Truth, one_line,
 };
 
 /// A `malformed-input` refusal: `what` is not a document of its format, and why.
@@ -220,7 +221,7 @@ fn protocol(value: &Json) -> Shape<Protocol> {
         outcomes: declarations(value, "outcomes", model::OutcomeId::new, |entry| {
             Ok(Outcome {
                 description: optional_text(entry, "description")?,
-                requires: predicate(required(entry, "requires")?)?,
+                requires: requirement(required(entry, "requires")?)?,
             })
         })?,
     })
@@ -250,6 +251,19 @@ fn action(entry: &Json) -> Shape<Action> {
         effect: optional_text(entry, "effect")?.map(EffectClass::new),
         may_produce,
     })
+}
+
+/// An outcome's requirement: `{"decision": <name>}`, or a predicate.
+fn requirement(value: &Json) -> Shape<OutcomeRequirement> {
+    if let Some(map) = value.as_object()
+        && map.len() == 1
+        && map.contains_key("decision")
+    {
+        return Ok(OutcomeRequirement::Decision(model::DecisionName::new(
+            text(value, "decision")?,
+        )));
+    }
+    predicate(value).map(OutcomeRequirement::Predicate)
 }
 
 fn predicate(value: &Json) -> Shape<Predicate> {

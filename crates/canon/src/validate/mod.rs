@@ -6,7 +6,8 @@
 //! 1. the format;
 //! 2. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
 //!    claims, obligations, actions and outcomes, in that section order, then the capabilities and
-//!    effect classes actions name, in action order;
+//!    effect classes actions name, in action order, then the decisions outcomes require, in
+//!    outcome order;
 //! 3. duplicate identifiers, in the same section order;
 //! 4. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
 //!    or `d`, or that are but are too long to count in seconds (each with its own message), in the
@@ -30,7 +31,8 @@ use crate::model::{
 };
 
 /// What an identifier names: the protocol itself, a declaration section (named by the singular noun
-/// of what it declares), or a capability or effect class an action names.
+/// of what it declares), a capability or effect class an action names, or a decision an outcome
+/// requires.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Section {
     Protocol,
@@ -42,6 +44,7 @@ pub enum Section {
     Outcome,
     Capability,
     EffectClass,
+    Decision,
 }
 
 impl fmt::Display for Section {
@@ -56,6 +59,7 @@ impl fmt::Display for Section {
             Section::Outcome => "outcome",
             Section::Capability => "capability",
             Section::EffectClass => "effect class",
+            Section::Decision => "decision",
         })
     }
 }
@@ -220,6 +224,11 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
             named.push((Section::EffectClass, effect.as_str()));
         }
     }
+    for (_, outcome) in protocol.outcomes.iter() {
+        if let Some(decision) = outcome.requires.decision() {
+            named.push((Section::Decision, decision.as_str()));
+        }
+    }
     let every_identifier = declared
         .iter()
         .flat_map(|(section, ids)| ids.iter().map(move |id| (*section, *id)))
@@ -281,12 +290,14 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         }
     }
     for (id, outcome) in protocol.outcomes.iter() {
-        references(
-            protocol,
-            &Referrer::Outcome(id.clone()),
-            &outcome.requires,
-            &mut problems,
-        );
+        if let Some(requires) = outcome.requires.predicate() {
+            references(
+                protocol,
+                &Referrer::Outcome(id.clone()),
+                requires,
+                &mut problems,
+            );
+        }
     }
 
     claim_cycles(protocol, &mut problems);
@@ -504,6 +515,39 @@ mod tests {
             [
                 "invalid-max-age: evidence kind `k` has max_age `106751991167301d`, which is too long to count in seconds"
             ]
+        );
+    }
+
+    /// A decision an outcome requires is an identifier, reported after every name actions give;
+    /// it references nothing, so it is never undeclared. Written beside a predicate form, or inside
+    /// one, it does not parse.
+    #[test]
+    fn a_decision_requirement_is_an_identifier_and_stands_alone() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            actions: {act: {effect: 'two words'}}\n\
+            outcomes: {o: {requires: {decision: 'a b'}}, q: {requires: {decision: fine}}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "invalid-identifier: effect class identifier `two words` is empty or contains whitespace or a control character",
+                "invalid-identifier: decision identifier `a b` is empty or contains whitespace or a control character",
+            ]
+        );
+        for requires in [
+            "{decision: d, claim: c}",
+            "{all: [{decision: d}]}",
+            "{not: {decision: d}}",
+        ] {
+            let source = format!(
+                "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nclaims: {{c: {{true_when: {{all: []}}}}}}\noutcomes: {{o: {{requires: {requires}}}}}\n"
+            );
+            assert!(crate::model::parse(&source).is_err(), "{requires} parses");
+        }
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            claims: {c: {true_when: {decision: d}}}\n";
+        assert!(
+            crate::model::parse(source).is_err(),
+            "a claim names a decision"
         );
     }
 }

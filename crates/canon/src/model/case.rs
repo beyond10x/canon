@@ -1,5 +1,6 @@
 //! The `canon-case/1` case snapshot: one concrete undertaking governed by one protocol, with the
-//! current revision of each artifact the protocol declares (design § 4.2).
+//! current revision of each artifact the protocol declares (design § 4.2), and optionally the
+//! case's own revision, which explicit decisions are bound to.
 
 use serde::Deserialize;
 
@@ -26,6 +27,10 @@ pub struct Case {
     /// protocol declares it is checked by the outcomes section (story:outcomes).
     #[serde(default, deserialize_with = "super::present::optional")]
     pub termination: Option<OutcomeId>,
+    /// The case's own current revision. An explicit decision applies only while its
+    /// `case_revision` is this one; a snapshot without one has no explicit decision applying.
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub revision: Option<Revision>,
 }
 
 /// One declared artifact as the case snapshot records it.

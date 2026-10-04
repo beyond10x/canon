@@ -28,8 +28,16 @@ fn main() -> ExitCode {
             case,
             evidence,
             authority,
+            decisions,
             at,
-        } => evaluate::run(&ir, &case, &evidence, authority.as_deref(), at.as_deref()),
+        } => evaluate::run(
+            &ir,
+            &case,
+            &evidence,
+            authority.as_deref(),
+            decisions.as_deref(),
+            at.as_deref(),
+        ),
         Command::Diff { from, to } => diff::run(&from, &to),
     }
 }

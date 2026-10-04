@@ -14,19 +14,19 @@ hold everything marked shipped below. Nothing has been released; build from sour
 | [Validation](../reference/validation.md) | Shipped | Format, identifiers, duplicates, unresolved references and claim cycles, in a stable order. |
 | [`canon-ir/1` compilation](../reference/canon-ir.md) | Shipped | Canonical ordering, explicit defaults, one serialization suitable for hashing. |
 | [Three-valued claim evaluation](../reference/evaluation.md) | Shipped | `canon evaluate` over a case snapshot and evidence records, writing a `canon-decision/1` document; scenario `CANON-CLAIM-001` (covering `CANON-CLAIM-001` and `-002`). |
-| [Evaluation documents](../reference/documents.md) | Shipped | `canon-case/1`, `canon-evidence/1` and `canon-decision/1`. |
-| [`canon conform run`](../reference/conformance.md) | Shipped | Runs scenarios that compile a fixture and evaluate a case, with authority decisions and an evaluation instant when a step gives them. |
+| [Evaluation documents](../reference/documents.md) | Shipped | `canon-case/1`, `canon-evidence/1`, `canon-decisions/1` and `canon-decision/1`. |
+| [`canon conform run`](../reference/conformance.md) | Shipped | Runs scenarios that compile a fixture and evaluate a case, with authority decisions, explicit decisions and an evaluation instant when a step gives them. |
 | ESS specification of the data model | Shipped | The model is specified under `ess/` and held to a hard gate; a test fails when the two differ. |
 | [Evidence bound to revisions](../reference/evaluation.md#refusals) | Shipped | Evidence applies only to the current revision of the artifact it names; a record bound to another revision is listed as excluded under each claim that reaches its kind, and one about an undeclared artifact is refused; scenario `CANON-EVIDENCE-001`. |
 | [Evidence freshness](../reference/evaluation.md#refusals) | Shipped | An evidence kind may declare a `max_age`; at the instant given with `--at`, a record older than that is listed as excluded (`expired`), never counted as `FALSE`. Without `--at` nothing expires; scenario `CANON-EVIDENCE-002`. |
 | [Obligations](../reference/evaluation.md#sections) | Shipped | Each declared obligation is `open` or `discharged` by its discharge predicate over the claim values; scenario `CANON-OBLIGATION-001`. |
 | [Action admissibility](../reference/evaluation.md#sections) | Shipped | Each declared action is `admissible`, `approval-required` or `blocked`, from its precondition and the authority decisions given with `--authority`, with the reasons; scenario `CANON-AUTHORITY-001`. |
 | [Outcomes](../reference/evaluation.md#sections) | Shipped | Each declared outcome is `legitimate` or `blocked`, with the reasons; a case that terminates through an undeclared or a blocked outcome is refused; scenario `CANON-OUTCOME-001`. |
-| Decision-based outcomes | Planned | Outcome requirements that name an explicit decision; explicit decisions are not an input yet. |
+| [Decision-based outcomes](../reference/evaluation.md#explicit-decisions) | Shipped | An outcome may require an explicit decision (`requires: decision: <name>`) instead of a predicate. It is `legitimate` only with a `canon-decisions/1` decision of that name, for that outcome, taken at the case snapshot's `revision` (given with `--decisions`); a decision taken at a superseded case revision does not apply; scenario `CANON-OUTCOME-002`. |
 | Invalidation rules | Planned | An upstream artifact change invalidates dependent claims. |
 | Structured explanation | Planned | A deterministic account of why each value is what it is. |
 | Semantic diff | Planned | Classify a protocol change as tightening, relaxation, breaking, expansion or no semantic change. |
-| Normative conformance suite | Started | The requirements below as runnable scenarios; scenarios cover `CANON-CLAIM-001`, `CANON-CLAIM-002`, `CANON-EVIDENCE-001`, `CANON-EVIDENCE-002`, `CANON-AUTHORITY-001` and `CANON-OUTCOME-001`. |
+| Normative conformance suite | Started | The requirements below as runnable scenarios; scenarios cover `CANON-CLAIM-001`, `CANON-CLAIM-002`, `CANON-EVIDENCE-001`, `CANON-EVIDENCE-002`, `CANON-AUTHORITY-001`, `CANON-OUTCOME-001` and `CANON-OUTCOME-002`. |
 | Protocol composition, a shared evidence envelope | Open question | Listed as open in the design; no decision yet. |
 
 ## Commands that are not built
@@ -39,8 +39,9 @@ The design proposes `canon frontier`, `canon diff`, `canon inspect` and `canon c
 From the design document. Each is meant to become a conformance scenario. Today the scenarios in
 `conformance/scenarios` cover `CANON-CLAIM-001`, `CANON-CLAIM-002`, `CANON-EVIDENCE-001`,
 `CANON-EVIDENCE-002`, `CANON-AUTHORITY-001` and `CANON-OUTCOME-001`; `CANON-INDEPENDENCE-001`,
-`CANON-INVALIDATION-001` and `CANON-DETERMINISM-001` have none yet. One more scenario,
-`CANON-OBLIGATION-001`, holds obligations, which the design lists no requirement for.
+`CANON-INVALIDATION-001` and `CANON-DETERMINISM-001` have none yet. Two more scenarios hold what
+the design lists no requirement for: `CANON-OBLIGATION-001`, obligations, and `CANON-OUTCOME-002`,
+outcomes that require an explicit decision.
 
 | Requirement | Statement |
 |---|---|
@@ -59,8 +60,9 @@ From the design document. Each is meant to become a conformance scenario. Today 
 The design sets one goal for the first milestone: a protocol can deterministically derive a useful
 frontier and legitimate outcomes from a live case, evidence, authority and time, without owning
 execution or persistence. Parsing, validation, the compiled form, claim evaluation, revision
-binding, freshness, obligations, action admissibility and outcomes are done; the rest is the
-planned work above. A service, database, UI, scheduling and workflow execution are not part of it.
+binding, freshness, obligations, action admissibility, outcomes and decision-based outcomes are
+done; the rest is the planned work above. A service, database, UI, scheduling and workflow
+execution are not part of it.
 
 Read the full
 [design proposal](https://github.com/beyond10x/canon/blob/main/docs/design/canon-protocol-calculus-design.md)

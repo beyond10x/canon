@@ -107,8 +107,8 @@ precondition is `TRUE` and every required capability is granted. A status other 
 ## Outcomes
 
 An outcome is a declared terminal interpretation of a case, such as `supported`, `restored` or
-`abandoned`, together with the predicate it requires. A case ends only through an outcome its
-protocol declares.
+`abandoned`, together with what it requires: a predicate, or an explicit decision. A case ends only
+through an outcome its protocol declares.
 
 :::note[Shipped: legitimate or blocked]
 
@@ -116,7 +116,26 @@ protocol declares.
 and `blocked`, with the reasons, otherwise. A case snapshot that records termination through an
 outcome the protocol does not declare is refused (`undeclared-outcome`), and so is one through a
 blocked outcome (`illegitimate-termination`). Conformance scenario `CANON-OUTCOME-001` holds this.
-Outcomes that require an explicit decision are planned.
+
+:::
+
+:::note[Shipped: outcomes that require an explicit decision]
+
+An outcome may require an explicit decision instead of a predicate:
+
+```yaml
+outcomes:
+  inconclusive:
+    requires:
+      decision: explicitly_inconclusive
+```
+
+It is `legitimate` only when `canon evaluate --decisions` is given a `canon-decisions/1` decision
+of that name, for that outcome, taken at the case snapshot's `revision`. A decision taken at an
+earlier case revision has been superseded and does not apply; the outcome is then `blocked`, naming
+the decision. A legitimate decided outcome records who decided: the decision and every principal
+whose decision applied. A decision for an outcome that does not require it, or the same decision
+given twice, is refused. Conformance scenario `CANON-OUTCOME-002` holds this.
 
 :::
 
@@ -124,7 +143,10 @@ Outcomes that require an explicit decision are planned.
 
 Claims, discharge predicates, preconditions and outcome requirements are written as predicates: a
 small, total expression language with five forms, `all`, `any`, `not`, an `evidence` match and a
-`claim` test. There are no variables, loops or function calls.
+`claim` test. There are no variables, loops or function calls. An outcome requirement may instead
+be a decision requirement, `requires: decision: <name>`: it is not a predicate form, so it stands
+alone as the whole requirement and cannot appear inside `all`, `any` or `not`, or in a claim,
+obligation or action.
 
 ```yaml
 true_when:

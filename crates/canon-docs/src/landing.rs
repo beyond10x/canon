@@ -9,7 +9,7 @@ use std::path::Path;
 use std::process::Command;
 
 use b10x_canon::ir::{self, Ir};
-use b10x_canon::model::{self, Predicate, Truth};
+use b10x_canon::model::{self, OutcomeRequirement, Predicate, Truth};
 
 use crate::json::{self, Json, obj};
 
@@ -186,14 +186,21 @@ pub fn graph(compiled: &Ir, source: &str) -> Json {
     }
     for (id, outcome) in &compiled.outcomes {
         let mut members = described(&outcome.description);
-        members.push(("predicate".to_owned(), predicate(&outcome.requires)));
-        for (claim, value) in leaves(&outcome.requires).1 {
-            edge((
-                "requires",
-                format!("claim:{claim}"),
-                format!("outcome:{id}"),
-                qualifier(value),
-            ));
+        match &outcome.requires {
+            OutcomeRequirement::Predicate(requires) => {
+                members.push(("predicate".to_owned(), predicate(requires)));
+                for (claim, value) in leaves(requires).1 {
+                    edge((
+                        "requires",
+                        format!("claim:{claim}"),
+                        format!("outcome:{id}"),
+                        qualifier(value),
+                    ));
+                }
+            }
+            OutcomeRequirement::Decision(name) => {
+                members.push(("decision".to_owned(), json::str(name.as_str())));
+            }
         }
         nodes.push(Node {
             kind: "outcome",

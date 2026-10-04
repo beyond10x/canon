@@ -15,7 +15,8 @@ does not depend on the order the sections are written in:
 1. the format;
 2. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
    claims, obligations, actions and outcomes, in that section order, then the capabilities and
-   effect classes actions name, in action order;
+   effect classes actions name, in action order, then the decisions outcomes require, in
+   outcome order;
 3. duplicate identifiers, in the same section order;
 4. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
    or `d`, or that are but are too long to count in seconds (each with its own message), in the
