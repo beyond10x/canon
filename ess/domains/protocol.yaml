@@ -3,7 +3,8 @@
 # validation rule (duplicate identifiers, references that resolve), is tested by Canon itself.
 # The evaluation documents (canon-case/1, canon-evidence/1, canon-decision/1) are specified first
 # here (story:three-valued-claims), and the explicit decisions an evaluation reads
-# (canon-decisions/1) too (story:decision-outcomes).
+# (canon-decisions/1) too (story:decision-outcomes), and the authority decisions it reads
+# (canon-authority/1, story:review-hardening-w7).
 # crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
 domain: canon.protocol
 
@@ -426,6 +427,40 @@ types:
       # read from: .engineering/planning/story/decision-outcomes.md:106-108
       - name: case_revision
         type: canon.protocol.Revision
+
+  # One authority decision of a canon-authority/1 document. `canon evaluate --authority` names that
+  # document: a YAML (or JSON) list of these entries; an empty list decides nothing, and an empty
+  # document is not a list. Canon grants nothing and resolves no identity: whoever runs the
+  # evaluation decides which capabilities are granted and passes those decisions in (design § 33).
+  # A capability no action requires may be decided; it changes no action. Refused, in this order:
+  # text that is not such a list, or an entry with another key, another decision or a missing key,
+  # as malformed-input, naming the key an entry leaves out; then, entry by entry in the order given,
+  # a capability that is not an identifier as invalid-identifier, and a capability decided a second
+  # time as duplicate-identifier.
+  # read from: crates/canon/src/eval/authority.rs:1-19
+  # read from: crates/canon/src/eval/authority.rs:70-75
+  # read from: .engineering/planning/story/review-hardening-w7.md:28
+  # read from: .engineering/planning/story/review-hardening-w7.md:31
+  - name: canon.protocol.AuthorityDecision
+    kind: struct
+    fields:
+      # The capability decided, an identifier an action's `requires` may name.
+      # read from: crates/canon/src/eval/authority.rs:73
+      - name: capability
+        type: canon.protocol.CapabilityId
+      # Whether it is granted.
+      # read from: crates/canon/src/eval/authority.rs:74
+      - name: decision
+        type: canon.protocol.Grant
+
+  # An authority decision on one capability. An action whose precondition is true is admissible
+  # when every capability it requires is granted, blocked when one is denied, naming it, and
+  # approval-required when none is denied and one is not decided (CANON-AUTHORITY-001).
+  # read from: crates/canon/src/eval/authority.rs:31-38
+  # read from: crates/canon/src/eval/actions.rs:23-29
+  - name: canon.protocol.Grant
+    kind: enum
+    variants: ["granted", "denied"]
 
   # One claim's entry in a decision. An object rather than a bare value, so that later stories add
   # to it (story:evidence-revision-binding adds the excluded evidence).
