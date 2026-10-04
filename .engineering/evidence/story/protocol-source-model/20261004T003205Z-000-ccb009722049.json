@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T00:32:05Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-source-model",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "canon validate --path fixtures/investigation/{protocol.yaml,invalid/*.yaml}: baseline wave/2026-10-04-w1 vs treatment impl/protocol-source-model",
+    "reference": "ga-wave-2026-10-04-w1/canon/scratch/verify-{baseline,treatment}.log: baseline exit 101 (no canon CLI); treatment valid exit 0, each invalid variant exit 1 naming the identifier; VERIFIED"
+  }
+}

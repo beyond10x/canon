@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:protocol-source-model
 kind: story
-status: proposed
+status: implemented
 title: Define the protocol/1 minimal source model
 refs:
 - provider: taskboard
@@ -28,9 +28,11 @@ scope:
   path: fixtures/investigation/invalid/
 - confidence: cited
   path: fixtures/investigation/protocol.yaml
-revision: 4
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:51Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "proposed", to: "active", at: "2026-10-04T00:23:52Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "active", to: "implemented", at: "2026-10-04T01:05:26Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":15,"verification":1}}}
 ---
 ## Outcome
 

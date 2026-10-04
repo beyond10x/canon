@@ -1,0 +1,13 @@
+[package]
+name = "canon-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "canon"
+path = "src/main.rs"
+
+[dependencies]
+b10x-canon = { path = "../canon" }
+clap = { version = "4", features = ["derive"] }
