@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T08:26:15Z",
+  "actor": "human:timo",
+  "artifact": "story:explanation",
+  "kind": "story",
+  "revision": 12,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test --workspace --locked: 478 passed, 0 failed",
+    "reference": "https://github.com/beyond10x/canon/commit/6d3dcd8"
+  }
+}

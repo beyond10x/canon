@@ -2,11 +2,40 @@
 format: aep.planning-md/3
 id: story:subject-bound-evidence-match
 kind: story
-status: draft
+status: implemented
 title: Evidence matches can name the artifact a record must be about
 relations:
 - decomposes: epic:canon-kernel
-revision: 1
+- serves: vision:O2
+- serves: vision:governed-autonomy
+scope:
+- confidence: cited
+  path: conformance/scenarios/subject-bound-evidence-match.yaml
+- confidence: cited
+  path: crates/canon-docs/
+- confidence: cited
+  path: crates/canon/src/eval/actions.rs
+- confidence: cited
+  path: crates/canon/src/eval/claims.rs
+- confidence: cited
+  path: crates/canon/src/eval/outcomes.rs
+- confidence: cited
+  path: crates/canon/src/ir/
+- confidence: cited
+  path: crates/canon/src/model/
+- confidence: cited
+  path: crates/canon/src/validate/
+- confidence: cited
+  path: ess/
+- confidence: cited
+  path: fixtures/investigation/subject-bound-evidence-match.yaml
+- confidence: cited
+  path: website/
+revision: 6
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-04T07:10:25Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-10-04T07:10:25Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-10-04T08:26:14Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":3,"verification":1}}}
 ---
 ## Outcome
 

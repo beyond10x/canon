@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T08:26:15Z",
+  "actor": "human:timo",
+  "artifact": "story:explanation",
+  "kind": "story",
+  "revision": 12,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "wave 2026-10-04-w10 integration gate: fmt, clippy, ess validate+synthesize (0 refusals), canon-docs --check, conform run 9 passed",
+    "reference": "https://github.com/beyond10x/canon/commit/6d3dcd8"
+  }
+}

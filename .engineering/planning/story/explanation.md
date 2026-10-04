@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:explanation
 kind: story
-status: proposed
+status: implemented
 title: Emit a deterministic structured explanation
 refs:
 - provider: taskboard
@@ -23,14 +23,26 @@ scope:
 - confidence: cited
   path: conformance/scenarios/explanation.yaml
 - confidence: cited
+  path: crates/canon/src/eval/authority.rs
+- confidence: cited
   path: crates/canon/src/eval/decision.rs
+- confidence: cited
+  path: crates/canon/src/eval/decisions.rs
+- confidence: cited
+  path: crates/canon/src/eval/mod.rs
 - confidence: cited
   path: crates/canon/src/explain/
 - confidence: cited
+  path: crates/canon/src/model/decision.rs
+- confidence: cited
   path: fixtures/investigation/explanation.yaml
-revision: 7
+- confidence: cited
+  path: website/
+revision: 13
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "proposed", to: "active", at: "2026-10-04T07:10:25Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "active", to: "implemented", at: "2026-10-04T08:26:15Z", actor: "human:timo", revision: 13, decided_on: {"recorded":{"test_result":1,"review_outcome":5,"verification":1}}}
 ---
 ## Outcome
 
@@ -96,3 +108,13 @@ reverse order gives byte-identical output.
 TASKBOARD C-009 (build pack, now Atlas `docs/design/governed-autonomy/TASKBOARD.md`);
 `docs/design/canon-protocol-calculus-design.md` § 13, § 14, § 37, § 41 item 13;
 `docs/contracts/protocol-core.md`; CANON-DETERMINISM-001 (§ 32).
+
+## Coordinator decisions (wave 2026-10-04-w10)
+
+- Shape: `claims` lists each non-true claim with `because` (records applied or excluded, kinds absent);
+  outcomes, actions and obligations point into `claims`; `computed_from` records protocol and revision,
+  the case snapshot, the sorted evidence ids and any supplied authority, decisions and `at`.
+- `semantics` is `{"canon": <crate version>, "format": "canon-decision/1"}`, because the design names
+  no semantics identifier. A canon version bump must update CANON-EXPLAIN-001 and the generated example.
+- Five existing tests that compared or searched whole decisions set the recorded `computed_from` field
+  aside after asserting it, keeping every other byte compared.

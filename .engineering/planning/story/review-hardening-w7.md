@@ -7,7 +7,18 @@ title: Fix the independent review findings on the wave-7 evaluator
 relations:
 - decomposes: epic:canon-kernel
 - depends_on: story:decision-outcomes
-revision: 1
+- serves: vision:O2
+- serves: vision:governed-autonomy
+scope:
+- confidence: cited
+  path: crates/canon-cli/src/evaluate.rs
+- confidence: cited
+  path: crates/canon-cli/src/lib.rs
+- confidence: cited
+  path: crates/canon/src/eval/authority.rs
+- confidence: cited
+  path: crates/canon/src/eval/evidence.rs
+revision: 3
 ---
 ## Outcome
 
@@ -18,6 +29,8 @@ The findings of the independent review of canon main 8fc260a (wave 2026-10-04-w7
 - every evidence refusal names the record, and `canon evaluate` names the file;
 - the exit-status table covers usage errors (or usage errors exit with a status of their own);
 - `canon-authority/1` is declared in `ess/`, with a schema and a documents-page section.
+
+- a conformance scenario holds the subject-bound evidence reason shape `{evidence, present, subject}` in the `actions` and `outcomes` sections (CANON-EVIDENCE-003 has no actions or outcomes step; adversary pass 2 of story:subject-bound-evidence-match, ess/domains/protocol.yaml:434).
 
 ## Acceptance
 
