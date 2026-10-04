@@ -14,6 +14,11 @@ const SKELETON_FIXTURE: &str = "fixtures/investigation/evaluator-skeleton.yaml";
 /// `no-evidence` step): no section slot is written.
 const NO_EVIDENCE_DECISION: &str = "{\n  \"case\": \"INV-18\",\n  \"claims\": {\n    \"explanation.supported\": {\n      \"value\": \"unknown\"\n    }\n  },\n  \"format\": \"canon-decision/1\",\n  \"protocol\": \"investigation\",\n  \"protocol_revision\": 1\n}\n";
 
+/// The decision the skeleton fixture gives `INV-18` with no evidence: the base fixture's, plus the
+/// `obligations` section story:obligations fills, with `establish.explanation` open because
+/// `explanation.supported` is `unknown`.
+const SKELETON_NO_EVIDENCE_DECISION: &str = "{\n  \"case\": \"INV-18\",\n  \"claims\": {\n    \"explanation.supported\": {\n      \"value\": \"unknown\"\n    }\n  },\n  \"format\": \"canon-decision/1\",\n  \"obligations\": [\n    {\n      \"id\": \"establish.explanation\",\n      \"status\": \"open\"\n    }\n  ],\n  \"protocol\": \"investigation\",\n  \"protocol_revision\": 1\n}\n";
+
 fn repository_root() -> PathBuf {
     let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
         .expect("CARGO_MANIFEST_DIR is unset; run this test through cargo");
@@ -80,18 +85,36 @@ fn evaluate(name: &str, fixture: &str, case: &str) -> Output {
 
 const CASE: &str = "format: canon-case/1\nid: INV-18\nprotocol: investigation\nartifacts:\n  explanation: {revision: r1}\n";
 
-/// "Nothing evaluates differently: every stub is inert." The unit's tests evaluate only protocols
-/// without obligations, and CANON-CLAIM-001 now compares only the sections it lists, so neither
-/// would see an `obligations` section the stub wrote for a protocol that declares one. This
-/// evaluates the unit's own fixture, which declares `establish.explanation`, and pins the whole
-/// decision: it is the base fixture's, byte for byte. It also drives `read_ir` over an IR carrying
-/// `discharged_when` from the binary.
+/// "Nothing evaluates differently: every stub is inert", until story:obligations filled the
+/// `obligations` section. CANON-CLAIM-001 compares only the sections it lists, so it would not see
+/// any other section written for a protocol that declares an obligation. This evaluates the
+/// skeleton fixture, which declares `establish.explanation`, and pins the whole decision: the base
+/// fixture's, byte for byte, plus the `obligations` section and nothing else. The base fixture,
+/// which declares no obligation, still gets no section. It also drives `read_ir` over an IR
+/// carrying `discharged_when` from the binary.
 #[test]
-fn a_declared_obligation_changes_no_decision() {
+fn a_declared_obligation_adds_only_the_obligations_section() {
     let run = evaluate("obligation", SKELETON_FIXTURE, CASE);
     assert_eq!(text(&run.stderr), "", "stderr");
-    assert_eq!(text(&run.stdout), NO_EVIDENCE_DECISION, "canon-decision/1");
+    assert_eq!(
+        text(&run.stdout),
+        SKELETON_NO_EVIDENCE_DECISION,
+        "canon-decision/1"
+    );
     assert_eq!(run.status.code(), Some(0), "exit");
+
+    let base = evaluate(
+        "no-obligation",
+        "fixtures/investigation/protocol.yaml",
+        CASE,
+    );
+    assert_eq!(text(&base.stderr), "", "base: stderr");
+    assert_eq!(
+        text(&base.stdout),
+        NO_EVIDENCE_DECISION,
+        "base: canon-decision/1"
+    );
+    assert_eq!(base.status.code(), Some(0), "base: exit");
 }
 
 /// `canon-case/1` gains `termination`, and "its check stays in `outcomes.rs`" which is a stub that
@@ -104,7 +127,7 @@ fn a_recorded_termination_changes_no_decision() {
         assert_eq!(text(&run.stderr), "", "{outcome}: stderr");
         assert_eq!(
             text(&run.stdout),
-            NO_EVIDENCE_DECISION,
+            SKELETON_NO_EVIDENCE_DECISION,
             "{outcome}: canon-decision/1"
         );
         assert_eq!(run.status.code(), Some(0), "{outcome}: exit");
