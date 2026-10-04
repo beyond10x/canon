@@ -233,6 +233,15 @@ types:
       # read from: crates/canon/src/model/predicate.rs:73
       - name: result
         type: Optional<String>
+      # The declared artifact a record must be about to match. A match that names one is decided
+      # only by records whose subject is that artifact; a record about another declared artifact,
+      # at its current revision, is not of the match, so it neither establishes nor contradicts it
+      # (CANON-EVIDENCE-003). A match without one is decided by records about any declared
+      # artifact, as before. It names an artifact the protocol declares.
+      # read from: .engineering/planning/story/subject-bound-evidence-match.md:13-16
+      # read from: .engineering/planning/story/subject-bound-evidence-match.md:26-28
+      - name: subject
+        type: Optional<canon.protocol.ArtifactId>
 
   # Source text may leave `is` out; it then reads as true (crates/canon/src/model/predicate.rs:169).
   # read from: crates/canon/src/model/predicate.rs:76-81
