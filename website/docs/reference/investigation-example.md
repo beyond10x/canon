@@ -242,6 +242,11 @@ and `canon evaluate --ir investigation.ir.json --case case.yaml --evidence evide
     }
   },
   "format": "canon-decision/1",
+  "outcomes": {
+    "supported": {
+      "status": "legitimate"
+    }
+  },
   "protocol": "investigation",
   "protocol_revision": 1
 }

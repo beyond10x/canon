@@ -238,13 +238,50 @@ fn canon_evaluate_prints_the_decision_each_step_expects() {
             step.id
         );
         assert_eq!(
-            text(&run.stdout),
-            decision,
-            "step `{}`: canon evaluate stdout",
-            step.id
+            listed_sections(text(&run.stdout), decision),
+            *decision,
+            "step `{}`: canon evaluate stdout:\n{}",
+            step.id,
+            text(&run.stdout)
         );
         assert_eq!(run.status.code(), Some(0), "step `{}`: exit", step.id);
     }
+}
+
+/// `actual`, a canonical `canon-decision/1` document, holding only the top-level members
+/// `expected` lists, each byte for byte: the comparison `canon conform run` makes, so a section a
+/// later story writes for this fixture (story:outcomes writes `outcomes`) does not change what
+/// this test checks.
+fn listed_sections(actual: &str, expected: &str) -> String {
+    // Each top-level member: its key and its lines, the separating comma dropped.
+    let members = |document: &str| -> Vec<(String, Vec<String>)> {
+        let mut members: Vec<(String, Vec<String>)> = Vec::new();
+        for line in document.lines() {
+            if let Some(rest) = line.strip_prefix("  \"") {
+                let key = rest.split('"').next().unwrap_or_default().to_owned();
+                members.push((key, vec![line.to_owned()]));
+            } else if line != "{" && line != "}" {
+                let (_, lines) = members
+                    .last_mut()
+                    .unwrap_or_else(|| panic!("a member line before any member: {line}"));
+                lines.push(line.to_owned());
+            }
+        }
+        for (_, lines) in &mut members {
+            let last = lines.last_mut().expect("a member has a line");
+            if let Some(unseparated) = last.strip_suffix(',') {
+                *last = unseparated.to_owned();
+            }
+        }
+        members
+    };
+    let listed: Vec<String> = members(expected).into_iter().map(|(key, _)| key).collect();
+    let kept: Vec<String> = members(actual)
+        .into_iter()
+        .filter(|(key, _)| listed.contains(key))
+        .map(|(_, lines)| lines.join("\n"))
+        .collect();
+    format!("{{\n{}\n}}\n", kept.join(",\n"))
 }
 
 /// A refusal exits 1 naming its code on standard error; an input that cannot be read exits 2.

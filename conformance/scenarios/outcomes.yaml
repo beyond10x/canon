@@ -127,8 +127,9 @@ steps:
           "protocol_revision": 1
         }
 
-  # The case terminated through `supported`, which the protocol declares: it is evaluated, not
-  # refused. The control for the next step, which differs only in the outcome named.
+  # The case terminated through `supported`, which the protocol declares and which is legitimate:
+  # it is evaluated, not refused. The control for the next step, which differs only in the outcome
+  # named, and for `terminated-blocked`, which differs only in the evidence.
   - id: terminated-declared
     evaluate:
       case:
@@ -188,3 +189,19 @@ steps:
           subject_revision: r1
     expect:
       refusal: undeclared-outcome
+
+  # The case terminated through `supported`, which the protocol declares, while it is blocked (no
+  # evidence, so its claim is UNKNOWN): an outcome is a legitimate terminal interpretation, so the
+  # snapshot is refused. The control is `terminated-declared`, where `supported` is legitimate.
+  - id: terminated-blocked
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+        termination: supported
+      evidence: []
+    expect:
+      refusal: illegitimate-termination
