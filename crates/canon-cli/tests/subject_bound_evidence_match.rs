@@ -8,7 +8,9 @@
 //! and beside a refuted attempt about the explanation, it does not enter the subject-bound match's
 //! count at all (`FALSE`, not the `UNKNOWN` of disagreeing records). `canon evaluate` prints the
 //! bytes each step expects, and `canon validate` refuses a match whose subject is not a declared
-//! artifact, naming it.
+//! artifact, naming it. A record the binding stage excludes is listed under a claim only when a
+//! match the claim reaches would read it, so one about the dataset is not listed under
+//! `explanation.survived` (coordinator decision, wave 2026-10-04-w10).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -296,6 +298,55 @@ fn path(p: &Path) -> String {
     p.to_str().expect("utf-8 path").to_owned()
 }
 
+/// `canon evaluate --ir <file> --case <file> --evidence <dir>` over the compiled fixture, for a
+/// case snapshot at the given revisions of the subject and the other artifact, with these records.
+fn evaluate(name: &str, subject_revision: &str, other_revision: &str, given: &[Record]) -> Output {
+    let dir = scratch(name);
+    let compiled = canon(&["compile", "--path", FIXTURE]);
+    assert_eq!(
+        compiled.status.code(),
+        Some(0),
+        "the fixture compiles: {}",
+        text(&compiled.stderr)
+    );
+    let ir = dir.join("protocol.ir.json");
+    std::fs::write(&ir, &compiled.stdout).expect("IR written");
+    let case = dir.join("case.yaml");
+    std::fs::write(
+        &case,
+        format!(
+            "format: canon-case/1\nid: INV-18\nprotocol: investigation\nartifacts:\n  \
+             {SUBJECT}: {{revision: {subject_revision}}}\n  {OTHER}: {{revision: {other_revision}}}\n"
+        ),
+    )
+    .expect("case written");
+    let evidence = dir.join("evidence");
+    std::fs::create_dir(&evidence).expect("evidence directory created");
+    for (index, record) in given.iter().enumerate() {
+        let result = record
+            .result
+            .as_ref()
+            .map_or(String::new(), |result| format!("result: {result}\n"));
+        std::fs::write(
+            evidence.join(format!("{index:02}.yaml")),
+            format!(
+                "format: canon-evidence/1\nid: {}\nkind: {}\n{result}subject: {}\nsubject_revision: {}\n",
+                record.id, record.kind, record.subject, record.subject_revision
+            ),
+        )
+        .expect("record written");
+    }
+    canon(&[
+        "evaluate",
+        "--ir",
+        &path(&ir),
+        "--case",
+        &path(&case),
+        "--evidence",
+        &path(&evidence),
+    ])
+}
+
 /// `canon evaluate` over the compiled fixture, given each evaluate step's case and records as
 /// files, prints exactly the `canon-decision/1` bytes the step expects.
 #[test]
@@ -309,58 +360,82 @@ fn canon_evaluate_prints_the_decision_each_step_expects() {
         let EvaluateExpectation::Decision(decision) = expected else {
             panic!("step `{id}` expects a decision");
         };
-        let dir = scratch(id);
-        let compiled = canon(&["compile", "--path", FIXTURE]);
-        assert_eq!(
-            compiled.status.code(),
-            Some(0),
-            "the fixture compiles: {}",
-            text(&compiled.stderr)
+        let run = evaluate(
+            id,
+            &current(inputs, SUBJECT),
+            &current(inputs, OTHER),
+            &records(inputs),
         );
-        let ir = dir.join("protocol.ir.json");
-        std::fs::write(&ir, &compiled.stdout).expect("IR written");
-        let case = dir.join("case.yaml");
-        std::fs::write(
-            &case,
-            format!(
-                "format: canon-case/1\nid: INV-18\nprotocol: investigation\nartifacts:\n  \
-                 {SUBJECT}: {{revision: {}}}\n  {OTHER}: {{revision: {}}}\n",
-                current(inputs, SUBJECT),
-                current(inputs, OTHER)
-            ),
-        )
-        .expect("case written");
-        let evidence = dir.join("evidence");
-        std::fs::create_dir(&evidence).expect("evidence directory created");
-        for (index, record) in records(inputs).iter().enumerate() {
-            let result = record
-                .result
-                .as_ref()
-                .map_or(String::new(), |result| format!("result: {result}\n"));
-            std::fs::write(
-                evidence.join(format!("{index:02}.yaml")),
-                format!(
-                    "format: canon-evidence/1\nid: {}\nkind: {}\n{result}subject: {}\nsubject_revision: {}\n",
-                    record.id, record.kind, record.subject, record.subject_revision
-                ),
-            )
-            .expect("record written");
-        }
-        let run = canon(&[
-            "evaluate",
-            "--ir",
-            &path(&ir),
-            "--case",
-            &path(&case),
-            "--evidence",
-            &path(&evidence),
-        ]);
         assert_eq!(
             (text(&run.stdout), text(&run.stderr), run.status.code()),
             (decision.as_str(), "", Some(0)),
             "step `{id}`: canon evaluate"
         );
     }
+}
+
+/// A record the binding stage excludes is listed under a claim only when a match the claim reaches
+/// would read it. One about the dataset, bound to a superseded revision of it, is listed under the
+/// unbound claim and under the `any` with a dataset member, and not under the claim whose match is
+/// bound to the explanation: it does not match, so it was never that claim's evidence. One about
+/// the explanation, bound to a superseded revision of it, is listed under all three.
+#[test]
+fn an_excluded_record_about_another_artifact_is_not_listed_under_a_subject_bound_claim() {
+    let attempt = |id: &str, subject: &str| Record {
+        id: id.to_owned(),
+        kind: "falsification_attempt".to_owned(),
+        result: Some("survived".to_owned()),
+        subject: subject.to_owned(),
+        subject_revision: "old".to_owned(),
+    };
+    let excluded = |id: &str| {
+        format!(
+            "\"excluded_evidence\": [\n        {{\n          \"evidence\": \"{id}\",\n          \
+             \"reason\": \"revision_mismatch\"\n        }}\n      ],\n      "
+        )
+    };
+    let decision = |bound_listed: &str, unbound_listed: &str, either_listed: &str| {
+        format!(
+            "{{\n  \"case\": \"INV-18\",\n  \"claims\": {{\n    \"attempt.survived\": {{\n      \
+             {unbound_listed}\"value\": \"unknown\"\n    }},\n    \"either.survived\": {{\n      \
+             {either_listed}\"value\": \"unknown\"\n    }},\n    \"explanation.survived\": {{\n      \
+             {bound_listed}\"value\": \"unknown\"\n    }}\n  }},\n  \"format\": \"canon-decision/1\",\n  \
+             \"protocol\": \"investigation\",\n  \"protocol_revision\": 1\n}}\n"
+        )
+    };
+
+    let about_other = evaluate(
+        "excluded-about-another-artifact",
+        "r1",
+        "d2",
+        &[attempt("falsification-1", OTHER)],
+    );
+    let listed = excluded("falsification-1");
+    assert_eq!(
+        (
+            text(&about_other.stdout),
+            text(&about_other.stderr),
+            about_other.status.code()
+        ),
+        (decision("", &listed, &listed).as_str(), "", Some(0)),
+        "a superseded record about the dataset"
+    );
+
+    let about_subject = evaluate(
+        "excluded-about-the-subject",
+        "r2",
+        "d1",
+        &[attempt("falsification-1", SUBJECT)],
+    );
+    assert_eq!(
+        (
+            text(&about_subject.stdout),
+            text(&about_subject.stderr),
+            about_subject.status.code()
+        ),
+        (decision(&listed, &listed, &listed).as_str(), "", Some(0)),
+        "a superseded record about the explanation"
+    );
 }
 
 /// A match may name only an artifact the protocol declares: `canon validate` refuses one that

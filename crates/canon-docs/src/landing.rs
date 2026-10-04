@@ -45,6 +45,9 @@ fn predicate(predicate: &Predicate) -> Json {
             if let Some(result) = &matching.result {
                 members.push(("result".to_owned(), json::str(result.clone())));
             }
+            if let Some(subject) = &matching.subject {
+                members.push(("subject".to_owned(), json::str(subject.as_str())));
+            }
             obj([("evidence", Json::Obj(members))])
         }
         Predicate::Claim(test) => {
@@ -372,6 +375,29 @@ pub fn run_canon(canon: &Path, root: &Path, args: &[&str]) -> Result<Run, String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The graph keeps an evidence match's subject, and writes none for a match without one.
+    #[test]
+    fn an_evidence_match_keeps_its_subject_in_the_graph() {
+        let protocol = model::parse(
+            "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}}\n\
+             evidence_kinds: {k: {}}\nclaims:\n  \
+             bound: {true_when: {evidence: {kind: k, result: pass, subject: a}}}\n  \
+             unbound: {true_when: {evidence: {kind: k, result: pass}}}\n",
+        )
+        .expect("parses");
+        let rendered: Vec<String> = protocol
+            .claims
+            .iter()
+            .map(|(_, claim)| predicate(&claim.true_when).pretty())
+            .collect();
+        assert!(
+            rendered[0].contains("\"subject\": \"a\""),
+            "{}",
+            rendered[0]
+        );
+        assert!(!rendered[1].contains("subject"), "{}", rendered[1]);
+    }
 
     #[test]
     fn the_terminal_keeps_the_head_of_compile_and_every_line_of_the_rest() {

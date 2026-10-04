@@ -11,14 +11,15 @@
 //! - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
 //!   evidence match without a result has `"result": null`; a claim test without `is` has
 //!   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-//!   true; absent lists and sections are empty. The one exception is an evidence kind's
-//!   `max_age`: written, as authored, only when the kind declares one, so the IR of a protocol
-//!   that declares none is the IR it was before `max_age` existed.
+//!   true; absent lists and sections are empty. The two exceptions are an evidence kind's
+//!   `max_age` and an evidence match's `subject`: each written, as authored, only when it is
+//!   declared, so the IR of a protocol that declares neither is the IR it was before they existed.
 //! - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
 //!   it was written. An outcome that requires an explicit decision has the requirement
 //!   `{"decision": <name>}`, as written; any other requirement is its predicate.
 //! - **Resolved references.** Only a document the validator accepts compiles, so every claim and
-//!   evidence kind the IR references is declared in it.
+//!   evidence kind the IR references is declared in it, and so is every artifact an evidence match
+//!   names as its subject.
 //!
 //! The IR carries the protocol id and revision (design § 37) and nothing about where the document
 //! came from: no path, no working directory, no time. [`Ir::canonical_json`] is its one
@@ -220,8 +221,9 @@ fn unique<T: Ord>(mut ids: Vec<T>) -> Vec<T> {
 /// 2. Two `all`s, or two `any`s, compare their members pairwise in order; the first pair that
 ///    differs decides, and when one list runs out first, the shorter list comes first.
 /// 3. Two `not`s compare what they negate.
-/// 4. Two evidence matches compare by kind, then by result: no result comes before any result, and
-///    results compare as text.
+/// 4. Two evidence matches compare by kind, then by result, then by subject: no result comes before
+///    any result and no subject before any subject, and results and subjects compare as text. Two
+///    matches that differ only in their subject are two members.
 /// 5. Two claim tests compare by claim, then by the value tested: `false`, `true`, `unknown`.
 fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
     fn form(predicate: &Predicate) -> u8 {
@@ -243,6 +245,15 @@ fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
     fn text(left: &str, right: &str) -> Ordering {
         left.chars().cmp(right.chars())
     }
+    /// Absent before present; two present values compare as text.
+    fn optional(left: Option<&str>, right: Option<&str>) -> Ordering {
+        match (left, right) {
+            (None, None) => Ordering::Equal,
+            (None, Some(_)) => Ordering::Less,
+            (Some(_), None) => Ordering::Greater,
+            (Some(left), Some(right)) => text(left, right),
+        }
+    }
     fn members(left: &[Predicate], right: &[Predicate]) -> Ordering {
         for (left, right) in left.iter().zip(right) {
             let order = canonical_order(left, right);
@@ -258,14 +269,14 @@ fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
         | (Predicate::Any(left), Predicate::Any(right)) => members(left, right),
         (Predicate::Not(left), Predicate::Not(right)) => canonical_order(left, right),
         (Predicate::Evidence(left), Predicate::Evidence(right)) => {
-            text(left.kind.as_str(), right.kind.as_str()).then_with(|| {
-                match (&left.result, &right.result) {
-                    (None, None) => Ordering::Equal,
-                    (None, Some(_)) => Ordering::Less,
-                    (Some(_), None) => Ordering::Greater,
-                    (Some(left), Some(right)) => text(left, right),
-                }
-            })
+            text(left.kind.as_str(), right.kind.as_str())
+                .then_with(|| optional(left.result.as_deref(), right.result.as_deref()))
+                .then_with(|| {
+                    optional(
+                        left.subject.as_ref().map(|subject| subject.as_str()),
+                        right.subject.as_ref().map(|subject| subject.as_str()),
+                    )
+                })
         }
         (Predicate::Claim(left), Predicate::Claim(right)) => {
             text(left.claim.as_str(), right.claim.as_str())
@@ -412,13 +423,20 @@ fn predicate_value(predicate: &Predicate) -> Value {
             Value::Array(members.iter().map(predicate_value).collect()),
         )]),
         Predicate::Not(inner) => Value::object([("not", predicate_value(inner))]),
-        Predicate::Evidence(EvidenceMatch { kind, result }) => Value::object([(
-            "evidence",
-            Value::object([
+        Predicate::Evidence(EvidenceMatch {
+            kind,
+            result,
+            subject,
+        }) => {
+            let mut fields = vec![
                 ("kind", Value::string(kind.as_str())),
                 ("result", Value::optional(result.as_deref())),
-            ]),
-        )]),
+            ];
+            if let Some(subject) = subject {
+                fields.push(("subject", Value::string(subject.as_str())));
+            }
+            Value::object([("evidence", Value::object(fields))])
+        }
         Predicate::Claim(ClaimTest { claim, is }) => Value::object([(
             "claim",
             Value::object([
@@ -440,7 +458,9 @@ fn truth(value: Truth) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{FORMAT, compile, sorted};
-    use crate::model::{self, ClaimId, ClaimTest, EvidenceKindId, EvidenceMatch, Predicate, Truth};
+    use crate::model::{
+        self, ArtifactId, ClaimId, ClaimTest, EvidenceKindId, EvidenceMatch, Predicate, Truth,
+    };
 
     fn claim(id: &str, is: Truth) -> Predicate {
         Predicate::Claim(ClaimTest {
@@ -450,9 +470,14 @@ mod tests {
     }
 
     fn evidence(kind: &str, result: Option<&str>) -> Predicate {
+        about(kind, result, None)
+    }
+
+    fn about(kind: &str, result: Option<&str>, subject: Option<&str>) -> Predicate {
         Predicate::Evidence(EvidenceMatch {
             kind: EvidenceKindId::new(kind),
             result: result.map(str::to_owned),
+            subject: subject.map(ArtifactId::new),
         })
     }
 
@@ -468,7 +493,10 @@ mod tests {
             claim("c", Truth::Unknown),
             claim("d", Truth::False),
             evidence("a", None),
+            about("a", None, Some("s")),
             evidence("a", Some("x")),
+            about("a", Some("x"), Some("s")),
+            about("a", Some("x"), Some("t")),
             evidence("a", Some("y")),
             evidence("a", Some("\u{FF61}")),
             evidence("a", Some("\u{1F600}")),

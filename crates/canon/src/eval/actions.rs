@@ -10,10 +10,13 @@
 //!   through `not` (`{not: {claim: a}}` names `a` when `a` is `true`, as `{claim: a, is: false}`
 //!   does); a test that is as needed is never named, nor is one in an `any` branch that holds. In
 //!   an `all` that is `false`, only its `false` members decide it. Each evidence match that decides
-//!   it, by the same rule, is a reason too, `{"evidence": <kind>, "present": <bool>}`, once per
-//!   kind in kind order after the claim reasons, whether or not a claim is also named: `present`
-//!   is whether a record of that kind applies: `false` when none does, `true` when one does (one
-//!   under `not` that a record satisfies, or a match whose records have another result). A
+//!   it, by the same rule, is a reason too, `{"evidence": <kind>, "present": <bool>}`, with
+//!   `"subject": <artifact>` added when the match names one; once per kind and subject, in kind
+//!   order and then subject order (no subject first), after the claim reasons, whether or not a
+//!   claim is also named. `present` is whether a record the match reads applies (one of its kind
+//!   and, when it names a subject, about that artifact): `false` when none does, `true` when one
+//!   does (one under `not` that a record satisfies, or a match whose records have another
+//!   result). A record about another artifact than the subject does not make it `true`. A
 //!   precondition that no claim test and no evidence
 //!   match decides, such as `{any: []}` or `{not: {all: []}}`, can never be `true`, and gives the
 //!   one reason `{"requirement": "unsatisfiable"}`. Authority is not consulted.
@@ -35,9 +38,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Map, Value};
 
 use super::authority::{Authority, Grant};
-use super::claims::predicate;
+use super::claims::{predicate, reads};
 use crate::ir::{Action, Ir};
-use crate::model::{CapabilityId, ClaimId, EvidenceKindId, EvidenceRecord, Json, Predicate, Truth};
+use crate::model::{
+    ArtifactId, CapabilityId, ClaimId, EvidenceKindId, EvidenceRecord, Json, Predicate, Truth,
+};
 
 /// The section, or `None` to leave the slot empty. `evidence` is what the claims were evaluated
 /// over (after the exclusion stages); a precondition is evaluated over it and `claims` with
@@ -108,12 +113,15 @@ fn admissibility(
 #[derive(Default)]
 struct Named<'a> {
     claims: BTreeSet<&'a ClaimId>,
-    kinds: BTreeSet<&'a EvidenceKindId>,
+    /// Each evidence match by kind and subject: two matches that differ only in their subject are
+    /// two reasons.
+    matches: BTreeSet<(&'a EvidenceKindId, Option<&'a ArtifactId>)>,
 }
 
 /// The reasons a precondition (not `true`) is unmet: each claim whose test decides it, with the
-/// claim's value, then each evidence kind whose match decides it, with whether a record of that
-/// kind applies; or, when no test and no match decides it, `{"requirement": "unsatisfiable"}`.
+/// claim's value, then each evidence match (kind and subject) that decides it, with whether a
+/// record it reads applies; or, when no test and no match decides it,
+/// `{"requirement": "unsatisfiable"}`.
 fn unmet(
     precondition: &Predicate,
     claims: &BTreeMap<ClaimId, Truth>,
@@ -121,19 +129,23 @@ fn unmet(
 ) -> Vec<Value> {
     let mut named = Named::default();
     deciding(precondition, true, claims, evidence, &mut named);
-    if named.claims.is_empty() && named.kinds.is_empty() {
+    if named.claims.is_empty() && named.matches.is_empty() {
         return vec![reason([("requirement", "unsatisfiable")])];
     }
     let claim_reasons = named.claims.into_iter().map(|claim| {
         let value = claims.get(claim).copied().unwrap_or(Truth::Unknown);
         reason([("claim", claim.as_str()), ("value", &value.to_string())])
     });
-    let evidence_reasons = named.kinds.into_iter().map(|kind| {
-        let present = evidence.iter().any(|record| &record.kind == kind);
-        Value::Object(Map::from_iter([
+    let evidence_reasons = named.matches.into_iter().map(|(kind, subject)| {
+        let present = evidence.iter().any(|record| reads(kind, subject, record));
+        let mut entry = Map::from_iter([
             ("evidence".to_owned(), Value::from(kind.as_str())),
             ("present".to_owned(), Value::Bool(present)),
-        ]))
+        ]);
+        if let Some(subject) = subject {
+            entry.insert("subject".to_owned(), Value::from(subject.as_str()));
+        }
+        Value::Object(entry)
     });
     claim_reasons.chain(evidence_reasons).collect()
 }
@@ -171,7 +183,9 @@ fn deciding<'a>(
         }
         Predicate::Evidence(matching) => {
             if value(node) != goal {
-                named.kinds.insert(&matching.kind);
+                named
+                    .matches
+                    .insert((&matching.kind, matching.subject.as_ref()));
             }
         }
         Predicate::Not(inner) => deciding(inner, !wanted, claims, evidence, named),
@@ -239,6 +253,36 @@ mod tests {
         let claims = BTreeMap::from([(ClaimId::new("a"), a), (ClaimId::new("b"), b)]);
         let section = section(&ir(PROTOCOL), &claims, &[], authority).expect("a section");
         serde_json::to_string(&section).expect("serializes")
+    }
+
+    /// An evidence reason is keyed by kind and subject and carries the subject when its match
+    /// names one; `present` counts only the records the match reads. Two matches of one kind that
+    /// differ only in their subject are two reasons, the one without a subject first.
+    #[test]
+    fn an_evidence_reason_names_its_subject_and_counts_only_records_it_reads() {
+        let ir = ir("format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+             artifacts: {a: {}, b: {}}\nevidence_kinds: {k: {}}\n\
+             actions:\n  \
+             act: {precondition: {any: [{evidence: {kind: k, subject: b}}, \
+             {evidence: {kind: k, result: pass, subject: a}}, {evidence: {kind: k, result: pass}}]}}\n");
+        let record = EvidenceRecord {
+            format: "canon-evidence/1".to_owned(),
+            id: crate::model::EvidenceId::new("e"),
+            kind: EvidenceKindId::new("k"),
+            result: Some("fail".to_owned()),
+            subject: ArtifactId::new("a"),
+            subject_revision: crate::model::Revision::new("r1"),
+            observed_at: None,
+        };
+        let section = section(&ir, &BTreeMap::new(), &[record], None).expect("a section");
+        assert_eq!(
+            section,
+            serde_json::json!({"act": {"status": "blocked", "reasons": [
+                {"evidence": "k", "present": true},
+                {"evidence": "k", "present": true, "subject": "a"},
+                {"evidence": "k", "present": false, "subject": "b"},
+            ]}})
+        );
     }
 
     /// Each claim whose test decides the precondition is named once, in claim-id order; an
