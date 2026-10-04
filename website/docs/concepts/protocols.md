@@ -47,12 +47,21 @@ which other claims establish it. Claims must not test each other in a cycle.
 
 ## Obligations
 
-An obligation is something that must be done before the case can be complete.
+An obligation is something that must be done before the case can be complete. Its
+`discharged_when` predicate says when it is done; it may test only claim values, never evidence
+directly.
 
-:::caution[Today an obligation is a name and a description]
+```yaml
+obligations:
+  establish.support:
+    discharged_when:
+      claim: explanation.supported
+```
 
-Nothing in `protocol/1` yet says when an obligation is discharged, and nothing references one.
-Evaluating obligations as open or discharged is planned.
+:::caution[Planned: evaluating obligations]
+
+The validator checks every discharge predicate today. Evaluating each obligation as open or
+discharged is not built yet.
 
 :::
 

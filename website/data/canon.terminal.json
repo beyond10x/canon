@@ -1,0 +1,22 @@
+{
+  "format": "b10x-terminal/1",
+  "title": "canon / repository root",
+  "entries": [
+    {
+      "command": "canon validate --path fixtures/investigation/protocol.yaml",
+      "output": "valid: protocol `investigation` revision 1",
+      "exitCode": 0
+    },
+    {
+      "command": "canon compile --path fixtures/investigation/protocol.yaml | head -n 8",
+      "output": "{\n  \"actions\": {\n    \"attempt_falsification\": {\n      \"description\": \"Try to refute the explanation.\",\n      \"effect\": null,\n      \"may_produce\": [\n        {\n          \"evidence\": \"falsification_attempt\"",
+      "exitCode": 0
+    },
+    {
+      "command": "canon conform run",
+      "output": "passed: scenario `CANON-CLAIM-001`\nconform: 1 passed, 0 failed, 0 unreadable",
+      "exitCode": 0
+    }
+  ],
+  "recordedWith": "canon 0.0.0, recorded by canon-docs from the repository root"
+}
