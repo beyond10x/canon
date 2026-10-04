@@ -224,6 +224,34 @@ fn protocol(value: &Json) -> Shape<Protocol> {
                 requires: requirement(required(entry, "requires")?)?,
             })
         })?,
+        invalidation: if field(value, "invalidation").is_some() {
+            declarations(
+                value,
+                "invalidation",
+                model::InvalidationRuleId::new,
+                invalidation_rule,
+            )?
+        } else {
+            Declarations::default()
+        },
+    })
+}
+
+/// An invalidation rule; the IR writes the section only when the protocol declares one.
+fn invalidation_rule(entry: &Json) -> Shape<model::InvalidationRule> {
+    let invalidates = list(entry, "invalidates")?
+        .iter()
+        .map(|claim| {
+            claim
+                .as_str()
+                .map(ClaimId::new)
+                .ok_or_else(|| "an invalidated claim is not a string".to_owned())
+        })
+        .collect::<Shape<_>>()?;
+    Ok(model::InvalidationRule {
+        description: optional_text(entry, "description")?,
+        upstream: ArtifactId::new(text(entry, "upstream")?),
+        invalidates,
     })
 }
 

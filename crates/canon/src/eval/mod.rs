@@ -47,10 +47,12 @@
 //! revision when given, then each artifact id and revision in the order written), its protocol against the compiled protocol's,
 //! each artifact it lists (declared by the protocol, listed once), each artifact the protocol
 //! declares (listed by the case); then each evidence record in the order given: its format, its
-//! identifiers (id, kind, subject, subject revision), its `observed_at` when given (an instant,
-//! else `invalid-instant`), its id (used once in the set) and its kind (declared by the protocol).
-//! A record's subject and subject revision are checked here as identifiers only; the
-//! revision-binding stage reads them.
+//! identifiers (id, kind, subject, subject revision, then each upstream artifact and revision in
+//! `upstream_revisions`), its `observed_at` when given (an instant, else `invalid-instant`), its id
+//! (used once in the set), its kind (declared by the protocol) and each upstream artifact
+//! (declared by the protocol, else `undeclared-artifact`, naming the record and the artifact; named
+//! once, else `duplicate-identifier`). A record's subject and subject revision are checked here as
+//! identifiers only; the revision-binding stage reads them.
 //!
 //! Then the supplied inputs are read, in this order: the authority decisions (`--authority`), the
 //! evaluation instant (`--at`) and the explicit decisions. The authority decisions are read by
@@ -66,8 +68,11 @@
 //! declare ``), and a record bound to a revision of its subject that is not the case snapshot's
 //! current one is excluded as `revision_mismatch`. Freshness refuses a `max_age` it cannot read
 //! (`invalid-max-age`) and excludes a record older than its kind's `max_age` at the evaluation
-//! instant as `expired`. Invalidation is not built yet (story:invalidation-rules): it refuses and
-//! excludes nothing.
+//! instant as `expired`. Invalidation refuses a rule whose upstream artifact the case snapshot does
+//! not name, which only an IR a caller builds can hold, as `undeclared-artifact`, and invalidates,
+//! for the claims each rule names and every claim built on one of them, the records that recorded
+//! a revision of the rule's upstream artifact other than the case snapshot's current one
+//! (`invalidation.rs`, CANON-INVALIDATION-001).
 //!
 //! Then claims are evaluated. An IR whose claims test each other in a cycle — which `canon
 //! compile` never produces, but a caller can build — is refused as `claim-cycle`, naming the claims
@@ -98,27 +103,38 @@
 //!    (`freshness.rs`) and explicit decisions (`decisions.rs`);
 //! 3. run the exclusion stages in order: revision binding (`binding.rs`), freshness
 //!    (`freshness.rs`), invalidation (`invalidation.rs`). Each sees only the evidence the stages
-//!    before it left, and returns the records it excludes with its reason;
-//! 4. evaluate every claim over the evidence left (`claims.rs`). Each claim's `excluded_evidence`
-//!    lists, in evidence-id order, every excluded record of a kind the claim reaches: a kind an
-//!    evidence match in its own predicate names, or one a claim it tests reaches, through any
-//!    number of claim references. A match that names a subject reaches its kind only for records
-//!    about that artifact: a record about another artifact does not match it, so it is not listed
-//!    under a claim that reaches its kind only through such a match. A record excluded from a
-//!    claim is excluded from every claim built on it;
+//!    before it left. Revision binding and freshness return the records they exclude from every
+//!    claim, with their reason; invalidation returns, for each claim, the records it keeps from
+//!    that claim alone;
+//! 4. evaluate every claim over the evidence left (`claims.rs`), each in its own context: no
+//!    evidence match in its evaluation reads a record invalidated for it, including the matches of
+//!    every claim it tests, which are evaluated for that use without the records invalidated for
+//!    either; the value reported for a tested claim is its own. Each claim's
+//!    `excluded_evidence` lists, in evidence-id order, every excluded record of a kind the claim
+//!    reaches: a kind an evidence match in its own predicate names, or one a claim it tests
+//!    reaches, through any number of claim references. A match that names a subject reaches its
+//!    kind only for records about that artifact: a record about another artifact does not match
+//!    it, so it is not listed under a claim that reaches its kind only through such a match. A
+//!    record excluded from a claim is excluded from every claim built on it. A record invalidated
+//!    for a claim is listed under it, with the reason `invalidated`, when an evidence match the
+//!    claim reaches reads it, and under no claim it was not invalidated for;
 //! 5. the `obligations`, `actions` and `outcomes` sections (`obligations.rs`, `actions.rs`,
 //!    `outcomes.rs`), then the explanation (`crate::explain`). Each section evaluates its
 //!    predicates with the one evaluator claims use (`claims::predicate`): discharge predicates over
 //!    the claim values, action preconditions and outcome requirements over the claim values and
-//!    the evidence left after step 3. An outcome that requires an explicit decision is decided by
-//!    the explicit decisions instead.
+//!    the evidence left after step 3. The invalidation stage keeps a record from claims only, so
+//!    these predicates' own evidence matches read it. An outcome that requires an explicit
+//!    decision is decided by the explicit decisions instead.
 //!
 //! Revision binding excludes a record bound to another revision as `revision_mismatch`, and
 //! freshness a record older than its kind's `max_age` at the evaluation instant as `expired`,
 //! each listed as excluded under each claim that reaches its kind through a match that reads it, as
-//! step 4 says. The `obligations`, `actions` and `outcomes` sections are written as the next section
-//! says, and every decision carries an `explanation` (`crate::explain`). One part is not built yet:
-//! the invalidation stage excludes nothing (story:invalidation-rules).
+//! step 4 says. Invalidation keeps a record from the claims an invalidation rule names and every
+//! claim built on one of them, throughout their evaluation, as `invalidated`, listed under each of
+//! those claims that reaches a match reading it; every other claim, even one reading the same
+//! kind, reads the record and does not list it. The `obligations`, `actions` and `outcomes`
+//! sections are written as the next section says, and every decision carries an `explanation`
+//! (`crate::explain`).
 //!
 //! # Sections
 //!
@@ -203,7 +219,7 @@ use std::fmt;
 use crate::ir::Ir;
 use crate::model::{
     Case, ClaimDecision, ClaimId, DECISION_FORMAT, Decision, Declarations, EvidenceExclusion,
-    EvidenceId, EvidenceRecord, Predicate, is_identifier, one_line,
+    EvidenceId, EvidenceRecord, ExclusionReason, Predicate, is_identifier, one_line,
 };
 
 pub use case::{case_from_value, read_case};
@@ -214,6 +230,7 @@ pub use read::{MAX_IR_DEPTH, read_ir};
 pub(crate) use authority::Authority;
 pub(crate) use claims::reads;
 pub(crate) use decisions::Decisions;
+pub(crate) use invalidation::{Invalidated, invalidated_claims};
 
 /// Why an evaluation was refused: a stable machine-readable code and a one-line message.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -280,11 +297,10 @@ pub fn evaluate_with(
         set_aside(&mut applicable, &mut excluded, stage);
         let stage = freshness::exclude(ir, case, &applicable, at.as_ref())?;
         set_aside(&mut applicable, &mut excluded, stage);
-        let stage = invalidation::exclude(ir, case, &applicable)?;
-        set_aside(&mut applicable, &mut excluded, stage);
+        let invalidated = invalidation::exclude(ir, case, &applicable)?;
 
         let applicable: Vec<EvidenceRecord> = applicable.into_iter().cloned().collect();
-        let values = claims::values(ir, &applicable)?;
+        let values = claims::values(ir, &applicable, &invalidated)?;
         let obligations = obligations::section(ir, &values);
         let actions = actions::section(ir, &values, &applicable, authority.as_ref());
         let outcomes = outcomes::section(ir, case, &values, &applicable, decisions.as_ref())?;
@@ -293,7 +309,7 @@ pub fn evaluate_with(
             .map(|(id, value)| {
                 let entry = ClaimDecision {
                     value: *value,
-                    excluded_evidence: excluded_for(ir, id, evidence, &excluded),
+                    excluded_evidence: excluded_for(ir, id, evidence, &excluded, &invalidated),
                 };
                 (id.clone(), entry)
             })
@@ -314,8 +330,15 @@ pub fn evaluate_with(
             decisions: decisions.as_ref(),
             at: supplied.at,
         };
-        decision.explanation =
-            crate::explain::explain(ir, case, evidence, &excluded, inputs, &decision);
+        decision.explanation = crate::explain::explain(
+            ir,
+            case,
+            evidence,
+            &excluded,
+            &invalidated,
+            inputs,
+            &decision,
+        );
         Ok(decision)
     })
 }
@@ -353,14 +376,19 @@ fn set_aside(
 /// (of its kind and, when it names a subject, about that artifact), in evidence-id order. A claim
 /// reaches the evidence matches of its own predicate, and every match a claim it tests reaches,
 /// through any number of claim references; each claim is visited once, so a cycle a caller builds
-/// into an IR ends.
+/// into an IR ends. The records the exclusion stages set aside for every claim (`excluded`) are
+/// listed with their reasons. A record the invalidation stage kept from this claim
+/// (`invalidated`) is listed with the reason `invalidated` when an evidence match the claim reaches
+/// reads it ([`invalidation::Invalidated::lists`]).
 fn excluded_for(
     ir: &Ir,
     claim: &ClaimId,
     evidence: &[EvidenceRecord],
     excluded: &[EvidenceExclusion],
+    invalidated: &invalidation::Invalidated,
 ) -> Vec<EvidenceExclusion> {
-    if excluded.is_empty() {
+    let kept = invalidated.for_claim(claim);
+    if excluded.is_empty() && kept.is_none_or(BTreeSet::is_empty) {
         return Vec::new();
     }
     let mut matches = BTreeSet::new();
@@ -396,6 +424,19 @@ fn excluded_for(
                 .is_some_and(|record| read(record))
         })
         .cloned()
+        .chain(
+            kept.into_iter()
+                .flatten()
+                .filter(|id| {
+                    record_of
+                        .get(id)
+                        .is_some_and(|record| invalidated.lists(ir, claim, record))
+                })
+                .map(|id| EvidenceExclusion {
+                    evidence: id.clone(),
+                    reason: ExclusionReason::Invalidated,
+                }),
+        )
         .collect();
     listed.sort();
     listed
@@ -723,6 +764,7 @@ mod tests {
             subject: crate::model::ArtifactId::new("a"),
             subject_revision: crate::model::Revision::new("r1"),
             observed_at: None,
+            upstream_revisions: crate::model::Declarations::default(),
         }
     }
 
@@ -798,18 +840,101 @@ mod tests {
             exclusion("e1", Expired),
         ];
         let listed = |claim: &str| -> Vec<String> {
-            excluded_for(&ir, &ClaimId::new(claim), &evidence, &excluded)
-                .iter()
-                .map(|exclusion| exclusion.evidence.as_str().to_owned())
-                .collect()
+            excluded_for(
+                &ir,
+                &ClaimId::new(claim),
+                &evidence,
+                &excluded,
+                &invalidation::Invalidated::default(),
+            )
+            .iter()
+            .map(|exclusion| exclusion.evidence.as_str().to_owned())
+            .collect()
         };
         for claim in ["direct", "one_level", "two_levels"] {
             assert_eq!(listed(claim), ["e1", "e3"], "{claim}");
         }
         assert_eq!(listed("other"), ["e2"]);
         assert_eq!(
-            excluded_for(&ir, &ClaimId::new("direct"), &evidence, &[]),
+            excluded_for(
+                &ir,
+                &ClaimId::new("direct"),
+                &evidence,
+                &[],
+                &invalidation::Invalidated::default()
+            ),
             Vec::new()
+        );
+    }
+
+    /// A claim is evaluated in its own context: a record invalidated for it is read by no match in
+    /// its evaluation, including the match of `helper`, which the rule does not name. So `named`
+    /// is `unknown`, not `true` on `e1` through `helper`, and lists `e1`; so do `built` and
+    /// `tests_only`, built on it, the second through claim tests alone. `helper` reports its own
+    /// value, `true` on `e1`, and lists nothing. The explanation agrees with `excluded_evidence`.
+    #[test]
+    fn a_claim_is_evaluated_without_its_invalidated_records_in_every_claim_it_tests() {
+        let ir = crate::ir::compile(
+            &crate::model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 artifacts: {a: {}, up: {}}\nevidence_kinds: {k: {}, m: {}}\n\
+                 claims: {helper: {true_when: {evidence: {kind: k}}}, \
+                 named: {true_when: {all: [{claim: helper}, {evidence: {kind: m}}]}}, \
+                 built: {true_when: {all: [{claim: named}, {evidence: {kind: k}}]}}, \
+                 tests_only: {true_when: {not: {claim: named}}}}\n\
+                 invalidation: {r: {upstream: up, invalidates: [named]}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let case = read_case(
+            "format: canon-case/1\nid: C-1\nprotocol: p\nartifacts: {a: {revision: r1}, up: {revision: u1}}\n",
+        )
+        .expect("reads");
+        let evidence = [
+            read_evidence(
+                "format: canon-evidence/1\nid: e1\nkind: k\nsubject: a\nsubject_revision: r1\n\
+                 upstream_revisions: {up: u0}\n",
+            )
+            .expect("reads"),
+            read_evidence(
+                "format: canon-evidence/1\nid: e2\nkind: m\nsubject: a\nsubject_revision: r1\n",
+            )
+            .expect("reads"),
+        ];
+        let decision = evaluate(&ir, &case, &evidence).expect("decides");
+        let entry = |claim: &str| {
+            let entry = decision.claims.get(&ClaimId::new(claim)).expect("declared");
+            let listed: Vec<&str> = entry
+                .excluded_evidence
+                .iter()
+                .map(|exclusion| exclusion.evidence.as_str())
+                .collect();
+            (entry.value, listed)
+        };
+        assert_eq!(entry("helper"), (Truth::True, vec![]));
+        assert_eq!(entry("named"), (Truth::Unknown, vec!["e1"]));
+        assert_eq!(entry("built"), (Truth::Unknown, vec!["e1"]));
+        assert_eq!(entry("tests_only"), (Truth::Unknown, vec!["e1"]));
+        let explained = |claim: &str| -> Vec<String> {
+            decision.explanation.as_ref().expect("explained")["claims"][claim]["because"]
+                .as_array()
+                .expect("because")
+                .iter()
+                .filter(|reason| reason["evidence"] == "e1")
+                .map(ToString::to_string)
+                .collect()
+        };
+        for claim in ["named", "built", "tests_only"] {
+            assert_eq!(
+                explained(claim),
+                [r#"{"evidence":"e1","reason":"invalidated","status":"excluded"}"#],
+                "{claim}"
+            );
+        }
+        assert_eq!(
+            explained("helper"),
+            [r#"{"evidence":"e1","status":"applied"}"#]
         );
     }
 }

@@ -219,6 +219,7 @@ fn protocol(requires: Predicate) -> Protocol {
                 requires: requires.into(),
             },
         )]),
+        invalidation: Declarations::default(),
     }
 }
 

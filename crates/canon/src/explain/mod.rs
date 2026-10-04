@@ -38,9 +38,13 @@
 //! `"subject"` when the match names one) followed by every record of the evidence set that match
 //! reads, in evidence-id order: `{"evidence": <id>,
 //! "status": "applied"}`, or `{"evidence": <id>, "reason": <reason>, "status": "excluded"}` with
-//! the reason its exclusion stage gave (`revision_mismatch`, `expired`). A reason `{"claim": <id>,
-//! "value": <value>}` anywhere continues under `claims`. A member with nothing to explain is not
-//! written.
+//! the reason its exclusion stage gave (`revision_mismatch`, `expired`, `invalidated`). A record
+//! the invalidation stage kept from some claims only is `excluded` with the reason `invalidated`
+//! under each of those claims in `claims`, which are evaluated without it throughout, including in
+//! the claims they test. It is `applied` under every claim it was not invalidated for, and in the
+//! `because` of an outcome, action or obligation, whose own evidence matches read it. A
+//! reason `{"claim": <id>, "value": <value>}` anywhere continues under `claims`. A member with
+//! nothing to explain is not written.
 //!
 //! Every list is in a fixed order — claim reasons by claim id, evidence records and evidence ids by
 //! evidence id, absent kinds by kind id, authority decisions by capability, explicit decisions by
@@ -53,11 +57,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
-use crate::eval::{Authority, Decisions, reads, unmet_reasons};
+use crate::eval::{Authority, Decisions, Invalidated, reads, unmet_reasons};
 use crate::ir::Ir;
 use crate::model::{
     ArtifactId, Case, ClaimId, DECISION_FORMAT, Decision, EvidenceExclusion, EvidenceKindId,
-    EvidenceRecord, Json, Predicate, Truth,
+    EvidenceRecord, ExclusionReason, Json, Predicate, Truth,
 };
 
 /// An explanation, the payload of the decision's `explanation` slot, as the module docs give it.
@@ -81,17 +85,19 @@ pub(crate) struct Inputs<'a> {
 }
 
 /// The explanation of `decision`, computed from `ir`, `case`, `evidence`, the records the
-/// exclusion stages `excluded` (each with its reason) and the supplied `inputs` it was evaluated
-/// from. Always written: it records at least what the decision was computed from.
+/// exclusion stages `excluded` for every claim (each with its reason), the records the
+/// invalidation stage kept from each claim (`invalidated`) and the supplied `inputs` it was
+/// evaluated from. Always written: it records at least what the decision was computed from.
 pub(crate) fn explain(
     ir: &Ir,
     case: &Case,
     evidence: &[EvidenceRecord],
     excluded: &[EvidenceExclusion],
+    invalidated: &Invalidated,
     inputs: Inputs<'_>,
     decision: &Decision,
 ) -> Option<Explanation> {
-    let records = Records::new(evidence, excluded);
+    let records = Records::new(evidence, excluded, invalidated);
     let values: BTreeMap<ClaimId, Truth> = decision
         .claims
         .iter()
@@ -141,10 +147,16 @@ struct Records<'a> {
     /// In evidence-id order.
     records: Vec<&'a EvidenceRecord>,
     excluded: BTreeMap<&'a str, &'a str>,
+    /// The records the invalidation stage kept from each claim.
+    invalidated: &'a Invalidated,
 }
 
 impl<'a> Records<'a> {
-    fn new(evidence: &'a [EvidenceRecord], excluded: &'a [EvidenceExclusion]) -> Self {
+    fn new(
+        evidence: &'a [EvidenceRecord],
+        excluded: &'a [EvidenceExclusion],
+        invalidated: &'a Invalidated,
+    ) -> Self {
         let mut records: Vec<&EvidenceRecord> = evidence.iter().collect();
         records.sort_by(|one, other| one.id.as_str().cmp(other.id.as_str()));
         Self {
@@ -153,13 +165,21 @@ impl<'a> Records<'a> {
                 .iter()
                 .map(|exclusion| (exclusion.evidence.as_str(), exclusion.reason.as_str()))
                 .collect(),
+            invalidated,
         }
     }
 
     /// Each record one of `matches` reads (`crate::eval::reads`), in evidence-id order:
     /// `{"evidence": <id>, "status": "applied"}` or `{"evidence": <id>, "reason": <reason>,
-    /// "status": "excluded"}`.
-    fn read_by<'m>(&self, matches: impl IntoIterator<Item = Match<'m>> + Clone) -> Vec<Value> {
+    /// "status": "excluded"}`. Listed under `claim`, a record the invalidation stage kept from it
+    /// is excluded with the reason `invalidated` (`crate::eval::Invalidated::lists`): the claim is
+    /// evaluated in its own context, where no match it reaches reads the record. Outside `claims`,
+    /// an invalidated record applied.
+    fn read_by<'m>(
+        &self,
+        claim: Option<(&Ir, &ClaimId)>,
+        matches: impl IntoIterator<Item = Match<'m>> + Clone,
+    ) -> Vec<Value> {
         self.records
             .iter()
             .filter(|record| {
@@ -170,7 +190,10 @@ impl<'a> Records<'a> {
             })
             .map(|record| {
                 let id = record.id.as_str();
-                match self.excluded.get(id) {
+                let invalidated = claim
+                    .is_some_and(|(ir, claim)| self.invalidated.lists(ir, claim, record))
+                    .then_some(ExclusionReason::Invalidated.as_str());
+                match self.excluded.get(id).copied().or(invalidated) {
                     Some(reason) => {
                         json!({"evidence": id, "reason": reason, "status": "excluded"})
                     }
@@ -198,7 +221,7 @@ fn because(reasons: &[Value], records: &Records<'_>) -> Vec<Value> {
         if let (Some(kind), Some(_)) = (reason["evidence"].as_str(), reason.get("present")) {
             let kind = EvidenceKindId::new(kind);
             let subject = reason["subject"].as_str().map(ArtifactId::new);
-            because.extend(records.read_by([(&kind, subject.as_ref())]));
+            because.extend(records.read_by(None, [(&kind, subject.as_ref())]));
         }
     }
     because
@@ -359,7 +382,7 @@ fn claims(
             None => Vec::new(),
         };
         let matches = reached_matches(ir, id);
-        because.extend(records.read_by(matches.iter().copied()));
+        because.extend(records.read_by(Some((ir, id)), matches.iter().copied()));
         because.extend(
             matches
                 .iter()

@@ -45,7 +45,29 @@ expiry alone never implies `FALSE`.
 ## Invalidation
 
 When an upstream artifact changes, claims whose only support was bound to its previous revision are
-to be invalidated.
+invalidated. A protocol says which claims depend on which upstream artifact with invalidation
+rules:
+
+```yaml
+invalidation:
+  dataset.revised:
+    upstream: dataset
+    invalidates:
+      - explanation.supported
+```
+
+An evidence record says which upstream revisions it was observed against:
+
+```yaml
+upstream_revisions:
+  dataset: d1
+```
+
+Once the case snapshot's revision of `dataset` is no longer `d1`, the record no longer supports
+`explanation.supported`, nor any claim built on it. Exclusion is per claim: a claim the rule does
+not name, and that is not built on one it names, still reads the record, even when it reads the
+same kind of evidence. A record that records no revision of the upstream artifact is never
+invalidated.
 
 :::note[Shipped: revision binding]
 
@@ -73,15 +95,24 @@ An evidence match in `protocol/1` may name a `subject`, which must be a declared
 An evidence kind may declare a `max_age`, and a `canon-evidence/1` record may give its
 `observed_at`. Given an evaluation instant (`canon evaluate --at`), a record older than its kind's
 `max_age` at that instant is left out of claim evaluation and listed as excluded with the reason
-`expired`, so a claim it alone decided is `UNKNOWN`, never `FALSE`. Without an instant, or without
-`observed_at`, nothing expires: Canon reads no clock. Conformance scenario `CANON-EVIDENCE-002`
+`expired`: an evidence match it alone decided is `UNKNOWN` rather than `FALSE`, and claims follow
+their predicates. Without an instant, or without `observed_at`, nothing expires: Canon reads no clock. Conformance scenario `CANON-EVIDENCE-002`
 holds this.
 
 :::
 
-:::caution[Planned: invalidation]
+:::note[Shipped: invalidation]
 
-An upstream change invalidates nothing yet; see
-[where this stands](../status/where-this-stands.md).
+A `protocol/1` document may declare `invalidation:` rules, and a `canon-evidence/1` record may give
+its `upstream_revisions` ([evaluation documents](../reference/documents.md)). `canon validate`
+refuses a rule whose upstream artifact or invalidated claim the protocol does not declare
+(`undeclared-artifact`, `undeclared-claim`), and one that names a claim reaching no evidence match
+(`inert-invalidation`). `canon evaluate` evaluates each claim the rule names, and every claim built
+on them, without an invalidated record anywhere in its evaluation, including in the claims it
+tests, and lists the record in its `excluded_evidence`, with the reason `invalidated`, when a match
+it reaches reads it. A named claim loses the support the record gave, and claims built on it follow
+their predicates; every other claim keeps the record. `canon check` checks records
+observed before an upstream move and after it, alone and together. Conformance scenario
+`CANON-INVALIDATION-001` holds this.
 
 :::

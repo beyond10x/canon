@@ -120,3 +120,7 @@ identifier!(
     /// Who took an explicit decision, recorded as given: Canon resolves no identity.
     Principal
 );
+identifier!(
+    /// Identifies an invalidation rule a protocol declares.
+    InvalidationRuleId
+);

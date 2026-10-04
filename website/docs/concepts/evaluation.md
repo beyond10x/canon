@@ -53,9 +53,11 @@ fit the protocol are refused with a stable code. See the
 
 :::
 
-:::caution[Planned: invalidation]
+:::note[Shipped: invalidation]
 
-An upstream artifact change invalidates nothing yet.
+An invalidation rule keeps evidence observed against an earlier revision of an upstream artifact
+from the claims it names and every claim built on them; see
+[invalidation](./evidence-and-revisions.md#invalidation).
 
 :::
 

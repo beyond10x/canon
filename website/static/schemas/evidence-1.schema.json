@@ -49,6 +49,16 @@
         "observed_at": {
           "description": "When the observation was made; its age at the evaluation instant is measured from here. A record without it never expires.",
           "$ref": "#/$defs/Instant"
+        },
+        "upstream_revisions": {
+          "description": "The revision of each upstream artifact the observation was made against, keyed by artifact. A record without it is never invalidated.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Identifier"
+          }
         }
       },
       "required": [

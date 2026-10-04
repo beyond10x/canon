@@ -56,10 +56,12 @@ the refusal: the case snapshot's format, its identifiers (case id, protocol id, 
 revision when given, then each artifact id and revision in the order written), its protocol against the compiled protocol's,
 each artifact it lists (declared by the protocol, listed once), each artifact the protocol
 declares (listed by the case); then each evidence record in the order given: its format, its
-identifiers (id, kind, subject, subject revision), its `observed_at` when given (an instant,
-else `invalid-instant`), its id (used once in the set) and its kind (declared by the protocol).
-A record's subject and subject revision are checked here as identifiers only; the
-revision-binding stage reads them.
+identifiers (id, kind, subject, subject revision, then each upstream artifact and revision in
+`upstream_revisions`), its `observed_at` when given (an instant, else `invalid-instant`), its id
+(used once in the set), its kind (declared by the protocol) and each upstream artifact
+(declared by the protocol, else `undeclared-artifact`, naming the record and the artifact; named
+once, else `duplicate-identifier`). A record's subject and subject revision are checked here as
+identifiers only; the revision-binding stage reads them.
 
 Then the supplied inputs are read, in this order: the authority decisions (`--authority`), the
 evaluation instant (`--at`) and the explicit decisions. The authority decisions are read by
@@ -75,8 +77,11 @@ the record and its subject (`` evidence `e1` is about artifact `x`, which the pr
 declare ``), and a record bound to a revision of its subject that is not the case snapshot's
 current one is excluded as `revision_mismatch`. Freshness refuses a `max_age` it cannot read
 (`invalid-max-age`) and excludes a record older than its kind's `max_age` at the evaluation
-instant as `expired`. Invalidation is not built yet (story:invalidation-rules): it refuses and
-excludes nothing.
+instant as `expired`. Invalidation refuses a rule whose upstream artifact the case snapshot does
+not name, which only an IR a caller builds can hold, as `undeclared-artifact`, and invalidates,
+for the claims each rule names and every claim built on one of them, the records that recorded
+a revision of the rule's upstream artifact other than the case snapshot's current one
+(`invalidation.rs`, CANON-INVALIDATION-001).
 
 Then claims are evaluated. An IR whose claims test each other in a cycle — which `canon
 compile` never produces, but a caller can build — is refused as `claim-cycle`, naming the claims
@@ -107,27 +112,38 @@ concept; this module holds only the order:
    (`freshness.rs`) and explicit decisions (`decisions.rs`);
 3. run the exclusion stages in order: revision binding (`binding.rs`), freshness
    (`freshness.rs`), invalidation (`invalidation.rs`). Each sees only the evidence the stages
-   before it left, and returns the records it excludes with its reason;
-4. evaluate every claim over the evidence left (`claims.rs`). Each claim's `excluded_evidence`
-   lists, in evidence-id order, every excluded record of a kind the claim reaches: a kind an
-   evidence match in its own predicate names, or one a claim it tests reaches, through any
-   number of claim references. A match that names a subject reaches its kind only for records
-   about that artifact: a record about another artifact does not match it, so it is not listed
-   under a claim that reaches its kind only through such a match. A record excluded from a
-   claim is excluded from every claim built on it;
+   before it left. Revision binding and freshness return the records they exclude from every
+   claim, with their reason; invalidation returns, for each claim, the records it keeps from
+   that claim alone;
+4. evaluate every claim over the evidence left (`claims.rs`), each in its own context: no
+   evidence match in its evaluation reads a record invalidated for it, including the matches of
+   every claim it tests, which are evaluated for that use without the records invalidated for
+   either; the value reported for a tested claim is its own. Each claim's
+   `excluded_evidence` lists, in evidence-id order, every excluded record of a kind the claim
+   reaches: a kind an evidence match in its own predicate names, or one a claim it tests
+   reaches, through any number of claim references. A match that names a subject reaches its
+   kind only for records about that artifact: a record about another artifact does not match
+   it, so it is not listed under a claim that reaches its kind only through such a match. A
+   record excluded from a claim is excluded from every claim built on it. A record invalidated
+   for a claim is listed under it, with the reason `invalidated`, when an evidence match the
+   claim reaches reads it, and under no claim it was not invalidated for;
 5. the `obligations`, `actions` and `outcomes` sections (`obligations.rs`, `actions.rs`,
    `outcomes.rs`), then the explanation (`crate::explain`). Each section evaluates its
    predicates with the one evaluator claims use (`claims::predicate`): discharge predicates over
    the claim values, action preconditions and outcome requirements over the claim values and
-   the evidence left after step 3. An outcome that requires an explicit decision is decided by
-   the explicit decisions instead.
+   the evidence left after step 3. The invalidation stage keeps a record from claims only, so
+   these predicates' own evidence matches read it. An outcome that requires an explicit
+   decision is decided by the explicit decisions instead.
 
 Revision binding excludes a record bound to another revision as `revision_mismatch`, and
 freshness a record older than its kind's `max_age` at the evaluation instant as `expired`,
 each listed as excluded under each claim that reaches its kind through a match that reads it, as
-step 4 says. The `obligations`, `actions` and `outcomes` sections are written as the next section
-says, and every decision carries an `explanation` (`crate::explain`). One part is not built yet:
-the invalidation stage excludes nothing (story:invalidation-rules).
+step 4 says. Invalidation keeps a record from the claims an invalidation rule names and every
+claim built on one of them, throughout their evaluation, as `invalidated`, listed under each of
+those claims that reaches a match reading it; every other claim, even one reading the same
+kind, reads the record and does not list it. The `obligations`, `actions` and `outcomes`
+sections are written as the next section says, and every decision carries an `explanation`
+(`crate::explain`).
 
 ## Sections
 

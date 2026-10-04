@@ -14,21 +14,23 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
 
 - **Canonical ordering.** Declarations are keyed and ordered by identifier, not by the order they
   are written in. The members of an `all` or `any` predicate are sorted by `canonical_order`,
-  and an action's capability requirements and the evidence kinds it may produce by identifier.
-- **No repetition.** Each of those four lists holds every member once: in three-valued logic
-  `all` and `any` are idempotent, and the two action lists are sets.
+  and an action's capability requirements, the evidence kinds it may produce and the claims an
+  invalidation rule invalidates by identifier.
+- **No repetition.** Each of those five lists holds every member once: in three-valued logic
+  `all` and `any` are idempotent, and the two action lists and the invalidated claims are sets.
 - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
   evidence match without a result has `"result": null`; a claim test without `is` has
   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-  true; absent lists and sections are empty. The two exceptions are an evidence kind's
-  `max_age` and an evidence match's `subject`: each written, as authored, only when it is
-  declared, so the IR of a protocol that declares neither is the IR it was before they existed.
+  true; absent lists and sections are empty. The three exceptions are an evidence kind's
+  `max_age`, an evidence match's `subject` and the `invalidation` section: each written, as
+  authored, only when it is declared (the section only when it holds a rule), so the IR of a
+  protocol that declares none of them is the IR it was before they existed.
 - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
   it was written. An outcome that requires an explicit decision has the requirement
   `{"decision": <name>}`, as written; any other requirement is its predicate.
 - **Resolved references.** Only a document the validator accepts compiles, so every claim and
   evidence kind the IR references is declared in it, and so is every artifact an evidence match
-  names as its subject.
+  names as its subject or an invalidation rule names as its upstream artifact.
 
 The IR carries the protocol id and revision (design § 37) and nothing about where the document
 came from: no path, no working directory, no time. `Ir::canonical_json` is its one

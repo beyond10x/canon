@@ -81,8 +81,9 @@ types:
       - name: description
         type: Optional<String>
       # How old evidence of this kind may be and still apply. At an evaluation instant later than
-      # a record's observed_at by more than this, the record is excluded as expired, and a claim
-      # left without applicable evidence is unknown, never false (design § 8, CANON-EVIDENCE-002).
+      # a record's observed_at by more than this, the record is excluded as expired: an evidence
+      # match it alone decided is unknown rather than false, and claims follow their predicates
+      # (design § 8, CANON-EVIDENCE-002).
       # Declared on the evidence kind, not on an evidence match: expiry is a property of the
       # record, decided once per record before any claim is evaluated (story:evidence-freshness).
       # read from: .engineering/planning/story/evidence-freshness.md:40-45
@@ -209,19 +210,21 @@ types:
 
   # An invalidation rule (design § 4.1, contract sketch InvalidationRule, CANON-INVALIDATION-001):
   # it names an upstream artifact and the claims whose support a change of that artifact's
-  # revision invalidates. Exclusion is per claim: an evidence record that records a revision of
-  # the rule's upstream artifact (EvidenceRecord.upstream_revisions) other than the case
-  # snapshot's current revision of it is excluded, with reason invalidated, from each claim the
-  # rule names and from every claim built on one of them through any number of claim references
-  # (a record excluded from a claim is excluded from every claim built on it): no evidence match
-  # in those claims reads it, and each of them that reaches a match of the record's kind lists it
-  # in excluded_evidence. With no other applicable evidence such a claim is unknown, never false.
-  # Every other claim keeps the record: a claim the rule does not name, and that is not built on
-  # one it names, reads it as before and does not list it, even when it reads the same kind. A
-  # record that records no revision of the upstream artifact is not invalidated by the rule.
-  # canon validate refuses a rule whose upstream artifact the protocol does not declare
-  # (undeclared-artifact), and one naming a claim it does not declare (undeclared-claim), each
-  # naming the rule and what it names.
+  # revision invalidates. An evidence record that records a revision of the upstream artifact
+  # (EvidenceRecord.upstream_revisions) other than the case snapshot's current revision of it is
+  # invalidated for each claim the rule names and for every claim built on one of them, through
+  # any number of claim references. A claim is evaluated without the records invalidated for it
+  # anywhere in its evaluation, including in every claim it tests: a tested claim is evaluated, for
+  # that use, without the records invalidated for either of them, while its own reported value
+  # uses its own. A record invalidated for a claim is listed in that claim's excluded_evidence, with
+  # reason invalidated, when an evidence match the claim reaches reads it. A named claim loses the
+  # support such a record gave, and claims built on it follow their predicates. Every other claim
+  # keeps the record and does not list it, even one that reads the same kind. A record that
+  # records no revision of the upstream artifact is not invalidated by the rule. canon validate
+  # refuses a rule whose upstream artifact the protocol does not declare (undeclared-artifact), one
+  # naming a claim it does not declare (undeclared-claim), and one naming a claim that reaches no
+  # evidence match, in its own predicate or in a claim it tests (inert-invalidation), each naming
+  # the rule and what it names.
   # read from: .engineering/planning/story/invalidation-rules.md:41-46
   # read from: .engineering/planning/story/invalidation-rules.md:50-52
   # read from: docs/contracts/protocol-core.md:27

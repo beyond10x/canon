@@ -24,6 +24,7 @@ A `protocol/1` source document as written.
 | `obligations` | map from [identifier](#identifiers) (`ObligationId`) to [`Obligation`](#obligation) | optional | — |
 | `actions` | map from [identifier](#identifiers) (`ActionId`) to [`Action`](#action) | optional | — |
 | `outcomes` | map from [identifier](#identifiers) (`OutcomeId`) to [`Outcome`](#outcome) | optional | — |
+| `invalidation` | map from [identifier](#identifiers) (`InvalidationRuleId`) to [`InvalidationRule`](#invalidationrule) | optional | The invalidation rules, keyed by rule id; a protocol without the section declares none. |
 
 ## `ProtocolHeader`
 
@@ -93,6 +94,18 @@ decision (`requires: decision: <name>`).
 |---|---|---|---|
 | `description` | text | optional | — |
 | `requires` | [`OutcomeRequirement`](#outcomerequirement) | required | — |
+
+## `InvalidationRule`
+
+An invalidation rule: a change of its upstream artifact's revision invalidates, for the claims
+it names and every claim built on them, the evidence observed against an earlier revision of
+that artifact (design § 4.1, CANON-INVALIDATION-001).
+
+| Key | Value | Required | Meaning |
+|---|---|---|---|
+| `description` | text | optional | — |
+| `upstream` | [identifier](#identifiers) (`ArtifactId`) | required | The artifact whose revision the rule watches. |
+| `invalidates` | list of [identifier](#identifiers) (`ClaimId`) | required | The claims whose support a change of that revision invalidates. |
 
 ## `Predicate`
 
@@ -178,6 +191,7 @@ An identifier is text. A well-formed identifier is not empty, and without whites
 | `CapabilityId` | Names a capability an action requires authority for. |
 | `EffectClass` | Names the class of effect an action has. |
 | `DecisionName` | Names an explicit decision an outcome may require (`explicitly_inconclusive`). |
+| `InvalidationRuleId` | Identifies an invalidation rule a protocol declares. |
 
 ## Text formats
 

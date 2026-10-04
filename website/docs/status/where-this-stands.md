@@ -10,7 +10,7 @@ hold everything marked shipped below. Nothing has been released; build from sour
 
 | Capability | Status | What it means |
 |---|---|---|
-| [`protocol/1` source model and parser](../reference/protocol.md) | Shipped | Artifacts, evidence kinds, claims, obligations, actions and outcomes, read strictly. |
+| [`protocol/1` source model and parser](../reference/protocol.md) | Shipped | Artifacts, evidence kinds, claims, obligations, actions, outcomes and invalidation rules, read strictly. |
 | [Validation](../reference/validation.md) | Shipped | Format, identifiers, duplicates, unresolved references and claim cycles, in a stable order. |
 | [`canon-ir/1` compilation](../reference/canon-ir.md) | Shipped | Canonical ordering, explicit defaults, one serialization suitable for hashing. |
 | [Three-valued claim evaluation](../reference/evaluation.md) | Shipped | `canon evaluate` over a case snapshot and evidence records, writing a `canon-decision/1` document; scenario `CANON-CLAIM-001` (covering `CANON-CLAIM-001` and `-002`). |
@@ -25,10 +25,10 @@ hold everything marked shipped below. Nothing has been released; build from sour
 | [Outcomes](../reference/evaluation.md#sections) | Shipped | Each declared outcome is `legitimate` or `blocked`, with the reasons; a case that terminates through an undeclared or a blocked outcome is refused; scenario `CANON-OUTCOME-001`. |
 | [Decision-based outcomes](../reference/evaluation.md#explicit-decisions) | Shipped | An outcome may require an explicit decision (`requires: decision: <name>`) instead of a predicate. It is `legitimate` only with a `canon-decisions/1` decision of that name, for that outcome, taken at the case snapshot's `revision` (given with `--decisions`); a decision taken at a superseded case revision does not apply; scenario `CANON-OUTCOME-002`. |
 | [`canon check`](../reference/cli.md#canon-check) | Shipped | Evaluates a protocol in every state of its finite state space and reports outcomes no state reaches, actions whose precondition holds in no state, claims, obligations, preconditions and outcome requirements that read evidence no action produces, outcomes that rest on evidence an authority-requiring action may produce yet hold without any authority decision, and each [`canon-properties/1`](../reference/documents.md) property that fails, with a counterexample; a space of more than 65 536 states is refused. |
-| Invalidation rules | Planned | An upstream artifact change invalidates dependent claims. |
+| [Invalidation rules](../concepts/evidence-and-revisions.md#invalidation) | Shipped | A protocol may declare `invalidation:` rules, each naming an upstream artifact and the claims a change of its revision invalidates. A record that recorded (`upstream_revisions`) a revision of that artifact other than the current one is excluded (`invalidated`) from the claims the rule names and every claim built on them, throughout their evaluation: a named claim loses that support, and claims built on it follow their predicates; every other claim keeps it. `canon validate` refuses a rule naming an undeclared artifact or claim, or a claim that reaches no evidence match; `canon check` checks records of one kind observed before an upstream move and after it, alone and together; scenario `CANON-INVALIDATION-001`. |
 | [Structured explanation](../reference/evaluation.md#sections) | Shipped | Every decision carries an `explanation`: what it was computed from (protocol revision, Canon version, case snapshot, evidence set, authority and explicit decisions, evaluation instant), and why each claim that is not `TRUE`, open obligation, action that is not admissible and blocked outcome has its status, down to each evidence record that applied or was excluded and why. The same inputs in any evidence order give the same bytes; scenario `CANON-EXPLAIN-001` (also covering `CANON-DETERMINISM-001`). |
 | Semantic diff | Planned | Classify a protocol change as tightening, relaxation, breaking, expansion or no semantic change. |
-| Normative conformance suite | Started | The requirements below as runnable scenarios; scenarios cover `CANON-CLAIM-001`, `CANON-CLAIM-002`, `CANON-EVIDENCE-001`, `CANON-EVIDENCE-002`, `CANON-EVIDENCE-003`, `CANON-OBLIGATION-001`, `CANON-AUTHORITY-001`, `CANON-OUTCOME-001`, `CANON-OUTCOME-002`, `CANON-EXPLAIN-001` and `CANON-DETERMINISM-001`. |
+| Normative conformance suite | Started | The requirements below as runnable scenarios; scenarios cover `CANON-CLAIM-001`, `CANON-CLAIM-002`, `CANON-EVIDENCE-001`, `CANON-EVIDENCE-002`, `CANON-EVIDENCE-003`, `CANON-OBLIGATION-001`, `CANON-AUTHORITY-001`, `CANON-OUTCOME-001`, `CANON-OUTCOME-002`, `CANON-EXPLAIN-001`, `CANON-DETERMINISM-001` and `CANON-INVALIDATION-001`. |
 | Protocol composition, a shared evidence envelope | Open question | Listed as open in the design; no decision yet. |
 
 ## Commands that are not built
@@ -40,8 +40,8 @@ The design proposes `canon frontier`, `canon diff`, `canon inspect` and `canon c
 
 From the design document. Each is meant to become a conformance scenario. Today the scenarios in
 `conformance/scenarios` cover `CANON-CLAIM-001`, `CANON-CLAIM-002`, `CANON-EVIDENCE-001`,
-`CANON-EVIDENCE-002`, `CANON-AUTHORITY-001`, `CANON-OUTCOME-001` and `CANON-DETERMINISM-001`;
-`CANON-INDEPENDENCE-001` and `CANON-INVALIDATION-001` have none yet. Four more scenarios hold what
+`CANON-EVIDENCE-002`, `CANON-AUTHORITY-001`, `CANON-OUTCOME-001`, `CANON-INVALIDATION-001` and
+`CANON-DETERMINISM-001`; `CANON-INDEPENDENCE-001` has none yet. Four more scenarios hold what
 the design lists no requirement for: `CANON-OBLIGATION-001`, obligations, `CANON-OUTCOME-002`,
 outcomes that require an explicit decision, `CANON-EVIDENCE-003`, evidence matches bound to a
 subject, and `CANON-EXPLAIN-001`, the structured explanation, which also covers
@@ -65,7 +65,8 @@ The design sets one goal for the first milestone: a protocol can deterministical
 frontier and legitimate outcomes from a live case, evidence, authority and time, without owning
 execution or persistence. Parsing, validation, the compiled form, claim evaluation, revision
 binding, subject-bound evidence matches, freshness, obligations, action admissibility, outcomes,
-decision-based outcomes and the structured explanation are done; the rest is the planned work above.
+decision-based outcomes, invalidation rules and the structured explanation are done; the rest is
+the planned work above.
 A service, database, UI, scheduling and workflow execution are not part of it.
 
 Read the full

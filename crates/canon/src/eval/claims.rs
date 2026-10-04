@@ -1,46 +1,70 @@
 //! Three-valued claim evaluation over an evidence set (the rules are in the module docs of
 //! [`super`]).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::Refusal;
+use super::invalidation::Invalidated;
 use crate::ir::Ir;
 use crate::model::{
-    ArtifactId, ClaimId, EvidenceKindId, EvidenceMatch, EvidenceRecord, Predicate, Truth, one_line,
+    ArtifactId, ClaimId, EvidenceId, EvidenceKindId, EvidenceMatch, EvidenceRecord, Predicate,
+    Truth, one_line,
 };
 
 /// The value of every claim `ir` declares, keyed by claim id. An IR whose claims test each other
 /// in a cycle is refused as `claim-cycle`: a compiled protocol has none (the validator refuses
 /// one), but [`super::evaluate`] takes any [`Ir`] a caller builds.
+///
+/// A claim is evaluated in its own context: no evidence match anywhere in its evaluation reads a
+/// record invalidated for it, including the matches of every claim it tests, through any number of
+/// claim references. A claim it tests is evaluated, for that use, with the records invalidated for
+/// either of them kept out; the value reported for that claim is its own, in its own context.
 pub(super) fn values(
     ir: &Ir,
     evidence: &[EvidenceRecord],
+    invalidated: &Invalidated,
 ) -> Result<BTreeMap<ClaimId, Truth>, Refusal> {
     let mut walk = Walk {
         ir,
         evidence,
+        invalidated,
         values: BTreeMap::new(),
         in_progress: Vec::new(),
     };
+    let mut reported = BTreeMap::new();
     for id in ir.claims.keys() {
-        walk.value_of(id)?;
+        let own = walk.own(id);
+        reported.insert(id.clone(), walk.value_in(id, &own)?);
     }
-    Ok(walk.values)
+    Ok(reported)
 }
 
-/// One evaluation: the claims decided so far, and the claims being decided, outermost first.
+/// The records kept out of an evaluation: those invalidated for the claim whose context it is.
+type Context = BTreeSet<EvidenceId>;
+
+/// One evaluation: each claim decided so far in each context, and the claims being decided,
+/// outermost first.
 struct Walk<'a> {
     ir: &'a Ir,
     evidence: &'a [EvidenceRecord],
-    values: BTreeMap<ClaimId, Truth>,
+    /// What the invalidation stage kept from each claim.
+    invalidated: &'a Invalidated,
+    values: BTreeMap<(ClaimId, Context), Truth>,
     in_progress: Vec<ClaimId>,
 }
 
 impl Walk<'_> {
-    /// The value of one claim, memoized, so each claim's predicate is evaluated once. A claim
-    /// reached again while it is still being decided closes a cycle, which is refused.
-    fn value_of(&mut self, id: &ClaimId) -> Result<Truth, Refusal> {
-        if let Some(value) = self.values.get(id) {
+    /// The records invalidated for `id`.
+    fn own(&self, id: &ClaimId) -> Context {
+        self.invalidated.for_claim(id).cloned().unwrap_or_default()
+    }
+
+    /// The value of one claim in one context, memoized, so each claim's predicate is evaluated
+    /// once per context. A claim reached again while it is still being decided closes a cycle,
+    /// which is refused.
+    fn value_in(&mut self, id: &ClaimId, context: &Context) -> Result<Truth, Refusal> {
+        let key = (id.clone(), context.clone());
+        if let Some(value) = self.values.get(&key) {
             return Ok(*value);
         }
         if let Some(start) = self.in_progress.iter().position(|open| open == id) {
@@ -58,7 +82,7 @@ impl Walk<'_> {
         let value = match ir.claims.get(id) {
             Some(claim) => {
                 self.in_progress.push(id.clone());
-                let value = self.predicate(&claim.true_when);
+                let value = self.predicate(&claim.true_when, context);
                 self.in_progress.pop();
                 value?
             }
@@ -66,24 +90,33 @@ impl Walk<'_> {
             // undeclared one.
             None => Truth::Unknown,
         };
-        self.values.insert(id.clone(), value);
+        self.values.insert(key, value);
         Ok(value)
     }
 
-    fn predicate(&mut self, predicate: &Predicate) -> Result<Truth, Refusal> {
+    fn predicate(&mut self, predicate: &Predicate, context: &Context) -> Result<Truth, Refusal> {
         Ok(match predicate {
-            Predicate::All(members) => all(&self.members(members)?),
-            Predicate::Any(members) => any(&self.members(members)?),
-            Predicate::Not(inner) => not(self.predicate(inner)?),
-            Predicate::Evidence(matching) => evidence_match(matching, self.evidence),
-            Predicate::Claim(test) => tested(self.value_of(&test.claim)?, test.is),
+            Predicate::All(members) => all(&self.members(members, context)?),
+            Predicate::Any(members) => any(&self.members(members, context)?),
+            Predicate::Not(inner) => not(self.predicate(inner, context)?),
+            Predicate::Evidence(matching) => evidence_match_in(
+                matching,
+                self.evidence
+                    .iter()
+                    .filter(|record| !context.contains(&record.id)),
+            ),
+            Predicate::Claim(test) => {
+                let mut tested_in: Context = self.own(&test.claim);
+                tested_in.extend(context.iter().cloned());
+                tested(self.value_in(&test.claim, &tested_in)?, test.is)
+            }
         })
     }
 
-    fn members(&mut self, members: &[Predicate]) -> Result<Vec<Truth>, Refusal> {
+    fn members(&mut self, members: &[Predicate], context: &Context) -> Result<Vec<Truth>, Refusal> {
         members
             .iter()
-            .map(|member| self.predicate(member))
+            .map(|member| self.predicate(member, context))
             .collect()
     }
 }
@@ -167,8 +200,15 @@ pub(crate) fn reads(
 }
 
 fn evidence_match(matching: &EvidenceMatch, evidence: &[EvidenceRecord]) -> Truth {
+    evidence_match_in(matching, evidence.iter())
+}
+
+/// An evidence match's value over the records `evidence` yields.
+fn evidence_match_in<'r>(
+    matching: &EvidenceMatch,
+    evidence: impl Iterator<Item = &'r EvidenceRecord>,
+) -> Truth {
     let mut of_kind = evidence
-        .iter()
         .filter(|record| reads(&matching.kind, matching.subject.as_ref(), record))
         .peekable();
     if of_kind.peek().is_none() {
@@ -205,6 +245,7 @@ mod tests {
             subject: ArtifactId::new("a"),
             subject_revision: Revision::new("r1"),
             observed_at: None,
+            upstream_revisions: crate::model::Declarations::default(),
         }
     }
 
@@ -367,7 +408,7 @@ mod tests {
             vec![record("k", Some("pass")), record("k", Some("fail"))],
             vec![record("l", None)],
         ] {
-            let claims = values(&ir, &evidence).expect("acyclic");
+            let claims = values(&ir, &evidence, &Invalidated::default()).expect("acyclic");
             for (id, claim) in &ir.claims {
                 assert_eq!(
                     predicate(&claim.true_when, &claims, &evidence),

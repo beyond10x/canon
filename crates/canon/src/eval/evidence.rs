@@ -39,6 +39,10 @@ pub(super) fn check(ir: &Ir, evidence: &[EvidenceRecord]) -> Result<(), Refusal>
             "evidence subject revision",
             record.subject_revision.as_str(),
         )?;
+        for (artifact, revision) in record.upstream_revisions.iter() {
+            identifier("evidence upstream artifact identifier", artifact.as_str())?;
+            identifier("evidence upstream revision", revision.as_str())?;
+        }
         if let Some(observed_at) = &record.observed_at
             && observed_at.seconds().is_none()
         {
@@ -66,6 +70,29 @@ pub(super) fn check(ir: &Ir, evidence: &[EvidenceRecord]) -> Result<(), Refusal>
                 ),
             ));
         }
+        let mut upstream = BTreeSet::new();
+        for artifact in record.upstream_revisions.ids() {
+            if !ir.artifacts.contains_key(artifact) {
+                return Err(Refusal::new(
+                    "undeclared-artifact",
+                    format!(
+                        "evidence `{}` records a revision of upstream artifact `{}`, which the protocol does not declare",
+                        one_line(record.id.as_str()),
+                        one_line(artifact.as_str())
+                    ),
+                ));
+            }
+            if !upstream.insert(artifact) {
+                return Err(Refusal::new(
+                    "duplicate-identifier",
+                    format!(
+                        "evidence `{}` records a revision of upstream artifact `{}` more than once",
+                        one_line(record.id.as_str()),
+                        one_line(artifact.as_str())
+                    ),
+                ));
+            }
+        }
     }
     Ok(())
 }
@@ -90,6 +117,62 @@ mod tests {
              observed_at: {observed_at}\n"
         ))?;
         check(&ir(), &[record])
+    }
+
+    /// Each upstream artifact a record records a revision of is one the protocol declares, named
+    /// once; one that is not is refused, naming the record and the artifact.
+    #[test]
+    fn upstream_revisions_name_declared_artifacts_once() {
+        let ir = crate::ir::compile(
+            &crate::model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 artifacts: {a: {}, up: {}}\nevidence_kinds: {k: {}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let checked = |upstream: &str| -> Result<(), Refusal> {
+            let record = read_evidence(&format!(
+                "format: canon-evidence/1\nid: e1\nkind: k\nsubject: a\nsubject_revision: r1\n\
+                 upstream_revisions: {upstream}\n"
+            ))?;
+            check(&ir, &[record])
+        };
+        assert_eq!(checked("{up: u1}"), Ok(()));
+        let undeclared = checked("{up: u1, gone: g1}").expect_err("refused");
+        assert_eq!(
+            (undeclared.code(), undeclared.to_string().as_str()),
+            (
+                "undeclared-artifact",
+                "evidence `e1` records a revision of upstream artifact `gone`, which the protocol does not declare"
+            )
+        );
+        // YAML itself refuses a repeated key, so a record read from text never repeats one; a
+        // record built in Rust can, and `check` refuses it as `duplicate-identifier`.
+        assert_eq!(
+            checked("{up: u1, up: u2}").expect_err("refused").code(),
+            "malformed-input"
+        );
+        let mut built = read_evidence(
+            "format: canon-evidence/1\nid: e1\nkind: k\nsubject: a\nsubject_revision: r1\n",
+        )
+        .expect("reads");
+        built.upstream_revisions = crate::model::Declarations::new(vec![
+            ("up".into(), "u1".into()),
+            ("up".into(), "u2".into()),
+        ]);
+        assert_eq!(
+            check(&ir, &[built]).expect_err("refused").to_string(),
+            "evidence `e1` records a revision of upstream artifact `up` more than once"
+        );
+        assert_eq!(
+            checked("{up: ' '}").expect_err("refused").code(),
+            "invalid-identifier"
+        );
+        assert_eq!(
+            checked("~").expect_err("null refused").code(),
+            "malformed-input"
+        );
     }
 
     /// `observed_at` is optional, and when given it is an instant; an explicit null or any other

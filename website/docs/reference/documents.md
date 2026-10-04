@@ -51,6 +51,7 @@ only while its subject revision is the case's current revision of that subject.
 | `subject` | [identifier](#identifiers) (`ArtifactId`) | required | The artifact the record is about. |
 | `subject_revision` | [identifier](#identifiers) (`Revision`) | required | The revision of that artifact the record is about. |
 | `observed_at` | [text](#text-formats) (`Instant`) | optional | When the observation was made; its age at the evaluation instant is measured from here. A record without it never expires. |
+| `upstream_revisions` | map from [identifier](#identifiers) (`ArtifactId`) to [identifier](#identifiers) (`Revision`) | optional | The revision of each upstream artifact the observation was made against, keyed by artifact. A record without it is never invalidated. |
 
 ## `canon-decision/1`
 

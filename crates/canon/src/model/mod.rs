@@ -4,9 +4,10 @@
 //! (`explicit.rs`), and the `canon-properties/1` properties `canon check` reads (`properties.rs`).
 //!
 //! A protocol document declares a protocol id and revision, artifacts, evidence kinds, claims with
-//! their predicates, obligations, actions and outcomes. Every declaration section is a map keyed by
-//! identifier; [`Declarations`] keeps the entries in source order and keeps repeated keys, so the
-//! validator can report a duplicate identifier instead of the parser silently dropping one.
+//! their predicates, obligations, actions, outcomes and invalidation rules. Every declaration
+//! section is a map keyed by identifier; [`Declarations`] keeps the entries in source order and
+//! keeps repeated keys, so the validator can report a duplicate identifier instead of the parser
+//! silently dropping one.
 
 mod case;
 mod decision;
@@ -36,7 +37,8 @@ pub use evidence::{EVIDENCE_FORMAT, EvidenceRecord};
 pub use explicit::{DECISIONS_FORMAT, ExplicitDecision};
 pub use ids::{
     ActionId, Age, ArtifactId, CapabilityId, CaseId, ClaimId, DecisionName, EffectClass,
-    EvidenceId, EvidenceKindId, Instant, ObligationId, OutcomeId, Principal, ProtocolId, Revision,
+    EvidenceId, EvidenceKindId, Instant, InvalidationRuleId, ObligationId, OutcomeId, Principal,
+    ProtocolId, Revision,
 };
 pub use parse::{FORMAT, ParseError, parse};
 pub use predicate::{ClaimTest, EvidenceMatch, Predicate, Truth};
@@ -65,6 +67,9 @@ pub struct Protocol {
     pub actions: Declarations<ActionId, Action>,
     #[serde(default, deserialize_with = "present::required")]
     pub outcomes: Declarations<OutcomeId, Outcome>,
+    /// The invalidation rules, keyed by rule id; a protocol without the section declares none.
+    #[serde(default, deserialize_with = "present::required")]
+    pub invalidation: Declarations<InvalidationRuleId, InvalidationRule>,
 }
 
 /// The protocol's identity: id and revision.
@@ -155,6 +160,21 @@ pub struct Outcome {
     #[serde(default, deserialize_with = "present::optional")]
     pub description: Option<String>,
     pub requires: OutcomeRequirement,
+}
+
+/// An invalidation rule: a change of its upstream artifact's revision invalidates, for the claims
+/// it names and every claim built on them, the evidence observed against an earlier revision of
+/// that artifact (design § 4.1, CANON-INVALIDATION-001).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InvalidationRule {
+    #[serde(default, deserialize_with = "present::optional")]
+    pub description: Option<String>,
+    /// The artifact whose revision the rule watches.
+    pub upstream: ArtifactId,
+    /// The claims whose support a change of that revision invalidates.
+    #[serde(deserialize_with = "present::required")]
+    pub invalidates: Vec<ClaimId>,
 }
 
 /// The entries of one declaration section, in source order, repeated keys included.
