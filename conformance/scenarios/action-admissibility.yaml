@@ -1,0 +1,199 @@
+format: canon-conformance/1
+id: CANON-AUTHORITY-001
+covers: [CANON-AUTHORITY-001]
+fixture: fixtures/investigation/action-admissibility.yaml
+# `publish_finding` requires `explanation.supported` to be TRUE and the capability
+# `finding.publish`. Every declared action is listed with its status; `reasons` explain the status
+# (only the reasons that decide it) and are left out when there are none. `inspect` and
+# `attempt_falsification` declare neither a precondition nor a capability, so they are admissible
+# throughout.
+steps:
+  # The precondition is not TRUE (no evidence leaves the claim UNKNOWN): blocked, naming the claim
+  # and its value, although the authority grants the capability.
+  - id: precondition-not-true
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+      evidence: []
+      authority:
+        - capability: finding.publish
+          decision: granted
+    expect:
+      decision: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "status": "admissible"
+            },
+            "inspect": {
+              "status": "admissible"
+            },
+            "publish_finding": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "explanation.supported": {
+              "value": "unknown"
+            }
+          }
+        }
+
+  # The precondition is TRUE and the authority carries no decision for `finding.publish` (only
+  # one for another capability): approval is required, naming the capability.
+  - id: no-decision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          subject: explanation
+          subject_revision: r1
+      authority:
+        - capability: finding.retract
+          decision: granted
+    expect:
+      decision: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "status": "admissible"
+            },
+            "inspect": {
+              "status": "admissible"
+            },
+            "publish_finding": {
+              "reasons": [
+                {
+                  "capability": "finding.publish",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "claims": {
+            "explanation.supported": {
+              "value": "true"
+            }
+          }
+        }
+
+  # The precondition is TRUE and the authority denies `finding.publish`: blocked, naming the
+  # denied capability. Asking again would not change a denial.
+  - id: denied
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          subject: explanation
+          subject_revision: r1
+      authority:
+        - capability: finding.publish
+          decision: denied
+    expect:
+      decision: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "status": "admissible"
+            },
+            "inspect": {
+              "status": "admissible"
+            },
+            "publish_finding": {
+              "reasons": [
+                {
+                  "capability": "finding.publish",
+                  "decision": "denied"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "explanation.supported": {
+              "value": "true"
+            }
+          }
+        }
+
+  # The precondition is TRUE and the authority grants `finding.publish`: admissible.
+  - id: granted
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          subject: explanation
+          subject_revision: r1
+      authority:
+        - capability: finding.publish
+          decision: granted
+    expect:
+      decision: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "status": "admissible"
+            },
+            "inspect": {
+              "status": "admissible"
+            },
+            "publish_finding": {
+              "status": "admissible"
+            }
+          },
+          "claims": {
+            "explanation.supported": {
+              "value": "true"
+            }
+          }
+        }
