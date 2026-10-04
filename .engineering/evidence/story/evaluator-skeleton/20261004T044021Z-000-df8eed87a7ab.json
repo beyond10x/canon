@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T04:40:21Z",
+  "actor": "human:timo",
+  "artifact": "story:evaluator-skeleton",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "whole gate on wave/2026-10-04-w6 at f6197a0 (main merged): fmt --check, clippy -D warnings, test (254 passed, 0 failed), ess validate and synthesize (0 refusals), canon-docs generate --check (11 current), canon conform run (1 passed); every step exit 0",
+    "reference": "ga-wave-2026-10-04-w6/canon-integration-gate.log"
+  }
+}

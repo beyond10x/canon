@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T04:40:20Z",
+  "actor": "human:timo",
+  "artifact": "story:evaluator-skeleton",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "ess_model_matches and evaluator_skeleton: phase-1 commit 962ac65 vs treatment 6095d39",
+    "reference": "ga-wave-2026-10-04-w6/canon-evaluator-skeleton/scratch/phase1-red.log: phase 1 ess_model_matches FAILED (8 passed, 19 failed) and evaluator_skeleton FAILED (0 passed, 4 failed); treatment passes; VERIFIED"
+  }
+}

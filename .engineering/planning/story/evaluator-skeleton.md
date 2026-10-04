@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:evaluator-skeleton
 kind: story
-status: proposed
+status: implemented
 title: Split the evaluator into one module per concept and land the shared slots
 relations:
 - decomposes: epic:canon-kernel
@@ -40,9 +40,11 @@ scope:
   path: fixtures/investigation/evaluator-skeleton.yaml
 - confidence: cited
   path: fixtures/investigation/invalid/undeclared-discharge-claim.yaml
-revision: 4
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T02:12:47Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-10-04T03:45:02Z", actor: "human:timo", revision: 5}
+- {from: "active", to: "implemented", at: "2026-10-04T04:40:21Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":1,"review_outcome":3,"verification":1}}}
 ---
 ## Outcome
 
@@ -156,3 +158,36 @@ each `claims` entry (such as `excluded_evidence`) breaks every existing expectat
 is left out when empty. This story keeps CANON-CLAIM-001 unedited by omitting empty slots, and says
 so in the decision format. The claim-value memo in `eval/claims.rs` must survive the split into
 per-concept files (a pass-2 adversary case pins it).
+
+
+## Coordinator decisions (wave 2026-10-04-w6)
+
+- The case, evidence and decision document types stay in `crates/canon/src/model/`, where
+  `ess_model_matches` compares them with `ess/`; only their reading and rendering code moves into the
+  `eval/` files. Where this body says the files move, read it as that.
+- The decision's five slots are declared in `ess/` in this story's first commit: `excluded_evidence`
+  with its settled shape, and `obligations`, `actions`, `outcomes`, `explanation` as
+  `Optional<Json>`, each naming the story that later gives it a type. Each of those stories replaces
+  its own Json with its type in its own ESS change.
+
+### Adversary decisions (wave 2026-10-04-w6)
+
+- Pass 1 F1: `canon validate` refuses an evidence match inside `discharged_when`
+  (`evidence-in-discharge`), since a discharge predicate is over claim values (fixed).
+- Pass 1 F2: `claims.rs` exposes `pub(super) fn predicate(predicate, claims, evidence)`, so the
+  wave-7 stories do not edit `claims.rs` (fixed).
+- Pass 1 F3: `actions::section` and `outcomes::section` receive the evidence left after the
+  exclusion stages (fixed).
+- Pass 1 F4: direct unit tests for `set_aside` and `excluded_for` kill the three surviving mutants (fixed).
+- Pass 1 F5: listed sections are compared each on its own, in any key order (fixed).
+- Pass 1 F6: `excluded_for` follows claim references transitively, each claim visited once (fixed).
+- Pass 2 F1: the runner writes a scenario authority list back so it always reaches the evaluator
+  (flow style where the YAML emitter refuses a mapping key); an entry that reads back differently is
+  a step failure, never a panic (fixed; the adversary cases require the entry to pass).
+- Pass 2 F2: section comparison keeps every byte, so a `\r` difference fails (fixed).
+- Pass 2 J1: the four decision-section slots stay `Json`; comments in `ess/` and the model now say
+  each section's shape is fixed by its story's conformance scenarios and typing them is a later
+  model story (fixed).
+- Pass 2 J2: the evaluator docs list refusals in their real order (fixed).
+- Pass 2 J3: a scenario authority stays a YAML list; a format header on `canon-authority/1` would be
+  story:action-admissibility's change to `conform/` (no-op).

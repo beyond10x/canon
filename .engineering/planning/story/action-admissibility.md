@@ -23,7 +23,7 @@ scope:
   path: crates/canon/src/eval/authority.rs
 - confidence: cited
   path: fixtures/investigation/action-admissibility.yaml
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":2}}}
 ---
@@ -101,3 +101,8 @@ decision for it; `blocked` naming `finding.publish` as denied when `--authority`
 TASKBOARD C-006 (build pack, now Atlas `docs/design/governed-autonomy/TASKBOARD.md`);
 `docs/design/canon-protocol-calculus-design.md` § 6, § 10, § 14, § 29, § 33, § 41 items 8–9;
 `docs/contracts/protocol-core.md`; CANON-AUTHORITY-001 (§ 32).
+
+## From wave 2026-10-04-w6 (evaluator-skeleton, adversary pass 2, J3)
+
+`conform/mod.rs` reads a scenario's `authority` as a YAML list. If `canon-authority/1` gains a
+`format:` header like the other Canon inputs, this story owns that change to `conform/`.
