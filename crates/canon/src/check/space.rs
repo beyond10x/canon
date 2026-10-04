@@ -10,7 +10,8 @@ use crate::eval::reads;
 use crate::ir::Ir;
 use crate::model::{
     ArtifactId, CapabilityId, ClaimId, DecisionName, EVIDENCE_FORMAT, EvidenceId, EvidenceKindId,
-    EvidenceMatch, EvidenceRecord, OutcomeId, OutcomeRequirement, Predicate, Revision, one_line,
+    EvidenceMatch, EvidenceRecord, OutcomeId, OutcomeRequirement, Predicate, Revision, Truth,
+    one_line,
 };
 
 /// The revision every artifact and the case itself have in a checked state, and the case revision
@@ -216,13 +217,34 @@ impl<'a> Space<'a> {
         ir: &Ir,
         predicate: &Predicate,
     ) -> BTreeMap<usize, &'a EvidenceKindId> {
-        let matches = matches_read(ir, predicate);
+        self.dimensions_of(&matches_read(ir, predicate))
+    }
+
+    /// The positions of the evidence dimensions `predicate` reads positively, each with its kind:
+    /// those whose records an evidence match [`positive_matches`] finds reads.
+    pub(super) fn dimensions_read_positively(
+        &self,
+        ir: &Ir,
+        predicate: &Predicate,
+    ) -> BTreeMap<usize, &'a EvidenceKindId> {
+        self.dimensions_of(&positive_matches(ir, predicate))
+    }
+
+    /// The positions of the evidence dimensions one of `matches` reads, each with its kind.
+    fn dimensions_of(&self, matches: &[&EvidenceMatch]) -> BTreeMap<usize, &'a EvidenceKindId> {
         self.kinds
             .iter()
             .enumerate()
             .filter(|(_, kind)| matches.iter().any(|matching| kind.read_by(matching)))
             .map(|(at, kind)| (at, kind.id))
             .collect()
+    }
+
+    /// Whether `state` takes any authority decision: some capability granted or denied.
+    pub(super) fn decides_authority(&self, state: &State) -> bool {
+        state[self.kinds.len()..self.kinds.len() + self.capabilities.len()]
+            .iter()
+            .any(|value| *value != UNDECIDED)
     }
 
     /// The evidence kinds present in `state`.
@@ -428,4 +450,40 @@ pub(super) fn kinds_read<'a>(ir: &'a Ir, predicate: &'a Predicate) -> BTreeSet<&
         .into_iter()
         .map(|matching| &matching.kind)
         .collect()
+}
+
+/// Every evidence match `predicate` reaches in a positive position, where a record it reads can
+/// help the predicate hold: its own and those of every claim it tests, through any number of claim
+/// references. `not` flips the position, and so does a claim test `is: false` or `is: unknown`,
+/// each of which holds on what the claim's evidence does not establish; `all`, `any` and
+/// `is: true` keep it. Each claim is visited once per position.
+pub(super) fn positive_matches<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<&'a EvidenceMatch> {
+    let mut matches = Vec::new();
+    let mut visited: BTreeSet<(&ClaimId, bool)> = BTreeSet::new();
+    let mut pending = vec![(predicate, true)];
+    while let Some((next, positive)) = pending.pop() {
+        match next {
+            Predicate::All(members) | Predicate::Any(members) => {
+                pending.extend(members.iter().map(|member| (member, positive)));
+            }
+            Predicate::Not(inner) => pending.push((inner, !positive)),
+            Predicate::Evidence(matching) => {
+                if positive {
+                    matches.push(matching);
+                }
+            }
+            Predicate::Claim(test) => {
+                let position = match test.is {
+                    Truth::True => positive,
+                    Truth::False | Truth::Unknown => !positive,
+                };
+                if visited.insert((&test.claim, position))
+                    && let Some(claim) = ir.claims.get(&test.claim)
+                {
+                    pending.push((&claim.true_when, position));
+                }
+            }
+        }
+    }
+    matches
 }

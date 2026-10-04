@@ -13,9 +13,10 @@
 //!
 //! - An evidence dimension is the records of one kind about one artifact. A kind has one bound
 //!   dimension per artifact some evidence match of the kind names as its `subject`, in identifier
-//!   order. It has one unbound dimension too, about the first declared artifact no match of the
-//!   kind names, when such an artifact exists and either some match of the kind names no subject
-//!   or none names one (a kind no predicate reads keeps its one dimension). A match reads a
+//!   order. After them it has one unbound dimension, about an artifact no match of the kind names
+//!   (the first such in identifier order), when such an artifact exists and either some match of
+//!   the kind names no subject or none names one (a kind no predicate reads keeps its one
+//!   dimension). Only a match that names no subject reads the unbound dimension. A match reads a
 //!   dimension's records by the evaluator's own rule (`crate::eval::reads`): a match that names a
 //!   subject reads the bound dimension about it, and a match that names none reads every dimension
 //!   of its kind.
@@ -56,15 +57,20 @@
 //!   `true_when`, each obligation's `discharged_when`, each action's precondition and each outcome's
 //!   requirement, in that order, each section in identifier order; one finding per declaration and
 //!   kind, kinds in identifier order.
-//! - `authority-bypass`: an outcome whose requirement holds because evidence an authority-requiring
-//!   action may produce is present, in a state that needs no authority decision. Governed evidence
-//!   is each kind some action that requires a capability may produce. The outcome is legitimate in
-//!   a state whose every present evidence kind some action requiring no capability may produce, and
-//!   not legitimate in that state with the evidence dimensions of governed kinds its requirement
-//!   reads (directly or through claims) empty. An outcome that holds because governed evidence is
-//!   absent, such as
-//!   `{claim: approved, is: unknown}`, needs no authority decision and is no bypass. Static: action
-//!   order and preconditions are not followed. The finding names the witness state.
+//! - `authority-bypass`: an outcome that reads governed evidence where its presence helps it hold,
+//!   and that is legitimate without authority because of evidence present. Governed evidence is
+//!   each kind some action that requires a capability may produce. A requirement reads an evidence
+//!   match positively unless it sits under an odd number of flips, through the claims it tests: a
+//!   `not`, a claim test `is: false` and a claim test `is: unknown` each flip, and `all`, `any` and
+//!   `is: true` do not. The outcome is a bypass when some evidence dimension it reads positively is
+//!   of a governed kind, and it is legitimate in a state that takes no authority decision, whose
+//!   every present evidence kind some action requiring no capability may produce, and from which
+//!   taking away one positively read dimension that is present blocks it. Each such dimension is
+//!   judged alone, so the outcome may rest on governed evidence produced without authority or on
+//!   other evidence beside it. An outcome that holds only because governed evidence is absent,
+//!   such as `{claim: approved, is: unknown}`, needs no authority decision and is no bypass.
+//!   Static: action order and preconditions are not followed. The finding names the witness
+//!   state.
 //! - `property-failed`: a property whose subject has two statuses in two states that agree on every
 //!   dimension except the evidence dimensions its `independent_of` claim reads (directly or through
 //!   claims). The counterexample is that pair of states.
@@ -76,7 +82,8 @@
 //! taken decisions in dimension order: `` {evidence `k` result `r`, evidence `k2`, evidence `k3`
 //! about `b` result `r`, capability `c` granted, decision `d` taken} ``. A bound dimension is
 //! written with its subject, in a state and in the bound refusal (`` evidence kind `k3` about `b`
-//! 4 ``); an unbound one without.
+//! 4 ``); an unbound one without, and stands for records about an artifact no match of its kind
+//! names.
 //!
 //! # Refusals
 //!
@@ -453,24 +460,25 @@ fn bypasses(ir: &Ir, space: &Space<'_>, states: &[State], evaluated: &[Evaluated
         let Some(requirement) = outcome.requires.predicate() else {
             continue;
         };
-        // The evidence dimensions of governed kinds the requirement reads.
-        let read_governed: BTreeSet<usize> = space
-            .dimensions_read(ir, requirement)
-            .into_iter()
-            .filter(|(_, kind)| governed.contains(kind))
-            .map(|(at, _)| at)
-            .collect();
-        if read_governed.is_empty() {
+        // The evidence dimensions the requirement reads where a record helps it hold. It is
+        // meant to rest on authority only when one of them is of a governed kind.
+        let positive = space.dimensions_read_positively(ir, requirement);
+        if !positive.values().any(|kind| governed.contains(kind)) {
             continue;
         }
-        // Legitimate with only evidence no authority is needed for, and not once the governed
-        // evidence is taken away: it holds because that evidence is present.
+        // Legitimate with no authority decision and only evidence no authority is needed for, and
+        // because of evidence present there: taking away one positively read dimension that is
+        // present blocks it. A state where it holds only on absent evidence is no witness.
         let candidates = (0..states.len()).filter(|index| {
             let state = &states[*index];
-            let without_authority = space.present(state).iter().all(|kind| free.contains(kind));
+            let without_authority = !space.decides_authority(state)
+                && space.present(state).iter().all(|kind| free.contains(kind));
             without_authority
                 && legitimate(state, at)
-                && !legitimate(&space.erase(state, &read_governed), at)
+                && positive.keys().any(|dimension| {
+                    state[*dimension] != 0
+                        && !legitimate(&space.erase(state, &BTreeSet::from([*dimension])), at)
+                })
         });
         if let Some(index) = witness(space, states, candidates) {
             findings.push(Finding::AuthorityBypass {

@@ -73,8 +73,8 @@ pub enum PropertySubject {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(try_from = "WrittenDependency")]
 pub enum PropertyDependency {
-    /// The claim, standing for the evidence kinds it reads, directly or through the claims it
-    /// tests.
+    /// The claim, standing for the evidence it reads, by kind and subject, directly or through the
+    /// claims it tests.
     Claim(ClaimId),
 }
 

@@ -103,7 +103,7 @@
           "additionalProperties": false,
           "properties": {
             "claim": {
-              "description": "The claim, standing for the evidence kinds it reads, directly or through the claims it tests.",
+              "description": "The claim, standing for the evidence it reads, by kind and subject, directly or through the claims it tests.",
               "$ref": "#/$defs/Identifier"
             }
           },

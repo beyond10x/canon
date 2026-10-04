@@ -156,7 +156,7 @@ What a property's subject must not depend on. Written as a map with the one key 
 
 | Key | Value | Meaning |
 |---|---|---|
-| `claim` | [identifier](#identifiers) (`ClaimId`) | The claim, standing for the evidence kinds it reads, directly or through the claims it tests. |
+| `claim` | [identifier](#identifiers) (`ClaimId`) | The claim, standing for the evidence it reads, by kind and subject, directly or through the claims it tests. |
 
 ## Identifiers
 

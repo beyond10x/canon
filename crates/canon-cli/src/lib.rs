@@ -87,10 +87,10 @@ pub enum Command {
     },
     /// Check a `protocol/1` document over its whole finite state space: report outcomes no state
     /// reaches, actions whose precondition holds in no state, claims, obligations, preconditions and
-    /// outcome requirements that read evidence no action produces, outcomes that hold on evidence an
-    /// authority-requiring action may produce without any authority decision, and each declared
-    /// property that fails, with a counterexample. A state space of more than 65536 states is
-    /// refused.
+    /// outcome requirements that read evidence no action produces, outcomes that rest on evidence an
+    /// authority-requiring action may produce yet hold without any authority decision, and each
+    /// declared property that fails, with a counterexample. A state space of more than 65536 states
+    /// is refused.
     Check {
         /// The protocol document to check.
         #[arg(long)]

@@ -334,3 +334,27 @@ fn a_property_erases_only_the_dimensions_its_claim_reads() {
         "checked: protocol `p` revision 1: 4 states, 1 property, 0 findings\n"
     );
 }
+
+/// Adversary pass 2, findings 2 and 3: the bypass reads polarity. `clean` reads the governed `g`
+/// under `not`, and `refuted` through `is: false`: both hold on what the evidence does not
+/// establish, so neither is a bypass. `known` reads it under `not` of `is: unknown`, two flips, so
+/// a record helps it hold, and `self_approve` gives one without authority.
+#[test]
+fn a_bypass_reads_governed_evidence_only_where_its_presence_helps() {
+    let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}}\n\
+        evidence_kinds: {g: {}}\n\
+        claims: {approved: {true_when: {evidence: {kind: g, result: 'yes'}}}}\n\
+        actions:\n\
+        \x20\x20approve: {requires: [{capability: c}], may_produce: [{evidence: g}]}\n\
+        \x20\x20self_approve: {may_produce: [{evidence: g}]}\n\
+        outcomes:\n\
+        \x20\x20clean: {requires: {not: {evidence: {kind: g, result: bad}}}}\n\
+        \x20\x20refuted: {requires: {claim: approved, is: false}}\n\
+        \x20\x20known: {requires: {not: {claim: approved, is: unknown}}}\n";
+    assert_eq!(
+        check(&compiled(source), None).expect("checked").to_string(),
+        "authority-bypass: outcome `known` is legitimate without authority in state \
+         {evidence `g` result `bad`}\n\
+         checked: protocol `p` revision 1: 24 states, 0 properties, 1 finding\n"
+    );
+}

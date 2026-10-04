@@ -65,8 +65,8 @@ types:
       action: canon.protocol.ActionId
       outcome: canon.protocol.OutcomeId
 
-  # What the subject must not depend on: a claim, standing for the evidence kinds it reads,
-  # directly or through the claims it tests.
+  # What the subject must not depend on: a claim, standing for the evidence it reads, by kind and
+  # subject, directly or through the claims it tests.
   # read from: fixtures/investigation/check/failing-property/properties.yaml:16-17
   - name: canon.check.PropertyDependency
     kind: union
