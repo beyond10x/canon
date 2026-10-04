@@ -146,6 +146,65 @@ fn generated_on_disk(root: &Path) -> BTreeMap<String, String> {
     found
 }
 
+/// Whether a line opens an admonition with its title written after a space (`:::note Title`),
+/// the form `^:::[a-z]+ +\S` that MDX renders as raw text; the title belongs in brackets.
+fn is_raw_admonition(line: &str) -> bool {
+    let Some(rest) = line.strip_prefix(":::") else {
+        return false;
+    };
+    let keyword = rest.bytes().take_while(u8::is_ascii_lowercase).count();
+    let after = &rest[keyword..];
+    let spaces = after.bytes().take_while(|b| *b == b' ').count();
+    keyword > 0
+        && spaces > 0
+        && after[spaces..]
+            .chars()
+            .next()
+            .is_some_and(|c| !c.is_whitespace())
+}
+
+/// Every raw admonition line in the documentation sources, as `path:line: text`, outside fenced
+/// code, in sorted path order.
+fn raw_admonitions(root: &Path) -> Vec<String> {
+    fn files(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                files(&path, out);
+            } else if path
+                .extension()
+                .is_some_and(|ext| ext == "md" || ext == "mdx")
+            {
+                out.push(path);
+            }
+        }
+    }
+    let mut paths = Vec::new();
+    files(&root.join("website/docs"), &mut paths);
+    paths.sort();
+    let mut found = Vec::new();
+    for path in paths {
+        let text = fs::read_to_string(&path).unwrap_or_default();
+        let shown = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .display()
+            .to_string();
+        let mut in_fence = false;
+        for (index, line) in text.lines().enumerate() {
+            if line.trim_start().starts_with("```") {
+                in_fence = !in_fence;
+            } else if !in_fence && is_raw_admonition(line) {
+                found.push(format!("{shown}:{}: {line}", index + 1));
+            }
+        }
+    }
+    found
+}
+
 /// Compares what would be generated with what is on disk.
 fn drift(
     expected: &BTreeMap<String, String>,
@@ -215,7 +274,13 @@ fn generate(root: &Path, check: bool, canon: Option<PathBuf>) -> Result<bool, St
         } else {
             eprintln!("canon-docs: run `canon-docs generate` and commit the result");
         }
-        return Ok(found.is_empty());
+        let raw = raw_admonitions(root);
+        for line in &raw {
+            eprintln!(
+                "canon-docs: raw admonition, write the title in brackets (`:::note[Title]`): {line}"
+            );
+        }
+        return Ok(found.is_empty() && raw.is_empty());
     }
     for (path, text) in &expected {
         let path = root.join(path);
@@ -305,6 +370,30 @@ mod tests {
         assert!(!valid_commit(&"0".repeat(40)));
         assert!(!valid_commit("abc123"));
         assert!(!valid_commit(&"g".repeat(40)));
+    }
+
+    #[test]
+    fn raw_admonitions_are_the_keyword_space_title_form_only() {
+        for raw in [":::note Title", ":::caution  Two spaces", ":::shipped Done"] {
+            assert!(is_raw_admonition(raw), "{raw}");
+        }
+        for fine in [
+            ":::note[Title]",
+            ":::shipped[Claim evaluation]",
+            ":::",
+            ":::note",
+            ":::note ",
+            "::: note Title",
+            ":::Note Title",
+            "text :::note Title",
+        ] {
+            assert!(!is_raw_admonition(fine), "{fine}");
+        }
+    }
+
+    #[test]
+    fn the_documentation_has_no_raw_admonition() {
+        assert_eq!(raw_admonitions(&repository_root()), Vec::<String>::new());
     }
 
     #[test]

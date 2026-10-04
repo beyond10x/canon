@@ -5,7 +5,7 @@
     "mark": "C",
     "eyebrow": "Protocol calculus · bootstrap",
     "promise": ["What is known.", "What is owed.", "What has been earned."],
-    "lede": "Canon is a formal language and a deterministic calculus for evidence-governed protocols. For one case under one protocol it is built to answer what is known, what is unknown, which obligations remain open, which actions are admissible, and whether an outcome has been earned. Today it answers the first two.",
+    "lede": "Canon is a formal language and a deterministic calculus for evidence-governed protocols. For one case under one protocol it answers what is known, what is unknown, which obligations remain open, which actions are admissible, and whether an outcome has been earned.",
     "actions": [
       {"label": "Get started", "href": "/docs/getting-started", "kind": "primary"},
       {"label": "See a protocol", "href": "#protocol"}
