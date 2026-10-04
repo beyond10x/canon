@@ -127,9 +127,13 @@ fn the_first_refusable_record_by_file_name_is_the_one_named() {
     }
     let run = evaluate(&ir, &case, &evidence);
     assert_eq!(run.status.code(), Some(1), "{}", text(&run.stderr));
+    // Story review-hardening-w7: a refusal names the file of each record it cites.
     assert_eq!(
         text(&run.stderr),
-        "error[undeclared-evidence-kind]: evidence `e-a` is of kind `undeclared-a`, which the \
-         protocol does not declare\n"
+        format!(
+            "error[undeclared-evidence-kind]: {}: evidence `e-a` is of kind `undeclared-a`, which \
+             the protocol does not declare\n",
+            evidence.join("a.yaml").display()
+        )
     );
 }

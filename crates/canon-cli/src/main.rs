@@ -8,6 +8,7 @@ mod check;
 mod conform;
 mod diff;
 mod evaluate;
+mod generate;
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -15,10 +16,23 @@ use std::process::ExitCode;
 use clap::Parser;
 
 use b10x_canon::{ir, model, validate};
-use canon_cli::{Cli, Command, ConformCommand, REJECTED, UNREADABLE};
+use canon_cli::{Cli, Command, ConformCommand, REJECTED, UNREADABLE, USAGE};
 
 fn main() -> ExitCode {
-    match Cli::parse().command {
+    // A usage error exits `USAGE`, not clap's own 2, which the exit-status table gives to an
+    // unreadable input; `--help` and `--version` print to standard output and succeed.
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(error) => {
+            let _ = error.print();
+            return if error.use_stderr() {
+                ExitCode::from(USAGE)
+            } else {
+                ExitCode::SUCCESS
+            };
+        }
+    };
+    match cli.command {
         Command::Validate { path } => validate_command(&path),
         Command::Compile { path } => compile_command(&path),
         Command::Conform {
@@ -41,6 +55,7 @@ fn main() -> ExitCode {
         ),
         Command::Diff { from, to } => diff::run(&from, &to),
         Command::Check { path, properties } => check::run(&path, properties.as_deref()),
+        Command::Generate { path, out } => generate::run(&path, &out),
     }
 }
 

@@ -39,7 +39,7 @@
     {
       "label": "Evaluation documents",
       "status": "shipped",
-      "detail": "canon-case/1, canon-evidence/1, canon-decisions/1 and canon-decision/1, and the canon-properties/1 document canon check reads.",
+      "detail": "canon-case/1, canon-evidence/1, canon-authority/1, canon-decisions/1 and canon-decision/1, and the canon-properties/1 document canon check reads.",
       "href": "/docs/reference/documents",
       "area": "Evaluation"
     },
@@ -118,6 +118,13 @@
       "status": "shipped",
       "detail": "Every state of a protocol's finite state space; unreachable outcomes, unsatisfiable preconditions, unproduced evidence, authority bypasses with a witness state, and failing properties with a counterexample.",
       "href": "/docs/reference/cli#canon-check",
+      "area": "Analysis"
+    },
+    {
+      "label": "canon generate",
+      "status": "shipped",
+      "detail": "One minimal witness scenario per outcome and per blocked action, which canon conform run runs unchanged.",
+      "href": "/docs/reference/cli#canon-generate",
       "area": "Analysis"
     },
     {

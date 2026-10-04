@@ -13,23 +13,32 @@ use clap::{Parser, Subcommand};
 pub const REJECTED: u8 = 1;
 /// A document could not be read.
 pub const UNREADABLE: u8 = 2;
+/// The command line was not understood: an unknown command or option, a missing required one, or
+/// a value clap refuses (`EX_USAGE` of BSD `sysexits.h`).
+pub const USAGE: u8 = 64;
 
 /// Every exit status `canon` uses and what it means.
-pub const EXIT_STATUSES: [(u8, &str); 3] = [
+pub const EXIT_STATUSES: [(u8, &str); 4] = [
     (
         0,
         "Success: the document is valid or compiled, the case was evaluated, every conformance \
-         scenario ran and passed, or a check found nothing.",
+         scenario ran and passed, a check found nothing, or the scenarios were generated.",
     ),
     (
         REJECTED,
         "Rejected: a document was read and rejected, an evaluation or a check was refused, a \
-         conformance scenario failed or was unreadable, no scenario ran, or a check found \
-         something.",
+         conformance scenario failed or was unreadable, no scenario ran, a check found \
+         something, or generation was refused.",
     ),
     (
         UNREADABLE,
-        "Unreadable: an input file or directory could not be read.",
+        "Unreadable: an input file or directory could not be read, or an output file could not \
+         be written.",
+    ),
+    (
+        USAGE,
+        "Usage error: the command line was not understood (an unknown command or option, a \
+         missing required option, or a value that cannot be parsed); nothing was read.",
     ),
 ];
 
@@ -101,6 +110,25 @@ pub enum Command {
         /// action's or outcome's status is independent of a claim. Each is checked in every state.
         #[arg(long)]
         properties: Option<PathBuf>,
+    },
+    /// Generate `canon-conformance/1` scenarios into an empty directory: one minimal witness per
+    /// declared outcome and per action blocked in some state, over the state space `canon check`
+    /// enumerates. Each names the protocol path, as given, as its fixture, so `canon conform run`
+    /// runs them from the working directory `canon generate` ran in. Refused, writing nothing: a
+    /// protocol path that resolves outside the working directory, an outcome no state reaches, a
+    /// protocol that yields no scenario, an outcome or action identifier holding a character a file
+    /// name cannot hold (`/ \ : * ? " < > |` or a control character), two scenario file names
+    /// equal up to letter case or Unicode normalisation, and a non-empty `--out`. On failure,
+    /// nothing this run created is left.
+    Generate {
+        /// The protocol document, as a relative path without `..` components.
+        #[arg(long)]
+        path: PathBuf,
+        /// The directory to write the scenarios to: absent or empty. When absent it is created, with
+        /// any missing parents; an existing one, or a symbolic link to one, is written into as it
+        /// is.
+        #[arg(long)]
+        out: PathBuf,
     },
     /// The semantic difference between two compiled protocol revisions. Not built yet.
     Diff {

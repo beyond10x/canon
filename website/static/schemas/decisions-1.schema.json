@@ -3,7 +3,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://beyond10x.github.io/canon/schemas/decisions-1.schema.json",
   "title": "canon-decisions/1",
-  "description": "A list of `ExplicitDecision` entries. One entry of a `canon-decisions/1` document. It applies to `outcome` when the outcome requires a decision named `decision` and `case_revision` is the case snapshot's revision.",
+  "description": "A list of `ExplicitDecision` entries. One entry of a `canon-decisions/1` document. It applies to `outcome` when the outcome requires a decision named `decision` and `case_revision` is the case snapshot's revision. An entry given twice, every key equal, is refused.",
   "type": "array",
   "items": {
     "$ref": "#/$defs/ExplicitDecision"

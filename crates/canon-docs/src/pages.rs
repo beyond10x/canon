@@ -240,6 +240,9 @@ struct Document {
     /// The document is a list of `root` entries rather than one `root`, read by the named
     /// option of `command`.
     list: Option<&'static str>,
+    /// For a list document, which entries are refused as given twice: a sentence for the documents
+    /// page and the schema's description, which says so when the schema cannot express it.
+    twice: &'static str,
     /// The command that reads or writes it, with the option that names it when there is one.
     command: &'static str,
 }
@@ -249,17 +252,19 @@ const PROTOCOL: Document = Document {
     format: "FORMAT",
     schema: Some("protocol-1.schema.json"),
     list: None,
+    twice: "",
     command: "canon validate",
 };
 
 /// The documents the documents page lists, in order: those `canon evaluate` reads and writes,
 /// then the one `canon check` reads.
-const DOCUMENTS: [Document; 5] = [
+const DOCUMENTS: [Document; 6] = [
     Document {
         root: "Case",
         format: "CASE_FORMAT",
         schema: Some("case-1.schema.json"),
         list: None,
+        twice: "",
         command: "canon evaluate",
     },
     Document {
@@ -267,6 +272,7 @@ const DOCUMENTS: [Document; 5] = [
         format: "EVIDENCE_FORMAT",
         schema: Some("evidence-1.schema.json"),
         list: None,
+        twice: "",
         command: "canon evaluate",
     },
     Document {
@@ -274,6 +280,16 @@ const DOCUMENTS: [Document; 5] = [
         format: "DECISION_FORMAT",
         schema: None,
         list: None,
+        twice: "",
+        command: "canon evaluate",
+    },
+    Document {
+        root: "AuthorityDecision",
+        format: "AUTHORITY_FORMAT",
+        schema: Some("authority-1.schema.json"),
+        list: Some("--authority"),
+        twice: "A capability decided twice is refused, whatever the decision; the JSON Schema cannot \
+                express that, and refuses only an entry repeated exactly.",
         command: "canon evaluate",
     },
     Document {
@@ -281,6 +297,7 @@ const DOCUMENTS: [Document; 5] = [
         format: "DECISIONS_FORMAT",
         schema: Some("decisions-1.schema.json"),
         list: Some("--decisions"),
+        twice: "An entry given twice, every key equal, is refused.",
         command: "canon evaluate",
     },
     Document {
@@ -288,6 +305,7 @@ const DOCUMENTS: [Document; 5] = [
         format: "PROPERTIES_FORMAT",
         schema: Some("properties-1.schema.json"),
         list: None,
+        twice: "",
         command: "canon check --properties",
     },
 ];
@@ -622,6 +640,15 @@ fn type_sections(
                     .collect();
                 out.push_str(&table(&["Value", "Meaning"], &rows));
             }
+            (Reading::Derived, Shape::Enum(variants))
+                if variants.iter().all(|variant| variant.payload.is_none()) =>
+            {
+                let rows: Vec<Vec<String>> = variants
+                    .iter()
+                    .map(|variant| vec![code(&variant.written), meaning(&variant.doc)])
+                    .collect();
+                out.push_str(&table(&["Value", "Meaning"], &rows));
+            }
             (Reading::TryFrom(written), _) => {
                 if let Some(doc) = model.module_docs.get("predicate.rs")
                     && def.name == "Predicate"
@@ -816,15 +843,15 @@ fn documents(model: &Model) -> Result<String, String> {
     let mut out = front_matter(
         "Evaluation documents",
         "Evaluation documents",
-        "The case snapshot, evidence records and explicit decisions canon evaluate reads, the \
-         decision it writes, and the properties canon check reads.",
+        "The case snapshot, evidence records, authority decisions and explicit decisions canon \
+         evaluate reads, the decision it writes, and the properties canon check reads.",
     );
     out.push_str(&format!(
         "Generated from the model types in {}. `canon evaluate` reads a compiled protocol, one \
-         case snapshot, a set of evidence records and, optionally, a list of explicit decisions, \
-         and writes a decision. `canon check` reads a protocol and, optionally, the properties \
-         declared beside it. Every key is listed; \
-         a key Canon does not know is refused.\n",
+         case snapshot, a set of evidence records and, optionally, a list of authority decisions \
+         and a list of explicit decisions, and writes a decision. `canon check` reads a protocol \
+         and, optionally, the properties declared beside it. Every key is listed; a key Canon \
+         does not know is refused.\n",
         source_link(source::MODEL_DIR),
     ));
     let mut all_defs = Vec::new();
@@ -834,10 +861,11 @@ fn documents(model: &Model) -> Result<String, String> {
         out.push_str(&format!("\n## `{format}`\n\n"));
         match (document.schema, document.list) {
             (Some(file), Some(option)) => out.push_str(&format!(
-                "Read by `{} {option}`: a list of `{}` entries; an empty list is \
-                 allowed, and an entry given twice is refused. The {} is generated from the same types.\n",
+                "Read by `{} {option}`: a list of `{}` entries; an empty list is allowed. {} The \
+                 {} is generated from the same types.\n",
                 document.command,
                 document.root,
+                document.twice,
                 schema_link(file)
             )),
             (Some(file), None) => out.push_str(&format!(
@@ -1013,6 +1041,19 @@ fn schema(model: &Model, document: &Document) -> Result<Json, String> {
                     .collect();
                 obj([("oneOf", Json::Arr(forms))])
             }
+            (Reading::Derived, Shape::Enum(variants))
+                if variants.iter().all(|variant| variant.payload.is_none()) =>
+            {
+                obj([(
+                    "enum",
+                    Json::Arr(
+                        variants
+                            .iter()
+                            .map(|variant| json::str(variant.written.clone()))
+                            .collect(),
+                    ),
+                )])
+            }
             (Reading::Custom, Shape::Enum(variants)) => {
                 custom(&def.name)?;
                 obj([(
@@ -1057,9 +1098,10 @@ fn schema(model: &Model, document: &Document) -> Result<Json, String> {
             "description",
             json::str(match document.list {
                 Some(_) => format!(
-                    "A list of `{}` entries. {}",
+                    "A list of `{}` entries. {} {}",
                     document.root,
-                    plain(&resolve(&root.doc, model))
+                    plain(&resolve(&root.doc, model)),
+                    document.twice
                 ),
                 None => plain(&resolve(&root.doc, model)),
             }),
@@ -1067,8 +1109,9 @@ fn schema(model: &Model, document: &Document) -> Result<Json, String> {
     ]) else {
         unreachable!("obj builds an object");
     };
-    // A list document is an array of root entries, none repeated (Canon refuses an entry given
-    // twice as `duplicate-identifier`); any other is one root.
+    // A list document is an array of root entries, none repeated exactly (Canon refuses an entry
+    // given twice as `duplicate-identifier`, and what counts as twice is the document's `twice`);
+    // any other is one root.
     if document.list.is_some() {
         members.push(("type".to_owned(), json::str("array")));
         members.push(("items".to_owned(), obj([("$ref", root_ref)])));

@@ -11,9 +11,9 @@ use crate::model::{
     Truth, one_line,
 };
 
-/// The value of every claim `ir` declares, keyed by claim id. An IR whose claims test each other
-/// in a cycle is refused as `claim-cycle`: a compiled protocol has none (the validator refuses
-/// one), but [`super::evaluate`] takes any [`Ir`] a caller builds.
+/// The value of every claim `ir` declares, keyed by claim id. The walk recurses through claim
+/// tests, so it runs only after `depth.rs` has bounded every claim's effective depth and refused a
+/// cycle; the cycle refusal here, `claim-cycle`, is the same one, kept so the walk never loops.
 ///
 /// A claim is evaluated in its own context: no evidence match anywhere in its evaluation reads a
 /// record invalidated for it, including the matches of every claim it tests, through any number of

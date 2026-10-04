@@ -21,7 +21,9 @@ Two lines of work fit none of those three states:
 - **Normative conformance suite: started.** The requirements below as runnable scenarios; scenarios
   cover `CANON-CLAIM-001`, `CANON-CLAIM-002`, `CANON-EVIDENCE-001`, `CANON-EVIDENCE-002`,
   `CANON-EVIDENCE-003`, `CANON-OBLIGATION-001`, `CANON-AUTHORITY-001`, `CANON-OUTCOME-001`,
-  `CANON-OUTCOME-002`, `CANON-EXPLAIN-001`, `CANON-DETERMINISM-001` and `CANON-INVALIDATION-001`.
+  `CANON-OUTCOME-002`, `CANON-EXPLAIN-001`, `CANON-DETERMINISM-001` and `CANON-INVALIDATION-001`,
+  by eleven scenarios, among them `CANON-REASONS-001`, which covers `CANON-EVIDENCE-003` in the
+  `actions` and `outcomes` sections.
 - **Protocol composition, a shared evidence envelope: open question.** Listed as open in the
   design; no decision yet.
 
@@ -35,10 +37,11 @@ The design proposes `canon frontier`, `canon diff`, `canon inspect` and `canon c
 From the design document. Each is meant to become a conformance scenario. Today the scenarios in
 `conformance/scenarios` cover `CANON-CLAIM-001`, `CANON-CLAIM-002`, `CANON-EVIDENCE-001`,
 `CANON-EVIDENCE-002`, `CANON-AUTHORITY-001`, `CANON-OUTCOME-001`, `CANON-INVALIDATION-001` and
-`CANON-DETERMINISM-001`; `CANON-INDEPENDENCE-001` has none yet. Four more scenarios hold what
+`CANON-DETERMINISM-001`; `CANON-INDEPENDENCE-001` has none yet. Five more scenarios hold what
 the design lists no requirement for: `CANON-OBLIGATION-001`, obligations, `CANON-OUTCOME-002`,
 outcomes that require an explicit decision, `CANON-EVIDENCE-003`, evidence matches bound to a
-subject, and `CANON-EXPLAIN-001`, the structured explanation, which also covers
+subject, `CANON-REASONS-001`, the reasons such a match gives in the `actions` and `outcomes`
+sections, and `CANON-EXPLAIN-001`, the structured explanation, which also covers
 `CANON-DETERMINISM-001`.
 
 | Requirement | Statement |

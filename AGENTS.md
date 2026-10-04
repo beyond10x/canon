@@ -32,7 +32,8 @@ it must know. The cross-repository architecture is Atlas ADRs 0066–0075 and At
 Canon's ESS specification lives under `ess/`. It specifies the `protocol/1` source model
 (`crates/canon/src/model/`), the evaluation documents `canon-case/1` (the Case entity),
 `canon-evidence/1`, `canon-decisions/1` and `canon-decision/1` (story:three-valued-claims,
-story:decision-outcomes) in the domain `canon.protocol`, and the `canon-properties/1` document
+story:decision-outcomes) and `canon-authority/1` (story:review-hardening-w7) in the domain
+`canon.protocol`, and the `canon-properties/1` document
 `canon check` reads (story:canon-check) in the domain `canon.check`, with no commands. Atlas ADR
 0076 still owes the `canon` CLI's commands (`canon validate` and its successors), with the story
 that introduces them.

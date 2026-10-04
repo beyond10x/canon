@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:scenario-generation
 kind: story
-status: draft
+status: implemented
 title: Generate minimal witness scenarios with canon generate
 relations:
 - decomposes: epic:protocol-analysis
@@ -12,16 +12,38 @@ relations:
 - serves: vision:governed-autonomy
 scope:
 - confidence: cited
+  path: Cargo.lock
+- confidence: cited
   path: crates/canon-cli/src/generate.rs
+- confidence: cited
+  path: crates/canon-cli/src/lib.rs
 - confidence: cited
   path: crates/canon-cli/src/main.rs
 - confidence: cited
+  path: crates/canon-cli/tests/adversary2_scenario_generation.rs
+- confidence: cited
+  path: crates/canon-cli/tests/adversary_scenario_generation.rs
+- confidence: cited
   path: crates/canon-cli/tests/scenario_generation.rs
+- confidence: cited
+  path: crates/canon/Cargo.toml
+- confidence: cited
+  path: crates/canon/src/check/
 - confidence: cited
   path: crates/canon/src/generate/
 - confidence: cited
+  path: crates/canon/src/lib.rs
+- confidence: cited
+  path: crates/canon/tests/adversary_scenario_generation.rs
+- confidence: cited
   path: fixtures/investigation/generate/
-revision: 2
+- confidence: cited
+  path: website/
+revision: 10
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-04T09:00:39Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-10-04T09:00:39Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-10-04T12:11:07Z", actor: "human:timo", revision: 10, decided_on: {"recorded":{"test_result":1,"review_outcome":4,"verification":1}}}
 ---
 ## Outcome
 
@@ -67,3 +89,12 @@ passes every scenario; and for each scenario, removing any one evidence record m
 ## Source
 
 epic:protocol-analysis part 2; Atlas ADR 0080.
+
+## Coordinator decisions (wave 2026-10-04-w14)
+
+- The base protocol is `fixtures/investigation/check/base/protocol.yaml`; the command is
+  `canon generate --path <protocol> --out <dir>`; file and scenario naming, the least-weight witness
+  and the subject-only expectation are as the phase-1 fixtures fix them.
+- `generate/` uses check's state space and witness choice; `check/` changes are visibility only
+  (`pub(crate)`), no copy of its logic. Scope adds `check/` (visibility), `canon-cli/src/lib.rs`
+  (the clap variant) and `website/`.

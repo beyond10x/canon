@@ -184,12 +184,12 @@ fn every_identifier_the_refusal_list_names_is_checked() {
         (
             CASE.to_owned(),
             vec![good.replace("kind: tests", "kind: 'te sts'")],
-            "evidence kind identifier `te sts`",
+            "evidence `e1` kind identifier `te sts`",
         ),
         (
             CASE.to_owned(),
             vec![good.replace("subject: a", "subject: 'a b'")],
-            "evidence subject identifier `a b`",
+            "evidence `e1` subject identifier `a b`",
         ),
     ] {
         let refusal = decide(&ir, &case, &evidence).expect_err(message);

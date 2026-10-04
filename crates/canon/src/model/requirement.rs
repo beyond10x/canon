@@ -63,17 +63,17 @@ impl PartialEq<Predicate> for OutcomeRequirement {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WrittenRequirement {
-    #[serde(default, deserialize_with = "super::present::optional")]
+    #[serde(default, deserialize_with = "super::present::form")]
     decision: Option<DecisionName>,
-    #[serde(default, deserialize_with = "super::present::optional")]
+    #[serde(default, deserialize_with = "super::present::form")]
     all: Option<Vec<Predicate>>,
-    #[serde(default, deserialize_with = "super::present::optional")]
+    #[serde(default, deserialize_with = "super::present::form")]
     any: Option<Vec<Predicate>>,
-    #[serde(default, deserialize_with = "super::present::optional")]
+    #[serde(default, deserialize_with = "super::present::form")]
     not: Option<Box<Predicate>>,
-    #[serde(default, deserialize_with = "super::present::optional")]
+    #[serde(default, deserialize_with = "super::present::form")]
     evidence: Option<EvidenceMatch>,
-    #[serde(default, deserialize_with = "super::present::optional")]
+    #[serde(default, deserialize_with = "super::present::form")]
     claim: Option<ClaimId>,
     #[serde(default, deserialize_with = "super::present::optional")]
     is: Option<Truth>,
@@ -101,6 +101,22 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             is,
         };
         let Some(decision) = decision else {
+            // With no key at all, name `decision` among what a requirement may be written as.
+            if let WrittenPredicate {
+                all: None,
+                any: None,
+                not: None,
+                evidence: None,
+                claim: None,
+                is: None,
+            } = predicate
+            {
+                return Err(
+                    "a requirement has exactly one of `all`, `any`, `not`, `evidence`, \
+                     `claim` or `decision`, found 0"
+                        .to_owned(),
+                );
+            }
             return Predicate::try_from(predicate).map(OutcomeRequirement::Predicate);
         };
         let WrittenPredicate {

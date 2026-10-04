@@ -16,8 +16,9 @@
 //!
 //! An empty list (`[]`) decides nothing; an empty document is not a list. Refused, in this order:
 //! text that is not such a list, or an entry with another key or a missing one, as
-//! `malformed-input` (`` `--decisions` is not a canon-decisions/1 document: <why> ``); then, entry
-//! by entry in the order given, a decision, outcome, principal or case revision that is not an
+//! `malformed-input` (`` `--decisions` is not a canon-decisions/1 document: entry <n>: <why> ``,
+//! counting entries from 1, where a missing key is named: `` missing field `case_revision` ``); then,
+//! entry by entry in the order given, a decision, outcome, principal or case revision that is not an
 //! identifier, in that order, as `invalid-identifier`, and an entry that repeats an earlier one
 //! exactly (all four keys equal) as `duplicate-identifier`, naming it. The `outcomes` section
 //! (`outcomes.rs`), which has the protocol, then refuses a decision for an outcome the protocol
@@ -31,7 +32,7 @@
 //! sorted by Unicode code point, so the order the decisions are given in does not change the
 //! result and no principal who decided is dropped (design § 37).
 
-use super::read::{malformed, yaml};
+use super::read::{entries, malformed, yaml};
 use super::{Refusal, identifier};
 use crate::model::{DecisionName, ExplicitDecision, OutcomeId, Principal, Revision, one_line};
 
@@ -89,8 +90,7 @@ pub(super) fn read(text: Option<&str>) -> Result<Option<Decisions>, Refusal> {
     if !value.is_sequence() {
         return Err(malformed(&what, "expected a list of decisions"));
     }
-    let entries: Vec<ExplicitDecision> =
-        serde_yaml_ng::from_value(value).map_err(|error| malformed(&what, error))?;
+    let entries: Vec<ExplicitDecision> = entries(value, &what)?;
     for (at, entry) in entries.iter().enumerate() {
         identifier("decision name", entry.decision.as_str())?;
         identifier("decision outcome", entry.outcome.as_str())?;

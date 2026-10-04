@@ -18,7 +18,7 @@ macro_rules! identifier {
         /// the text `~` or `null`.
         impl<'de> Deserialize<'de> for $name {
             fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-                super::present::required::<D, String>(deserializer).map(Self)
+                super::present::identifier::<D, String>(deserializer).map(Self)
             }
         }
 

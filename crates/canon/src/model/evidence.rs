@@ -18,16 +18,20 @@ pub struct EvidenceRecord {
     /// The document format; the evaluator accepts only [`EVIDENCE_FORMAT`].
     #[serde(deserialize_with = "super::present::required")]
     pub format: String,
+    #[serde(deserialize_with = "super::present::required")]
     pub id: EvidenceId,
     /// The evidence kind, which the protocol declares.
+    #[serde(deserialize_with = "super::present::required")]
     pub kind: EvidenceKindId,
     /// What the observation found; a record without one matches only an evidence match that names
     /// no result.
     #[serde(default, deserialize_with = "super::present::optional")]
     pub result: Option<String>,
     /// The artifact the record is about.
+    #[serde(deserialize_with = "super::present::required")]
     pub subject: ArtifactId,
     /// The revision of that artifact the record is about.
+    #[serde(deserialize_with = "super::present::required")]
     pub subject_revision: Revision,
     /// When the observation was made; its age at the evaluation instant is measured from here. A
     /// record without it never expires.
@@ -35,6 +39,6 @@ pub struct EvidenceRecord {
     pub observed_at: Option<Instant>,
     /// The revision of each upstream artifact the observation was made against, keyed by
     /// artifact. A record without it is never invalidated.
-    #[serde(default, deserialize_with = "super::present::required")]
+    #[serde(default, deserialize_with = "super::present::defaulted")]
     pub upstream_revisions: Declarations<ArtifactId, Revision>,
 }

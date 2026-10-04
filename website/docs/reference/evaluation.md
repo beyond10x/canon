@@ -52,7 +52,9 @@ A claim's value is its `true_when` predicate's value over the evidence set:
 ## Refusals
 
 Inputs are checked before any claim is evaluated, in this order, and the first problem found is
-the refusal: the case snapshot's format, its identifiers (case id, protocol id, the case
+the refusal: the compiled protocol's depth (a predicate nested more than `MAX_IR_DEPTH`
+levels, itself or along the claims it tests, as `predicate-too-deep`, and claims that test each
+other in a cycle as `claim-cycle`; see "Depth" below), the case snapshot's format, its identifiers (case id, protocol id, the case
 revision when given, then each artifact id and revision in the order written), its protocol against the compiled protocol's,
 each artifact it lists (declared by the protocol, listed once), each artifact the protocol
 declares (listed by the case); then each evidence record in the order given: its format, its
@@ -61,7 +63,17 @@ identifiers (id, kind, subject, subject revision, then each upstream artifact an
 (used once in the set), its kind (declared by the protocol) and each upstream artifact
 (declared by the protocol, else `undeclared-artifact`, naming the record and the artifact; named
 once, else `duplicate-identifier`). A record's subject and subject revision are checked here as
-identifiers only; the revision-binding stage reads them.
+identifiers only; the revision-binding stage reads them. Every refusal of a record names it
+(`` evidence `e2` format is `canon-evidence/2`, expected `canon-evidence/1` ``, `` evidence
+`e2` kind identifier `k k` is empty or … ``), and cites it (`Refusal::evidence`), here and
+in the revision-binding stage below, so a caller that read the records from files can name the
+file of each (`canon evaluate` does).
+
+A case snapshot or evidence record that is not a document of its format is refused when it is
+read (`read_case`, `read_evidence`), before any of this, as `malformed-input`; a required key
+left out is named (`` missing field `subject` ``), and an evidence record is named by its `id`
+when it has one (`` evidence `e2` is not a canon-evidence/1 document: missing field `subject`
+``).
 
 Then the supplied inputs are read, in this order: the authority decisions (`--authority`), the
 evaluation instant (`--at`) and the explicit decisions. The authority decisions are read by
@@ -83,9 +95,7 @@ for the claims each rule names and every claim built on one of them, the records
 a revision of the rule's upstream artifact other than the case snapshot's current one
 (`invalidation.rs`, CANON-INVALIDATION-001).
 
-Then claims are evaluated. An IR whose claims test each other in a cycle — which `canon
-compile` never produces, but a caller can build — is refused as `claim-cycle`, naming the claims
-from the first one reached again: `claims test each other in a cycle: c -> d -> c`.
+Then claims are evaluated.
 
 Last, the `outcomes` section checks the case snapshot's `termination`: one naming an outcome
 the protocol does not declare is refused as `undeclared-outcome`, naming the outcome; then an
@@ -102,12 +112,32 @@ the outcome and its status (CANON-OUTCOME-001).
 predicates, so they run on a thread of their own with a stack sized for that bound
 (`DEEP_STACK`): an IR at the bound reads and evaluates from any caller's thread.
 
+Claim evaluation also recurses through each claim test into the predicate of the claim it
+tests, so the bound applies to a claim's effective depth: a predicate is one level and each
+`all`, `any` or `not` around it one more, and a claim test at level `n` reaches `n` plus the
+effective depth of the claim it tests. `evaluate_with` takes any `Ir` a caller builds and
+checks the bound first, before any step recurses (`depth.rs`), computing each claim's
+effective depth once, after the claims it tests, without recursion. It refuses as
+`predicate-too-deep` an obligation, action, outcome or claim whose own predicate nests more
+than `MAX_IR_DEPTH` levels (`` claim `c` true_when nests predicates deeper than 4096 ``), and
+a claim whose effective depth is more than `MAX_IR_DEPTH`, naming the claims of the chain that
+reaches it (`` claim `c1` true_when nests predicates deeper than 4096 through the claims it
+tests: c1 -> c2 -> c3 ``). Claims that test each other in a cycle — which `canon compile` never
+produces, but a caller can build — have no effective depth and are refused there as
+`claim-cycle`, naming the claims from the first one reached again, in the order evaluation
+reaches them: `claims test each other in a cycle: c -> d -> c`. Each level of the JSON text is
+at least one predicate level, so `read_ir`'s bound holds every predicate of an IR it returns
+within the bound; a chain of claims, each within it, can still exceed it, and `canon compile`
+compiles such a protocol, so an IR `read_ir` returns can still be refused here. Dropping a
+caller's IR is the caller's own recursion.
+
 ## The pipeline
 
 `evaluate_with` runs the same steps for every evaluation, each in the file that owns its
 concept; this module holds only the order:
 
-1. check the case snapshot (`case.rs`) and the evidence set (`evidence.rs`);
+1. check the compiled protocol's depth (`depth.rs`), the case snapshot (`case.rs`) and the
+   evidence set (`evidence.rs`);
 2. read the supplied inputs: authority decisions (`authority.rs`), the evaluation instant
    (`freshness.rs`) and explicit decisions (`decisions.rs`);
 3. run the exclusion stages in order: revision binding (`binding.rs`), freshness
@@ -168,7 +198,9 @@ declares no obligation has no `obligations` key, and likewise for actions and ou
   every required capability is granted (CANON-AUTHORITY-001).
 - `outcomes` maps each declared outcome to `{"status": "legitimate"}` when its `requires`
   predicate is `true` over the claim values and the evidence left, and otherwise to
-  `{"status": "blocked", "reasons": [...]}`, the reasons written as an action precondition's.
+  `{"status": "blocked", "reasons": [...]}`. Its reasons follow the one rule an action
+  precondition's do, and are written the same way: in an `all` that is `false`, only its
+  `false` members decide it, with polarity carried through `not`.
   An outcome that requires an explicit decision (`requires: decision: <name>`) is
   `legitimate` only when an explicit decision of that name, for that outcome, was taken at the
   case snapshot's `revision`, and its entry then records who decided (design § 37):
@@ -187,9 +219,10 @@ declares no obligation has no `obligations` key, and likewise for actions and ou
 capability and whether it is granted, `- {capability: finding.publish, decision: granted}` (or
 `denied`). An empty list decides nothing. Canon grants nothing and resolves no identity: the
 caller decides and passes the decisions in. Refused, in this order: text that is not such a
-list, or an entry with another key or another decision, as `malformed-input`; then, entry by
-entry, a capability that is not an identifier as `invalid-identifier`, and a capability decided
-a second time as `duplicate-identifier`.
+list, or an entry with another key, another decision or a missing key, as `malformed-input`,
+naming the entry by its position, counting from 1, and a missing key by name (`` entry 2:
+missing field `capability` ``); then, entry by entry, a capability that is not an identifier
+as `invalid-identifier`, and a capability decided a second time as `duplicate-identifier`.
 
 ## Explicit decisions
 
@@ -201,7 +234,8 @@ nothing and resolves no identity: the caller passes in the decisions that were t
 decision applies only while its case revision is the case snapshot's `revision`: one taken at a
 superseded revision, or given for a snapshot without a revision, applies to nothing. Refused,
 in this order: text that is not such a list, or an entry with another key or a missing one, as
-`malformed-input`; then, entry by entry, a decision, outcome, principal or case revision that
+`malformed-input`, naming the entry by its position and a missing key by name (`` entry 1:
+missing field `case_revision` ``); then, entry by entry, a decision, outcome, principal or case revision that
 is not an identifier as `invalid-identifier`, and an entry that repeats an earlier one exactly as
 `duplicate-identifier`, naming it; then, in the `outcomes` section and at any case revision, a
 decision for an outcome the protocol does not declare as `undeclared-outcome`, and one for an

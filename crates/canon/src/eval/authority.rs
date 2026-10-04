@@ -11,41 +11,23 @@
 //!   decision: granted        # or denied
 //! ```
 //!
-//! An empty list (`[]`) decides nothing; an empty document is not a list. A capability no action requires may be decided; it changes no
-//! action. Refused, in this order: text that is not such a list, or an entry with another key or
-//! another decision, as `malformed-input` (`` `--authority` is not a canon-authority/1 document:
-//! <why> ``); then, entry by entry in the order given, a capability that is not an identifier as
-//! `invalid-identifier`, and a capability decided a second time as `duplicate-identifier`
-//! (`` `--authority` decides capability `<c>` more than once ``).
+//! The entry type is [`crate::model::AuthorityDecision`]. An empty list (`[]`) decides nothing; an
+//! empty document is not a list. A capability no action requires may be decided; it changes no
+//! action. Refused, in this order: text that is not such a list, or an entry with another key,
+//! another decision or a missing key, as `malformed-input` (`` `--authority` is not a
+//! canon-authority/1 document: entry <n>: <why> ``, counting entries from 1, where a missing key is
+//! named: `` missing field `capability` ``); then, entry by entry in the order given, a capability
+//! that is not an identifier as `invalid-identifier`, and a capability decided a second time as
+//! `duplicate-identifier` (`` `--authority` decides capability `<c>` more than once ``).
 
 use std::collections::BTreeMap;
 
-use serde::Deserialize;
-
-use super::read::{malformed, yaml};
+use super::read::{entries, malformed, yaml};
 use super::{Refusal, identifier};
-use crate::model::{CapabilityId, one_line};
+use crate::model::{AuthorityDecision, CapabilityId, Grant, one_line};
 
 /// How the input is named in a refusal: the flag that gives it.
 const INPUT: &str = "`--authority`";
-
-/// One authority decision on one capability.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub(super) enum Grant {
-    Granted,
-    Denied,
-}
-
-impl Grant {
-    /// The decision as `canon-authority/1` and `canon-decision/1` write it.
-    pub(super) fn as_str(self) -> &'static str {
-        match self {
-            Grant::Granted => "granted",
-            Grant::Denied => "denied",
-        }
-    }
-}
 
 /// The authority decisions, read from the text given as `--authority`, keyed by capability.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,13 +50,6 @@ impl Authority {
     }
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Entry {
-    capability: CapabilityId,
-    decision: Grant,
-}
-
 /// Reads the authority decisions, or `None` when none were given.
 pub(super) fn read(text: Option<&str>) -> Result<Option<Authority>, Refusal> {
     let Some(text) = text else {
@@ -86,10 +61,8 @@ pub(super) fn read(text: Option<&str>) -> Result<Option<Authority>, Refusal> {
     if !value.is_sequence() {
         return Err(malformed(&what, "expected a list of decisions"));
     }
-    let entries: Vec<Entry> =
-        serde_yaml_ng::from_value(value).map_err(|error| malformed(&what, error))?;
     let mut decisions = BTreeMap::new();
-    for entry in entries {
+    for entry in entries::<AuthorityDecision>(value, &what)? {
         identifier("authority capability", entry.capability.as_str())?;
         if decisions.contains_key(&entry.capability) {
             return Err(Refusal::new(
@@ -154,6 +127,30 @@ mod tests {
                 "{text:?}: {refused}"
             );
         }
+    }
+
+    /// A key left out of an entry is refused naming the entry, counted from 1, and the key; so is
+    /// one left out of an explicit decision (`decisions.rs` reads its list the same way).
+    #[test]
+    fn a_left_out_key_is_refused_naming_the_entry_and_the_key() {
+        let refused = refusal("- {capability: a, decision: granted}\n- {decision: denied}\n");
+        assert_eq!(
+            refused.to_string(),
+            "`--authority` is not a canon-authority/1 document: entry 2: missing field `capability`"
+        );
+        let refused = refusal("[{capability: a}]");
+        assert_eq!(
+            refused.to_string(),
+            "`--authority` is not a canon-authority/1 document: entry 1: missing field `decision`"
+        );
+        let refused =
+            super::super::decisions::read(Some("- {decision: d, outcome: o, principal: p}\n"))
+                .expect_err("refused");
+        assert_eq!(
+            refused.to_string(),
+            "`--decisions` is not a canon-decisions/1 document: entry 1: missing field \
+             `case_revision`"
+        );
     }
 
     #[test]

@@ -53,6 +53,9 @@ pub struct Variant {
     pub doc: String,
     /// The single payload of a tuple variant, if any.
     pub payload: Option<Ty>,
+    /// The value a document writes for a unit variant of a derived enum: its name, lowercased
+    /// when the enum says `#[serde(rename_all = "lowercase")]`.
+    pub written: String,
 }
 
 #[derive(Debug, Clone)]
@@ -213,6 +216,8 @@ fn derives_deserialize(attrs: &[Attribute]) -> Result<bool, String> {
 struct Serde {
     default: bool,
     try_from: Option<String>,
+    /// `rename_all = "lowercase"`, the one renaming this reader understands, on an enum.
+    lowercase: bool,
 }
 
 fn serde(attrs: &[Attribute], owner: &str) -> Result<Serde, String> {
@@ -227,6 +232,14 @@ fn serde(attrs: &[Attribute], owner: &str) -> Result<Serde, String> {
             } else if meta.path.is_ident("try_from") {
                 let written: syn::LitStr = meta.value()?.parse()?;
                 found.try_from = Some(written.value());
+            } else if meta.path.is_ident("rename_all") {
+                let rule: syn::LitStr = meta.value()?.parse()?;
+                if rule.value() != "lowercase" {
+                    return Err(
+                        meta.error("canon-docs understands only rename_all = \"lowercase\"")
+                    );
+                }
+                found.lowercase = true;
             } else {
                 return Err(meta.error("canon-docs does not understand this serde attribute"));
             }
@@ -379,6 +392,11 @@ pub fn model(root: &Path) -> Result<Model, String> {
                 Item::Struct(item) => {
                     let name = item.ident.to_string();
                     let attrs = serde(&item.attrs, &name)?;
+                    if attrs.lowercase {
+                        return Err(format!(
+                            "{name}: canon-docs reads rename_all only on an enum"
+                        ));
+                    }
                     let fields = match &item.fields {
                         Fields::Named(named) => named
                             .named
@@ -432,8 +450,14 @@ pub fn model(root: &Path) -> Result<Model, String> {
                                     ));
                                 }
                             };
+                            let name = variant.ident.to_string();
                             Ok(Variant {
-                                name: variant.ident.to_string(),
+                                written: if attrs.lowercase {
+                                    name.to_lowercase()
+                                } else {
+                                    name.clone()
+                                },
+                                name,
                                 doc: docs(&variant.attrs),
                                 payload,
                             })

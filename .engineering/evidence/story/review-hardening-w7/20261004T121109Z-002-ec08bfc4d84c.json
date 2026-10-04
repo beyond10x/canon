@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T12:11:09Z",
+  "actor": "human:timo",
+  "artifact": "story:review-hardening-w7",
+  "kind": "story",
+  "revision": 9,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test --workspace --locked: 577 passed, 0 failed",
+    "reference": "https://github.com/beyond10x/canon/commit/00f6948"
+  }
+}
