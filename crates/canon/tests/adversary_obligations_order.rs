@@ -116,6 +116,7 @@ fn an_evidence_match_a_caller_puts_in_a_discharge_predicate_never_discharges() {
         .discharged_when = Predicate::Evidence(EvidenceMatch {
         kind: EvidenceKindId::new("k"),
         result: None,
+        subject: None,
     });
     assert_eq!(
         entries(&ir, &[evidence("k")]),

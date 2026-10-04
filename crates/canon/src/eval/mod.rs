@@ -16,6 +16,11 @@
 //!
 //! A claim's value is its `true_when` predicate's value over the evidence set:
 //!
+//! - An evidence match reads the records of its kind. One that names a `subject` reads only the
+//!   records about that artifact: a record about another artifact, even at that artifact's
+//!   current revision, is not of the match and neither establishes nor contradicts it
+//!   (CANON-EVIDENCE-003). One that names no subject reads records about any artifact. "Records of
+//!   the kind" below are the records the match reads.
 //! - An evidence match without a result is `true` when a record of the kind exists and `unknown`
 //!   when none does.
 //! - An evidence match with a result is `unknown` when no record of the kind exists, `false` when
@@ -97,8 +102,10 @@
 //! 4. evaluate every claim over the evidence left (`claims.rs`). Each claim's `excluded_evidence`
 //!    lists, in evidence-id order, every excluded record of a kind the claim reaches: a kind an
 //!    evidence match in its own predicate names, or one a claim it tests reaches, through any
-//!    number of claim references. A record excluded from a claim is excluded from every claim
-//!    built on it;
+//!    number of claim references. A match that names a subject reaches its kind only for records
+//!    about that artifact: a record about another artifact does not match it, so it is not listed
+//!    under a claim that reaches its kind only through such a match. A record excluded from a
+//!    claim is excluded from every claim built on it;
 //! 5. the `obligations`, `actions` and `outcomes` sections (`obligations.rs`, `actions.rs`,
 //!    `outcomes.rs`), then the explanation (`crate::explain`). Each section evaluates its
 //!    predicates with the one evaluator claims use (`claims::predicate`): discharge predicates over
@@ -108,10 +115,10 @@
 //!
 //! Revision binding excludes a record bound to another revision as `revision_mismatch`, and
 //! freshness a record older than its kind's `max_age` at the evaluation instant as `expired`,
-//! each listed as excluded under each claim that reaches its kind. The `obligations`, `actions`
-//! and `outcomes` sections are written as the next section says. Two parts are not built yet: the
-//! invalidation stage excludes nothing (story:invalidation-rules), and no decision carries an
-//! `explanation` (story:explanation).
+//! each listed as excluded under each claim that reaches its kind through a match that reads it, as
+//! step 4 says. The `obligations`, `actions` and `outcomes` sections are written as the next section
+//! says. Two parts are not built yet: the invalidation stage excludes nothing
+//! (story:invalidation-rules), and no decision carries an `explanation` (story:explanation).
 //!
 //! # Sections
 //!
@@ -125,7 +132,9 @@
 //! - `actions` maps each declared action to its `status` and, unless it is admissible, the
 //!   `reasons` that decide it. `blocked` when the precondition is not `true`: each claim test and
 //!   evidence match that decides it is a reason, `{"claim": <id>, "value": <the claim's value>}`
-//!   or `{"evidence": <kind>, "present": <whether a record of the kind applies>}`, or
+//!   or `{"evidence": <kind>, "present": <whether a record the match reads applies>}`, with
+//!   `"subject": <artifact>` added when the match names one (a record about another artifact
+//!   is not read by it), or
 //!   `{"requirement": "unsatisfiable"}` when none does. `blocked` too when the precondition is
 //!   `true` and the authority decisions deny a capability the action requires, each a reason
 //!   `{"capability": <id>, "decision": "denied"}`. `approval-required` when the precondition is
@@ -315,10 +324,11 @@ fn set_aside(
     }
 }
 
-/// The excluded records listed under `claim`: those of a kind the claim reaches, in evidence-id
-/// order. A claim reaches the kinds the evidence matches of its own predicate name, and every kind
-/// a claim it tests reaches, through any number of claim references; each claim is visited once,
-/// so a cycle a caller builds into an IR ends.
+/// The excluded records listed under `claim`: those an evidence match the claim reaches would read
+/// (of its kind and, when it names a subject, about that artifact), in evidence-id order. A claim
+/// reaches the evidence matches of its own predicate, and every match a claim it tests reaches,
+/// through any number of claim references; each claim is visited once, so a cycle a caller builds
+/// into an IR ends.
 fn excluded_for(
     ir: &Ir,
     claim: &ClaimId,
@@ -328,7 +338,7 @@ fn excluded_for(
     if excluded.is_empty() {
         return Vec::new();
     }
-    let mut kinds = BTreeSet::new();
+    let mut matches = BTreeSet::new();
     let mut visited = BTreeSet::new();
     let mut pending = vec![claim];
     while let Some(next) = pending.pop() {
@@ -340,22 +350,25 @@ fn excluded_for(
         };
         declared.true_when.visit(&mut |node| match node {
             Predicate::Evidence(matching) => {
-                kinds.insert(&matching.kind);
+                matches.insert((&matching.kind, matching.subject.as_ref()));
             }
             Predicate::Claim(test) => pending.push(&test.claim),
             _ => {}
         });
     }
-    let kind_of: BTreeMap<&EvidenceId, _> = evidence
-        .iter()
-        .map(|record| (&record.id, &record.kind))
-        .collect();
+    let record_of: BTreeMap<&EvidenceId, &EvidenceRecord> =
+        evidence.iter().map(|record| (&record.id, record)).collect();
+    let read = |record: &EvidenceRecord| {
+        matches
+            .iter()
+            .any(|(kind, subject)| claims::reads(kind, *subject, record))
+    };
     let mut listed: Vec<EvidenceExclusion> = excluded
         .iter()
         .filter(|exclusion| {
-            kind_of
+            record_of
                 .get(&exclusion.evidence)
-                .is_some_and(|kind| kinds.contains(kind))
+                .is_some_and(|record| read(record))
         })
         .cloned()
         .collect();

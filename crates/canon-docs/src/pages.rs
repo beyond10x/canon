@@ -1137,14 +1137,16 @@ fn words(predicate: &Predicate) -> String {
             members.iter().map(nested).collect::<Vec<_>>().join("; ")
         ),
         Predicate::Not(inner) => format!("not {}", nested(inner)),
-        Predicate::Evidence(matching) => match &matching.result {
-            Some(result) => format!(
-                "evidence of kind {} with result {}",
-                code(matching.kind.as_str()),
-                code(result)
-            ),
-            None => format!("evidence of kind {}", code(matching.kind.as_str())),
-        },
+        Predicate::Evidence(matching) => {
+            let mut words = format!("evidence of kind {}", code(matching.kind.as_str()));
+            if let Some(subject) = &matching.subject {
+                words.push_str(&format!(" about {}", code(subject.as_str())));
+            }
+            if let Some(result) = &matching.result {
+                words.push_str(&format!(" with result {}", code(result)));
+            }
+            words
+        }
         Predicate::Claim(test) => format!(
             "claim {} is {}",
             code(test.claim.as_str()),
@@ -1531,4 +1533,42 @@ fn example(root: &Path) -> Result<String, String> {
     ));
     out.push_str(&invalid_variants(root)?);
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn true_when(source_predicate: &str) -> Predicate {
+        let protocol = model::parse(&format!(
+            "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nartifacts: {{a: {{}}}}\n\
+             evidence_kinds: {{k: {{}}}}\nclaims: {{c: {{true_when: {source_predicate}}}}}\n"
+        ))
+        .expect("parses");
+        let (_, claim) = protocol.claims.iter().next().expect("one claim");
+        claim.true_when.clone()
+    }
+
+    /// An evidence match is described with its subject when it names one, and without otherwise.
+    #[test]
+    fn an_evidence_match_is_described_with_its_subject() {
+        assert_eq!(
+            words(&true_when(
+                "{evidence: {kind: k, result: pass, subject: a}}"
+            )),
+            "evidence of kind `k` about `a` with result `pass`"
+        );
+        assert_eq!(
+            words(&true_when("{evidence: {kind: k, subject: a}}")),
+            "evidence of kind `k` about `a`"
+        );
+        assert_eq!(
+            words(&true_when("{evidence: {kind: k, result: pass}}")),
+            "evidence of kind `k` with result `pass`"
+        );
+        assert_eq!(
+            words(&true_when("{evidence: {kind: k}}")),
+            "evidence of kind `k`"
+        );
+    }
 }

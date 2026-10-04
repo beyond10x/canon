@@ -39,6 +39,25 @@ Evidence is bound to the revision of an artifact it was observed on; see
 An evidence kind names a class of observation the protocol admits. Claims match evidence by kind,
 and actions say which kinds they may produce. Both must name a declared kind.
 
+An evidence match may also name the artifact its record must be about, with `subject`. Only
+records about that artifact then count; a record about another declared artifact does not
+match, even at that artifact's current revision. A match without `subject` counts records about
+any declared artifact. A `subject` must name a declared artifact.
+
+```yaml
+claims:
+  explanation.survived:
+    true_when:
+      evidence: {kind: falsification_attempt, result: survived, subject: explanation}
+```
+
+:::note[Shipped: subject-bound evidence matches]
+
+Conformance scenario `CANON-EVIDENCE-003` holds this; see
+[evidence bound to revisions](./evidence-and-revisions.md#evidence-about-one-artifact).
+
+:::
+
 ## Claims
 
 A claim is a proposition whose value is `TRUE`, `FALSE` or `UNKNOWN`

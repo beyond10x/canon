@@ -5,7 +5,9 @@ use std::collections::BTreeMap;
 
 use super::Refusal;
 use crate::ir::Ir;
-use crate::model::{ClaimId, EvidenceMatch, EvidenceRecord, Predicate, Truth, one_line};
+use crate::model::{
+    ArtifactId, ClaimId, EvidenceKindId, EvidenceMatch, EvidenceRecord, Predicate, Truth, one_line,
+};
 
 /// The value of every claim `ir` declares, keyed by claim id. An IR whose claims test each other
 /// in a cycle is refused as `claim-cycle`: a compiled protocol has none (the validator refuses
@@ -151,10 +153,22 @@ fn not(value: Truth) -> Truth {
     }
 }
 
+/// Whether an evidence match of `kind`, naming `subject` or none, reads `record`: a record of its
+/// kind and, when it names a subject, about that artifact. A record about another artifact is not
+/// of the match, so it neither establishes nor contradicts it. The one rule claim values, the
+/// excluded evidence a claim lists and the `present` of an evidence reason all use.
+pub(super) fn reads(
+    kind: &EvidenceKindId,
+    subject: Option<&ArtifactId>,
+    record: &EvidenceRecord,
+) -> bool {
+    record.kind == *kind && subject.is_none_or(|subject| record.subject == *subject)
+}
+
 fn evidence_match(matching: &EvidenceMatch, evidence: &[EvidenceRecord]) -> Truth {
     let mut of_kind = evidence
         .iter()
-        .filter(|record| record.kind == matching.kind)
+        .filter(|record| reads(&matching.kind, matching.subject.as_ref(), record))
         .peekable();
     if of_kind.peek().is_none() {
         return Truth::Unknown;
@@ -197,7 +211,74 @@ mod tests {
         EvidenceMatch {
             kind: EvidenceKindId::new(kind),
             result: result.map(str::to_owned),
+            subject: None,
         }
+    }
+
+    fn about(subject: &str, record: EvidenceRecord) -> EvidenceRecord {
+        EvidenceRecord {
+            subject: ArtifactId::new(subject),
+            ..record
+        }
+    }
+
+    /// A match that names a subject reads only the records about it; one that names none reads
+    /// records about any artifact.
+    #[test]
+    fn an_evidence_match_with_a_subject_reads_only_records_about_it() {
+        let bound = EvidenceMatch {
+            subject: Some(ArtifactId::new("a")),
+            ..matching("k", Some("pass"))
+        };
+        let unbound = matching("k", Some("pass"));
+        let other_pass = about("b", record("k", Some("pass")));
+        let own_fail = about("a", record("k", Some("fail")));
+        let own_pass = about("a", record("k", Some("pass")));
+        for (evidence, bound_value, unbound_value, why) in [
+            (vec![], Truth::Unknown, Truth::Unknown, "no record"),
+            (
+                vec![other_pass.clone()],
+                Truth::Unknown,
+                Truth::True,
+                "only a record about another artifact",
+            ),
+            (
+                vec![own_fail.clone(), other_pass.clone()],
+                Truth::False,
+                Truth::Unknown,
+                "the other artifact's record is not counted",
+            ),
+            (
+                vec![own_pass, other_pass],
+                Truth::True,
+                Truth::True,
+                "the subject's own record decides",
+            ),
+        ] {
+            assert_eq!(
+                evidence_match(&bound, &evidence),
+                bound_value,
+                "bound: {why}"
+            );
+            assert_eq!(
+                evidence_match(&unbound, &evidence),
+                unbound_value,
+                "unbound: {why}"
+            );
+        }
+        let bound_without_result = EvidenceMatch {
+            subject: Some(ArtifactId::new("a")),
+            ..matching("k", None)
+        };
+        assert_eq!(
+            evidence_match(&bound_without_result, &[about("b", record("k", None))]),
+            Truth::Unknown,
+            "without a result, a record about another artifact still does not match"
+        );
+        assert_eq!(
+            evidence_match(&bound_without_result, &[own_fail]),
+            Truth::True
+        );
     }
 
     #[test]

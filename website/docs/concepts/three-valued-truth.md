@@ -34,7 +34,8 @@ These come from the design document.
 `canon evaluate` gives every claim of a case one of the three values from its evidence records. An
 evidence match with a result is `unknown` when no record of the kind exists, `false` when records
 exist and none has the result, `true` when every record of the kind has that result, and `unknown`
-when records of the kind disagree. The [evaluation reference](../reference/evaluation.md) has every
+when records of the kind disagree. A match that names a `subject` counts only the records about
+that artifact. The [evaluation reference](../reference/evaluation.md) has every
 rule, and the [worked example](../reference/investigation-example.md) shows the values for five
 evidence situations.
 
