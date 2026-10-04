@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-04T06:13:33Z",
+  "actor": "human:timo",
+  "artifact": "story:outcomes",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:adversary-w7-canon-outcomes-pass-2",
+    "review": "review-result:adversary-w7-canon-outcomes-pass-2",
+    "outcome": "fixed"
+  }
+}

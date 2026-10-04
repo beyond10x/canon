@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T06:13:33Z",
+  "actor": "human:timo",
+  "artifact": "story:outcomes",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "CANON-OUTCOME-001 and outcomes unit tests: phase-1 commit cf91239 vs treatment b85de01",
+    "reference": "ga-wave-2026-10-04-w7/canon-outcomes/scratch/phase1-red.log: conform run failed at claim-unknown (no outcomes section), undeclared-termination test FAILED; treatment passes; VERIFIED"
+  }
+}

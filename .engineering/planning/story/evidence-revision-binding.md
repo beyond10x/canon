@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:evidence-revision-binding
 kind: story
-status: proposed
+status: implemented
 title: Apply evidence only to the revision it is bound to
 refs:
 - provider: taskboard
@@ -18,12 +18,26 @@ scope:
 - confidence: cited
   path: conformance/scenarios/evidence-revision-binding.yaml
 - confidence: cited
+  path: crates/canon-docs/src/pages.rs
+- confidence: cited
   path: crates/canon/src/eval/binding.rs
 - confidence: cited
+  path: crates/canon/src/eval/mod.rs
+- confidence: cited
+  path: crates/canon/src/model/evidence.rs
+- confidence: cited
+  path: ess/domains/protocol.yaml
+- confidence: cited
   path: fixtures/investigation/evidence-revision-binding.yaml
-revision: 7
+- confidence: cited
+  path: website/docs/concepts/evidence-and-revisions.md
+- confidence: cited
+  path: website/docs/status/where-this-stands.md
+revision: 12
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "proposed", to: "active", at: "2026-10-04T05:19:06Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "active", to: "implemented", at: "2026-10-04T06:13:33Z", actor: "human:timo", revision: 12, decided_on: {"recorded":{"test_result":1,"review_outcome":5,"verification":1}}}
 ---
 ## Outcome
 
@@ -101,3 +115,16 @@ declared artifact is refused, the refusal naming that subject.
 
 TASKBOARD C-004 (build pack, now Atlas `docs/design/governed-autonomy/TASKBOARD.md`);
 `docs/design/canon-protocol-calculus-design.md` § 9, § 39.3, § 41 item 5; CANON-EVIDENCE-001 (§ 32).
+
+### Coordinator and adversary decisions (wave 2026-10-04-w7)
+
+- An evidence record about an undeclared artifact is refused as `undeclared-artifact`, naming it.
+- Pass 1 F1: the behaviour is right and the doc was wrong. Exclusion removes the record; a claim
+  decided by an evidence match on it becomes UNKNOWN, while a claim that tests `is: unknown` is
+  decided by that unknown and can become TRUE or FALSE. The Outcome line above ("never FALSE")
+  holds for evidence-decided claims only (fixed in docs).
+- Pass 1 F2: no published page says subject or revision has no effect (fixed).
+- Pass 2: a stale record is listed as excluded under each claim that reaches its kind, not at
+  decision level; the docs say so (fixed). Present tense and the UNKNOWN wording on the concept pages
+  (fixed). Pages outside the typed scope overlap with parallel units (note); the hard-coded example
+  sentence in canon-docs (no-op).

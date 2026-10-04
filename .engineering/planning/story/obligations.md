@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:obligations
 kind: story
-status: proposed
+status: implemented
 title: Evaluate obligations as open or discharged
 refs:
 - provider: taskboard
@@ -21,9 +21,11 @@ scope:
   path: crates/canon/src/eval/obligations.rs
 - confidence: cited
   path: fixtures/investigation/obligations.yaml
-revision: 8
+revision: 11
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:51Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "proposed", to: "active", at: "2026-10-04T05:19:06Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "active", to: "implemented", at: "2026-10-04T06:13:32Z", actor: "human:timo", revision: 11, decided_on: {"recorded":{"test_result":1,"review_outcome":5,"verification":1}}}
 ---
 ## Outcome
 
@@ -92,3 +94,11 @@ input that changes: `establish.explanation` is `open` while `explanation.support
 
 TASKBOARD C-005 (build pack, now Atlas `docs/design/governed-autonomy/TASKBOARD.md`);
 `docs/design/canon-protocol-calculus-design.md` § 4.1, § 7.2, § 8, § 14, § 41 item 7.
+
+### Adversary decisions (wave 2026-10-04-w7)
+
+- Pass 1: no code defect. Three doc findings (eval/mod.rs module docs, canon-docs pages.rs and the
+  status and concept pages still saying obligations are planned; the documents reference marking
+  every output field present "always") go to the wave's docs pass (escalated).
+- Pass 2: no code defect; the pass-1 test file was rustfmt-formatted by the coordinator (fixed).
+- The `adversary_skel_cli.rs` whole-decision pins now include the open obligation.

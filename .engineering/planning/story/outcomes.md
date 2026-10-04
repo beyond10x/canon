@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:outcomes
 kind: story
-status: proposed
+status: implemented
 title: Evaluate outcomes and refuse undeclared completion
 refs:
 - provider: taskboard
@@ -21,9 +21,11 @@ scope:
   path: crates/canon/src/eval/outcomes.rs
 - confidence: cited
   path: fixtures/investigation/outcomes.yaml
-revision: 6
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:51Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "proposed", to: "active", at: "2026-10-04T05:19:06Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "active", to: "implemented", at: "2026-10-04T06:13:33Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1,"review_outcome":4,"verification":1}}}
 ---
 ## Outcome
 
@@ -93,3 +95,18 @@ refused with an error naming `abandoned`.
 
 TASKBOARD C-007 (build pack, now Atlas `docs/design/governed-autonomy/TASKBOARD.md`);
 `docs/design/canon-protocol-calculus-design.md` § 4.6, § 12, § 41 item 11; CANON-OUTCOME-001 (§ 32).
+
+### Coordinator and adversary decisions (wave 2026-10-04-w7)
+
+- Section shape: keyed by outcome id, `{status}` when legitimate, `{status, reasons}` when blocked;
+  a termination through an undeclared outcome is refused as `undeclared-outcome`.
+- Pass 1 F1/F2: reasons come from the tests that decide the requirement, with polarity through
+  `not`, `all` and `any` (fixed). F3: a blocked outcome always states a reason;
+  `{evidence, present}` for an evidence match and `{requirement: unsatisfiable}` for an empty
+  connective (fixed). F4: stale eval docs go to the wave docs pass (escalated). F5: a termination
+  through a declared but blocked outcome is refused as `illegitimate-termination` (fixed).
+- Pass 2: five mutants the suite missed are now killed by adversary2_outcomes_polarity.rs (fixed);
+  evidence reasons carry `present` (fixed); a test name corrected (fixed). The refusal replacing the
+  whole decision for a terminated case is decision-blocker:terminated-case-reevaluation (escalated).
+- Open difference with story:action-admissibility: a false `all` names every unmet member here and
+  only its false members there; to harmonise in a later story.

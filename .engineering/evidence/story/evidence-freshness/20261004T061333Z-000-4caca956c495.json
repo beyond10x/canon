@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-04T06:13:33Z",
+  "actor": "human:timo",
+  "artifact": "story:evidence-freshness",
+  "kind": "story",
+  "revision": 13,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:adversary-w7-canon-evidence-freshness-pass-1",
+    "review": "review-result:adversary-w7-canon-evidence-freshness-pass-1",
+    "outcome": "fixed"
+  }
+}

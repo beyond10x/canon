@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:evidence-freshness
 kind: story
-status: proposed
+status: implemented
 title: Expire evidence against the evaluation instant
 refs:
 - provider: taskboard
@@ -19,9 +19,17 @@ scope:
 - confidence: cited
   path: conformance/scenarios/evidence-freshness.yaml
 - confidence: cited
+  path: crates/canon-cli/src/lib.rs
+- confidence: cited
+  path: crates/canon-docs/
+- confidence: cited
+  path: crates/canon/src/eval/claims.rs
+- confidence: cited
   path: crates/canon/src/eval/evidence.rs
 - confidence: cited
   path: crates/canon/src/eval/freshness.rs
+- confidence: cited
+  path: crates/canon/src/eval/read.rs
 - confidence: cited
   path: crates/canon/src/ir/
 - confidence: cited
@@ -32,9 +40,13 @@ scope:
   path: ess/
 - confidence: cited
   path: fixtures/investigation/evidence-freshness.yaml
-revision: 9
+- confidence: cited
+  path: website/
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "proposed", to: "active", at: "2026-10-04T05:19:06Z", actor: "human:timo", revision: 10, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "active", to: "implemented", at: "2026-10-04T06:13:34Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"test_result":1,"review_outcome":6,"verification":1}}}
 ---
 ## Outcome
 
@@ -118,3 +130,15 @@ maximum age, and `UNKNOWN`, not `FALSE`, at an instant past it.
 TASKBOARD C-008 (build pack, now Atlas `docs/design/governed-autonomy/TASKBOARD.md`);
 `docs/design/canon-protocol-calculus-design.md` § 8, § 9, § 13, § 41 items 6 and 12;
 CANON-EVIDENCE-002, CANON-INVALIDATION-001 (§ 32).
+
+### Coordinator and adversary decisions (wave 2026-10-04-w7)
+
+- `max_age` is declared on the evidence kind. A record expires when instant minus `observed_at` is
+  more than `max_age`; at exactly `max_age` it still applies; with no `--at` or no `observed_at`,
+  nothing expires.
+- Pass 1: the published schemas give `Age` and `Instant` their own patterns, with calendar validity
+  checked by Canon (fixed); the refusal message states "without leading zeros" (fixed); the ESS
+  comment describes the strict UTC form (fixed); edits to shared files were authorised (no-op).
+- Pass 2: an over-long age has its own message (fixed); an unreadable `max_age` in a caller-built IR
+  is refused, never silently disabling expiry (fixed); the merge with story:evidence-revision-binding
+  is resolved by the coordinator (fixed at merge).

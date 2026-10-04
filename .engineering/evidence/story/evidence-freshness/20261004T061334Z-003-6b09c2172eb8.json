@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T06:13:34Z",
+  "actor": "human:timo",
+  "artifact": "story:evidence-freshness",
+  "kind": "story",
+  "revision": 13,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "ess_model_matches, evidence_freshness and CANON-EVIDENCE-002: phase-1 commit 7e60184 vs treatment a2e77bb",
+    "reference": "ga-wave-2026-10-04-w7/canon-evidence-freshness/scratch/phase1-red.log: ess_model_matches 5 FAILED, evidence_freshness 2 FAILED, conform run failed (fixture does not parse max_age); treatment passes; VERIFIED"
+  }
+}

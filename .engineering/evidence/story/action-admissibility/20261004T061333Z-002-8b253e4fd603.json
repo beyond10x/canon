@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T06:13:33Z",
+  "actor": "human:timo",
+  "artifact": "story:action-admissibility",
+  "kind": "story",
+  "revision": 10,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "CANON-AUTHORITY-001: phase-1 commit 5196c59 vs treatment 4b00bf6",
+    "reference": "ga-wave-2026-10-04-w7/canon-action-admissibility/scratch/phase1-red.log: conform run refused --authority as unsupported-input, and without it the actions section differed; treatment passes; VERIFIED"
+  }
+}

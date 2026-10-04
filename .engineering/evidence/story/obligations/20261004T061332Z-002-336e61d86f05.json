@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T06:13:32Z",
+  "actor": "human:timo",
+  "artifact": "story:obligations",
+  "kind": "story",
+  "revision": 10,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "CANON-OBLIGATION-001: phase-1 commit b38a76e vs treatment b7986fc",
+    "reference": "ga-wave-2026-10-04-w7/canon-obligations/scratch/phase1-red.log: conform run failed at claim-unknown (no obligations section); treatment passes; VERIFIED"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T06:13:32Z",
+  "actor": "human:timo",
+  "artifact": "story:evidence-revision-binding",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "CANON-EVIDENCE-001 and evidence_revision_binding: phase-1 commit c755b24 vs treatment bf040c9",
+    "reference": "ga-wave-2026-10-04-w7/canon-evidence-revision-binding/scratch/phase1-red.log: 3 of 4 acceptance tests FAILED, conform run failed at subject-advanced; treatment passes; VERIFIED"
+  }
+}

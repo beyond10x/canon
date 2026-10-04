@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:action-admissibility
 kind: story
-status: proposed
+status: implemented
 title: Evaluate action admissibility from preconditions and authority
 refs:
 - provider: taskboard
@@ -18,14 +18,22 @@ scope:
 - confidence: cited
   path: conformance/scenarios/action-admissibility.yaml
 - confidence: cited
+  path: crates/canon-cli/tests/adversary2_skel_conform_cli.rs
+- confidence: cited
+  path: crates/canon-cli/tests/evaluator_skeleton.rs
+- confidence: cited
   path: crates/canon/src/eval/actions.rs
 - confidence: cited
   path: crates/canon/src/eval/authority.rs
 - confidence: cited
+  path: crates/canon/tests/adversary2_skel_authority.rs
+- confidence: cited
   path: fixtures/investigation/action-admissibility.yaml
-revision: 7
+revision: 11
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "proposed", to: "active", at: "2026-10-04T05:19:06Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "active", to: "implemented", at: "2026-10-04T06:13:33Z", actor: "human:timo", revision: 11, decided_on: {"recorded":{"test_result":1,"review_outcome":4,"verification":1}}}
 ---
 ## Outcome
 
@@ -106,3 +114,16 @@ TASKBOARD C-006 (build pack, now Atlas `docs/design/governed-autonomy/TASKBOARD.
 
 `conform/mod.rs` reads a scenario's `authority` as a YAML list. If `canon-authority/1` gains a
 `format:` header like the other Canon inputs, this story owns that change to `conform/`.
+
+### Coordinator and adversary decisions (wave 2026-10-04-w7)
+
+- Section shape: keyed by action id, every declared action listed; `canon-authority/1` is a list of
+  `{capability, decision: granted|denied}` without a format header; a denied capability outranks an
+  undecided one. Malformed authority input (mapping keys, tags, `.nan`) is refused as
+  `malformed-input`.
+- Pass 1 F1/F2: precondition reasons come from the deciding claim tests, with polarity (fixed). F3:
+  the stale `--authority` help and eval docs go to the wave docs pass (escalated). F4: capability
+  reasons are sorted and deduplicated (fixed).
+- Pass 2 F1: an unsatisfiable precondition gives `{requirement: unsatisfiable}` (fixed). F2: evidence
+  reasons are `{evidence, present}` as in story:outcomes (fixed); a false `all` names only its false
+  members here, every unmet member in story:outcomes (open, to harmonise later).
