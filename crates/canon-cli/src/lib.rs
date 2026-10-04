@@ -73,7 +73,8 @@ pub enum Command {
         /// supported yet.
         #[arg(long)]
         authority: Option<PathBuf>,
-        /// The evaluation instant. Passed through as written; not supported yet.
+        /// The evaluation instant, in UTC as `YYYY-MM-DDTHH:MM:SSZ`. Evidence older than its kind's
+        /// `max_age` at this instant does not apply; without it, no evidence expires.
         #[arg(long)]
         at: Option<String>,
     },

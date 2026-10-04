@@ -21,7 +21,7 @@ use serde_yaml_ng::Value;
 use super::Refusal;
 use crate::ir::{self, Ir};
 use crate::model::{
-    self, Action, Artifact, CapabilityId, CapabilityRequirement, Claim, ClaimId, ClaimTest,
+    self, Action, Age, Artifact, CapabilityId, CapabilityRequirement, Claim, ClaimId, ClaimTest,
     Declarations, EffectClass, EvidenceKind, EvidenceKindId, EvidenceMatch, EvidenceProduction,
     Obligation, Outcome, Predicate, Protocol, ProtocolHeader, ProtocolId, Truth, one_line,
 };
@@ -146,6 +146,15 @@ fn optional_text(value: &Json, key: &str) -> Shape<Option<String>> {
     }
 }
 
+/// A field the IR writes only when it has a value, so absent is `None` and present is a string.
+fn absent_or_text(value: &Json, key: &str) -> Shape<Option<String>> {
+    match field(value, key) {
+        None => Ok(None),
+        Some(Json::String(text)) => Ok(Some(text.clone())),
+        Some(_) => Err(format!("`{key}` is not a string")),
+    }
+}
+
 fn section<'a>(value: &'a Json, key: &str) -> Shape<&'a Map<String, Json>> {
     required(value, key)?
         .as_object()
@@ -192,6 +201,7 @@ fn protocol(value: &Json) -> Shape<Protocol> {
         evidence_kinds: declarations(value, "evidence_kinds", EvidenceKindId::new, |entry| {
             Ok(EvidenceKind {
                 description: optional_text(entry, "description")?,
+                max_age: absent_or_text(entry, "max_age")?.map(Age::new),
             })
         })?,
         claims: declarations(value, "claims", ClaimId::new, |entry| {
@@ -306,6 +316,34 @@ mod tests {
     fn the_ir_canon_compile_prints_reads_back_as_the_same_ir() {
         let ir = compiled();
         assert_eq!(read_ir(&ir.canonical_json()), Ok(ir));
+    }
+
+    /// A maximum age reads back as written; one that is not a string, or an explicit null the
+    /// compiler never writes, is refused.
+    #[test]
+    fn a_maximum_age_reads_back_and_any_other_value_is_refused() {
+        let ir = ir::compile(
+            &model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 evidence_kinds: {k: {max_age: 5m}, l: {}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let text = ir.canonical_json();
+        assert!(text.contains("\"max_age\": \"5m\""), "{text}");
+        assert_eq!(read_ir(&text), Ok(ir));
+        for replacement in ["\"max_age\": 300", "\"max_age\": null"] {
+            let refusal =
+                read_ir(&text.replace("\"max_age\": \"5m\"", replacement)).expect_err(replacement);
+            assert_eq!(refusal.code(), "malformed-input", "{refusal}");
+            assert_eq!(
+                refusal.to_string(),
+                "not canon-ir/1: `max_age` is not a string"
+            );
+        }
+        let refusal = read_ir(&text.replace("\"5m\"", "\"5 min\"")).expect_err("invalid age");
+        assert!(refusal.to_string().contains("invalid-max-age"), "{refusal}");
     }
 
     /// The IR of a claim whose predicate is `not` nested `depth` times around an evidence match.

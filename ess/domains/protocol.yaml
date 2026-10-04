@@ -78,6 +78,15 @@ types:
       # read from: crates/canon/src/model/mod.rs:72
       - name: description
         type: Optional<String>
+      # How old evidence of this kind may be and still apply. At an evaluation instant later than
+      # a record's observed_at by more than this, the record is excluded as expired, and a claim
+      # left without applicable evidence is unknown, never false (design § 8, CANON-EVIDENCE-002).
+      # Declared on the evidence kind, not on an evidence match: expiry is a property of the
+      # record, decided once per record before any claim is evaluated (story:evidence-freshness).
+      # read from: .engineering/planning/story/evidence-freshness.md:40-45
+      # read from: docs/design/canon-protocol-calculus-design.md:477
+      - name: max_age
+        type: Optional<canon.protocol.Age>
 
   # read from: crates/canon/src/model/mod.rs:76-82
   - name: canon.protocol.Claim
@@ -221,6 +230,22 @@ types:
     kind: newtype
     of: String
 
+  # An instant written YYYY-MM-DDTHH:MM:SSZ in UTC, whole seconds, uppercase T and Z, no leap second
+  # (2026-10-04T12:00:00Z). Evidence records when it was observed in this form, and the evaluation
+  # instant (`--at`) is given in it.
+  # read from: docs/design/canon-protocol-calculus-design.md:505
+  # read from: .engineering/planning/story/evidence-freshness.md:50-53
+  - name: canon.protocol.Instant
+    kind: newtype
+    of: String
+
+  # A length of time: a whole number without leading zeros, followed by s, m, h or d (5m, 24h).
+  # read from: docs/design/canon-protocol-calculus-design.md:477
+  # read from: .engineering/planning/story/evidence-freshness.md:50
+  - name: canon.protocol.Age
+    kind: newtype
+    of: String
+
   # One declared artifact as a case snapshot records it.
   # read from: .engineering/planning/story/three-valued-claims.md:57-58
   - name: canon.protocol.CaseArtifact
@@ -258,6 +283,12 @@ types:
       # read from: .engineering/planning/story/three-valued-claims.md:60
       - name: subject_revision
         type: canon.protocol.Revision
+      # When the observation was made; its age at the evaluation instant is measured from here.
+      # A record without it is never expired, so no earlier expectation changes.
+      # read from: .engineering/planning/story/evidence-freshness.md:52-53
+      # read from: .engineering/planning/story/evidence-freshness.md:77-78
+      - name: observed_at
+        type: Optional<canon.protocol.Instant>
 
   # One claim's entry in a decision. An object rather than a bare value, so that later stories add
   # to it (story:evidence-revision-binding adds the excluded evidence).

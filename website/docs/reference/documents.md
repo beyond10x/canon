@@ -49,6 +49,7 @@ only while its subject revision is the case's current revision of that subject.
 | `result` | text | optional | What the observation found; a record without one matches only an evidence match that names no result. |
 | `subject` | [identifier](#identifiers) (`ArtifactId`) | required | The artifact the record is about. |
 | `subject_revision` | [identifier](#identifiers) (`Revision`) | required | The revision of that artifact the record is about. |
+| `observed_at` | [text](#text-formats) (`Instant`) | optional | When the observation was made; its age at the evaluation instant is measured from here. A record without it never expires. |
 
 ## `canon-decision/1`
 
@@ -112,3 +113,11 @@ An identifier is text. A well-formed identifier is not empty, and without whites
 | `EvidenceId` | Identifies one evidence record. |
 | `EvidenceKindId` | Identifies a kind of evidence a protocol declares. |
 | `OutcomeId` | Identifies an outcome a protocol declares. |
+
+## Text formats
+
+These values are text in a fixed form, not identifiers. Canon refuses text that does not match its pattern, and also checks what the pattern cannot:
+
+| Type | Written as | Pattern |
+|---|---|---|
+| `Instant` | An instant written `YYYY-MM-DDTHH:MM:SSZ` in UTC, whole seconds, uppercase `T` and `Z`, no leap second (`2026-10-04T12:00:00Z`): when evidence was observed, and the evaluation instant. Calendar validity is checked by Canon, not by the pattern: the date must exist (leap years included) and the time be at most 23:59:59. | `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$` |

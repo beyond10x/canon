@@ -297,9 +297,17 @@ fn a_recorded_termination_leaves_the_obligations_section_unchanged() {
     ];
     for (evidence, status) in sets {
         let a = eval::evaluate(&ir, &case(open), &evidence).expect("open case");
-        let b = eval::evaluate(&ir, &case(&ended), &evidence).expect("terminated case");
         let expected = pairs(&[("establish.explanation", status)]);
         assert_eq!(rendered_entries(&a), expected);
+        // Merge of story:outcomes (wave 2026-10-04-w7): a termination through `supported` while
+        // it is blocked is refused as illegitimate-termination, so the terminated case is only
+        // evaluated where the outcome is legitimate (the discharged set).
+        if status != "discharged" {
+            let refusal = eval::evaluate(&ir, &case(&ended), &evidence).expect_err("refused");
+            assert_eq!(refusal.code(), "illegitimate-termination", "{refusal}");
+            continue;
+        }
+        let b = eval::evaluate(&ir, &case(&ended), &evidence).expect("terminated case");
         assert_eq!(rendered_entries(&b), expected);
     }
 }

@@ -5,11 +5,13 @@
 use b10x_canon::model::{EvidenceKindId, EvidenceMatch, ObligationId, Predicate};
 use b10x_canon::{eval, ir, model};
 
-const CASE: &str = "format: canon-case/1\nid: C\nprotocol: p\nartifacts: {}\n";
+// Merge of story:evidence-revision-binding (wave 2026-10-04-w7): records about an undeclared
+// subject are refused, so the protocol declares `x` and the case snapshot holds it at r1.
+const CASE: &str = "format: canon-case/1\nid: C\nprotocol: p\nartifacts: {x: {revision: r1}}\n";
 
 fn compiled(obligations: &str) -> ir::Ir {
     let source = format!(
-        "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nevidence_kinds: {{k: {{}}}}\n\
+        "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nartifacts: {{x: {{}}}}\nevidence_kinds: {{k: {{}}}}\n\
          claims:\n  c: {{true_when: {{evidence: {{kind: k}}}}}}\nobligations:\n{obligations}"
     );
     ir::compile(&model::parse(&source).expect("parses")).expect("compiles")

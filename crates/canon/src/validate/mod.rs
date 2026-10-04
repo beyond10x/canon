@@ -8,12 +8,15 @@
 //!    claims, obligations, actions and outcomes, in that section order, then the capabilities and
 //!    effect classes actions name, in action order;
 //! 3. duplicate identifiers, in the same section order;
-//! 4. unresolved references: those in claims first, then those in obligations (their discharge
+//! 4. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
+//!    or `d`, or that are but are too long to count in seconds (each with its own message), in the
+//!    order the evidence kinds are written;
+//! 5. unresolved references: those in claims first, then those in obligations (their discharge
 //!    predicates, each followed by every evidence match it holds, which a discharge predicate may
 //!    not: it tests only claim values), then those in actions, then those in outcomes;
 //!    within a section, in the order its declarations are written, and within a declaration, in
 //!    the order its references are written;
-//! 5. cycles between claims.
+//! 6. cycles between claims.
 //!
 //! Within a section, entries come in the order they are written. Every message renders document
 //! text on one line. The same document always yields the same problems in the same order.
@@ -93,6 +96,14 @@ pub enum Problem {
         referrer: Referrer,
         kind: EvidenceKindId,
     },
+    /// An evidence kind's `max_age` is not a whole number without leading zeros, followed by `s`,
+    /// `m`, `h` or `d`, or is too long to count in seconds.
+    InvalidMaxAge {
+        kind: EvidenceKindId,
+        max_age: String,
+        /// Well formed, but too long to count in seconds.
+        too_long: bool,
+    },
     /// A discharge predicate tests evidence; it may test only claim values. `path` locates the
     /// evidence match inside the predicate, as `discharged_when.all[1].evidence`.
     EvidenceInDischarge {
@@ -113,6 +124,7 @@ impl Problem {
             Problem::DuplicateIdentifier { .. } => "duplicate-identifier",
             Problem::UndeclaredClaim { .. } => "undeclared-claim",
             Problem::UndeclaredEvidenceKind { .. } => "undeclared-evidence-kind",
+            Problem::InvalidMaxAge { .. } => "invalid-max-age",
             Problem::EvidenceInDischarge { .. } => "evidence-in-discharge",
             Problem::ClaimCycle { .. } => "claim-cycle",
         }
@@ -142,6 +154,21 @@ impl fmt::Display for Problem {
                 f,
                 "{referrer} references evidence kind `{}`, which is not declared",
                 one_line(kind.as_str())
+            ),
+            Problem::InvalidMaxAge {
+                kind,
+                max_age,
+                too_long,
+            } => write!(
+                f,
+                "evidence kind `{}` has max_age `{}`, which {}",
+                one_line(kind.as_str()),
+                one_line(max_age),
+                if *too_long {
+                    "is too long to count in seconds"
+                } else {
+                    "is not a whole number without leading zeros, followed by s, m, h or d"
+                }
             ),
             Problem::EvidenceInDischarge {
                 obligation,
@@ -208,6 +235,18 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
 
     for (section, ids) in &declared {
         duplicates(*section, ids, &mut problems);
+    }
+
+    for (id, kind) in protocol.evidence_kinds.iter() {
+        if let Some(max_age) = &kind.max_age
+            && max_age.seconds().is_none()
+        {
+            problems.push(Problem::InvalidMaxAge {
+                kind: id.clone(),
+                max_age: max_age.as_str().to_owned(),
+                too_long: max_age.is_well_formed(),
+            });
+        }
     }
 
     for (id, claim) in protocol.claims.iter() {
@@ -431,6 +470,40 @@ mod tests {
                     .replace("{claim: y}", "{claim: c}")
             ),
             Vec::<String>::new()
+        );
+    }
+
+    /// Each malformed maximum age is refused, in the order the evidence kinds are written, after
+    /// the duplicate identifiers and before the unresolved references; a well-formed one is not.
+    #[test]
+    fn a_malformed_maximum_age_is_refused_naming_its_kind() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            evidence_kinds: {z: {max_age: 5 min}, a: {max_age: 1h}, k: {max_age: 05m}, k: {}}\n\
+            claims: {c: {true_when: {evidence: {kind: x}}}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "duplicate-identifier: evidence kind `k` is declared more than once",
+                "invalid-max-age: evidence kind `z` has max_age `5 min`, which is not a whole number without leading zeros, followed by s, m, h or d",
+                "invalid-max-age: evidence kind `k` has max_age `05m`, which is not a whole number without leading zeros, followed by s, m, h or d",
+                "undeclared-evidence-kind: claim `c` references evidence kind `x`, which is not declared",
+            ]
+        );
+        assert_eq!(
+            problems(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 evidence_kinds: {k: {max_age: 0s}, l: {max_age: 30d}}\n"
+            ),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            problems(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 evidence_kinds: {k: {max_age: 106751991167301d}}\n"
+            ),
+            [
+                "invalid-max-age: evidence kind `k` has max_age `106751991167301d`, which is too long to count in seconds"
+            ]
         );
     }
 }

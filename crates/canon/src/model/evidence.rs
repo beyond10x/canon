@@ -3,7 +3,7 @@
 
 use serde::Deserialize;
 
-use super::ids::{ArtifactId, EvidenceId, EvidenceKindId, Revision};
+use super::ids::{ArtifactId, EvidenceId, EvidenceKindId, Instant, Revision};
 
 /// The evidence record format this model reads.
 pub const EVIDENCE_FORMAT: &str = "canon-evidence/1";
@@ -28,4 +28,8 @@ pub struct EvidenceRecord {
     pub subject: ArtifactId,
     /// The revision of that artifact the record is about.
     pub subject_revision: Revision,
+    /// When the observation was made; its age at the evaluation instant is measured from here. A
+    /// record without it never expires.
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub observed_at: Option<Instant>,
 }

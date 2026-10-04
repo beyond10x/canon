@@ -400,12 +400,28 @@ fn evaluate_authority_parses_and_is_read() {
     );
 }
 
-/// `canon evaluate --at <instant>` is declared and passed through unparsed, and refused until
-/// story:evidence-freshness parses it.
+/// `canon evaluate --at <instant>` is read since story:evidence-freshness: over a protocol that
+/// declares no maximum age it changes no decision, and text that is not an instant is refused.
 #[test]
-fn evaluate_at_parses_and_is_inert() {
+fn evaluate_at_is_read_as_the_evaluation_instant() {
     let (args, _dir) = evaluate_inputs("at-flag");
-    assert_evaluate_flag_is_inert("--at", "2026-10-04T00:00:00Z", args);
+    let control = canon_owned(&args);
+    assert_eq!(control.status.code(), Some(0), "{}", text(&control.stderr));
+    let with_at = |at: &str| {
+        let mut with_at = args.clone();
+        with_at.extend(["--at".to_owned(), at.to_owned()]);
+        canon_owned(&with_at)
+    };
+    let run = with_at("2026-10-04T00:00:00Z");
+    assert_eq!(run.status.code(), Some(0), "{}", text(&run.stderr));
+    assert_eq!(text(&run.stdout), text(&control.stdout));
+    let run = with_at("2026-10-04");
+    assert_eq!(run.status.code(), Some(1), "malformed instant: exit");
+    assert!(
+        text(&run.stderr).starts_with("error[invalid-instant]: "),
+        "{}",
+        text(&run.stderr)
+    );
 }
 
 /// `canon diff --from --to` is declared and refuses as not built until story:semantic-diff.

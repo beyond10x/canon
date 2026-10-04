@@ -183,11 +183,14 @@ fn probe_a_supplied_input_is_refused_before_an_undeclared_subject() {
     let refusal = decide_with(
         &case_text("r1", "r1"),
         &[record("e1", "k", "nowhere", "r1")],
+        // Merge of story:evidence-freshness (wave 2026-10-04-w7): `--at` is read now, so the
+        // supplied input that is refused first is a malformed instant, before the undeclared
+        // subject.
         Supplied {
-            at: Some("2026-10-04T00:00:00Z"),
+            at: Some("yesterday"),
             ..Supplied::default()
         },
     )
     .expect_err("refused");
-    assert_eq!(refusal.code(), "unsupported-input", "{refusal}");
+    assert_eq!(refusal.code(), "invalid-instant", "{refusal}");
 }

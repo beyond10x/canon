@@ -79,6 +79,7 @@ mod tests {
             result: None,
             subject: ArtifactId::new(subject),
             subject_revision: Revision::new(revision),
+            observed_at: None,
         }
     }
 

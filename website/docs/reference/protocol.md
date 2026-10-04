@@ -50,6 +50,7 @@ A kind of evidence the protocol admits.
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `description` | text | optional | — |
+| `max_age` | [text](#text-formats) (`Age`) | optional | How old a record of this kind may be and still apply: at an evaluation instant later than its `observed_at` by more than this, it is excluded as expired (design § 8). |
 
 ## `Claim`
 
@@ -163,3 +164,11 @@ An identifier is text. A well-formed identifier is not empty, and without whites
 | `OutcomeId` | Identifies an outcome a protocol declares. |
 | `CapabilityId` | Names a capability an action requires authority for. |
 | `EffectClass` | Names the class of effect an action has. |
+
+## Text formats
+
+These values are text in a fixed form, not identifiers. Canon refuses text that does not match its pattern, and also checks what the pattern cannot:
+
+| Type | Written as | Pattern |
+|---|---|---|
+| `Age` | A length of time: a whole number without leading zeros, followed by `s`, `m`, `h` or `d` (`5m`, `24h`). Canon also refuses an age too long to count in seconds. | `^(0\|[1-9][0-9]*)[smhd]$` |

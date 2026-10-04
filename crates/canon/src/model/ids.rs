@@ -100,3 +100,14 @@ identifier!(
     /// Names the class of effect an action has.
     EffectClass
 );
+identifier!(
+    /// An instant written `YYYY-MM-DDTHH:MM:SSZ` in UTC, whole seconds, uppercase `T` and `Z`, no
+    /// leap second (`2026-10-04T12:00:00Z`): when evidence was observed, and the evaluation
+    /// instant.
+    Instant
+);
+identifier!(
+    /// A length of time: a whole number without leading zeros, followed by `s`, `m`, `h` or `d`
+    /// (`5m`, `24h`).
+    Age
+);

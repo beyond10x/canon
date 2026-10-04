@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 
 use serde_yaml_ng::Value;
 
+use super::freshness::invalid_instant;
 use super::read::{malformed, yaml};
 use super::{Refusal, identifier, unsupported_format};
 use crate::ir::Ir;
@@ -38,6 +39,14 @@ pub(super) fn check(ir: &Ir, evidence: &[EvidenceRecord]) -> Result<(), Refusal>
             "evidence subject revision",
             record.subject_revision.as_str(),
         )?;
+        if let Some(observed_at) = &record.observed_at
+            && observed_at.seconds().is_none()
+        {
+            return Err(invalid_instant(
+                &format!("evidence `{}` observed_at", one_line(record.id.as_str())),
+                observed_at.as_str(),
+            ));
+        }
         if !seen.insert(&record.id) {
             return Err(Refusal::new(
                 "duplicate-identifier",
@@ -59,4 +68,44 @@ pub(super) fn check(ir: &Ir, evidence: &[EvidenceRecord]) -> Result<(), Refusal>
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ir() -> Ir {
+        crate::ir::compile(
+            &crate::model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\nevidence_kinds: {k: {}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles")
+    }
+
+    fn checked(observed_at: &str) -> Result<(), Refusal> {
+        let record = read_evidence(&format!(
+            "format: canon-evidence/1\nid: e1\nkind: k\nsubject: a\nsubject_revision: r1\n\
+             observed_at: {observed_at}\n"
+        ))?;
+        check(&ir(), &[record])
+    }
+
+    /// `observed_at` is optional, and when given it is an instant; an explicit null or any other
+    /// text is refused.
+    #[test]
+    fn observed_at_is_an_instant_when_given() {
+        assert_eq!(checked("2026-10-04T12:00:00Z"), Ok(()));
+        let refusal = checked("2026-10-04T12:00:00+02:00").expect_err("refused");
+        assert_eq!(refusal.code(), "invalid-instant");
+        assert_eq!(
+            refusal.to_string(),
+            "evidence `e1` observed_at `2026-10-04T12:00:00+02:00` is not an instant in UTC written YYYY-MM-DDTHH:MM:SSZ"
+        );
+        assert_eq!(
+            checked("~").expect_err("null refused").code(),
+            "malformed-input"
+        );
+    }
 }
