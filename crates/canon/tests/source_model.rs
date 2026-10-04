@@ -56,10 +56,12 @@ fn base_fixture_parses_into_the_model() {
             Predicate::Evidence(EvidenceMatch {
                 kind: EvidenceKindId::from("supporting_observation"),
                 result: None,
+                subject: None,
             }),
             Predicate::Evidence(EvidenceMatch {
                 kind: EvidenceKindId::from("falsification_attempt"),
                 result: Some("survived".to_owned()),
+                subject: None,
             }),
         ])
     );
@@ -442,7 +444,8 @@ fn omitted_optional_fields_take_their_defaults() {
         claim.true_when,
         Predicate::Evidence(EvidenceMatch {
             kind: EvidenceKindId::from("k"),
-            result: None
+            result: None,
+            subject: None,
         })
     );
 }

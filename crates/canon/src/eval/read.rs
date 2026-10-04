@@ -21,10 +21,10 @@ use serde_yaml_ng::Value;
 use super::Refusal;
 use crate::ir::{self, Ir};
 use crate::model::{
-    self, Action, Age, Artifact, CapabilityId, CapabilityRequirement, Claim, ClaimId, ClaimTest,
-    Declarations, EffectClass, EvidenceKind, EvidenceKindId, EvidenceMatch, EvidenceProduction,
-    Obligation, Outcome, OutcomeRequirement, Predicate, Protocol, ProtocolHeader, ProtocolId,
-    Truth, one_line,
+    self, Action, Age, Artifact, ArtifactId, CapabilityId, CapabilityRequirement, Claim, ClaimId,
+    ClaimTest, Declarations, EffectClass, EvidenceKind, EvidenceKindId, EvidenceMatch,
+    EvidenceProduction, Obligation, Outcome, OutcomeRequirement, Predicate, Protocol,
+    ProtocolHeader, ProtocolId, Truth, one_line,
 };
 
 /// A `malformed-input` refusal: `what` is not a document of its format, and why.
@@ -287,6 +287,7 @@ fn predicate(value: &Json) -> Shape<Predicate> {
         "evidence" => Ok(Predicate::Evidence(EvidenceMatch {
             kind: EvidenceKindId::new(text(inner, "kind")?),
             result: optional_text(inner, "result")?,
+            subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
         })),
         "claim" => {
             let is = match text(inner, "is")?.as_str() {

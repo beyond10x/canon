@@ -161,6 +161,7 @@ fn read_ir_refuses_a_hand_written_discharge_predicate_the_validator_refuses() {
         .discharged_when = Predicate::Not(Box::new(Predicate::Evidence(model::EvidenceMatch {
         kind: EvidenceKindId::new("k"),
         result: None,
+        subject: None,
     })));
     let refusal = eval::read_ir(&evidence.canonical_json()).expect_err("evidence in discharge");
     assert!(

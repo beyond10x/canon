@@ -25,6 +25,11 @@ serialization: canonical JSON, the serialization `canon-ir/1` uses.
 
 A claim's value is its `true_when` predicate's value over the evidence set:
 
+- An evidence match reads the records of its kind. One that names a `subject` reads only the
+  records about that artifact: a record about another artifact, even at that artifact's
+  current revision, is not of the match and neither establishes nor contradicts it
+  (CANON-EVIDENCE-003). One that names no subject reads records about any artifact. "Records of
+  the kind" below are the records the match reads.
 - An evidence match without a result is `true` when a record of the kind exists and `unknown`
   when none does.
 - An evidence match with a result is `unknown` when no record of the kind exists, `false` when
@@ -106,8 +111,10 @@ concept; this module holds only the order:
 4. evaluate every claim over the evidence left (`claims.rs`). Each claim's `excluded_evidence`
    lists, in evidence-id order, every excluded record of a kind the claim reaches: a kind an
    evidence match in its own predicate names, or one a claim it tests reaches, through any
-   number of claim references. A record excluded from a claim is excluded from every claim
-   built on it;
+   number of claim references. A match that names a subject reaches its kind only for records
+   about that artifact: a record about another artifact does not match it, so it is not listed
+   under a claim that reaches its kind only through such a match. A record excluded from a
+   claim is excluded from every claim built on it;
 5. the `obligations`, `actions` and `outcomes` sections (`obligations.rs`, `actions.rs`,
    `outcomes.rs`), then the explanation (`crate::explain`). Each section evaluates its
    predicates with the one evaluator claims use (`claims::predicate`): discharge predicates over
@@ -117,10 +124,10 @@ concept; this module holds only the order:
 
 Revision binding excludes a record bound to another revision as `revision_mismatch`, and
 freshness a record older than its kind's `max_age` at the evaluation instant as `expired`,
-each listed as excluded under each claim that reaches its kind. The `obligations`, `actions`
-and `outcomes` sections are written as the next section says, and every decision carries an
-`explanation` (`crate::explain`). One part is not built yet: the invalidation stage excludes
-nothing (story:invalidation-rules).
+each listed as excluded under each claim that reaches its kind through a match that reads it, as
+step 4 says. The `obligations`, `actions` and `outcomes` sections are written as the next section
+says, and every decision carries an `explanation` (`crate::explain`). One part is not built yet:
+the invalidation stage excludes nothing (story:invalidation-rules).
 
 ## Sections
 
@@ -134,7 +141,9 @@ declares no obligation has no `obligations` key, and likewise for actions and ou
 - `actions` maps each declared action to its `status` and, unless it is admissible, the
   `reasons` that decide it. `blocked` when the precondition is not `true`: each claim test and
   evidence match that decides it is a reason, `{"claim": <id>, "value": <the claim's value>}`
-  or `{"evidence": <kind>, "present": <whether a record of the kind applies>}`, or
+  or `{"evidence": <kind>, "present": <whether a record the match reads applies>}`, with
+  `"subject": <artifact>` added when the match names one (a record about another artifact
+  is not read by it), or
   `{"requirement": "unsatisfiable"}` when none does. `blocked` too when the precondition is
   `true` and the authority decisions deny a capability the action requires, each a reason
   `{"capability": <id>, "decision": "denied"}`. `approval-required` when the precondition is

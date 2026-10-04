@@ -1,0 +1,207 @@
+format: canon-conformance/1
+id: CANON-EVIDENCE-003
+covers: [CANON-EVIDENCE-003]
+fixture: fixtures/investigation/subject-bound-evidence-match.yaml
+# The fixture declares two artifacts, explanation and dataset, and one evidence kind. Claim
+# explanation.survived names the subject its record must be about; attempt.survived names none, so
+# a record about either artifact decides it; either.survived names each artifact in one member of an
+# `any`. Every record in every step is bound to its subject's current revision, so the binding
+# stage excludes nothing: what decides each value is the subject alone.
+steps:
+  # A subject is kept in canon-ir/1, written only when the match names one, so the IR of a match
+  # without one is unchanged. Two matches that differ only in their subject are two members, in
+  # subject order.
+  - id: compile
+    compile: {}
+    expect:
+      canon-ir: |
+        {
+          "actions": {},
+          "artifacts": {
+            "dataset": {
+              "description": "The observations the explanation is tested against."
+            },
+            "explanation": {
+              "description": "The explanation under investigation."
+            }
+          },
+          "claims": {
+            "attempt.survived": {
+              "description": "A falsification attempt survived, whichever declared artifact it was about.",
+              "true_when": {
+                "evidence": {
+                  "kind": "falsification_attempt",
+                  "result": "survived"
+                }
+              }
+            },
+            "either.survived": {
+              "description": "An attempt about the explanation, or one about the dataset, survived.",
+              "true_when": {
+                "any": [
+                  {
+                    "evidence": {
+                      "kind": "falsification_attempt",
+                      "result": "survived",
+                      "subject": "dataset"
+                    }
+                  },
+                  {
+                    "evidence": {
+                      "kind": "falsification_attempt",
+                      "result": "survived",
+                      "subject": "explanation"
+                    }
+                  }
+                ]
+              }
+            },
+            "explanation.survived": {
+              "description": "The explanation has survived falsification. Only an attempt about the explanation counts.",
+              "true_when": {
+                "evidence": {
+                  "kind": "falsification_attempt",
+                  "result": "survived",
+                  "subject": "explanation"
+                }
+              }
+            }
+          },
+          "evidence_kinds": {
+            "falsification_attempt": {
+              "description": "An attempt to refute an artifact; its result is survived or refuted."
+            }
+          },
+          "format": "canon-ir/1",
+          "obligations": {},
+          "outcomes": {},
+          "protocol": {
+            "description": "Decide whether an explanation survives an attempt to falsify it, when the case also declares the dataset it is tested against.",
+            "id": "investigation",
+            "revision": 1
+          }
+        }
+
+  # The attempt is about the explanation: it establishes the subject-bound claim, the unbound one
+  # and the `any`.
+  - id: about-the-subject
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+          dataset: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "case": "INV-18",
+          "claims": {
+            "attempt.survived": {
+              "value": "true"
+            },
+            "either.survived": {
+              "value": "true"
+            },
+            "explanation.survived": {
+              "value": "true"
+            }
+          },
+          "format": "canon-decision/1",
+          "protocol": "investigation",
+          "protocol_revision": 1
+        }
+
+  # The same attempt, about the other declared artifact at its current revision. It does not
+  # satisfy the match bound to the explanation: no record about the explanation decides it, so the
+  # claim is UNKNOWN, not FALSE, and nothing is listed as excluded, because nothing was. The
+  # unbound match keeps its behaviour and is TRUE; so is the `any`, through its dataset member.
+  - id: about-another-artifact
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+          dataset: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          subject: dataset
+          subject_revision: d1
+    expect:
+      decision: |
+        {
+          "case": "INV-18",
+          "claims": {
+            "attempt.survived": {
+              "value": "true"
+            },
+            "either.survived": {
+              "value": "true"
+            },
+            "explanation.survived": {
+              "value": "unknown"
+            }
+          },
+          "format": "canon-decision/1",
+          "protocol": "investigation",
+          "protocol_revision": 1
+        }
+
+  # An attempt about the explanation was refuted and one about the dataset survived. Only the
+  # first is of the bound match, so it is FALSE, not the UNKNOWN of disagreeing records. The
+  # unbound match reads both, which disagree, so it is UNKNOWN as before. The `any` is TRUE
+  # through its dataset member.
+  - id: another-artifact-does-not-count
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+          dataset: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: refuted
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-2
+          kind: falsification_attempt
+          result: survived
+          subject: dataset
+          subject_revision: d1
+    expect:
+      decision: |
+        {
+          "case": "INV-18",
+          "claims": {
+            "attempt.survived": {
+              "value": "unknown"
+            },
+            "either.survived": {
+              "value": "true"
+            },
+            "explanation.survived": {
+              "value": "false"
+            }
+          },
+          "format": "canon-decision/1",
+          "protocol": "investigation",
+          "protocol_revision": 1
+        }

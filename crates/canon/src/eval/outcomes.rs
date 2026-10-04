@@ -18,10 +18,13 @@
 //!   value is not the wanted one is a reason. So `{not: {claim: c}}` gives the reasons
 //!   `{claim: c, is: false}` gives, and a test that already has the wanted value is never named.
 //!   A claim test gives `{"claim": <id>, "value": <the claim's own value>}`, an evidence match
-//!   `{"evidence": <kind>, "present": <whether a record of the kind is in the evidence left after
-//!   the exclusion stages>}`: `false` for a required record that is missing, `true` for a record
-//!   present under `not`. Claims come first, in claim-id order, then evidence kinds, in kind
-//!   order. A blocked outcome always states at least one reason: a requirement no test decides
+//!   `{"evidence": <kind>, "present": <whether a record the match reads is in the evidence left
+//!   after the exclusion stages>}`, with `"subject": <artifact>` added when the match names one:
+//!   `false` for a required record that is missing, `true` for a record present under `not`. A
+//!   match reads the records of its kind and, when it names a subject, only those about that
+//!   artifact, so a record about another artifact leaves `present` `false`. Claims come first, in
+//!   claim-id order, then evidence matches, in kind order and then subject order (no subject
+//!   first), each kind and subject once. A blocked outcome always states at least one reason: a requirement no test decides
 //!   against is one that cannot be met (it is blocked only by an empty `any`, or a `not` over an
 //!   empty `all`), and gives `{"requirement": "unsatisfiable"}`. An outcome that requires an
 //!   explicit decision and has none applying states the one reason
@@ -43,12 +46,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::Refusal;
-use super::claims::predicate;
+use super::claims::{predicate, reads};
 use super::decisions::Decisions;
 use crate::ir::Ir;
 use crate::model::{
-    Case, ClaimId, EvidenceKindId, EvidenceRecord, Json, OutcomeRequirement, Predicate, Truth,
-    one_line,
+    ArtifactId, Case, ClaimId, EvidenceKindId, EvidenceRecord, Json, OutcomeRequirement, Predicate,
+    Truth, one_line,
 };
 
 /// The section, or `None` to leave the slot empty; or a refusal of the case snapshot. `evidence`
@@ -153,8 +156,8 @@ pub(super) fn section(
 struct Unmet<'a> {
     /// Each claim whose test decides against the requirement, with the claim's own value.
     claims: BTreeMap<&'a ClaimId, Truth>,
-    /// Each evidence kind whose match decides against the requirement.
-    evidence: BTreeSet<&'a EvidenceKindId>,
+    /// Each evidence match, by kind and subject, that decides against the requirement.
+    evidence: BTreeSet<(&'a EvidenceKindId, Option<&'a ArtifactId>)>,
 }
 
 impl<'a> Unmet<'a> {
@@ -193,7 +196,8 @@ impl<'a> Unmet<'a> {
             }
             Predicate::Evidence(matching) => {
                 if predicate(node, claims, evidence) != wanted {
-                    self.evidence.insert(&matching.kind);
+                    self.evidence
+                        .insert((&matching.kind, matching.subject.as_ref()));
                 }
             }
         }
@@ -201,7 +205,8 @@ impl<'a> Unmet<'a> {
 }
 
 /// The reasons a blocked requirement states: claims first, in claim-id order, then evidence
-/// kinds, in kind order, with whether a record of the kind is present, each once;
+/// matches, in kind and then subject order, with whether a record the match reads is present,
+/// each once;
 /// `{"requirement": "unsatisfiable"}` when no test is named.
 pub(super) fn reasons(
     requires: &Predicate,
@@ -220,9 +225,14 @@ pub(super) fn reasons(
             unmet
                 .evidence
                 .into_iter()
-                .map(|kind| {
-                    let present = evidence.iter().any(|record| record.kind == *kind);
-                    serde_json::json!({"evidence": kind.as_str(), "present": present})
+                .map(|(kind, subject)| {
+                    let present = evidence.iter().any(|record| reads(kind, subject, record));
+                    let mut reason =
+                        serde_json::json!({"evidence": kind.as_str(), "present": present});
+                    if let Some(subject) = subject {
+                        reason["subject"] = serde_json::json!(subject.as_str());
+                    }
+                    reason
                 }),
         )
         .collect();

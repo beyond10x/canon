@@ -19,6 +19,24 @@ match on it goes back to `UNKNOWN`, not to `FALSE`. A claim that tests whether a
 The same applies to anything that concerns a particular version: approvals, reviews, datasets,
 deployments, inspection records.
 
+## Evidence about one artifact
+
+A protocol with several artifacts often needs a claim that only evidence about one of them can
+decide. An evidence match that names a `subject` reads only records about that artifact. A record
+about another declared artifact does not match it, even when that record is bound to the other
+artifact's current revision: it neither establishes the claim nor contradicts it. A match that
+names no subject reads records about any declared artifact.
+
+| Records | Match with `subject: explanation` | Match without a subject |
+|---|---|---|
+| An attempt about the explanation survived | `TRUE` | `TRUE` |
+| An attempt about the dataset survived | `UNKNOWN` | `TRUE` |
+| An attempt about the explanation was refuted, one about the dataset survived | `FALSE` | `UNKNOWN` |
+
+A record about another artifact is not listed as excluded under a claim whose match is bound to a
+subject, because it does not match. That holds even when revision binding excludes it: the
+record is listed only under the claims with a match that would read it.
+
 ## Freshness
 
 Evidence can also expire. An observation older than the protocol allows becomes inapplicable, and
@@ -36,8 +54,17 @@ revision, and every `canon-evidence/1` record names its subject artifact and rev
 ([evaluation documents](../reference/documents.md)). `canon evaluate` refuses a record whose
 subject the protocol does not declare (`undeclared-artifact`), and leaves a record bound to any
 other revision of its subject out of claim evaluation: the decision lists it as excluded under
-each claim that reaches its kind, in `excluded_evidence`, with the reason `revision_mismatch`. Conformance scenario
-`CANON-EVIDENCE-001` holds the table above.
+each claim with a match that would read it, in `excluded_evidence`, with the reason
+`revision_mismatch`. Conformance scenario `CANON-EVIDENCE-001` holds the table above.
+
+:::
+
+:::note[Shipped: subject-bound evidence matches]
+
+An evidence match in `protocol/1` may name a `subject`, which must be a declared artifact
+(`canon validate` refuses another as `undeclared-artifact`). Conformance scenario
+`CANON-EVIDENCE-003` holds the table under
+[evidence about one artifact](#evidence-about-one-artifact).
 
 :::
 

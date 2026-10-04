@@ -23,13 +23,20 @@
 //!   together with every claim one of them tests, through any number of claim references, `true`
 //!   ones included, so every chain of reasons ends at evidence records. Each is `{"because": [...],
 //!   "value": <value>}`: each claim its `true_when` predicate tests, `{"claim": <id>, "value":
-//!   <value>}`, then each record of a kind the claim reaches (as its `excluded_evidence` list
-//!   counts them), written as below, then each kind it reaches that no record of the evidence set
-//!   has, `{"kind": <kind>, "status": "absent"}`.
+//!   <value>}`, then each record an evidence match the claim reaches reads (as its
+//!   `excluded_evidence` list counts them), written as below, then each evidence match it reaches
+//!   that reads no record of the evidence set, `{"kind": <kind>, "status": "absent"}`, with
+//!   `"subject": <artifact>` added when the match names one, in kind and then subject order (no
+//!   subject first).
+//!
+//! A match reads a record of its kind and, when it names a subject, only one about that artifact:
+//! the rule claim values are decided by (`crate::eval::reads`). A record about another artifact is
+//! not listed under a match bound to a subject, neither as applied nor as excluded.
 //!
 //! The `because` of an outcome, action or obligation is the reasons the decision states for it,
-//! in their order, each evidence-match reason `{"evidence": <kind>, "present": ...}` followed by
-//! every record of that kind in the evidence set, in evidence-id order: `{"evidence": <id>,
+//! in their order, each evidence-match reason `{"evidence": <kind>, "present": ...}` (with its
+//! `"subject"` when the match names one) followed by every record of the evidence set that match
+//! reads, in evidence-id order: `{"evidence": <id>,
 //! "status": "applied"}`, or `{"evidence": <id>, "reason": <reason>, "status": "excluded"}` with
 //! the reason its exclusion stage gave (`revision_mismatch`, `expired`). A reason `{"claim": <id>,
 //! "value": <value>}` anywhere continues under `claims`. A member with nothing to explain is not
@@ -47,11 +54,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
-use crate::eval::{Supplied, unmet_reasons};
+use crate::eval::{Supplied, reads, unmet_reasons};
 use crate::ir::Ir;
 use crate::model::{
-    Case, ClaimId, DECISION_FORMAT, Decision, EvidenceExclusion, EvidenceKindId, EvidenceRecord,
-    ExplicitDecision, Json, Predicate, Truth,
+    ArtifactId, Case, ClaimId, DECISION_FORMAT, Decision, EvidenceExclusion, EvidenceKindId,
+    EvidenceRecord, ExplicitDecision, Json, Predicate, Truth,
 };
 
 /// An explanation, the payload of the decision's `explanation` slot, as the module docs give it.
@@ -112,23 +119,23 @@ pub fn explain(
     Some(Value::Object(sections))
 }
 
-/// The evidence set as the explanation lists it: each record's id and kind, and the reason it was
-/// excluded, if it was.
+/// An evidence match as the explanation traces it: its kind, and the artifact it names, if any.
+type Match<'a> = (&'a EvidenceKindId, Option<&'a ArtifactId>);
+
+/// The evidence set as the explanation lists it: each record, and the reason it was excluded, if
+/// it was.
 struct Records<'a> {
-    /// `(id, kind)`, in evidence-id order.
-    records: Vec<(&'a str, &'a EvidenceKindId)>,
+    /// In evidence-id order.
+    records: Vec<&'a EvidenceRecord>,
     excluded: BTreeMap<&'a str, &'a str>,
 }
 
 impl<'a> Records<'a> {
     fn new(evidence: &'a [EvidenceRecord], excluded: &'a [EvidenceExclusion]) -> Self {
+        let mut records: Vec<&EvidenceRecord> = evidence.iter().collect();
+        records.sort_by(|one, other| one.id.as_str().cmp(other.id.as_str()));
         Self {
-            records: sorted(
-                evidence
-                    .iter()
-                    .map(|record| (record.id.as_str(), &record.kind))
-                    .collect(),
-            ),
+            records,
             excluded: excluded
                 .iter()
                 .map(|exclusion| (exclusion.evidence.as_str(), exclusion.reason.as_str()))
@@ -136,32 +143,49 @@ impl<'a> Records<'a> {
         }
     }
 
-    /// Each record of a kind `kinds` holds, in evidence-id order: `{"evidence": <id>, "status":
-    /// "applied"}` or `{"evidence": <id>, "reason": <reason>, "status": "excluded"}`.
-    fn of(&self, kinds: impl Fn(&EvidenceKindId) -> bool) -> Vec<Value> {
+    /// Each record one of `matches` reads (`crate::eval::reads`), in evidence-id order:
+    /// `{"evidence": <id>, "status": "applied"}` or `{"evidence": <id>, "reason": <reason>,
+    /// "status": "excluded"}`.
+    fn read_by<'m>(&self, matches: impl IntoIterator<Item = Match<'m>> + Clone) -> Vec<Value> {
         self.records
             .iter()
-            .filter(|(_, kind)| kinds(kind))
-            .map(|(id, _)| match self.excluded.get(id) {
-                Some(reason) => json!({"evidence": id, "reason": reason, "status": "excluded"}),
-                None => json!({"evidence": id, "status": "applied"}),
+            .filter(|record| {
+                matches
+                    .clone()
+                    .into_iter()
+                    .any(|(kind, subject)| reads(kind, subject, record))
+            })
+            .map(|record| {
+                let id = record.id.as_str();
+                match self.excluded.get(id) {
+                    Some(reason) => {
+                        json!({"evidence": id, "reason": reason, "status": "excluded"})
+                    }
+                    None => json!({"evidence": id, "status": "applied"}),
+                }
             })
             .collect()
     }
 
-    fn has(&self, kind: &EvidenceKindId) -> bool {
-        self.records.iter().any(|(_, of)| *of == kind)
+    /// Whether a record of the evidence set is one `matching` reads.
+    fn any_read_by(&self, (kind, subject): Match<'_>) -> bool {
+        self.records
+            .iter()
+            .any(|record| reads(kind, subject, record))
     }
 }
 
 /// `reasons` as `because`: each reason as given, and after an evidence match's reason
-/// `{"evidence": <kind>, "present": ...}` each record of that kind.
+/// `{"evidence": <kind>, "present": ...}`, with its `"subject"` when it names one, each record that
+/// match reads.
 fn because(reasons: &[Value], records: &Records<'_>) -> Vec<Value> {
     let mut because = Vec::new();
     for reason in reasons {
         because.push(reason.clone());
         if let (Some(kind), Some(_)) = (reason["evidence"].as_str(), reason.get("present")) {
-            because.extend(records.of(|of| of.as_str() == kind));
+            let kind = EvidenceKindId::new(kind);
+            let subject = reason["subject"].as_str().map(ArtifactId::new);
+            because.extend(records.read_by([(&kind, subject.as_ref())]));
         }
     }
     because
@@ -302,10 +326,11 @@ fn claim_reasons(predicate: &Predicate, values: &BTreeMap<ClaimId, Truth>) -> Ve
         .collect()
 }
 
-/// The evidence kinds `claim` reaches: those its own predicate matches, and those every claim it
-/// tests reaches, through any number of claim references. Each claim is visited once.
-fn reached_kinds<'a>(ir: &'a Ir, claim: &'a ClaimId) -> BTreeSet<&'a EvidenceKindId> {
-    let mut kinds = BTreeSet::new();
+/// The evidence matches `claim` reaches, by kind and subject: those of its own predicate, and those
+/// every claim it tests reaches, through any number of claim references. Each claim is visited
+/// once.
+fn reached_matches<'a>(ir: &'a Ir, claim: &'a ClaimId) -> BTreeSet<Match<'a>> {
+    let mut matches = BTreeSet::new();
     let mut visited = BTreeSet::new();
     let mut pending = vec![claim];
     while let Some(next) = pending.pop() {
@@ -317,13 +342,13 @@ fn reached_kinds<'a>(ir: &'a Ir, claim: &'a ClaimId) -> BTreeSet<&'a EvidenceKin
         };
         declared.true_when.visit(&mut |node| match node {
             Predicate::Evidence(matching) => {
-                kinds.insert(&matching.kind);
+                matches.insert((&matching.kind, matching.subject.as_ref()));
             }
             Predicate::Claim(test) => pending.push(&test.claim),
             _ => {}
         });
     }
-    kinds
+    matches
 }
 
 /// An entry for each of `seeds` and each claim one of them tests, through any number of claim
@@ -347,13 +372,19 @@ fn claims(
             }
             None => Vec::new(),
         };
-        let kinds = reached_kinds(ir, id);
-        because.extend(records.of(|kind| kinds.contains(kind)));
+        let matches = reached_matches(ir, id);
+        because.extend(records.read_by(matches.iter().copied()));
         because.extend(
-            kinds
+            matches
                 .iter()
-                .filter(|kind| !records.has(kind))
-                .map(|kind| json!({"kind": kind.as_str(), "status": "absent"})),
+                .filter(|matching| !records.any_read_by(**matching))
+                .map(|(kind, subject)| {
+                    let mut absent = json!({"kind": kind.as_str(), "status": "absent"});
+                    if let Some(subject) = subject {
+                        absent["subject"] = json!(subject.as_str());
+                    }
+                    absent
+                }),
         );
         let value = values.get(id).copied().unwrap_or(Truth::Unknown);
         entries.insert(

@@ -1,0 +1,45 @@
+format: protocol/1
+
+protocol:
+  id: investigation
+  revision: 1
+  description: Decide whether an explanation survives an attempt to falsify it, when the case also declares the dataset it is tested against.
+
+artifacts:
+  explanation:
+    description: The explanation under investigation.
+  dataset:
+    description: The observations the explanation is tested against.
+
+evidence_kinds:
+  falsification_attempt:
+    description: An attempt to refute an artifact; its result is survived or refuted.
+
+claims:
+  explanation.survived:
+    description: The explanation has survived falsification. Only an attempt about the explanation counts.
+    true_when:
+      evidence:
+        kind: falsification_attempt
+        result: survived
+        subject: explanation
+
+  attempt.survived:
+    description: A falsification attempt survived, whichever declared artifact it was about.
+    true_when:
+      evidence:
+        kind: falsification_attempt
+        result: survived
+
+  either.survived:
+    description: An attempt about the explanation, or one about the dataset, survived.
+    true_when:
+      any:
+        - evidence:
+            kind: falsification_attempt
+            result: survived
+            subject: explanation
+        - evidence:
+            kind: falsification_attempt
+            result: survived
+            subject: dataset

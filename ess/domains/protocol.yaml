@@ -200,49 +200,59 @@ types:
     of: String
 
   # A three-valued truth value; unknown is not false.
-  # read from: crates/canon/src/model/predicate.rs:13-19
+  # read from: crates/canon/src/model/predicate.rs:14-20
   - name: canon.protocol.Truth
     kind: enum
     variants: ["true", "false", "unknown"]
 
   # Source text writes a predicate as a map with exactly one of the keys all, any, not, evidence or
-  # claim (crates/canon/src/model/predicate.rs:110-173); the typed model is this union.
-  # read from: crates/canon/src/model/predicate.rs:54-65
+  # claim (crates/canon/src/model/predicate.rs:114-177); the typed model is this union.
+  # read from: crates/canon/src/model/predicate.rs:55-66
   - name: canon.protocol.Predicate
     kind: union
     tag: kind
     variants:
-      # read from: crates/canon/src/model/predicate.rs:59
+      # read from: crates/canon/src/model/predicate.rs:60
       all: List<canon.protocol.Predicate>
-      # read from: crates/canon/src/model/predicate.rs:61
-      any: List<canon.protocol.Predicate>
       # read from: crates/canon/src/model/predicate.rs:62
-      not: canon.protocol.Predicate
+      any: List<canon.protocol.Predicate>
       # read from: crates/canon/src/model/predicate.rs:63
-      evidence: canon.protocol.EvidenceMatch
+      not: canon.protocol.Predicate
       # read from: crates/canon/src/model/predicate.rs:64
+      evidence: canon.protocol.EvidenceMatch
+      # read from: crates/canon/src/model/predicate.rs:65
       claim: canon.protocol.ClaimTest
 
-  # read from: crates/canon/src/model/predicate.rs:67-74
+  # read from: crates/canon/src/model/predicate.rs:68-78
   - name: canon.protocol.EvidenceMatch
     kind: struct
     fields:
-      # read from: crates/canon/src/model/predicate.rs:71
+      # read from: crates/canon/src/model/predicate.rs:73
       - name: kind
         type: canon.protocol.EvidenceKindId
-      # read from: crates/canon/src/model/predicate.rs:73
+      # read from: crates/canon/src/model/predicate.rs:75
       - name: result
         type: Optional<String>
+      # The declared artifact a record must be about to match. A match that names one is decided
+      # only by records whose subject is that artifact; a record about another declared artifact,
+      # at its current revision, is not of the match, so it neither establishes nor contradicts it
+      # (CANON-EVIDENCE-003). A match without one is decided by records about any declared
+      # artifact, as before. It names an artifact the protocol declares.
+      # read from: .engineering/planning/story/subject-bound-evidence-match.md:13-16
+      # read from: .engineering/planning/story/subject-bound-evidence-match.md:26-28
+      # read from: crates/canon/src/model/predicate.rs:77
+      - name: subject
+        type: Optional<canon.protocol.ArtifactId>
 
-  # Source text may leave `is` out; it then reads as true (crates/canon/src/model/predicate.rs:169).
-  # read from: crates/canon/src/model/predicate.rs:76-81
+  # Source text may leave `is` out; it then reads as true (crates/canon/src/model/predicate.rs:175).
+  # read from: crates/canon/src/model/predicate.rs:80-85
   - name: canon.protocol.ClaimTest
     kind: struct
     fields:
-      # read from: crates/canon/src/model/predicate.rs:79
+      # read from: crates/canon/src/model/predicate.rs:83
       - name: claim
         type: canon.protocol.ClaimId
-      # read from: crates/canon/src/model/predicate.rs:80
+      # read from: crates/canon/src/model/predicate.rs:84
       - name: is
         type: canon.protocol.Truth
 
