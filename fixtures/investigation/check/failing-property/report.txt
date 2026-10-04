@@ -1,0 +1,2 @@
+property-failed: property `publication.rests.on.authority`: action `publish_finding` is blocked in state {} and approval-required in state {evidence `falsification_attempt` result `survived`, evidence `supporting_observation`}
+checked: protocol `investigation` revision 1: 48 states, 2 properties, 1 finding

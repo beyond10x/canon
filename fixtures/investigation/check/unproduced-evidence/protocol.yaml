@@ -1,0 +1,72 @@
+format: protocol/1
+
+protocol:
+  id: investigation
+  revision: 1
+  description: Decide whether an explanation is supported by observation and survives an attempt to falsify it.
+
+artifacts:
+  explanation:
+    description: The explanation under investigation.
+
+evidence_kinds:
+  supporting_observation:
+    description: An observation consistent with the explanation.
+  falsification_attempt:
+    description: An attempt to refute the explanation; its result is survived or refuted.
+  peer_review:
+    description: Seeded defect, a review of the explanation that no action produces.
+
+claims:
+  explanation.reviewed:
+    description: The explanation has been reviewed by a peer.
+    true_when:
+      evidence:
+        kind: peer_review
+
+  explanation.supported:
+    description: The explanation is supported by observation and has survived falsification.
+    true_when:
+      all:
+        - evidence:
+            kind: supporting_observation
+        - evidence:
+            kind: falsification_attempt
+            result: survived
+
+obligations:
+  establish.explanation:
+    description: Establish whether the explanation is supported.
+    discharged_when:
+      claim: explanation.supported
+      is: true
+
+actions:
+  inspect:
+    description: Look for observations bearing on the explanation.
+    may_produce:
+      - evidence: supporting_observation
+
+  attempt_falsification:
+    description: Try to refute the explanation.
+    may_produce:
+      - evidence: falsification_attempt
+
+  publish_finding:
+    description: Publish the finding that the explanation is supported.
+    precondition:
+      claim: explanation.supported
+      is: true
+    requires:
+      - capability: finding.publish
+
+outcomes:
+  supported:
+    description: The explanation is supported.
+    requires:
+      claim: explanation.supported
+
+  inconclusive:
+    description: The investigation ends without deciding the explanation, by an explicit decision.
+    requires:
+      decision: explicitly_inconclusive

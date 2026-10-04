@@ -1,15 +1,16 @@
 //! Canon's ESS specification and its hand-written Rust model stay equal.
 //!
 //! The model under `crates/canon/src/model/` — the `protocol/1` source model and the
-//! `canon-case/1`, `canon-evidence/1` and `canon-decision/1` documents — is hand-written beside its
-//! specification under `ess/`. This test compiles the specification (`ess specify compile --format
-//! json`) and reads the model's Rust source, then compares, for every entity and value type the
-//! specification declares, its fields and their types and every enum or union variant. A model
-//! change that leaves `ess/` behind fails here, naming what differs.
+//! `canon-case/1`, `canon-evidence/1`, `canon-decision/1` and `canon-properties/1` documents — is
+//! hand-written beside its specification under `ess/`. This test compiles the specification (`ess
+//! specify compile --format json`) and reads the model's Rust source, then compares, for every
+//! entity and value type the specification declares, its fields and their types and every enum or
+//! union variant. A model change that leaves `ess/` behind fails here, naming what differs.
 //!
 //! How the Rust model maps onto the specification:
 //!
-//! * A specification type `canon.protocol.X` is the Rust type `X`.
+//! * A specification type `canon.protocol.X` or `canon.check.X` (the [`DOMAINS`]) is the Rust type
+//!   `X`; two domains declaring one local name fail the test.
 //! * A type made by a `macro_rules!` macro that defines `struct $name(T)` — `identifier!(X)` — is a
 //!   `newtype` of `T`, read from the macro body; a struct with named fields is a `struct`; an enum
 //!   of unit variants is an `enum`; an enum of one-payload variants is a `union`. A variant's
@@ -24,7 +25,7 @@
 //!   is the Rust struct `Case`: its `id` field is the identity `id`, its other fields are entity
 //!   fields. An entity the specification declares and [`ENTITIES`] does not map fails the test.
 //! * The value types compared are those the entities reach, and those [`DOCUMENTS`] reach: the
-//!   evidence record, the explicit decision and the decision, which no entity holds.
+//!   evidence record, the explicit decision, the decision and the properties, which no entity holds.
 //! * Only module-level items count. Items inside functions, inline modules (`mod tests { … }`) and
 //!   anything under `#[cfg(test)]` are not the model. Two module-level types with one name, in any
 //!   model files, fail the test rather than one shadowing the other.
@@ -40,7 +41,9 @@ use std::process::Command;
 
 use serde_yaml_ng::Value;
 
-const DOMAIN: &str = "canon.protocol";
+/// Every domain the specification declares whose types are the Rust model. A type's local name is
+/// its name without the domain, and is unique across them.
+const DOMAINS: &[&str] = &["canon.protocol", "canon.check"];
 
 /// How one entity of the specification is written in the Rust model.
 struct EntityMapping {
@@ -68,9 +71,15 @@ const ENTITIES: &[EntityMapping] = &[
 ];
 
 /// Value types no entity holds that are still part of the model: the evidence record and the
-/// explicit decision (`canon-decisions/1`) an evaluation reads, and the decision it writes. They,
-/// and what they reach, are compared too.
-const DOCUMENTS: &[&str] = &["EvidenceRecord", "ExplicitDecision", "Decision"];
+/// explicit decision (`canon-decisions/1`) an evaluation reads, the decision it writes, and the
+/// properties (`canon-properties/1`) `canon check` reads. They, and what they reach, are compared
+/// too.
+const DOCUMENTS: &[&str] = &[
+    "EvidenceRecord",
+    "ExplicitDecision",
+    "Decision",
+    "Properties",
+];
 
 /// `(owner, field)` Integer fields that are never negative although `ess/` cannot say so: ess
 /// 0.52.0 refuses an invariant on a struct type no view publishes (ESS-SYNTH-013), and this
@@ -206,12 +215,16 @@ fn authored_map_keys(root: &Path) -> BTreeMap<(String, String), String> {
     keys
 }
 
-/// `canon.protocol.X` is `X`; a primitive is its lower-case name.
+/// `X` for a name `<domain>.X` of one of [`DOMAINS`], and `None` for any other name.
+fn in_model(name: &str) -> Option<&str> {
+    DOMAINS
+        .iter()
+        .find_map(|domain| name.strip_prefix(&format!("{domain}.")))
+}
+
+/// `canon.protocol.X` and `canon.check.X` are `X`; a primitive is its lower-case name.
 fn local(name: &str) -> String {
-    match name.strip_prefix(&format!("{DOMAIN}.")) {
-        Some(local) => local.to_owned(),
-        None => name.to_owned(),
-    }
+    in_model(name).unwrap_or(name).to_owned()
 }
 
 fn ir_ty(value: &Value, map_key: Option<&String>) -> Ty {
@@ -223,11 +236,10 @@ fn ir_ty(value: &Value, map_key: Option<&String>) -> Ty {
         "list" => Ty::List(Box::new(ir_ty(&value["of"], None))),
         "map" => {
             let compiled = value["key"].as_str().expect("map key").to_owned();
-            let key =
-                match map_key.and_then(|authored| authored.strip_prefix(&format!("{DOMAIN}."))) {
-                    Some(declared) => Ty::Declared(declared.to_owned()),
-                    None => Ty::Primitive(compiled),
-                };
+            let key = match map_key.and_then(|authored| in_model(authored)) {
+                Some(declared) => Ty::Declared(declared.to_owned()),
+                None => Ty::Primitive(compiled),
+            };
             Ty::Map(Box::new(key), Box::new(ir_ty(&value["value"], None)))
         }
         other => panic!("type ref kind `{other}` has no Rust mapping in this test"),
@@ -303,10 +315,16 @@ fn specification_at(root: &Path) -> Model {
     let mut types = BTreeMap::new();
     for (name, declaration) in ir["types"].as_mapping().expect("types map") {
         let name = name.as_str().expect("type name");
-        if state_types.contains(name) || !name.starts_with(&format!("{DOMAIN}.")) {
+        if state_types.contains(name) || in_model(name).is_none() {
             continue;
         }
+        let qualified = name;
         let name = local(name);
+        assert!(
+            !types.contains_key(&name),
+            "two domains declare a type `{name}` (one is `{qualified}`): the Rust model has one \
+             namespace, so local names must be unique across {DOMAINS:?}"
+        );
         let body = &declaration["body"];
         let shape = match body["kind"].as_str().expect("type kind") {
             "newtype" => Shape::Newtype(ir_ty(&body["of"], None)),
@@ -1529,7 +1547,12 @@ fn an_unlisted_file_under_ess_does_not_supply_map_keys() {
     let domains = root.join("ess/domains");
     fs::create_dir_all(&domains).expect("create the copy");
     let spec = repo_root().join("ess");
-    for file in ["system.yaml", "ess-inputs.yaml", "domains/protocol.yaml"] {
+    for file in [
+        "system.yaml",
+        "ess-inputs.yaml",
+        "domains/protocol.yaml",
+        "domains/check.yaml",
+    ] {
         fs::copy(spec.join(file), root.join("ess").join(file)).expect("copy spec file");
     }
     let domain = domains.join("protocol.yaml");
@@ -1555,6 +1578,57 @@ fn an_unlisted_file_under_ess_does_not_supply_map_keys() {
     let spec = specification_at(&root);
     let rust = rust_model(&model_sources());
     assert_named(&spec, &rust, &["Protocol.claims", "OutcomeId", "ClaimId"]);
+}
+
+/// The Rust model has one namespace, so a local name declared in two domains fails loudly rather
+/// than one declaration hiding the other: here `canon.check` declares its own `ClaimId`.
+#[test]
+fn a_local_name_declared_in_two_domains_fails_loudly() {
+    let root = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("canon-ess-model-matches")
+        .join(format!("{:016x}", {
+            use std::hash::{Hash, Hasher};
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            repo_root().hash(&mut hasher);
+            hasher.finish()
+        }))
+        .join("one-name-two-domains");
+    if root.exists() {
+        fs::remove_dir_all(&root).expect("remove the previous copy");
+    }
+    fs::create_dir_all(root.join("ess/domains")).expect("create the copy");
+    let spec = repo_root().join("ess");
+    for file in [
+        "system.yaml",
+        "ess-inputs.yaml",
+        "domains/protocol.yaml",
+        "domains/check.yaml",
+    ] {
+        fs::copy(spec.join(file), root.join("ess").join(file)).expect("copy spec file");
+    }
+    let domain = root.join("ess/domains/check.yaml");
+    let original = fs::read_to_string(&domain).expect("domain reads");
+    assert!(
+        original.contains("\ntypes:\n"),
+        "the control's edit no longer applies"
+    );
+    fs::write(
+        &domain,
+        original.replacen(
+            "\ntypes:\n",
+            "\ntypes:\n  - name: canon.check.ClaimId\n    kind: newtype\n    of: String\n\n",
+            1,
+        ),
+    )
+    .expect("edited domain written");
+
+    let panic = std::panic::catch_unwind(|| specification_at(&root))
+        .expect_err("a local name in two domains is refused");
+    let message = panic.downcast_ref::<String>().cloned().unwrap_or_default();
+    assert!(
+        message.contains("two domains declare a type `ClaimId`"),
+        "{message}"
+    );
 }
 
 /// The second entity is compared like the first: a field added to `Case` is named.
