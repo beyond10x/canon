@@ -1,0 +1,43 @@
+format: "canon-conformance/1"
+id: "investigation.outcome.stale.legitimate"
+covers: []
+fixture: "fixtures/investigation/generate/invalidation/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "investigation"
+        revision: "r"
+        artifacts:
+          "dataset":
+            revision: "r"
+          "explanation":
+            revision: "r"
+      evidence:
+        - format: "canon-evidence/1"
+          id: "e0"
+          kind: "supporting_observation"
+          subject: "dataset"
+          subject_revision: "r"
+          upstream_revisions:
+            "dataset": "r0"
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "stale": {
+              "status": "legitimate"
+            },
+            "supported": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }

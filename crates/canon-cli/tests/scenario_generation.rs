@@ -17,6 +17,10 @@
 //! The fourth is shown able to fail before it is trusted: the supported witness given a second
 //! observation still passes with either observation removed, and the same check reports both and
 //! nothing else.
+//!
+//! `generated_scenarios_witness_outcomes_under_invalidation_rules` holds the same four over a
+//! protocol with an invalidation rule (`fixtures/investigation/generate/invalidation/`), whose
+//! `stale` witness is a record observed before its upstream artifact moved.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -28,6 +32,10 @@ const PROTOCOL: &str = "fixtures/investigation/check/base/protocol.yaml";
 
 /// The committed expectations, relative to the repository root.
 const EXPECTED: &str = "fixtures/investigation/generate";
+
+/// A protocol with an invalidation rule and outcomes, and its committed expectations.
+const INVALIDATION_PROTOCOL: &str = "fixtures/investigation/generate/invalidation/protocol.yaml";
+const INVALIDATION_EXPECTED: &str = "fixtures/investigation/generate/invalidation/expected";
 
 /// The line an evidence list opens with, and the prefix each of its records opens with, in the
 /// layout `canon generate` writes and the expectations hold.
@@ -81,14 +89,27 @@ fn yaml_files(dir: &Path) -> Vec<String> {
     names
 }
 
+/// The names of the files of a directory, sorted; subdirectories are left out, so another
+/// protocol's expectations can sit below one protocol's.
+fn expected_files(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .unwrap_or_else(|error| panic!("{} is readable: {error}", dir.display()))
+        .map(|entry| entry.expect("a directory entry is readable"))
+        .filter(|entry| entry.file_type().is_ok_and(|kind| !kind.is_dir()))
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
 /// The scenario files the protocol must yield: one per declared outcome, and one per action that
-/// declares a precondition or requires a capability. In this protocol each such action is blocked
-/// in some state (its precondition reads a claim that is UNKNOWN without evidence, and a required
-/// capability can be denied), and every other action is admissible in every state.
-fn wanted_files() -> Vec<String> {
-    let source = std::fs::read_to_string(repository_root().join(PROTOCOL))
-        .expect("the base protocol is readable");
-    let protocol = model::parse(&source).expect("the base protocol parses");
+/// declares a precondition or requires a capability. In the protocols here each such action is
+/// blocked in some state (its precondition reads a claim that is UNKNOWN without evidence, and a
+/// required capability can be denied), and every other action is admissible in every state.
+fn wanted_files(protocol: &str) -> Vec<String> {
+    let source = std::fs::read_to_string(repository_root().join(protocol))
+        .unwrap_or_else(|error| panic!("{protocol} is readable: {error}"));
+    let protocol = model::parse(&source).expect("the protocol parses");
     let mut names: Vec<String> = protocol
         .outcomes
         .iter()
@@ -253,20 +274,45 @@ fn generated_scenarios_witness_every_outcome() {
         "the check reports both observations of a non-minimal witness, and nothing else"
     );
 
+    witness_every_subject(PROTOCOL, EXPECTED, "out");
+}
+
+/// The same four expectations over a protocol with an invalidation rule, whose outcome `stale`
+/// holds only on an observation made before its upstream artifact moved: the witness carries that
+/// record with the earlier upstream revision, and removing it fails the scenario.
+#[test]
+fn generated_scenarios_witness_outcomes_under_invalidation_rules() {
+    let out = witness_every_subject(
+        INVALIDATION_PROTOCOL,
+        INVALIDATION_EXPECTED,
+        "invalidation-out",
+    );
+    let stale = std::fs::read_to_string(out.join("outcome.stale.legitimate.yaml"))
+        .expect("the stale scenario was written");
+    assert!(
+        stale.contains("          upstream_revisions:\n            \"dataset\": \"r0\"\n"),
+        "the stale witness carries a record observed before `dataset` moved:\n{stale}"
+    );
+}
+
+/// The four expectations of the module docs over `protocol` and the committed expectations in
+/// `expected`, each a path relative to the repository root. `label` names the scratch directories.
+/// Returns the directory `canon generate` wrote.
+fn witness_every_subject(protocol: &str, expected: &str, label: &str) -> PathBuf {
     let root = repository_root();
-    let expected_dir = root.join(EXPECTED);
-    let wanted = wanted_files();
+    let expected_dir = root.join(expected);
+    let wanted = wanted_files(protocol);
     assert_eq!(
-        yaml_files(&expected_dir),
+        expected_files(&expected_dir),
         wanted,
         "the committed expectations are exactly one per outcome and per blocked action"
     );
 
-    let out = scratch("out");
+    let out = scratch(label);
     let generated = canon(&[
         "generate",
         "--path",
-        PROTOCOL,
+        protocol,
         "--out",
         out.to_str().expect("a UTF-8 scratch path"),
     ]);
@@ -295,7 +341,7 @@ fn generated_scenarios_witness_every_outcome() {
         match got {
             Ok(got) if got == want => {}
             Ok(got) => failures.push(format!(
-                "2: {name} differs from {EXPECTED}/{name}:\n--- expected\n{}--- got\n{}",
+                "2: {name} differs from {expected}/{name}:\n--- expected\n{}--- got\n{}",
                 text(&want),
                 text(&got)
             )),
@@ -326,7 +372,7 @@ fn generated_scenarios_witness_every_outcome() {
     for name in &written {
         let scenario = std::fs::read_to_string(out.join(name)).expect("a scenario is readable");
         removals += record_count(&scenario);
-        match removable_records(name, &scenario) {
+        match removable_records(&format!("{label}-{name}"), &scenario) {
             Ok(removable) if removable.is_empty() => {}
             Ok(removable) => failures.push(format!(
                 "4: {name} is not minimal: it still passes without record(s) {removable:?}"
@@ -344,6 +390,7 @@ fn generated_scenarios_witness_every_outcome() {
         failures.len(),
         failures.join("\n")
     );
+    out
 }
 
 /// A write that fails into an existing empty `--out` removes the files this run created and

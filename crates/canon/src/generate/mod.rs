@@ -11,12 +11,13 @@
 //!
 //! An outcome's witness is a state in which it is `legitimate`; an action's is a state in which it
 //! is `blocked`. Of those, the witness is the state `canon check` would name: the one of least
-//! weight (present evidence classes, decided capabilities and taken decisions), ties broken by its
-//! rendering. Each present class is one evidence record, so the witness is minimal: removing any one
-//! record leads to a state of less weight, in which the subject's status differs, and so does the
-//! section the scenario expects. An action never blocked gets no scenario. An outcome legitimate in
-//! no state has no witness, and generation is refused; so is a protocol that yields no scenario at
-//! all.
+//! weight (present evidence records, each weighing one more for every upstream artifact it was
+//! observed before, decided capabilities and taken decisions), ties broken by its rendering. Each
+//! present record is one evidence record of the scenario, a record observed before an upstream
+//! artifact moved included, so the witness is minimal: removing any one record leads to a state of
+//! less weight, in which the subject's status differs, and so does the section the scenario
+//! expects. An action never blocked gets no scenario. An outcome legitimate in no state has no
+//! witness, and generation is refused; so is a protocol that yields no scenario at all.
 //!
 //! # The scenarios
 //!
@@ -26,9 +27,11 @@
 //! the protocol document as its fixture, exactly as given, and has one evaluate step, `witness`:
 //!
 //! - the case `witness` of the protocol at revision `r`, listing every declared artifact at `r`;
-//! - one `canon-evidence/1` record per present class, ids `e0`, `e1`, … in dimension order, about
-//!   its dimension's artifact at `r`, with its class's result when it has one and no observation
-//!   instant;
+//! - one `canon-evidence/1` record per present class and upstream vector, ids `e0`, `e1`, … in
+//!   dimension order, about its dimension's artifact at `r`, with its class's result when it has
+//!   one and no observation instant, and, for a kind an invalidation rule can keep from a claim,
+//!   `upstream_revisions`: each upstream artifact at `r0` when the record was observed before it
+//!   moved, at `r` otherwise;
 //! - `authority`, each decided capability, when the witness decides one;
 //! - `decisions`, each taken decision for every outcome that requires it, by the principal
 //!   `canon-generate` at case revision `r`, when the witness takes one;
@@ -379,6 +382,15 @@ fn scenario(
                     quote(record.subject_revision.as_str())
                 ),
             );
+            if !record.upstream_revisions.is_empty() {
+                line(10, "upstream_revisions:");
+                for (artifact, revision) in record.upstream_revisions.iter() {
+                    line(
+                        12,
+                        &format!("{}: {}", quote(artifact.as_str()), quote(revision.as_str())),
+                    );
+                }
+            }
         }
     }
     let field = |entry: &Value, key: &str| {
