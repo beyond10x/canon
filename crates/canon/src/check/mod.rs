@@ -111,7 +111,7 @@ use crate::model::{
     ProtocolId, Revision, one_line,
 };
 
-use space::{Space, State};
+pub(crate) use space::{REVISION, Space, State};
 
 /// The most states [`check`] evaluates; a larger space is refused.
 pub const STATE_BOUND: u128 = 65_536;
@@ -292,9 +292,9 @@ fn counted(count: u128, one: &str, many: &str) -> String {
 }
 
 /// One state's evaluation: each action's status and each outcome's, in identifier order.
-struct Evaluated {
-    actions: Vec<String>,
-    outcomes: Vec<String>,
+pub(crate) struct Evaluated {
+    pub(crate) actions: Vec<String>,
+    pub(crate) outcomes: Vec<String>,
 }
 
 /// Checks `ir` over its whole state space, and each of `properties` when given, as the module docs
@@ -374,7 +374,7 @@ pub fn check(ir: &Ir, properties: Option<&Properties>) -> Result<Report, Refusal
 }
 
 /// Evaluates one state with the evaluator and keeps each action's and outcome's status.
-fn evaluate(ir: &Ir, space: &Space<'_>, state: &State) -> Result<Evaluated, Refusal> {
+pub(crate) fn evaluate(ir: &Ir, space: &Space<'_>, state: &State) -> Result<Evaluated, Refusal> {
     let revision = Revision::new(space::REVISION);
     let case = Case {
         format: CASE_FORMAT.to_owned(),
@@ -429,7 +429,7 @@ fn evaluate(ir: &Ir, space: &Space<'_>, state: &State) -> Result<Evaluated, Refu
 
 /// The index of the state of least weight among the `candidates` indices into `states`, ties
 /// broken by rendering.
-fn witness(
+pub(crate) fn witness(
     space: &Space<'_>,
     states: &[State],
     candidates: impl Iterator<Item = usize>,

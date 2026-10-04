@@ -10,6 +10,7 @@ pub mod conform;
 pub mod diff;
 pub mod eval;
 pub mod explain;
+pub mod generate;
 pub mod ir;
 pub mod model;
 pub mod validate;

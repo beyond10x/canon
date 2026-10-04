@@ -8,6 +8,7 @@ mod check;
 mod conform;
 mod diff;
 mod evaluate;
+mod generate;
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -41,6 +42,7 @@ fn main() -> ExitCode {
         ),
         Command::Diff { from, to } => diff::run(&from, &to),
         Command::Check { path, properties } => check::run(&path, properties.as_deref()),
+        Command::Generate { path, out } => generate::run(&path, &out),
     }
 }
 

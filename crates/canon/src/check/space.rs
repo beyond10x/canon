@@ -16,7 +16,7 @@ use crate::model::{
 
 /// The revision every artifact and the case itself have in a checked state, and the case revision
 /// every explicit decision is taken at.
-pub(super) const REVISION: &str = "r";
+pub(crate) const REVISION: &str = "r";
 
 /// Who takes an explicit decision in a checked state.
 const PRINCIPAL: &str = "canon-check";
@@ -56,7 +56,7 @@ impl Kind<'_> {
 }
 
 /// The dimensions, in order: the evidence dimensions, each capability, each decision name.
-pub(super) struct Space<'a> {
+pub(crate) struct Space<'a> {
     kinds: Vec<Kind<'a>>,
     capabilities: Vec<&'a CapabilityId>,
     /// Each decision name and every outcome that requires it.
@@ -64,14 +64,14 @@ pub(super) struct Space<'a> {
 }
 
 /// One state: a value for each dimension, in dimension order.
-pub(super) type State = Vec<u32>;
+pub(crate) type State = Vec<u32>;
 
 /// A capability's value: not decided, granted or denied.
 const UNDECIDED: u32 = 0;
 const GRANTED: u32 = 1;
 
 impl<'a> Space<'a> {
-    pub(super) fn new(ir: &'a Ir) -> Self {
+    pub(crate) fn new(ir: &'a Ir) -> Self {
         let matches: Vec<&EvidenceMatch> = readers(ir)
             .flat_map(|(_, predicate)| evidence_matches(predicate))
             .collect();
@@ -155,7 +155,7 @@ impl<'a> Space<'a> {
     }
 
     /// The number of states, or `None` when it does not fit a `u128`.
-    pub(super) fn size(&self) -> Option<u128> {
+    pub(crate) fn size(&self) -> Option<u128> {
         self.radices()
             .into_iter()
             .try_fold(1u128, |total, radix| total.checked_mul(radix?))
@@ -187,7 +187,7 @@ impl<'a> Space<'a> {
 
     /// The state at `index`, the first dimension varying fastest. Called only once the size is
     /// known to fit.
-    pub(super) fn state(&self, mut index: u128) -> State {
+    pub(crate) fn state(&self, mut index: u128) -> State {
         self.radices()
             .into_iter()
             .map(|radix| {
@@ -315,7 +315,7 @@ impl<'a> Space<'a> {
 
     /// The evidence records `state` stands for: one per present class, about its dimension's
     /// artifact at [`REVISION`], with no observation instant, so none expires.
-    pub(super) fn evidence(&self, state: &State) -> Vec<EvidenceRecord> {
+    pub(crate) fn evidence(&self, state: &State) -> Vec<EvidenceRecord> {
         let mut records = Vec::new();
         for (kind, value) in self.kinds.iter().zip(state) {
             let Some(record) = &kind.record else {
@@ -335,7 +335,7 @@ impl<'a> Space<'a> {
     }
 
     /// The `canon-authority/1` document `state` stands for, as JSON: each decided capability.
-    pub(super) fn authority(&self, state: &State) -> String {
+    pub(crate) fn authority(&self, state: &State) -> String {
         let values = &state[self.kinds.len()..];
         let decided: Vec<Value> = self
             .capabilities
@@ -356,7 +356,7 @@ impl<'a> Space<'a> {
 
     /// The `canon-decisions/1` document `state` stands for, as JSON: each taken decision, for
     /// every outcome that requires it, at [`REVISION`].
-    pub(super) fn decisions(&self, state: &State) -> String {
+    pub(crate) fn decisions(&self, state: &State) -> String {
         let values = &state[self.kinds.len() + self.capabilities.len()..];
         let taken: Vec<Value> = self
             .decisions

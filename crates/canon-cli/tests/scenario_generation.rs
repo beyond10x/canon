@@ -345,3 +345,51 @@ fn generated_scenarios_witness_every_outcome() {
         failures.join("\n")
     );
 }
+
+/// A write that fails into an existing empty `--out` removes the files this run created and
+/// nothing else: `--out` is still there, empty, with its own mode and inode.
+#[cfg(unix)]
+#[test]
+fn a_failed_write_into_an_existing_out_removes_only_what_it_created() {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let work = scratch("failed-write-existing-out");
+    // `outcome.a.legitimate.yaml` is written first; the second file name is over 255 bytes.
+    let long = "b".repeat(240);
+    std::fs::write(
+        work.join("p.yaml"),
+        format!(
+            "format: protocol/1\nprotocol: {{id: p, revision: 1}}\n\
+             outcomes: {{a: {{requires: {{decision: stop}}}}, {long}: {{requires: {{decision: go}}}}}}\n"
+        ),
+    )
+    .expect("the protocol is writable");
+    let out = work.join("out");
+    std::fs::create_dir(&out).expect("--out is creatable");
+    std::fs::set_permissions(&out, std::fs::Permissions::from_mode(0o700)).expect("chmod");
+    let before = std::fs::metadata(&out).expect("--out exists");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_canon"))
+        .current_dir(&work)
+        .args(["generate", "--path", "p.yaml", "--out", "out"])
+        .output()
+        .expect("the canon binary runs");
+    assert_eq!(output.status.code(), Some(2), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stdout), "");
+
+    let after = std::fs::metadata(&out).expect("--out is still there");
+    assert_eq!(after.ino(), before.ino(), "--out was replaced");
+    assert_eq!(after.mode() & 0o777, 0o700, "--out lost its mode");
+    assert!(yaml_files(&out).is_empty(), "left {:?}", yaml_files(&out));
+    let mut left: Vec<String> = std::fs::read_dir(&work)
+        .expect("readable")
+        .map(|entry| {
+            entry
+                .expect("an entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    left.sort();
+    assert_eq!(left, ["out", "p.yaml"]);
+}
