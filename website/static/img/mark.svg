@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32"
+     role="img" aria-label="Canon">
+  <rect x="1" y="1" width="30" height="30" rx="7" fill="#161d24"/>
+  <rect x="1.6" y="1.6" width="28.8" height="28.8" rx="6.4" fill="none"
+        stroke="#2b3540" stroke-width="1.2"/>
+  <circle cx="10" cy="16" r="3" fill="#3fb950"/>
+  <circle cx="16" cy="16" r="3" fill="#d29922"/>
+  <circle cx="22" cy="16" r="3" fill="none" stroke="#ff7b72" stroke-width="1.6"/>
+</svg>
