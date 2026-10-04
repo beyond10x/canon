@@ -76,6 +76,7 @@ fn unit_test_on_mutant(name: &str, edits: &[Edit]) -> (bool, String) {
     let target = base.join("target");
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
     let output = Command::new(cargo)
+        .env("CARGO_TERM_COLOR", "never")
         .args([
             "test",
             "--offline",
