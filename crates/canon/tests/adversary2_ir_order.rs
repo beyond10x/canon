@@ -63,6 +63,7 @@ fn evidence(kind: &str, result: Option<&str>) -> Predicate {
     Predicate::Evidence(EvidenceMatch {
         kind: EvidenceKindId::new(kind),
         result: result.map(str::to_owned),
+        subject: None,
     })
 }
 

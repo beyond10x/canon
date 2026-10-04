@@ -100,9 +100,10 @@ A predicate over evidence and claim values.
 
 The predicate language: a small, total, deterministic expression language (design § 39.2).
 
-A predicate is one of `all`, `any`, `not`, an evidence match by kind and optional result, or a
-test on a claim value. Written in source as a map with exactly one of the keys `all`, `any`,
-`not`, `evidence` or `claim`; a claim test may add `is`, which defaults to `true`.
+A predicate is one of `all`, `any`, `not`, an evidence match by kind, optional result and
+optional subject, or a test on a claim value. Written in source as a map with exactly one of the
+keys `all`, `any`, `not`, `evidence` or `claim`; a claim test may add `is`, which defaults to
+`true`.
 
 | Key | Value | Meaning |
 |---|---|---|
@@ -140,12 +141,14 @@ What an outcome requires.
 
 ## `EvidenceMatch`
 
-Matches evidence of one kind, optionally with one result.
+Matches evidence of one kind, optionally with one result, and optionally only evidence about one
+declared artifact: a match that names a subject reads only the records whose subject it is.
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `kind` | [identifier](#identifiers) (`EvidenceKindId`) | required | — |
 | `result` | text | optional | — |
+| `subject` | [identifier](#identifiers) (`ArtifactId`) | optional | — |
 
 ## `Truth`
 

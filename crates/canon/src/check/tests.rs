@@ -252,3 +252,85 @@ fn the_module_docs_show_a_bound_refusal_check_gives() {
         "the module docs do not show `{refusal}`"
     );
 }
+
+/// Adversary pass 1, finding 1: a match that names a subject reads only records about it, so the
+/// space has a dimension of `k` about `b`. The unbound `any_seen` also reads records about `a`,
+/// which no match names, and `elsewhere` needs one with none about `b`: without that separate
+/// dimension `elsewhere` would be unreachable. `k` about `b` has 4 values (`pass` and no result),
+/// `k` about another artifact 2.
+#[test]
+fn an_unbound_match_keeps_its_own_dimension_beside_a_bound_one() {
+    let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}, b: {}}\n\
+        evidence_kinds: {k: {}}\n\
+        claims:\n\
+        \x20\x20any_seen: {true_when: {evidence: {kind: k}}}\n\
+        \x20\x20b_passed: {true_when: {evidence: {kind: k, subject: b, result: pass}}}\n\
+        actions: {probe: {may_produce: [{evidence: k}]}}\n\
+        outcomes:\n\
+        \x20\x20elsewhere: {requires: {all: [{claim: any_seen}, {claim: b_passed, is: unknown}]}}\n";
+    assert_eq!(
+        check(&compiled(source), None).expect("checked").to_string(),
+        "checked: protocol `p` revision 1: 8 states, 0 properties, 0 findings\n"
+    );
+}
+
+/// A bound dimension is written with its subject, in a witness state and in the bound refusal.
+#[test]
+fn a_bound_dimension_is_written_with_its_subject() {
+    let bypassed = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}, b: {}}\n\
+        evidence_kinds: {k: {}}\n\
+        actions:\n\
+        \x20\x20approve: {requires: [{capability: c}], may_produce: [{evidence: k}]}\n\
+        \x20\x20self_approve: {may_produce: [{evidence: k}]}\n\
+        outcomes:\n\
+        \x20\x20granted: {requires: {evidence: {kind: k, subject: b, result: 'yes'}}}\n";
+    assert_eq!(
+        check(&compiled(bypassed), None)
+            .expect("checked")
+            .to_string(),
+        "authority-bypass: outcome `granted` is legitimate without authority in state \
+         {evidence `k` about `b` result `yes`}\n\
+         checked: protocol `p` revision 1: 12 states, 0 properties, 1 finding\n"
+    );
+    let matches: Vec<String> = (0..16)
+        .map(|n| format!("{{evidence: {{kind: k, subject: b, result: r{n}}}}}"))
+        .collect();
+    let large = format!(
+        "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nartifacts: {{a: {{}}, b: {{}}}}\n\
+         evidence_kinds: {{k: {{}}}}\n\
+         claims: {{x: {{true_when: {{any: [{}]}}}}}}\n\
+         actions: {{probe: {{may_produce: [{{evidence: k}}]}}}}\n",
+        matches.join(", ")
+    );
+    let refusal = check(&compiled(&large), None).expect_err("refused");
+    assert_eq!(
+        refusal.to_string(),
+        "protocol `p` revision 1 has 131072 states, more than the bound of 65536: evidence kind \
+         `k` about `b` 131072"
+    );
+}
+
+/// A property independent of a claim about `b` erases only the dimension of `k` about `b`: states
+/// that differ in records about `a` are not partners, so `done`, which reads only those, holds it.
+#[test]
+fn a_property_erases_only_the_dimensions_its_claim_reads() {
+    let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}, b: {}}\n\
+        evidence_kinds: {k: {}}\n\
+        claims:\n\
+        \x20\x20a_seen: {true_when: {evidence: {kind: k, subject: a}}}\n\
+        \x20\x20b_seen: {true_when: {evidence: {kind: k, subject: b}}}\n\
+        actions: {probe: {may_produce: [{evidence: k}]}}\n\
+        outcomes: {done: {requires: {claim: a_seen}}}\n";
+    let body = format!(
+        "{HEAD}properties: {{x: {{subject: {{outcome: done}}, independent_of: {{claim: b_seen}}}}}}\n"
+    );
+    assert_eq!(
+        check(&compiled(source), Some(&properties(&body)))
+            .expect("checked")
+            .to_string(),
+        "checked: protocol `p` revision 1: 4 states, 1 property, 0 findings\n"
+    );
+}

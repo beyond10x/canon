@@ -1,14 +1,15 @@
 //! The predicate language: a small, total, deterministic expression language (design § 39.2).
 //!
-//! A predicate is one of `all`, `any`, `not`, an evidence match by kind and optional result, or a
-//! test on a claim value. Written in source as a map with exactly one of the keys `all`, `any`,
-//! `not`, `evidence` or `claim`; a claim test may add `is`, which defaults to `true`.
+//! A predicate is one of `all`, `any`, `not`, an evidence match by kind, optional result and
+//! optional subject, or a test on a claim value. Written in source as a map with exactly one of the
+//! keys `all`, `any`, `not`, `evidence` or `claim`; a claim test may add `is`, which defaults to
+//! `true`.
 
 use std::fmt;
 
 use serde::Deserialize;
 
-use super::ids::{ClaimId, EvidenceKindId};
+use super::ids::{ArtifactId, ClaimId, EvidenceKindId};
 
 /// A three-valued truth value. `Unknown` is not `False`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -64,13 +65,16 @@ pub enum Predicate {
     Claim(ClaimTest),
 }
 
-/// Matches evidence of one kind, optionally with one result.
+/// Matches evidence of one kind, optionally with one result, and optionally only evidence about one
+/// declared artifact: a match that names a subject reads only the records whose subject it is.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EvidenceMatch {
     pub kind: EvidenceKindId,
     #[serde(default, deserialize_with = "super::present::optional")]
     pub result: Option<String>,
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub subject: Option<ArtifactId>,
 }
 
 /// Tests whether a claim has a given value.

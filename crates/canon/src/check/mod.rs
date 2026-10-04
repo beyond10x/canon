@@ -7,16 +7,24 @@
 //!
 //! # The state space
 //!
-//! The dimensions, in this order: each declared evidence kind, in identifier order; each capability
-//! some action requires, in identifier order; each decision name some outcome requires, in
-//! identifier order.
+//! The dimensions, in this order: the evidence dimensions of each declared evidence kind, in
+//! identifier order; each capability some action requires, in identifier order; each decision name
+//! some outcome requires, in identifier order.
 //!
-//! - An evidence kind's classes are each distinct result the protocol's predicates match for the
-//!   kind, in code-point order, then a record with no result, which stands for every other result:
-//!   against every evidence match the protocol writes, a record with another result behaves as one
-//!   with none. The kind takes every subset of its classes, so `2^(results + 1)` values; the empty
-//!   set is the kind absent. A protocol that declares no artifact has no record any evidence could
-//!   be about, so each of its kinds has the one value absent.
+//! - An evidence dimension is the records of one kind about one artifact. A kind has one bound
+//!   dimension per artifact some evidence match of the kind names as its `subject`, in identifier
+//!   order. It has one unbound dimension too, about the first declared artifact no match of the
+//!   kind names, when such an artifact exists and either some match of the kind names no subject
+//!   or none names one (a kind no predicate reads keeps its one dimension). A match reads a
+//!   dimension's records by the evaluator's own rule (`crate::eval::reads`): a match that names a
+//!   subject reads the bound dimension about it, and a match that names none reads every dimension
+//!   of its kind.
+//! - A dimension's classes are each distinct result a match that reads it matches, in code-point
+//!   order, then a record with no result, which stands for every other result: against every
+//!   evidence match that reads the dimension, a record with another result behaves as one with
+//!   none. The dimension takes every subset of its classes, so `2^(results + 1)` values; the empty
+//!   set is no record. A protocol that declares no artifact has no record any evidence could be
+//!   about, so each of its kinds has one dimension with the one value absent.
 //! - A capability is undecided, granted or denied (3 values).
 //! - A decision is not taken or taken (2 values); taken, it is taken for every outcome that
 //!   requires it.
@@ -26,8 +34,8 @@
 //! each state, and no `protocol/1` predicate reads it.
 //!
 //! A state is evaluated as a case snapshot that lists each declared artifact, and the case itself,
-//! at one revision, with one evidence record per present class about the first declared artifact,
-//! the decided capabilities as `canon-authority/1` and the taken decisions as `canon-decisions/1`.
+//! at one revision, with one evidence record per present class about its dimension's artifact, the
+//! decided capabilities as `canon-authority/1` and the taken decisions as `canon-decisions/1`.
 //!
 //! # The bound
 //!
@@ -52,20 +60,23 @@
 //!   action may produce is present, in a state that needs no authority decision. Governed evidence
 //!   is each kind some action that requires a capability may produce. The outcome is legitimate in
 //!   a state whose every present evidence kind some action requiring no capability may produce, and
-//!   not legitimate in that state with the governed kinds its requirement reads (directly or
-//!   through claims) absent. An outcome that holds because governed evidence is absent, such as
+//!   not legitimate in that state with the evidence dimensions of governed kinds its requirement
+//!   reads (directly or through claims) empty. An outcome that holds because governed evidence is
+//!   absent, such as
 //!   `{claim: approved, is: unknown}`, needs no authority decision and is no bypass. Static: action
 //!   order and preconditions are not followed. The finding names the witness state.
 //! - `property-failed`: a property whose subject has two statuses in two states that agree on every
-//!   dimension except the evidence kinds its `independent_of` claim reads (directly or through
+//!   dimension except the evidence dimensions its `independent_of` claim reads (directly or through
 //!   claims). The counterexample is that pair of states.
 //!
 //! A witness state is the one of least weight (present classes, decided capabilities and taken
 //! decisions), ties broken by its rendering in code-point order. The counterexample's first state is
 //! the witness among the states that have such a partner, and its second the witness among that
 //! state's partners. A state is written `{}`, or as its present classes, decided capabilities and
-//! taken decisions in dimension order: `` {evidence `k` result `r`, evidence `k2`, capability `c`
-//! granted, decision `d` taken} ``.
+//! taken decisions in dimension order: `` {evidence `k` result `r`, evidence `k2`, evidence `k3`
+//! about `b` result `r`, capability `c` granted, decision `d` taken} ``. A bound dimension is
+//! written with its subject, in a state and in the bound refusal (`` evidence kind `k3` about `b`
+//! 4 ``); an unbound one without.
 //!
 //! # Refusals
 //!
@@ -433,7 +444,6 @@ fn bypasses(ir: &Ir, space: &Space<'_>, states: &[State], evaluated: &[Evaluated
         .filter(|action| action.requires.is_empty())
         .flat_map(|action| &action.may_produce)
         .collect();
-    let positions = space.kind_positions();
     let legitimate = |state: &State, at: usize| {
         let index = usize::try_from(space.index(state)).expect("the space is within the bound");
         evaluated[index].outcomes[at] == "legitimate"
@@ -443,11 +453,12 @@ fn bypasses(ir: &Ir, space: &Space<'_>, states: &[State], evaluated: &[Evaluated
         let Some(requirement) = outcome.requires.predicate() else {
             continue;
         };
-        // The dimensions of the governed kinds the requirement reads.
-        let read_governed: BTreeSet<usize> = space::kinds_read(ir, requirement)
+        // The evidence dimensions of governed kinds the requirement reads.
+        let read_governed: BTreeSet<usize> = space
+            .dimensions_read(ir, requirement)
             .into_iter()
-            .filter(|kind| governed.contains(kind))
-            .filter_map(|kind| positions.get(kind).copied())
+            .filter(|(_, kind)| governed.contains(kind))
+            .map(|(at, _)| at)
             .collect();
         if read_governed.is_empty() {
             continue;
@@ -479,7 +490,6 @@ fn failed_properties(
     evaluated: &[Evaluated],
     properties: &Properties,
 ) -> Vec<Finding> {
-    let positions = space.kind_positions();
     let mut ordered: Vec<_> = properties.properties.iter().collect();
     ordered.sort_by(|a, b| a.0.cmp(b.0));
     let mut findings = Vec::new();
@@ -511,11 +521,8 @@ fn failed_properties(
             .collect();
         let PropertyDependency::Claim(claim) = &property.independent_of;
         let true_when = &ir.claims.get(claim).expect("validated").true_when;
-        let erased: BTreeSet<usize> = space::kinds_read(ir, true_when)
-            .into_iter()
-            .filter_map(|kind| positions.get(kind).copied())
-            .collect();
-        // States that agree outside the erased kinds share a group; a state has a partner exactly
+        let erased: BTreeSet<usize> = space.dimensions_read(ir, true_when).into_keys().collect();
+        // States that agree outside the erased dimensions share a group; a state has a partner exactly
         // when its group holds more than one status.
         let mut groups: BTreeMap<State, Vec<usize>> = BTreeMap::new();
         for (index, state) in states.iter().enumerate() {

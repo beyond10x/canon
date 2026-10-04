@@ -17,7 +17,8 @@ hold everything marked shipped below. Nothing has been released; build from sour
 | [Evaluation documents](../reference/documents.md) | Shipped | `canon-case/1`, `canon-evidence/1`, `canon-decisions/1` and `canon-decision/1`, and the `canon-properties/1` document `canon check` reads. |
 | [`canon conform run`](../reference/conformance.md) | Shipped | Runs scenarios that compile a fixture and evaluate a case, with authority decisions, explicit decisions and an evaluation instant when a step gives them. |
 | ESS specification of the data model | Shipped | The model is specified under `ess/` and held to a hard gate; a test fails when the two differ. |
-| [Evidence bound to revisions](../reference/evaluation.md#refusals) | Shipped | Evidence applies only to the current revision of the artifact it names; a record bound to another revision is listed as excluded under each claim that reaches its kind, and one about an undeclared artifact is refused; scenario `CANON-EVIDENCE-001`. |
+| [Evidence bound to revisions](../reference/evaluation.md#refusals) | Shipped | Evidence applies only to the current revision of the artifact it names; a record bound to another revision is listed as excluded under each claim that reaches its kind (through a match that names a subject, only when it is about that artifact), and one about an undeclared artifact is refused; scenario `CANON-EVIDENCE-001`. |
+| [Subject-bound evidence matches](../concepts/evidence-and-revisions.md#evidence-about-one-artifact) | Shipped | An evidence match may name the declared artifact its record must be about (`subject`); a record about another artifact, even at its current revision, does not match it and is not listed as excluded under it, while a match without a subject reads records about any artifact; scenario `CANON-EVIDENCE-003`. |
 | [Evidence freshness](../reference/evaluation.md#refusals) | Shipped | An evidence kind may declare a `max_age`; at the instant given with `--at`, a record older than that is listed as excluded (`expired`), never counted as `FALSE`. Without `--at` nothing expires; scenario `CANON-EVIDENCE-002`. |
 | [Obligations](../reference/evaluation.md#sections) | Shipped | Each declared obligation is `open` or `discharged` by its discharge predicate over the claim values; scenario `CANON-OBLIGATION-001`. |
 | [Action admissibility](../reference/evaluation.md#sections) | Shipped | Each declared action is `admissible`, `approval-required` or `blocked`, from its precondition and the authority decisions given with `--authority`, with the reasons; scenario `CANON-AUTHORITY-001`. |
@@ -27,7 +28,7 @@ hold everything marked shipped below. Nothing has been released; build from sour
 | Invalidation rules | Planned | An upstream artifact change invalidates dependent claims. |
 | Structured explanation | Planned | A deterministic account of why each value is what it is. |
 | Semantic diff | Planned | Classify a protocol change as tightening, relaxation, breaking, expansion or no semantic change. |
-| Normative conformance suite | Started | The requirements below as runnable scenarios; scenarios cover `CANON-CLAIM-001`, `CANON-CLAIM-002`, `CANON-EVIDENCE-001`, `CANON-EVIDENCE-002`, `CANON-AUTHORITY-001`, `CANON-OUTCOME-001` and `CANON-OUTCOME-002`. |
+| Normative conformance suite | Started | The requirements below as runnable scenarios; scenarios cover `CANON-CLAIM-001`, `CANON-CLAIM-002`, `CANON-EVIDENCE-001`, `CANON-EVIDENCE-002`, `CANON-EVIDENCE-003`, `CANON-OBLIGATION-001`, `CANON-AUTHORITY-001`, `CANON-OUTCOME-001` and `CANON-OUTCOME-002`. |
 | Protocol composition, a shared evidence envelope | Open question | Listed as open in the design; no decision yet. |
 
 ## Commands that are not built
@@ -40,9 +41,10 @@ The design proposes `canon frontier`, `canon diff`, `canon inspect` and `canon c
 From the design document. Each is meant to become a conformance scenario. Today the scenarios in
 `conformance/scenarios` cover `CANON-CLAIM-001`, `CANON-CLAIM-002`, `CANON-EVIDENCE-001`,
 `CANON-EVIDENCE-002`, `CANON-AUTHORITY-001` and `CANON-OUTCOME-001`; `CANON-INDEPENDENCE-001`,
-`CANON-INVALIDATION-001` and `CANON-DETERMINISM-001` have none yet. Two more scenarios hold what
-the design lists no requirement for: `CANON-OBLIGATION-001`, obligations, and `CANON-OUTCOME-002`,
-outcomes that require an explicit decision.
+`CANON-INVALIDATION-001` and `CANON-DETERMINISM-001` have none yet. Three more scenarios hold what
+the design lists no requirement for: `CANON-OBLIGATION-001`, obligations, `CANON-OUTCOME-002`,
+outcomes that require an explicit decision, and `CANON-EVIDENCE-003`, evidence matches bound to a
+subject.
 
 | Requirement | Statement |
 |---|---|
@@ -61,8 +63,8 @@ outcomes that require an explicit decision.
 The design sets one goal for the first milestone: a protocol can deterministically derive a useful
 frontier and legitimate outcomes from a live case, evidence, authority and time, without owning
 execution or persistence. Parsing, validation, the compiled form, claim evaluation, revision
-binding, freshness, obligations, action admissibility, outcomes and decision-based outcomes are
-done; the rest is the planned work above. A service, database, UI, scheduling and workflow
+binding, subject-bound evidence matches, freshness, obligations, action admissibility, outcomes
+and decision-based outcomes are done; the rest is the planned work above. A service, database, UI, scheduling and workflow
 execution are not part of it.
 
 Read the full

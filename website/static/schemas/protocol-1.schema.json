@@ -336,7 +336,7 @@
       ]
     },
     "EvidenceMatch": {
-      "description": "Matches evidence of one kind, optionally with one result.",
+      "description": "Matches evidence of one kind, optionally with one result, and optionally only evidence about one declared artifact: a match that names a subject reads only the records whose subject it is.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -345,6 +345,9 @@
         },
         "result": {
           "type": "string"
+        },
+        "subject": {
+          "$ref": "#/$defs/Identifier"
         }
       },
       "required": [

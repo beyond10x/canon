@@ -6,10 +6,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Value, json};
 
 use super::Reader;
+use crate::eval::reads;
 use crate::ir::Ir;
 use crate::model::{
     ArtifactId, CapabilityId, ClaimId, DecisionName, EVIDENCE_FORMAT, EvidenceId, EvidenceKindId,
-    EvidenceRecord, OutcomeId, OutcomeRequirement, Predicate, Revision, one_line,
+    EvidenceMatch, EvidenceRecord, OutcomeId, OutcomeRequirement, Predicate, Revision, one_line,
 };
 
 /// The revision every artifact and the case itself have in a checked state, and the case revision
@@ -19,23 +20,46 @@ pub(super) const REVISION: &str = "r";
 /// Who takes an explicit decision in a checked state.
 const PRINCIPAL: &str = "canon-check";
 
-/// One evidence kind's dimension: its classes, each a result the protocol's predicates match for
-/// the kind, in code-point order, then `None`, a record with no result, which stands for every
-/// other result. A value is a set of classes, one bit each.
+/// One evidence dimension: the records of one kind about one artifact. Its classes are each
+/// result a match that reads such a record matches, in code-point order, then `None`, a record
+/// with no result, which stands for every other result. A value is a set of classes, one bit each.
 struct Kind<'a> {
     id: &'a EvidenceKindId,
+    /// A record of the dimension with no result: every record of it is this one, with its own id
+    /// and class. `None` when the protocol declares no artifact, and then there is no class.
+    record: Option<EvidenceRecord>,
+    /// Whether some match of the kind names the record's artifact as its subject. A dimension that
+    /// is not bound stands for records about an artifact no match of the kind names.
+    bound: bool,
     classes: Vec<Option<&'a str>>,
 }
 
-/// The dimensions, in order: each evidence kind, each capability, each decision name.
+impl Kind<'_> {
+    /// `` `k` ``, or `` `k` about `b` `` for a bound dimension.
+    fn name(&self) -> String {
+        let id = one_line(self.id.as_str());
+        match &self.record {
+            Some(record) if self.bound => {
+                format!("`{id}` about `{}`", one_line(record.subject.as_str()))
+            }
+            _ => format!("`{id}`"),
+        }
+    }
+
+    /// Whether `matching` reads the records of this dimension, by the evaluator's own rule.
+    fn read_by(&self, matching: &EvidenceMatch) -> bool {
+        self.record
+            .as_ref()
+            .is_some_and(|record| reads(&matching.kind, matching.subject.as_ref(), record))
+    }
+}
+
+/// The dimensions, in order: the evidence dimensions, each capability, each decision name.
 pub(super) struct Space<'a> {
     kinds: Vec<Kind<'a>>,
     capabilities: Vec<&'a CapabilityId>,
     /// Each decision name and every outcome that requires it.
     decisions: Vec<(&'a DecisionName, Vec<&'a OutcomeId>)>,
-    /// The artifact every evidence record is about; `None` when the protocol declares none, and
-    /// then no evidence kind has a class.
-    subject: Option<&'a ArtifactId>,
 }
 
 /// One state: a value for each dimension, in dimension order.
@@ -47,38 +71,58 @@ const GRANTED: u32 = 1;
 
 impl<'a> Space<'a> {
     pub(super) fn new(ir: &'a Ir) -> Self {
-        let subject = ir.artifacts.keys().next();
-        let mut results: BTreeMap<&EvidenceKindId, BTreeSet<&str>> = BTreeMap::new();
-        for (_, predicate) in readers(ir) {
-            predicate.visit(&mut |node| {
-                if let Predicate::Evidence(matching) = node
-                    && let Some(result) = &matching.result
-                {
-                    results
-                        .entry(&matching.kind)
-                        .or_default()
-                        .insert(result.as_str());
-                }
-            });
-        }
-        let kinds = ir
-            .evidence_kinds
-            .keys()
-            .map(|id| {
-                let classes = if subject.is_none() {
-                    Vec::new()
-                } else {
-                    results
-                        .get(id)
-                        .into_iter()
-                        .flatten()
-                        .map(|result| Some(*result))
-                        .chain([None])
-                        .collect()
-                };
-                Kind { id, classes }
-            })
+        let matches: Vec<&EvidenceMatch> = readers(ir)
+            .flat_map(|(_, predicate)| evidence_matches(predicate))
             .collect();
+        let mut kinds = Vec::new();
+        for id in ir.evidence_kinds.keys() {
+            if ir.artifacts.is_empty() {
+                kinds.push(Kind {
+                    id,
+                    record: None,
+                    bound: false,
+                    classes: Vec::new(),
+                });
+                continue;
+            }
+            let of_kind: Vec<&EvidenceMatch> = matches
+                .iter()
+                .copied()
+                .filter(|matching| matching.kind == *id)
+                .collect();
+            let named: BTreeSet<&ArtifactId> = of_kind
+                .iter()
+                .filter_map(|matching| matching.subject.as_ref())
+                .collect();
+            let mut about: Vec<(&ArtifactId, bool)> = named.iter().map(|a| (*a, true)).collect();
+            let unbound = named.is_empty() || of_kind.iter().any(|m| m.subject.is_none());
+            if unbound && let Some(other) = ir.artifacts.keys().find(|a| !named.contains(a)) {
+                about.push((other, false));
+            }
+            for (artifact, bound) in about {
+                let mut kind = Kind {
+                    id,
+                    record: Some(EvidenceRecord {
+                        format: EVIDENCE_FORMAT.to_owned(),
+                        id: EvidenceId::new("e"),
+                        kind: id.clone(),
+                        result: None,
+                        subject: artifact.clone(),
+                        subject_revision: Revision::new(REVISION),
+                        observed_at: None,
+                    }),
+                    bound,
+                    classes: Vec::new(),
+                };
+                let results: BTreeSet<&str> = of_kind
+                    .iter()
+                    .filter(|matching| kind.read_by(matching))
+                    .filter_map(|matching| matching.result.as_deref())
+                    .collect();
+                kind.classes = results.into_iter().map(Some).chain([None]).collect();
+                kinds.push(kind);
+            }
+        }
         let capabilities: BTreeSet<&CapabilityId> = ir
             .actions
             .values()
@@ -94,7 +138,6 @@ impl<'a> Space<'a> {
             kinds,
             capabilities: capabilities.into_iter().collect(),
             decisions: decisions.into_iter().collect(),
-            subject,
         }
     }
 
@@ -124,7 +167,7 @@ impl<'a> Space<'a> {
             let count = 1u128
                 .checked_shl(kind.classes.len() as u32)
                 .map_or_else(|| format!("2^{}", kind.classes.len()), |n| n.to_string());
-            format!("evidence kind `{}` {count}", one_line(kind.id.as_str()))
+            format!("evidence kind {} {count}", kind.name())
         });
         let capabilities = self
             .capabilities
@@ -166,12 +209,19 @@ impl<'a> Space<'a> {
             })
     }
 
-    /// The position of each evidence kind's dimension, by kind.
-    pub(super) fn kind_positions(&self) -> BTreeMap<&'a EvidenceKindId, usize> {
+    /// The positions of the evidence dimensions `predicate` reads, directly or through the claims
+    /// it tests, each with its kind: those whose records an evidence match it reaches reads.
+    pub(super) fn dimensions_read(
+        &self,
+        ir: &Ir,
+        predicate: &Predicate,
+    ) -> BTreeMap<usize, &'a EvidenceKindId> {
+        let matches = matches_read(ir, predicate);
         self.kinds
             .iter()
             .enumerate()
-            .map(|(at, kind)| (kind.id, at))
+            .filter(|(_, kind)| matches.iter().any(|matching| kind.read_by(matching)))
+            .map(|(at, kind)| (at, kind.id))
             .collect()
     }
 
@@ -214,10 +264,10 @@ impl<'a> Space<'a> {
                 if value & (1 << bit) == 0 {
                     continue;
                 }
-                let id = one_line(kind.id.as_str());
+                let name = kind.name();
                 items.push(match class {
-                    Some(result) => format!("evidence `{id}` result `{}`", one_line(result)),
-                    None => format!("evidence `{id}`"),
+                    Some(result) => format!("evidence {name} result `{}`", one_line(result)),
+                    None => format!("evidence {name}"),
                 });
             }
         }
@@ -241,24 +291,20 @@ impl<'a> Space<'a> {
         format!("{{{}}}", items.join(", "))
     }
 
-    /// The evidence records `state` stands for: one per present class, about the first declared
+    /// The evidence records `state` stands for: one per present class, about its dimension's
     /// artifact at [`REVISION`], with no observation instant, so none expires.
     pub(super) fn evidence(&self, state: &State) -> Vec<EvidenceRecord> {
         let mut records = Vec::new();
-        let Some(subject) = self.subject else {
-            return records;
-        };
         for (kind, value) in self.kinds.iter().zip(state) {
+            let Some(record) = &kind.record else {
+                continue;
+            };
             for (bit, class) in kind.classes.iter().enumerate() {
                 if value & (1 << bit) != 0 {
                     records.push(EvidenceRecord {
-                        format: EVIDENCE_FORMAT.to_owned(),
                         id: EvidenceId::new(format!("e{}", records.len())),
-                        kind: kind.id.clone(),
                         result: class.map(str::to_owned),
-                        subject: subject.clone(),
-                        subject_revision: Revision::new(REVISION),
-                        observed_at: None,
+                        ..record.clone()
                     });
                 }
             }
@@ -343,17 +389,26 @@ pub(super) fn readers(ir: &Ir) -> impl Iterator<Item = (Reader, &Predicate)> {
     claims.chain(obligations).chain(actions).chain(outcomes)
 }
 
-/// Every evidence kind `predicate` reads: those its evidence matches name, and those every claim
-/// it tests reads, through any number of claim references, each claim visited once.
-pub(super) fn kinds_read<'a>(ir: &'a Ir, predicate: &'a Predicate) -> BTreeSet<&'a EvidenceKindId> {
-    let mut kinds = BTreeSet::new();
+/// The evidence matches in `predicate` itself, in source order.
+fn evidence_matches(predicate: &Predicate) -> Vec<&EvidenceMatch> {
+    let mut matches = Vec::new();
+    predicate.visit(&mut |node| {
+        if let Predicate::Evidence(matching) = node {
+            matches.push(matching);
+        }
+    });
+    matches
+}
+
+/// Every evidence match `predicate` reaches: its own, and those of every claim it tests, through
+/// any number of claim references, each claim visited once.
+fn matches_read<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<&'a EvidenceMatch> {
+    let mut matches = Vec::new();
     let mut visited: BTreeSet<&ClaimId> = BTreeSet::new();
     let mut pending = vec![predicate];
     while let Some(next) = pending.pop() {
         next.visit(&mut |node| match node {
-            Predicate::Evidence(matching) => {
-                kinds.insert(&matching.kind);
-            }
+            Predicate::Evidence(matching) => matches.push(matching),
             Predicate::Claim(test) => {
                 if visited.insert(&test.claim)
                     && let Some(claim) = ir.claims.get(&test.claim)
@@ -364,5 +419,13 @@ pub(super) fn kinds_read<'a>(ir: &'a Ir, predicate: &'a Predicate) -> BTreeSet<&
             _ => {}
         });
     }
-    kinds
+    matches
+}
+
+/// Every evidence kind `predicate` reads: the kinds of every evidence match it reaches.
+pub(super) fn kinds_read<'a>(ir: &'a Ir, predicate: &'a Predicate) -> BTreeSet<&'a EvidenceKindId> {
+    matches_read(ir, predicate)
+        .into_iter()
+        .map(|matching| &matching.kind)
+        .collect()
 }

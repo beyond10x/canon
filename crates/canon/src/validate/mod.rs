@@ -12,9 +12,11 @@
 //! 4. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
 //!    or `d`, or that are but are too long to count in seconds (each with its own message), in the
 //!    order the evidence kinds are written;
-//! 5. unresolved references: those in claims first, then those in obligations (their discharge
-//!    predicates, each followed by every evidence match it holds, which a discharge predicate may
-//!    not: it tests only claim values), then those in actions, then those in outcomes;
+//! 5. unresolved references (a claim, an evidence kind, or the artifact an evidence match names as
+//!    its subject, which is reported after the kind it is written beside): those in claims first,
+//!    then those in obligations (their discharge predicates, each followed by every evidence match
+//!    it holds, which a discharge predicate may not: it tests only claim values), then those in
+//!    actions, then those in outcomes;
 //!    within a section, in the order its declarations are written, and within a declaration, in
 //!    the order its references are written;
 //! 6. cycles between claims.
@@ -26,8 +28,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use crate::model::{
-    ActionId, ClaimId, EvidenceKindId, FORMAT, ObligationId, OutcomeId, Predicate, Protocol,
-    is_identifier, one_line,
+    ActionId, ArtifactId, ClaimId, EvidenceKindId, FORMAT, ObligationId, OutcomeId, Predicate,
+    Protocol, is_identifier, one_line,
 };
 
 /// What an identifier names: the protocol itself, a declaration section (named by the singular noun
@@ -100,6 +102,11 @@ pub enum Problem {
         referrer: Referrer,
         kind: EvidenceKindId,
     },
+    /// An evidence match names as its subject an artifact that is not declared.
+    UndeclaredArtifact {
+        referrer: Referrer,
+        artifact: ArtifactId,
+    },
     /// An evidence kind's `max_age` is not a whole number without leading zeros, followed by `s`,
     /// `m`, `h` or `d`, or is too long to count in seconds.
     InvalidMaxAge {
@@ -128,6 +135,7 @@ impl Problem {
             Problem::DuplicateIdentifier { .. } => "duplicate-identifier",
             Problem::UndeclaredClaim { .. } => "undeclared-claim",
             Problem::UndeclaredEvidenceKind { .. } => "undeclared-evidence-kind",
+            Problem::UndeclaredArtifact { .. } => "undeclared-artifact",
             Problem::InvalidMaxAge { .. } => "invalid-max-age",
             Problem::EvidenceInDischarge { .. } => "evidence-in-discharge",
             Problem::ClaimCycle { .. } => "claim-cycle",
@@ -158,6 +166,11 @@ impl fmt::Display for Problem {
                 f,
                 "{referrer} references evidence kind `{}`, which is not declared",
                 one_line(kind.as_str())
+            ),
+            Problem::UndeclaredArtifact { referrer, artifact } => write!(
+                f,
+                "{referrer} references artifact `{}`, which is not declared",
+                one_line(artifact.as_str())
             ),
             Problem::InvalidMaxAge {
                 kind,
@@ -357,8 +370,8 @@ fn duplicates(section: Section, ids: &[&str], problems: &mut Vec<Problem>) {
     }
 }
 
-/// Reports every claim and evidence kind the predicate references that is not declared, in the
-/// order the predicate is written.
+/// Reports every claim, evidence kind and evidence subject the predicate references that is not
+/// declared, in the order the predicate is written.
 fn references(
     protocol: &Protocol,
     referrer: &Referrer,
@@ -373,11 +386,21 @@ fn references(
                 claim: test.claim.clone(),
             });
         }
-        Predicate::Evidence(matching) if !protocol.evidence_kinds.contains(&matching.kind) => {
-            unresolved.push(Problem::UndeclaredEvidenceKind {
-                referrer: referrer.clone(),
-                kind: matching.kind.clone(),
-            });
+        Predicate::Evidence(matching) => {
+            if !protocol.evidence_kinds.contains(&matching.kind) {
+                unresolved.push(Problem::UndeclaredEvidenceKind {
+                    referrer: referrer.clone(),
+                    kind: matching.kind.clone(),
+                });
+            }
+            if let Some(subject) = &matching.subject
+                && !protocol.artifacts.contains(subject)
+            {
+                unresolved.push(Problem::UndeclaredArtifact {
+                    referrer: referrer.clone(),
+                    artifact: subject.clone(),
+                });
+            }
         }
         _ => {}
     });
@@ -479,6 +502,36 @@ mod tests {
                     .replace("{evidence: {kind: z}}", "{claim: c}")
                     .replace("{claim: x}", "{claim: c}")
                     .replace("{claim: y}", "{claim: c}")
+            ),
+            Vec::<String>::new()
+        );
+    }
+
+    /// An evidence match's subject resolves to a declared artifact in every section a predicate
+    /// appears in; one that does not is refused after the kind written beside it, naming the
+    /// declaration and the artifact. A declared subject is not refused.
+    #[test]
+    fn an_undeclared_evidence_subject_is_refused_naming_it() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            artifacts: {a: {}}\nevidence_kinds: {k: {}}\n\
+            claims: {c: {true_when: {all: [{evidence: {kind: z, subject: x}}, {evidence: {kind: k, subject: a}}]}}}\n\
+            actions: {act: {precondition: {evidence: {kind: k, subject: y}}}}\n\
+            outcomes: {o: {requires: {not: {evidence: {kind: k, subject: w}}}}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "undeclared-evidence-kind: claim `c` references evidence kind `z`, which is not declared",
+                "undeclared-artifact: claim `c` references artifact `x`, which is not declared",
+                "undeclared-artifact: action `act` references artifact `y`, which is not declared",
+                "undeclared-artifact: outcome `o` references artifact `w`, which is not declared",
+            ]
+        );
+        assert_eq!(
+            problems(
+                &source
+                    .replace("kind: z, subject: x", "kind: k, subject: a")
+                    .replace("subject: y", "subject: a")
+                    .replace("subject: w", "subject: a")
             ),
             Vec::<String>::new()
         );
