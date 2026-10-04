@@ -1,0 +1,91 @@
+format: canon-conformance/1
+id: RUNNER-COMPILE-PASSES
+covers: []
+fixture: fixtures/investigation/protocol.yaml
+steps:
+  - id: compile
+    compile: {}
+    expect:
+      canon-ir: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "description": "Try to refute the explanation.",
+              "effect": null,
+              "may_produce": [
+                {
+                  "evidence": "falsification_attempt"
+                }
+              ],
+              "precondition": {
+                "all": []
+              },
+              "requires": []
+            },
+            "inspect": {
+              "description": "Look for observations bearing on the explanation.",
+              "effect": null,
+              "may_produce": [
+                {
+                  "evidence": "supporting_observation"
+                }
+              ],
+              "precondition": {
+                "all": []
+              },
+              "requires": []
+            }
+          },
+          "artifacts": {
+            "explanation": {
+              "description": "The explanation under investigation."
+            }
+          },
+          "claims": {
+            "explanation.supported": {
+              "description": "The explanation is supported by observation and has survived falsification.",
+              "true_when": {
+                "all": [
+                  {
+                    "evidence": {
+                      "kind": "falsification_attempt",
+                      "result": "survived"
+                    }
+                  },
+                  {
+                    "evidence": {
+                      "kind": "supporting_observation",
+                      "result": null
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "evidence_kinds": {
+            "falsification_attempt": {
+              "description": "An attempt to refute the explanation; its result is survived or refuted."
+            },
+            "supporting_observation": {
+              "description": "An observation consistent with the explanation."
+            }
+          },
+          "format": "canon-ir/1",
+          "obligations": {},
+          "outcomes": {
+            "supported": {
+              "description": "The explanation is supported.",
+              "requires": {
+                "claim": {
+                  "id": "explanation.supported",
+                  "is": "true"
+                }
+              }
+            }
+          },
+          "protocol": {
+            "description": "Decide whether an explanation is supported by observation and survives an attempt to falsify it.",
+            "id": "investigation",
+            "revision": 1
+          }
+        }
