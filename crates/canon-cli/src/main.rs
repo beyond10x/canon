@@ -8,7 +8,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
-use b10x_canon::{conform, ir, model, validate};
+use b10x_canon::{conform, eval, ir, model, validate};
 
 /// A document was read and rejected.
 const REJECTED: u8 = 1;
@@ -40,6 +40,19 @@ enum Command {
         #[arg(long)]
         path: PathBuf,
     },
+    /// Evaluate every claim of a compiled protocol for a case from an evidence set, and print the
+    /// `canon-decision/1` document.
+    Evaluate {
+        /// The compiled protocol: `canon-ir/1` exactly as `canon compile` prints it.
+        #[arg(long)]
+        ir: PathBuf,
+        /// The `canon-case/1` case snapshot.
+        #[arg(long)]
+        case: PathBuf,
+        /// A directory holding only `canon-evidence/1` records, one per `*.yaml` or `*.json` file.
+        #[arg(long)]
+        evidence: PathBuf,
+    },
     /// Conformance scenarios.
     Conform {
         #[command(subcommand)]
@@ -64,6 +77,79 @@ fn main() -> ExitCode {
         Command::Conform {
             command: ConformCommand::Run { scenarios },
         } => conform_run_command(&scenarios),
+        Command::Evaluate { ir, case, evidence } => evaluate_command(&ir, &case, &evidence),
+    }
+}
+
+/// Prints `error[unreadable]: <path>: <why>` and returns the exit status for an unreadable input.
+fn unreadable(path: &Path, why: impl std::fmt::Display) -> ExitCode {
+    eprintln!(
+        "error[unreadable]: {}: {why}",
+        model::one_line(&path.display().to_string())
+    );
+    ExitCode::from(UNREADABLE)
+}
+
+/// Whether a file name is an evidence record's: `*.yaml` or `*.json`.
+fn is_record_name(name: &std::ffi::OsStr) -> bool {
+    Path::new(name)
+        .extension()
+        .is_some_and(|ext| ext == "yaml" || ext == "json")
+}
+
+/// Reads the compiled protocol, the case snapshot and every evidence record of the evidence
+/// directory, and hands them to the library, which decides everything else. The directory holds
+/// only records: every entry must be a regular file (a symbolic link to one counts) named `*.yaml`
+/// or `*.json`, read in sorted file-name order. Any other entry — another file, a subdirectory —
+/// is refused as unreadable, naming it, rather than skipped, so no evidence the operator put
+/// there is silently dropped. A file that cannot be read exits 2; a refusal exits 1 naming its
+/// code.
+fn evaluate_command(ir_path: &Path, case_path: &Path, evidence_dir: &Path) -> ExitCode {
+    let read = |path: &Path| read_text(path).map_err(|error| unreadable(path, error));
+    let inputs = (|| {
+        let ir = read(ir_path)?;
+        let case = read(case_path)?;
+        let mut names = Vec::new();
+        for entry in std::fs::read_dir(evidence_dir).map_err(|e| unreadable(evidence_dir, e))? {
+            names.push(entry.map_err(|e| unreadable(evidence_dir, e))?.file_name());
+        }
+        names.sort();
+        let mut evidence = Vec::with_capacity(names.len());
+        for name in &names {
+            let path = evidence_dir.join(name);
+            let metadata = std::fs::metadata(&path).map_err(|e| unreadable(&path, e))?;
+            if !metadata.is_file() || !is_record_name(name) {
+                return Err(unreadable(
+                    &path,
+                    "not an evidence record: the evidence directory holds only `*.yaml` and \
+                     `*.json` files",
+                ));
+            }
+            evidence.push(read(&path)?);
+        }
+        Ok((ir, case, evidence))
+    })();
+    let (ir, case, evidence) = match inputs {
+        Ok(inputs) => inputs,
+        Err(code) => return code,
+    };
+    let decision = eval::read_ir(&ir).and_then(|ir| {
+        let case = eval::read_case(&case)?;
+        let evidence = evidence
+            .iter()
+            .map(|text| eval::read_evidence(text))
+            .collect::<Result<Vec<_>, _>>()?;
+        eval::evaluate(&ir, &case, &evidence)
+    });
+    match decision {
+        Ok(decision) => {
+            print!("{}", eval::render(&decision));
+            ExitCode::SUCCESS
+        }
+        Err(refusal) => {
+            eprintln!("error[{}]: {refusal}", refusal.code());
+            ExitCode::from(REJECTED)
+        }
     }
 }
 

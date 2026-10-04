@@ -113,17 +113,18 @@ fn a_crlf_inside_the_expectation_differs_at_its_line() {
 
 /// The scenario story:three-valued-claims's acceptance describes — four evaluate steps, no
 /// compile step, evidence records as mappings, no authority, no instant — parses into four
-/// evaluate steps, and until that story wires the evaluator it fails at the first.
+/// evaluate steps, and now that story wires the evaluator it is evaluated from the first: a
+/// decision that is not the one expected fails there.
 #[test]
-fn a_three_valued_claims_shaped_scenario_parses_and_fails_unsupported_at_its_first_step() {
+fn a_three_valued_claims_shaped_scenario_parses_and_is_evaluated_from_its_first_step() {
     let evaluate = |id: &str, evidence: &str| {
         format!(
-            "  - id: {id}\n    evaluate:\n      case: {{format: canon-case/1, id: c1, protocol: investigation, artifacts: {{explanation: 1}}}}\n      evidence: {evidence}\n    expect:\n      decision: |\n        {{\"claims\": {{}}}}\n"
+            "  - id: {id}\n    evaluate:\n      case: {{format: canon-case/1, id: c1, protocol: investigation, artifacts: {{explanation: {{revision: r1}}}}}}\n      evidence: {evidence}\n    expect:\n      decision: |\n        {{\"claims\": {{}}}}\n"
         )
     };
-    let observation = "{id: e1, kind: supporting_observation, result: observed, subject: explanation, subject_revision: 1}";
-    let survived = "{id: e2, kind: falsification_attempt, result: survived, subject: explanation, subject_revision: 1}";
-    let refuted = "{id: e3, kind: falsification_attempt, result: refuted, subject: explanation, subject_revision: 1}";
+    let observation = "{format: canon-evidence/1, id: e1, kind: supporting_observation, result: observed, subject: explanation, subject_revision: r1}";
+    let survived = "{format: canon-evidence/1, id: e2, kind: falsification_attempt, result: survived, subject: explanation, subject_revision: r1}";
+    let refuted = "{format: canon-evidence/1, id: e3, kind: falsification_attempt, result: refuted, subject: explanation, subject_revision: r1}";
     let text = format!(
         "format: canon-conformance/1\nid: CANON-CLAIM-001\ncovers: [CANON-CLAIM-001, CANON-CLAIM-002]\nfixture: fixtures/investigation/three-valued-claims.yaml\nsteps:\n{}{}{}{}",
         evaluate("no-evidence", "[]"),
@@ -156,7 +157,7 @@ fn a_three_valued_claims_shaped_scenario_parses_and_fails_unsupported_at_its_fir
         conform::run(&scenario, Ok(&fixture())),
         Verdict::Failed {
             step: "no-evidence".to_owned(),
-            reason: "evaluate steps are not supported yet".to_owned()
+            reason: "canon-decision/1 differs from the expectation at line 1".to_owned()
         }
     );
 }

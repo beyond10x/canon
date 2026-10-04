@@ -1,7 +1,8 @@
 //! Canon's ESS specification and its hand-written Rust model stay equal.
 //!
-//! The `protocol/1` model under `crates/canon/src/model/` predates its specification under `ess/`
-//! and stays hand-written. This test compiles the specification (`ess specify compile --format
+//! The model under `crates/canon/src/model/` — the `protocol/1` source model and the
+//! `canon-case/1`, `canon-evidence/1` and `canon-decision/1` documents — is hand-written beside its
+//! specification under `ess/`. This test compiles the specification (`ess specify compile --format
 //! json`) and reads the model's Rust source, then compares, for every entity and value type the
 //! specification declares, its fields and their types and every enum or union variant. A model
 //! change that leaves `ess/` behind fails here, naming what differs.
@@ -14,11 +15,16 @@
 //!   of unit variants is an `enum`; an enum of one-payload variants is a `union`. A variant's
 //!   specification name is its Rust name in snake case.
 //! * `String` is `String`; `i64` is `Integer`; `u64` is an `Integer` field whose owner states the
-//!   invariant `<field> >= 0`; `Option<T>` is `Optional<T>`, `Vec<T>` is `List<T>`, `Box<T>` is `T`
-//!   and `Declarations<K, V>` is `Map<K, V>`. Any other Rust type matches nothing.
-//! * The entity `Protocol` is the Rust struct `Protocol` with its `protocol: ProtocolHeader` field
-//!   written in place: the header's `id` is the entity's identity `protocol_id`, and its other
-//!   fields are entity fields.
+//!   invariant `<field> >= 0`, or one [`NON_NEGATIVE`] lists; `Option<T>` is `Optional<T>`,
+//!   `Vec<T>` is `List<T>`, `Box<T>` is `T` and `Declarations<K, V>` is `Map<K, V>`. Any other Rust
+//!   type matches nothing.
+//! * Each entity is the Rust struct [`ENTITIES`] names. The entity `Protocol` is the Rust struct
+//!   `Protocol` with its `protocol: ProtocolHeader` field written in place: the header's `id` is
+//!   the entity's identity `protocol_id`, and its other fields are entity fields. The entity `Case`
+//!   is the Rust struct `Case`: its `id` field is the identity `id`, its other fields are entity
+//!   fields. An entity the specification declares and [`ENTITIES`] does not map fails the test.
+//! * The value types compared are those the entities reach, and those [`DOCUMENTS`] reach: the
+//!   evidence record and the decision, which no entity holds.
 //! * Only module-level items count. Items inside functions, inline modules (`mod tests { … }`) and
 //!   anything under `#[cfg(test)]` are not the model. Two module-level types with one name, in any
 //!   model files, fail the test rather than one shadowing the other.
@@ -35,11 +41,41 @@ use std::process::Command;
 use serde_yaml_ng::Value;
 
 const DOMAIN: &str = "canon.protocol";
-const ENTITY: &str = "Protocol";
-/// The Rust field of [`ENTITY`] whose struct is written in place.
-const HEADER_FIELD: &str = "protocol";
-/// The header field that is the entity's identity, and the identity's specification name.
-const HEADER_IDENTITY: (&str, &str) = ("id", "protocol_id");
+
+/// How one entity of the specification is written in the Rust model.
+struct EntityMapping {
+    /// The entity's local name, which is also the Rust struct's name.
+    name: &'static str,
+    /// The Rust field whose struct is written in place, if any.
+    header: Option<&'static str>,
+    /// The Rust field that is the entity's identity (in the header, when there is one), and the
+    /// identity's specification name.
+    identity: (&'static str, &'static str),
+}
+
+/// Every entity the specification declares.
+const ENTITIES: &[EntityMapping] = &[
+    EntityMapping {
+        name: "Protocol",
+        header: Some("protocol"),
+        identity: ("id", "protocol_id"),
+    },
+    EntityMapping {
+        name: "Case",
+        header: None,
+        identity: ("id", "id"),
+    },
+];
+
+/// Value types no entity holds that are still part of the model: the evidence record an
+/// evaluation reads and the decision it writes. They, and what they reach, are compared too.
+const DOCUMENTS: &[&str] = &["EvidenceRecord", "Decision"];
+
+/// `(owner, field)` Integer fields that are never negative although `ess/` cannot say so: ess
+/// 0.52.0 refuses an invariant on a struct type no view publishes (ESS-SYNTH-013), and this
+/// specification has no views. Each is read as if its owner stated `<field> >= 0`, so its Rust
+/// type must be `u64`. Remove an entry once `ess/` can state the bound itself.
+const NON_NEGATIVE: &[(&str, &str)] = &[("Decision", "protocol_revision")];
 
 /// The tree under test, read at run time: a test binary reused from a shared target directory
 /// would otherwise check the tree it was built from.
@@ -96,11 +132,17 @@ impl Shape {
     }
 }
 
-/// One side of the comparison: the entity's identity and fields, and every value type.
-#[derive(Debug, Clone)]
-struct Model {
+/// One entity: its identity and its fields.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Entity {
     identity: (String, Ty),
     fields: Vec<(String, Ty)>,
+}
+
+/// One side of the comparison: every entity by name, and every value type.
+#[derive(Debug, Clone)]
+struct Model {
+    entities: BTreeMap<String, Entity>,
     types: BTreeMap<String, Shape>,
 }
 
@@ -192,7 +234,8 @@ fn ir_ty(value: &Value, map_key: Option<&String>) -> Ty {
 }
 
 /// The fields of a struct or entity whose compiled declaration is `owner_ir`. An `Integer` field
-/// the owner bounds with the invariant `<field> >= 0` is a non-negative integer.
+/// the owner bounds with the invariant `<field> >= 0`, or that [`NON_NEGATIVE`] lists, is a
+/// non-negative integer.
 fn ir_fields(
     owner: &str,
     owner_ir: &Value,
@@ -213,7 +256,8 @@ fn ir_fields(
             let name = field["name"].as_str().expect("field name").to_owned();
             let key = keys.get(&(owner.to_owned(), name.clone()));
             let mut ty = ir_ty(&field["type_ref"], key);
-            if ty == integer() && invariants.contains(&format!("{name} >= 0")) {
+            let listed = NON_NEGATIVE.contains(&(owner, name.as_str()));
+            if ty == integer() && (listed || invariants.contains(&format!("{name} >= 0"))) {
                 ty = non_negative_integer();
             }
             (name, ty)
@@ -237,31 +281,28 @@ fn specification() -> Model {
 fn specification_at(root: &Path) -> Model {
     let ir = compiled_ir(root);
     let keys = authored_map_keys(root);
-    let entity = &ir["entities"][format!("{DOMAIN}.{ENTITY}").as_str()];
-    assert!(
-        entity.is_mapping(),
-        "the specification declares no entity {DOMAIN}.{ENTITY}"
-    );
-    let entities = ir["entities"].as_mapping().expect("entities map");
-    assert_eq!(
-        entities.len(),
-        1,
-        "the specification declares one entity, {ENTITY}"
-    );
-    let identity = (
-        entity["identity"]["name"]
-            .as_str()
-            .expect("identity name")
-            .to_owned(),
-        ir_ty(&entity["identity"]["type_ref"], None),
-    );
-    let fields = ir_fields(ENTITY, entity, &keys);
-    let state_type = entity["state_type"].as_str().unwrap_or_default();
+    let mut entities = BTreeMap::new();
+    let mut state_types = BTreeSet::new();
+    for (name, entity) in ir["entities"].as_mapping().expect("entities map") {
+        let name = local(name.as_str().expect("entity name"));
+        let identity = (
+            entity["identity"]["name"]
+                .as_str()
+                .expect("identity name")
+                .to_owned(),
+            ir_ty(&entity["identity"]["type_ref"], None),
+        );
+        let fields = ir_fields(&name, entity, &keys);
+        if let Some(state_type) = entity["state_type"].as_str() {
+            state_types.insert(state_type.to_owned());
+        }
+        entities.insert(name, Entity { identity, fields });
+    }
 
     let mut types = BTreeMap::new();
     for (name, declaration) in ir["types"].as_mapping().expect("types map") {
         let name = name.as_str().expect("type name");
-        if name == state_type || !name.starts_with(&format!("{DOMAIN}.")) {
+        if state_types.contains(name) || !name.starts_with(&format!("{DOMAIN}.")) {
             continue;
         }
         let name = local(name);
@@ -289,11 +330,7 @@ fn specification_at(root: &Path) -> Model {
         };
         types.insert(name, shape);
     }
-    Model {
-        identity,
-        fields,
-        types,
-    }
+    Model { entities, types }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -948,41 +985,26 @@ fn rust_model(sources: &[(String, String)]) -> Model {
         }
     }
 
-    let Some(Shape::Struct(entity_fields)) = all.get(ENTITY).cloned() else {
-        panic!("the Rust model has no struct {ENTITY}");
-    };
-    let mut identity = None;
-    let mut fields = Vec::new();
-    for (name, ty) in entity_fields {
-        if name != HEADER_FIELD {
-            fields.push((name, ty));
-            continue;
-        }
-        let Ty::Declared(header) = &ty else {
-            panic!("{ENTITY}.{HEADER_FIELD} is a struct");
-        };
-        let Some(Shape::Struct(header_fields)) = all.get(header) else {
-            panic!("{ENTITY}.{HEADER_FIELD} is a struct");
-        };
-        for (name, ty) in header_fields {
-            if name == HEADER_IDENTITY.0 {
-                identity = Some((HEADER_IDENTITY.1.to_owned(), ty.clone()));
-            } else {
-                fields.push((name.clone(), ty.clone()));
-            }
-        }
+    let mut entities = BTreeMap::new();
+    for mapping in ENTITIES {
+        entities.insert(mapping.name.to_owned(), rust_entity(mapping, &all));
     }
-    let identity = identity.unwrap_or_else(|| {
-        panic!(
-            "{ENTITY}.{HEADER_FIELD} has no `{}` field",
-            HEADER_IDENTITY.0
-        )
-    });
 
-    // Keep only the types the entity reaches.
+    // Keep only the types the entities and the documents reach.
     let mut types = BTreeMap::new();
-    let mut pending: Vec<Ty> = fields.iter().map(|(_, ty)| ty.clone()).collect();
-    pending.push(identity.1.clone());
+    let mut pending: Vec<Ty> = entities
+        .values()
+        .flat_map(|entity: &Entity| {
+            let mut reached: Vec<Ty> = entity.fields.iter().map(|(_, ty)| ty.clone()).collect();
+            reached.push(entity.identity.1.clone());
+            reached
+        })
+        .collect();
+    pending.extend(
+        DOCUMENTS
+            .iter()
+            .map(|name| Ty::Declared((*name).to_owned())),
+    );
     while let Some(ty) = pending.pop() {
         match ty {
             Ty::Primitive(_) => {}
@@ -1012,11 +1034,43 @@ fn rust_model(sources: &[(String, String)]) -> Model {
             }
         }
     }
-    Model {
-        identity,
-        fields,
-        types,
+    Model { entities, types }
+}
+
+/// One entity as the Rust model writes it: the struct `mapping` names, its header (if any)
+/// written in place, its identity field taken out of the fields.
+fn rust_entity(mapping: &EntityMapping, all: &Definitions) -> Entity {
+    let name = mapping.name;
+    let Some(Shape::Struct(entity_fields)) = all.get(name).cloned() else {
+        panic!("the Rust model has no struct {name}");
+    };
+    let (identity_field, identity_name) = mapping.identity;
+    let mut written = Vec::new();
+    for (field, ty) in entity_fields {
+        if Some(field.as_str()) != mapping.header {
+            written.push((field, ty));
+            continue;
+        }
+        let Ty::Declared(header) = &ty else {
+            panic!("{name}.{field} is a struct");
+        };
+        let Some(Shape::Struct(header_fields)) = all.get(header) else {
+            panic!("{name}.{field} is a struct");
+        };
+        written.extend(header_fields.iter().cloned());
     }
+    let mut identity = None;
+    let mut fields = Vec::new();
+    for (field, ty) in written {
+        if field == identity_field && identity.is_none() {
+            identity = Some((identity_name.to_owned(), ty));
+        } else {
+            fields.push((field, ty));
+        }
+    }
+    let identity =
+        identity.unwrap_or_else(|| panic!("{name} has no `{identity_field}` identity field"));
+    Entity { identity, fields }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1054,17 +1108,41 @@ fn compare_members(
 /// Every difference between the two models, in a stable order.
 fn differences(spec: &Model, rust: &Model) -> Vec<String> {
     let mut out = Vec::new();
-    if spec.identity != rust.identity {
-        out.push(format!(
-            "{ENTITY} identity: ess/ says {}: {}, Rust says {}: {}",
-            spec.identity.0, spec.identity.1, rust.identity.0, rust.identity.1
-        ));
+    for (entity, rust_entity) in &rust.entities {
+        let Some(spec_entity) = spec.entities.get(entity) else {
+            out.push(format!(
+                "Rust entity `{entity}` is not an entity ess/ declares"
+            ));
+            continue;
+        };
+        if spec_entity.identity != rust_entity.identity {
+            out.push(format!(
+                "{entity} identity: ess/ says {}: {}, Rust says {}: {}",
+                spec_entity.identity.0,
+                spec_entity.identity.1,
+                rust_entity.identity.0,
+                rust_entity.identity.1
+            ));
+        }
+        compare_members(
+            entity,
+            "field",
+            &spec_entity.fields,
+            &rust_entity.fields,
+            &mut out,
+        );
     }
-    compare_members(ENTITY, "field", &spec.fields, &rust.fields, &mut out);
+    for entity in spec.entities.keys() {
+        if !rust.entities.contains_key(entity) {
+            out.push(format!(
+                "ess/ entity `{entity}` has no Rust struct this test maps (ENTITIES)"
+            ));
+        }
+    }
     for (name, rust_shape) in &rust.types {
         let Some(spec_shape) = spec.types.get(name) else {
             out.push(format!(
-                "Rust {} `{name}` is reached from {ENTITY} but ess/ does not declare it",
+                "Rust {} `{name}` is reached from the Rust model but ess/ does not declare it",
                 rust_shape.kind()
             ));
             continue;
@@ -1091,7 +1169,7 @@ fn differences(spec: &Model, rust: &Model) -> Vec<String> {
     for (name, shape) in &spec.types {
         if !rust.types.contains_key(name) {
             out.push(format!(
-                "ess/ {} `{name}` is not reached from the Rust {ENTITY}",
+                "ess/ {} `{name}` is not reached from the Rust model",
                 shape.kind()
             ));
         }
@@ -1146,12 +1224,26 @@ fn assert_named(spec: &Model, rust: &Model, needles: &[&str]) {
 fn specification_and_model_are_equal() {
     let spec = specification();
     let rust = rust_model(&model_sources());
+    let entities_with_fields = |model: &Model| {
+        model
+            .entities
+            .values()
+            .filter(|entity| !entity.fields.is_empty())
+            .count()
+    };
     assert!(
-        !spec.fields.is_empty() && !spec.types.is_empty() && !rust.types.is_empty(),
-        "nothing was compared: ess/ declares {} field(s) and {} type(s), the Rust model reaches {} type(s)",
-        spec.fields.len(),
+        entities_with_fields(&spec) == ENTITIES.len()
+            && entities_with_fields(&rust) == ENTITIES.len()
+            && DOCUMENTS.iter().all(|name| spec.types.contains_key(*name))
+            && DOCUMENTS.iter().all(|name| rust.types.contains_key(*name)),
+        "nothing or too little was compared: ess/ declares {} entities with fields and {} type(s), \
+         the Rust model has {} entities with fields and reaches {} type(s); every one of the {} \
+         entities and the documents {DOCUMENTS:?} must be on both sides",
+        entities_with_fields(&spec),
         spec.types.len(),
-        rust.types.len()
+        entities_with_fields(&rust),
+        rust.types.len(),
+        ENTITIES.len()
     );
     assert_equal(&spec, &rust);
 }
@@ -1460,4 +1552,96 @@ fn an_unlisted_file_under_ess_does_not_supply_map_keys() {
     let spec = specification_at(&root);
     let rust = rust_model(&model_sources());
     assert_named(&spec, &rust, &["Protocol.claims", "OutcomeId", "ClaimId"]);
+}
+
+/// The second entity is compared like the first: a field added to `Case` is named.
+#[test]
+fn a_field_added_to_the_case_is_named() {
+    let spec = specification();
+    let rust = edited(
+        "case.rs",
+        "pub struct Case {",
+        "pub struct Case {\n    pub probe_field: String,",
+    );
+    assert_named(&spec, &rust, &["Case", "probe_field", "not in ess/"]);
+}
+
+/// The case's identity is compared: a case id that is plain text is named.
+#[test]
+fn a_changed_case_identity_is_named() {
+    let spec = specification();
+    let rust = edited("case.rs", "pub id: CaseId,", "pub id: String,");
+    assert_named(&spec, &rust, &["Case identity", "CaseId", "string"]);
+}
+
+/// A type only the case reaches is compared.
+#[test]
+fn a_changed_case_artifact_field_is_named() {
+    let spec = specification();
+    let rust = edited(
+        "case.rs",
+        "pub revision: Revision,",
+        "pub revision: String,",
+    );
+    assert_named(
+        &spec,
+        &rust,
+        &["CaseArtifact.revision", "Revision", "string"],
+    );
+}
+
+/// The documents no entity holds are compared: a field removed from the evidence record is named.
+#[test]
+fn a_field_removed_from_the_evidence_record_is_named() {
+    let spec = specification();
+    let rust = edited("evidence.rs", "pub subject: ArtifactId,", "");
+    assert_named(
+        &spec,
+        &rust,
+        &["EvidenceRecord", "subject", "not in the Rust model"],
+    );
+}
+
+/// The same for the decision, through the claim entry only the decision reaches.
+#[test]
+fn a_changed_claim_decision_value_is_named() {
+    let spec = specification();
+    let rust = edited("decision.rs", "pub value: Truth,", "pub value: String,");
+    assert_named(&spec, &rust, &["ClaimDecision.value", "Truth", "string"]);
+}
+
+/// `NON_NEGATIVE` reads the decision's protocol revision as `>= 0`: a signed one is named.
+#[test]
+fn a_signed_decision_revision_is_named() {
+    let spec = specification();
+    let rust = edited(
+        "decision.rs",
+        "pub protocol_revision: u64,",
+        "pub protocol_revision: i64,",
+    );
+    assert_named(
+        &spec,
+        &rust,
+        &[
+            "Decision.protocol_revision",
+            "integer >= 0",
+            "Rust says integer",
+        ],
+    );
+}
+
+/// An entity the specification declares that this test does not map is a difference, not skipped.
+#[test]
+fn an_entity_without_a_rust_mapping_is_named() {
+    let mut spec = specification();
+    let case = spec.entities["Case"].clone();
+    spec.entities.insert("Probe".to_owned(), case);
+    let rust = rust_model(&model_sources());
+    let found = differences(&spec, &rust);
+    assert!(
+        found
+            .iter()
+            .any(|d| d.contains("entity `Probe`") && d.contains("no Rust struct")),
+        "{found:?}"
+    );
 }

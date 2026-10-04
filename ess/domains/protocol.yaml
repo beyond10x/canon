@@ -1,13 +1,17 @@
 # Retrofitted from the protocol/1 source model in crates/canon/src/model/ (story:protocol-source-model).
 # This is the typed model, not the protocol/1 surface syntax: parsing that syntax, and every
 # validation rule (duplicate identifiers, references that resolve), is tested by Canon itself.
+# The evaluation documents (canon-case/1, canon-evidence/1, canon-decision/1) are specified first
+# here (story:three-valued-claims).
 # crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
 domain: canon.protocol
 
 summary: >-
   A protocol document: its identity and revision, and the artifacts, evidence kinds, claims,
   obligations, actions and outcomes it declares. A predicate over evidence and claim values
-  decides each claim, guards each action and states what each outcome requires.
+  decides each claim, guards each action and states what each outcome requires. A case governed
+  by a protocol is evaluated from a case snapshot and evidence records into a decision that gives
+  each claim a three-valued truth value.
 
 naming:
   wire: protocol
@@ -188,11 +192,108 @@ types:
       - name: is
         type: canon.protocol.Truth
 
+  # The evaluation documents (story:three-valued-claims). `canon evaluate` reads a canon-case/1
+  # case snapshot and canon-evidence/1 records against a compiled protocol and writes one
+  # canon-decision/1 document. Later stories add optional fields and sections to these shapes and
+  # never replace them; what an evaluation means is Canon's conformance suite
+  # (conformance/scenarios/three-valued-claims.yaml), not this file.
+
+  # read from: .engineering/planning/story/three-valued-claims.md:57
+  - name: canon.protocol.CaseId
+    kind: newtype
+    of: String
+
+  # An artifact revision is opaque text, compared for equality only (design § 9).
+  # read from: .engineering/planning/story/three-valued-claims.md:57-60
+  - name: canon.protocol.Revision
+    kind: newtype
+    of: String
+
+  # read from: .engineering/planning/story/three-valued-claims.md:59
+  - name: canon.protocol.EvidenceId
+    kind: newtype
+    of: String
+
+  # One declared artifact as a case snapshot records it.
+  # read from: .engineering/planning/story/three-valued-claims.md:57-58
+  - name: canon.protocol.CaseArtifact
+    kind: struct
+    fields:
+      # The artifact's current revision.
+      # read from: .engineering/planning/story/three-valued-claims.md:57-58
+      - name: revision
+        type: canon.protocol.Revision
+
+  # One canon-evidence/1 record. Here subject and subject_revision are read and type-checked but
+  # do not affect evaluation; story:evidence-revision-binding makes them binding.
+  # read from: .engineering/planning/story/three-valued-claims.md:59-61
+  - name: canon.protocol.EvidenceRecord
+    kind: struct
+    fields:
+      # The only accepted value is canon-evidence/1.
+      # read from: .engineering/planning/story/three-valued-claims.md:59
+      - name: format
+        type: String
+      # read from: .engineering/planning/story/three-valued-claims.md:59
+      - name: id
+        type: canon.protocol.EvidenceId
+      # read from: .engineering/planning/story/three-valued-claims.md:59
+      - name: kind
+        type: canon.protocol.EvidenceKindId
+      # A record without a result matches an evidence match that names no result, and no match
+      # that names one (.engineering/planning/story/three-valued-claims.md:46-50).
+      # read from: .engineering/planning/story/three-valued-claims.md:59
+      - name: result
+        type: Optional<String>
+      # read from: .engineering/planning/story/three-valued-claims.md:59
+      - name: subject
+        type: canon.protocol.ArtifactId
+      # read from: .engineering/planning/story/three-valued-claims.md:60
+      - name: subject_revision
+        type: canon.protocol.Revision
+
+  # One claim's entry in a decision. An object rather than a bare value, so that later stories add
+  # to it (story:evidence-revision-binding adds the excluded evidence).
+  # read from: .engineering/planning/story/three-valued-claims.md:62-63
+  - name: canon.protocol.ClaimDecision
+    kind: struct
+    fields:
+      # read from: .engineering/planning/story/three-valued-claims.md:41-43
+      - name: value
+        type: canon.protocol.Truth
+
+  # The canon-decision/1 document: which protocol revision applied to which case, and each declared
+  # claim's value. Serialized as canonical JSON, the serialization canon-ir/1 uses.
+  # read from: .engineering/planning/story/three-valued-claims.md:62-63
+  - name: canon.protocol.Decision
+    kind: struct
+    fields:
+      # The only accepted value is canon-decision/1 (docs/design/canon-protocol-calculus-design.md:714).
+      # read from: .engineering/planning/story/three-valued-claims.md:62
+      - name: format
+        type: String
+      # read from: .engineering/planning/story/three-valued-claims.md:62
+      - name: case
+        type: canon.protocol.CaseId
+      # read from: .engineering/planning/story/three-valued-claims.md:62
+      - name: protocol
+        type: canon.protocol.ProtocolId
+      # Copied from the compiled protocol's revision, so never negative (Protocol: revision >= 0).
+      # The bound is not restated here: ess 0.52.0 refuses an invariant on a type that no view
+      # publishes (ESS-SYNTH-013), and this specification has no views.
+      # read from: .engineering/planning/story/three-valued-claims.md:62
+      - name: protocol_revision
+        type: Integer
+      # Every claim the protocol declares, keyed by its id.
+      # read from: .engineering/planning/story/three-valued-claims.md:62-63
+      - name: claims
+        type: Map<canon.protocol.ClaimId, canon.protocol.ClaimDecision>
+
 entities:
   # The source model's root, with its header (id, revision, description) written in place. Every
   # declaration section is a map keyed by identifier (crates/canon/src/model/mod.rs:132-136); the
   # declarations are values with no identity outside their protocol, so they are types, not
-  # entities, and need no relations. The case a protocol governs is not in the source model yet.
+  # entities, and need no relations. The case a protocol governs is the Case entity below.
   # read from: crates/canon/src/model/mod.rs:27-57
   - name: canon.protocol.Protocol
     identity:
@@ -236,3 +337,39 @@ entities:
       initial: Declared
       states: [Declared]
       terminal: [Declared]
+
+  # A canon-case/1 case snapshot: one concrete undertaking governed by one protocol, with the
+  # current revision of each artifact the protocol declares (design § 4.2). A snapshot is read,
+  # never changed by Canon; story:outcomes adds how a case terminates.
+  # read from: .engineering/planning/story/three-valued-claims.md:57-58
+  - name: canon.protocol.Case
+    identity:
+      # read from: .engineering/planning/story/three-valued-claims.md:57
+      name: id
+      type: canon.protocol.CaseId
+    fields:
+      # The only accepted value is canon-case/1.
+      # read from: .engineering/planning/story/three-valued-claims.md:57
+      - name: format
+        type: String
+      # The protocol that governs the case.
+      # read from: .engineering/planning/story/three-valued-claims.md:57
+      - name: protocol
+        type: canon.protocol.ProtocolId
+      # The current revision of each declared artifact, keyed by artifact id.
+      # read from: .engineering/planning/story/three-valued-claims.md:57-58
+      - name: artifacts
+        type: Map<canon.protocol.ArtifactId, canon.protocol.CaseArtifact>
+    relations:
+      # Every case is governed by exactly one protocol (design § 4.2).
+      # read from: docs/design/canon-protocol-calculus-design.md:247
+      - name: protocol
+        kind: references
+        target: canon.protocol.Protocol
+        cardinality: one
+        via: protocol
+    # Canon reads a snapshot and never moves it: no lifecycle and no commands here.
+    lifecycle:
+      initial: Recorded
+      states: [Recorded]
+      terminal: [Recorded]
