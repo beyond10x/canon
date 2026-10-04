@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T01:05:26Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-source-model",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "whole gate on wave/2026-10-04-w1 at 7caa81a: fmt, clippy -D warnings, test (35 passed, 0 failed); every step exit 0",
+    "reference": "ga-wave-2026-10-04-w1/canon/scratch/integration-gate.log"
+  }
+}
