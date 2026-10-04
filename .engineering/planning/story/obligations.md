@@ -14,6 +14,7 @@ relations:
 - depends_on: story:evidence-revision-binding
 - serves: vision:O2
 - serves: vision:governed-autonomy
+- depends_on: story:ess-hard-gate
 scope:
 - confidence: cited
   path: conformance/scenarios/obligations.yaml
@@ -26,8 +27,10 @@ scope:
 - confidence: cited
   path: crates/canon/src/validate/
 - confidence: cited
+  path: ess/
+- confidence: cited
   path: fixtures/investigation/obligations.yaml
-revision: 4
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:51Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":3}}}
 ---
@@ -72,6 +75,13 @@ same chain.
   constructs are listed in design § 4.1 and the open-obligation output in § 14 and
   `docs/contracts/protocol-core.md`; the discharge rule follows design § 8. Not an ess/1 document:
   Canon opts out of ESS for language semantics (AGENTS.md § ESS, Atlas ADR 0067).
+
+## ESS
+
+This story changes the `protocol/1` source model: it adds `discharged_when` to the obligation. It updates `ess/` (domain `canon.protocol`, set up by story:ess-hard-gate) in this same
+story. Every new declaration cites the file and line it was read from, and `task ess-gate` stays
+green with no `UNMAPPED:` (Atlas ADR 0076). `ess_gate` does not compare `ess/` with the Rust
+model, so the review of this story is what checks that the two agree.
 
 ## Acceptance
 

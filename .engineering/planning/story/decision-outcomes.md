@@ -13,6 +13,7 @@ relations:
 - depends_on: story:conformance-runner
 - serves: vision:O2
 - serves: vision:governed-autonomy
+- depends_on: story:ess-hard-gate
 scope:
 - confidence: cited
   path: conformance/scenarios/
@@ -25,8 +26,10 @@ scope:
 - confidence: cited
   path: crates/canon/src/validate/
 - confidence: cited
+  path: ess/
+- confidence: cited
   path: fixtures/investigation/decision-outcomes.yaml
-revision: 8
+revision: 10
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 8}
 ---
@@ -48,6 +51,13 @@ matching decision for the current case revision, and as `blocked` naming the mis
 
 `crates/canon/src/{model,validate,ir,eval}/` and `canon-decision/1`; ordered after
 story:invalidation-rules in the evaluator chain.
+
+## ESS
+
+This story changes the `protocol/1` source model (`requires: decision:`) and adds the `canon-decisions/1` input. It updates `ess/` (domain `canon.protocol`, set up by story:ess-hard-gate) in this same
+story. Every new declaration cites the file and line it was read from, and `task ess-gate` stays
+green with no `UNMAPPED:` (Atlas ADR 0076). `ess_gate` does not compare `ess/` with the Rust
+model, so the review of this story is what checks that the two agree.
 
 ## Acceptance
 

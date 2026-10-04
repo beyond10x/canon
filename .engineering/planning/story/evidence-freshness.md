@@ -14,6 +14,7 @@ relations:
 - depends_on: story:outcomes
 - serves: vision:O2
 - serves: vision:governed-autonomy
+- depends_on: story:ess-hard-gate
 scope:
 - confidence: cited
   path: conformance/scenarios/evidence-freshness.yaml
@@ -28,8 +29,10 @@ scope:
 - confidence: cited
   path: crates/canon/src/validate/
 - confidence: cited
+  path: ess/
+- confidence: cited
   path: fixtures/investigation/evidence-freshness.yaml
-revision: 5
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":2}}}
 ---
@@ -72,6 +75,13 @@ story:obligations edits earlier in the same chain, so no two of them run at once
 - Surfaces: `crates/canon/src/model/`, `crates/canon/src/validate/`, `crates/canon/src/ir/`,
   `crates/canon/src/eval/`, `crates/canon-cli/`, `fixtures/investigation/evidence-freshness.yaml`,
   `conformance/scenarios/evidence-freshness.yaml`.
+
+## ESS
+
+This story changes the `protocol/1` source model (`max_age`) and the `canon-evidence/1` input (`observed_at`). It updates `ess/` (domain `canon.protocol`, set up by story:ess-hard-gate) in this same
+story. Every new declaration cites the file and line it was read from, and `task ess-gate` stays
+green with no `UNMAPPED:` (Atlas ADR 0076). `ess_gate` does not compare `ess/` with the Rust
+model, so the review of this story is what checks that the two agree.
 
 ## Acceptance
 

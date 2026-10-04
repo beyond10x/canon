@@ -13,6 +13,7 @@ relations:
 - depends_on: story:conformance-runner
 - serves: vision:O2
 - serves: vision:governed-autonomy
+- depends_on: story:ess-hard-gate
 scope:
 - confidence: cited
   path: conformance/scenarios/three-valued-claims.yaml
@@ -23,8 +24,10 @@ scope:
 - confidence: cited
   path: crates/canon/src/eval/
 - confidence: cited
+  path: ess/
+- confidence: cited
   path: fixtures/investigation/three-valued-claims.yaml
-revision: 4
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:51Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":1}}}
 ---
@@ -83,6 +86,13 @@ the first link. It also wires evaluate steps into `canon conform run` (story:con
   several claims, and a claim may draw on several evidence records through its predicate. Stated
   in design § 4.5 and § 12. Not an ess/1 document: Canon opts out of ESS for language semantics
   (AGENTS.md § ESS, Atlas ADR 0067).
+
+## ESS
+
+This story defines the input shapes `canon-case/1` and `canon-evidence/1`, and the output `canon-decision/1`. The case shape brings in the Case entity and its relation to Protocol. It updates `ess/` (domain `canon.protocol`, set up by story:ess-hard-gate) in this same
+story. Every new declaration cites the file and line it was read from, and `task ess-gate` stays
+green with no `UNMAPPED:` (Atlas ADR 0076). `ess_gate` does not compare `ess/` with the Rust
+model, so the review of this story is what checks that the two agree.
 
 ## Acceptance
 
