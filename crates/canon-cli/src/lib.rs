@@ -89,8 +89,10 @@ pub enum Command {
     /// reaches, actions whose precondition holds in no state, claims, obligations, preconditions and
     /// outcome requirements that read evidence no action produces, outcomes that rest on evidence an
     /// authority-requiring action may produce yet hold without any authority decision, and each
-    /// declared property that fails, with a counterexample. A state space of more than 65536 states
-    /// is refused.
+    /// declared property that fails, with a counterexample. A state is a set of evidence records,
+    /// authority decisions and explicit decisions; a record an invalidation rule can keep from a
+    /// claim is there in any combination of observed before and after each upstream artifact
+    /// moved, one record each. A state space of more than 65536 states is refused.
     Check {
         /// The protocol document to check.
         #[arg(long)]

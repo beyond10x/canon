@@ -3,6 +3,7 @@
 
 use serde::Deserialize;
 
+use super::Declarations;
 use super::ids::{ArtifactId, EvidenceId, EvidenceKindId, Instant, Revision};
 
 /// The evidence record format this model reads.
@@ -32,4 +33,8 @@ pub struct EvidenceRecord {
     /// record without it never expires.
     #[serde(default, deserialize_with = "super::present::optional")]
     pub observed_at: Option<Instant>,
+    /// The revision of each upstream artifact the observation was made against, keyed by
+    /// artifact. A record without it is never invalidated.
+    #[serde(default, deserialize_with = "super::present::required")]
+    pub upstream_revisions: Declarations<ArtifactId, Revision>,
 }

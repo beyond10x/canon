@@ -5,9 +5,9 @@
 //!
 //! 1. the format;
 //! 2. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
-//!    claims, obligations, actions and outcomes, in that section order, then the capabilities and
-//!    effect classes actions name, in action order, then the decisions outcomes require, in
-//!    outcome order;
+//!    claims, obligations, actions, outcomes and invalidation rules, in that section order, then
+//!    the capabilities and effect classes actions name, in action order, then the decisions
+//!    outcomes require, in outcome order;
 //! 3. duplicate identifiers, in the same section order;
 //! 4. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
 //!    or `d`, or that are but are too long to count in seconds (each with its own message), in the
@@ -16,10 +16,13 @@
 //!    its subject, which is reported after the kind it is written beside): those in claims first,
 //!    then those in obligations (their discharge predicates, each followed by every evidence match
 //!    it holds, which a discharge predicate may not: it tests only claim values), then those in
-//!    actions, then those in outcomes;
-//!    within a section, in the order its declarations are written, and within a declaration, in
-//!    the order its references are written;
-//! 6. cycles between claims.
+//!    actions, then those in outcomes, then those in invalidation rules (the upstream artifact,
+//!    then each claim the rule invalidates); within a section, in the order its declarations are
+//!    written, and within a declaration, in the order its references are written;
+//! 6. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
+//!    claim it tests through any number of claim references (`inert-invalidation`), in the order
+//!    the rules and their claims are written;
+//! 7. cycles between claims.
 //!
 //! Within a section, entries come in the order they are written. Every message renders document
 //! text on one line. The same document always yields the same problems in the same order.
@@ -28,8 +31,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use crate::model::{
-    ActionId, ArtifactId, ClaimId, EvidenceKindId, FORMAT, ObligationId, OutcomeId, Predicate,
-    Protocol, is_identifier, one_line,
+    ActionId, ArtifactId, ClaimId, EvidenceKindId, FORMAT, InvalidationRuleId, ObligationId,
+    OutcomeId, Predicate, Protocol, is_identifier, one_line,
 };
 
 /// What an identifier names: the protocol itself, a declaration section (named by the singular noun
@@ -47,6 +50,7 @@ pub enum Section {
     Capability,
     EffectClass,
     Decision,
+    InvalidationRule,
 }
 
 impl fmt::Display for Section {
@@ -59,6 +63,7 @@ impl fmt::Display for Section {
             Section::Obligation => "obligation",
             Section::Action => "action",
             Section::Outcome => "outcome",
+            Section::InvalidationRule => "invalidation rule",
             Section::Capability => "capability",
             Section::EffectClass => "effect class",
             Section::Decision => "decision",
@@ -73,6 +78,7 @@ pub enum Referrer {
     Obligation(ObligationId),
     Action(ActionId),
     Outcome(OutcomeId),
+    InvalidationRule(InvalidationRuleId),
 }
 
 impl fmt::Display for Referrer {
@@ -82,6 +88,9 @@ impl fmt::Display for Referrer {
             Referrer::Obligation(id) => write!(f, "obligation `{}`", one_line(id.as_str())),
             Referrer::Action(id) => write!(f, "action `{}`", one_line(id.as_str())),
             Referrer::Outcome(id) => write!(f, "outcome `{}`", one_line(id.as_str())),
+            Referrer::InvalidationRule(id) => {
+                write!(f, "invalidation rule `{}`", one_line(id.as_str()))
+            }
         }
     }
 }
@@ -95,14 +104,15 @@ pub enum Problem {
     InvalidIdentifier { section: Section, id: String },
     /// An identifier is declared more than once in one section.
     DuplicateIdentifier { section: Section, id: String },
-    /// A predicate tests a claim that is not declared.
+    /// A predicate tests, or an invalidation rule invalidates, a claim that is not declared.
     UndeclaredClaim { referrer: Referrer, claim: ClaimId },
     /// A predicate matches, or an action may produce, an evidence kind that is not declared.
     UndeclaredEvidenceKind {
         referrer: Referrer,
         kind: EvidenceKindId,
     },
-    /// An evidence match names as its subject an artifact that is not declared.
+    /// An evidence match names as its subject, or an invalidation rule as its upstream artifact, an
+    /// artifact that is not declared.
     UndeclaredArtifact {
         referrer: Referrer,
         artifact: ArtifactId,
@@ -122,6 +132,12 @@ pub enum Problem {
         kind: EvidenceKindId,
         path: String,
     },
+    /// An invalidation rule names a claim that reaches no evidence match, in its own predicate or
+    /// in a claim it tests, so no record could be kept from it.
+    InertInvalidation {
+        rule: InvalidationRuleId,
+        claim: ClaimId,
+    },
     /// Claims whose predicates test each other in a cycle; the first claim is repeated at the end.
     ClaimCycle { claims: Vec<ClaimId> },
 }
@@ -138,6 +154,7 @@ impl Problem {
             Problem::UndeclaredArtifact { .. } => "undeclared-artifact",
             Problem::InvalidMaxAge { .. } => "invalid-max-age",
             Problem::EvidenceInDischarge { .. } => "evidence-in-discharge",
+            Problem::InertInvalidation { .. } => "inert-invalidation",
             Problem::ClaimCycle { .. } => "claim-cycle",
         }
     }
@@ -197,6 +214,12 @@ impl fmt::Display for Problem {
                 one_line(obligation.as_str()),
                 one_line(kind.as_str())
             ),
+            Problem::InertInvalidation { rule, claim } => write!(
+                f,
+                "invalidation rule `{}` invalidates claim `{}`, which reaches no evidence match",
+                one_line(rule.as_str()),
+                one_line(claim.as_str())
+            ),
             Problem::ClaimCycle { claims } => {
                 let path: Vec<String> = claims.iter().map(|id| one_line(id.as_str())).collect();
                 write!(
@@ -219,7 +242,7 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         });
     }
 
-    let declared: [(Section, Vec<&str>); 7] = [
+    let declared: [(Section, Vec<&str>); 8] = [
         (Section::Protocol, vec![protocol.protocol.id.as_str()]),
         (Section::Artifact, strs(protocol.artifacts.ids())),
         (Section::EvidenceKind, strs(protocol.evidence_kinds.ids())),
@@ -227,6 +250,7 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         (Section::Obligation, strs(protocol.obligations.ids())),
         (Section::Action, strs(protocol.actions.ids())),
         (Section::Outcome, strs(protocol.outcomes.ids())),
+        (Section::InvalidationRule, strs(protocol.invalidation.ids())),
     ];
     let mut named = Vec::new();
     for (_, action) in protocol.actions.iter() {
@@ -312,6 +336,34 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
             );
         }
     }
+    for (id, rule) in protocol.invalidation.iter() {
+        let referrer = Referrer::InvalidationRule(id.clone());
+        if !protocol.artifacts.contains(&rule.upstream) {
+            problems.push(Problem::UndeclaredArtifact {
+                referrer: referrer.clone(),
+                artifact: rule.upstream.clone(),
+            });
+        }
+        for claim in &rule.invalidates {
+            if !protocol.claims.contains(claim) {
+                problems.push(Problem::UndeclaredClaim {
+                    referrer: referrer.clone(),
+                    claim: claim.clone(),
+                });
+            }
+        }
+    }
+
+    for (id, rule) in protocol.invalidation.iter() {
+        for claim in &rule.invalidates {
+            if protocol.claims.contains(claim) && !reaches_evidence(protocol, claim) {
+                problems.push(Problem::InertInvalidation {
+                    rule: id.clone(),
+                    claim: claim.clone(),
+                });
+            }
+        }
+    }
 
     claim_cycles(protocol, &mut problems);
 
@@ -320,6 +372,31 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
     } else {
         Err(problems)
     }
+}
+
+/// Whether `claim` reaches an evidence match: in its own predicate, or in a claim it tests through
+/// any number of claim references. Each claim is visited once, so a cycle ends.
+fn reaches_evidence(protocol: &Protocol, claim: &ClaimId) -> bool {
+    let mut visited = BTreeSet::new();
+    let mut pending = vec![claim];
+    while let Some(next) = pending.pop() {
+        if !visited.insert(next) {
+            continue;
+        }
+        let Some(declared) = protocol.claims.get(next) else {
+            continue;
+        };
+        let mut found = false;
+        declared.true_when.visit(&mut |node| match node {
+            Predicate::Evidence(_) => found = true,
+            Predicate::Claim(test) => pending.push(&test.claim),
+            _ => {}
+        });
+        if found {
+            return true;
+        }
+    }
+    false
 }
 
 /// Reports every evidence match in an obligation's discharge predicate, in the order written,
@@ -534,6 +611,63 @@ mod tests {
                     .replace("subject: w", "subject: a")
             ),
             Vec::<String>::new()
+        );
+    }
+
+    /// An invalidation rule's id is an identifier declared once, its upstream artifact is declared
+    /// and so is every claim it invalidates. Its references are reported after those of outcomes,
+    /// the upstream artifact first, each naming the rule and what it names.
+    #[test]
+    fn an_invalidation_rule_resolves_its_upstream_artifact_and_claims() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            artifacts: {a: {}}\nevidence_kinds: {k: {}}\n\
+            claims: {c: {true_when: {evidence: {kind: k}}}}\n\
+            outcomes: {o: {requires: {claim: gone}}}\n\
+            invalidation: {r: {upstream: x, invalidates: [c, y]}, r: {upstream: a, invalidates: []}, \
+            'bad id': {upstream: a, invalidates: [c]}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "invalid-identifier: invalidation rule identifier `bad id` is empty or contains whitespace or a control character",
+                "duplicate-identifier: invalidation rule `r` is declared more than once",
+                "undeclared-claim: outcome `o` references claim `gone`, which is not declared",
+                "undeclared-artifact: invalidation rule `r` references artifact `x`, which is not declared",
+                "undeclared-claim: invalidation rule `r` references claim `y`, which is not declared",
+            ]
+        );
+        assert_eq!(
+            problems(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}}\n\
+                 evidence_kinds: {k: {}}\nclaims: {c: {true_when: {evidence: {kind: k}}}}\n\
+                 invalidation: {r: {upstream: a, invalidates: [c]}}\n"
+            ),
+            Vec::<String>::new()
+        );
+    }
+
+    /// A rule that names a claim reaching no evidence match, in its own predicate or in any claim
+    /// it tests, is refused as `inert-invalidation`, naming the rule and the claim: no record could
+    /// ever be kept from that claim's evaluation. It is reported after every unresolved reference, so
+    /// after the other rule refusals, and before claim cycles. A claim that reaches a match only
+    /// through a claim it tests (`only_tests`) is not inert.
+    #[test]
+    fn a_rule_naming_a_claim_that_reaches_no_evidence_is_inert() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            artifacts: {a: {}}\nevidence_kinds: {k: {}}\n\
+            claims: {helper: {true_when: {evidence: {kind: k}}}, \
+            only_tests: {true_when: {not: {claim: helper}}}, \
+            bare: {true_when: {all: []}}, on_bare: {true_when: {claim: bare}}, \
+            mixed: {true_when: {all: [{claim: helper}, {evidence: {kind: k}}]}}}\n\
+            invalidation: {r: {upstream: a, invalidates: [mixed, only_tests, bare, gone]}, \
+            s: {upstream: x, invalidates: [on_bare]}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "undeclared-claim: invalidation rule `r` references claim `gone`, which is not declared",
+                "undeclared-artifact: invalidation rule `s` references artifact `x`, which is not declared",
+                "inert-invalidation: invalidation rule `r` invalidates claim `bare`, which reaches no evidence match",
+                "inert-invalidation: invalidation rule `s` invalidates claim `on_bare`, which reaches no evidence match",
+            ]
         );
     }
 

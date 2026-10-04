@@ -358,3 +358,90 @@ fn a_bypass_reads_governed_evidence_only_where_its_presence_helps() {
          checked: protocol `p` revision 1: 24 states, 0 properties, 1 finding\n"
     );
 }
+
+/// A protocol whose invalidation rule makes states reachable that no state without the rule
+/// reaches. `named` and `recorded` read the same dimension `b`; the rule invalidates `named`
+/// alone, so once the dataset moves, `recorded` keeps the record and `named` does not. `stale` and
+/// `revalidate` hold only there, and `settled` then depends on `ca`, which it does not otherwise.
+const INVALIDATING: &str = "format: protocol/1\n\
+    protocol: {id: p, revision: 1}\n\
+    artifacts: {dataset: {}, explanation: {}}\n\
+    evidence_kinds: {a: {}, b: {}}\n\
+    claims: {ca: {true_when: {evidence: {kind: a}}}, named: {true_when: {evidence: {kind: b}}}, \
+    recorded: {true_when: {evidence: {kind: b}}}}\n\
+    actions:\n\
+    \x20\x20observe: {may_produce: [{evidence: a}, {evidence: b}]}\n\
+    \x20\x20revalidate: {precondition: {all: [{claim: recorded}, {claim: named, is: unknown}]}}\n\
+    outcomes:\n\
+    \x20\x20stale: {requires: {all: [{claim: recorded}, {claim: named, is: unknown}]}}\n\
+    \x20\x20settled: {requires: {all: [{claim: recorded}, {any: [{claim: named}, {claim: ca}]}]}}\n\
+    invalidation: {dataset.revised: {upstream: dataset, invalidates: [named]}}\n";
+
+/// The probe that found the gap: with the dataset moved, `canon evaluate` finds `stale`
+/// legitimate and `revalidate` approval-free, so `canon check` must not report either as
+/// unreachable. The rule gives `b`, which `named` reads, the upstream `dataset`, and `a`, which no
+/// claim the rule invalidates reads, none: `a` has 2 values, `b` 4 (no record, one observed at the
+/// current dataset revision, one observed before it moved, both).
+#[test]
+fn a_state_with_the_upstream_moved_is_checked() {
+    assert_eq!(
+        check(&compiled(INVALIDATING), None)
+            .expect("checked")
+            .to_string(),
+        "checked: protocol `p` revision 1: 8 states, 0 properties, 0 findings\n"
+    );
+}
+
+/// `settled` is independent of `ca` in every state without a moved upstream: with `b` present
+/// `named` holds it, with `b` absent `recorded` blocks it. With the dataset moved, `named` is
+/// unknown while `recorded` holds, and `ca` decides it: the counterexample names the record observed
+/// before the move.
+#[test]
+fn a_property_sees_the_states_with_the_upstream_moved() {
+    let body = format!(
+        "{HEAD}properties: {{p: {{subject: {{outcome: settled}}, independent_of: {{claim: ca}}}}}}\n"
+    );
+    let checked = check(&compiled(INVALIDATING), Some(&properties(&body))).expect("checked");
+    assert_eq!(
+        checked.to_string(),
+        "property-failed: property `p`: outcome `settled` is blocked in state {evidence `b` \
+         observed before upstream `dataset` moved} and legitimate in state {evidence `a`, \
+         evidence `b` observed before upstream `dataset` moved}\n\
+         checked: protocol `p` revision 1: 8 states, 1 property, 1 finding\n"
+    );
+}
+
+/// The upstream counts toward the bound and is named in the refusal: `k` has 16 classes, so 65536
+/// values without an upstream artifact, and 2^(16 * 2) with one, each class present observed
+/// before the move, after it, both or neither. The listed numbers multiply to the total.
+#[test]
+fn a_rule_dimension_counts_toward_the_bound_and_is_named() {
+    let matches: Vec<String> = (0..15)
+        .map(|n| format!("{{evidence: {{kind: k, result: r{n}}}}}"))
+        .collect();
+    let source = format!(
+        "{}invalidation: {{r: {{upstream: a, invalidates: [c]}}}}\n",
+        PROTOCOL.replace(
+            "claims: {c: {true_when: {evidence: {kind: k}}}}",
+            &format!(
+                "claims: {{c: {{true_when: {{any: [{}]}}}}}}",
+                matches.join(", ")
+            ),
+        )
+    );
+    let refusal = check(&compiled(&source), None).expect_err("refused");
+    assert_eq!(
+        (refusal.code(), refusal.to_string().as_str()),
+        (
+            "state-space-bound",
+            "protocol `p` revision 2 has 4294967296 states, more than the bound of 65536: evidence \
+             kind `k` with upstream `a` 4294967296"
+        )
+    );
+    let without_rule = check(
+        &compiled(&source.replace("invalidation: {r: {upstream: a, invalidates: [c]}}\n", "")),
+        None,
+    )
+    .expect("65536 states are within the bound");
+    assert_eq!(without_rule.states, 65536);
+}

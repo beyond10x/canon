@@ -83,6 +83,16 @@
           "additionalProperties": {
             "$ref": "#/$defs/Outcome"
           }
+        },
+        "invalidation": {
+          "description": "The invalidation rules, keyed by rule id; a protocol without the section declares none.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/InvalidationRule"
+          }
         }
       },
       "required": [
@@ -209,6 +219,31 @@
       },
       "required": [
         "requires"
+      ]
+    },
+    "InvalidationRule": {
+      "description": "An invalidation rule: a change of its upstream artifact's revision invalidates, for the claims it names and every claim built on them, the evidence observed against an earlier revision of that artifact (design § 4.1, CANON-INVALIDATION-001).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "upstream": {
+          "description": "The artifact whose revision the rule watches.",
+          "$ref": "#/$defs/Identifier"
+        },
+        "invalidates": {
+          "description": "The claims whose support a change of that revision invalidates.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
+        }
+      },
+      "required": [
+        "upstream",
+        "invalidates"
       ]
     },
     "Predicate": {

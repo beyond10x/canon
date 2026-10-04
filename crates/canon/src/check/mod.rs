@@ -29,14 +29,31 @@
 //! - A capability is undecided, granted or denied (3 values).
 //! - A decision is not taken or taken (2 values); taken, it is taken for every outcome that
 //!   requires it.
+//! - An evidence dimension has upstream artifacts when an invalidation rule can keep its records
+//!   from a claim: the upstream artifact of each rule that invalidates a claim (one it names, or
+//!   one built on those, by the evaluator's own rule, `crate::eval::invalidated_claims`) that
+//!   reaches an evidence match reading the dimension, in its own predicate or a claim it tests:
+//!   the evaluator keeps such a record from every match in that claim's evaluation. Each class of
+//!   such a dimension then comes in one variant per upstream vector, which says for each upstream
+//!   artifact whether the record was observed before it moved, and the dimension takes every
+//!   subset of those variants: a class can be present in any combination of its `2^m` variants, as
+//!   one record each. A dimension of `c` classes and `m` upstream artifacts has `2^(c * 2^m)`
+//!   values. Rules that share an upstream
+//!   artifact share its variants, since one recorded revision moves for all of them. A record
+//!   observed before a move records an earlier revision of the artifact than the case's current
+//!   one, and the evaluator's invalidation stage decides which claims it is kept from. A dimension
+//!   without upstream artifacts, and every dimension of a protocol that declares no invalidation
+//!   rule, has its classes alone, as before rules existed.
 //!
 //! The space is atemporal: no record carries an observation instant, so none expires (an expired
-//! record is an absent one). Obligation status is not a dimension: it is computed from the claims in
-//! each state, and no `protocol/1` predicate reads it.
+//! record is an absent one). Invalidation is not absence: a record invalidated for some claims
+//! still applies to the others, so it has variants of its own. Obligation status is not a
+//! dimension: it is computed from the claims in each state, and no `protocol/1` predicate reads it.
 //!
 //! A state is evaluated as a case snapshot that lists each declared artifact, and the case itself,
-//! at one revision, with one evidence record per present class about its dimension's artifact, the
-//! decided capabilities as `canon-authority/1` and the taken decisions as `canon-decisions/1`.
+//! at one revision, with one evidence record per present class and variant about its dimension's
+//! artifact, the decided capabilities as `canon-authority/1` and the taken decisions as
+//! `canon-decisions/1`.
 //!
 //! # The bound
 //!
@@ -75,15 +92,20 @@
 //!   dimension except the evidence dimensions its `independent_of` claim reads (directly or through
 //!   claims). The counterexample is that pair of states.
 //!
-//! A witness state is the one of least weight (present classes, decided capabilities and taken
-//! decisions), ties broken by its rendering in code-point order. The counterexample's first state is
-//! the witness among the states that have such a partner, and its second the witness among that
-//! state's partners. A state is written `{}`, or as its present classes, decided capabilities and
-//! taken decisions in dimension order: `` {evidence `k` result `r`, evidence `k2`, evidence `k3`
-//! about `b` result `r`, capability `c` granted, decision `d` taken} ``. A bound dimension is
-//! written with its subject, in a state and in the bound refusal (`` evidence kind `k3` about `b`
-//! 4 ``); an unbound one without, and stands for records about an artifact no match of its kind
-//! names.
+//! A witness state is the one of least weight (present records, decided capabilities and taken
+//! decisions; a record weighs one more for each upstream artifact it was observed before the move
+//! of, so a witness prefers current records), ties broken by its rendering in code-point order. The
+//! counterexample's first state is the witness among the states that have such a partner, and its
+//! second the witness among that state's partners. A state is written `{}`, or as its present
+//! classes, decided capabilities and taken decisions in dimension order: `` {evidence `k` result
+//! `r`, evidence `k2`, evidence `k3` about `b` result `r`, capability `c` granted, decision `d`
+//! taken} ``. A record observed before
+//! an upstream artifact moved is written `` evidence `k` observed before upstream `a` moved ``, and
+//! a dimension with upstream artifacts is named with them in the bound refusal (`` evidence kind
+//! `k` with upstream `a` 16 ``). The numbers the refusal lists multiply to the state count. A bound
+//! dimension is written with its subject, in a state and in the bound refusal (`` evidence kind
+//! `k3` about `b` 4 ``); an unbound one without, and stands for records about an artifact no match
+//! of its kind names.
 //!
 //! # Refusals
 //!

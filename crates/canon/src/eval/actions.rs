@@ -273,6 +273,7 @@ mod tests {
             subject: ArtifactId::new("a"),
             subject_revision: crate::model::Revision::new("r1"),
             observed_at: None,
+            upstream_revisions: crate::model::Declarations::default(),
         };
         let section = section(&ir, &BTreeMap::new(), &[record], None).expect("a section");
         assert_eq!(

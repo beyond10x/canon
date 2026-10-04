@@ -21,7 +21,8 @@ scenarios. `canon evaluate` gives every claim of a case a three-valued value, ap
 only to the revision it is bound to and only while it is fresh, and says which obligations are
 open, which actions are admissible under the authority decisions given, and which outcomes are
 legitimate, including outcomes that require an explicit decision, with a structured explanation of
-each. Invalidation is not built yet. Every page says which parts are shipped and which are planned;
+each. Invalidation rules keep evidence observed against an earlier revision of an upstream artifact
+from the claims that depend on it. Every page says which parts are shipped and which are planned;
 [where this stands](./status/where-this-stands.md) has the full list.
 
 :::

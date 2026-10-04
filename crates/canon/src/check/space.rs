@@ -6,12 +6,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Value, json};
 
 use super::Reader;
-use crate::eval::reads;
+use crate::eval::{invalidated_claims, reads};
 use crate::ir::Ir;
 use crate::model::{
-    ArtifactId, CapabilityId, ClaimId, DecisionName, EVIDENCE_FORMAT, EvidenceId, EvidenceKindId,
-    EvidenceMatch, EvidenceRecord, OutcomeId, OutcomeRequirement, Predicate, Revision, Truth,
-    one_line,
+    ArtifactId, CapabilityId, ClaimId, DecisionName, Declarations, EVIDENCE_FORMAT, EvidenceId,
+    EvidenceKindId, EvidenceMatch, EvidenceRecord, OutcomeId, OutcomeRequirement, Predicate,
+    Revision, Truth, one_line,
 };
 
 /// The revision every artifact and the case itself have in a checked state, and the case revision
@@ -21,9 +21,17 @@ pub(super) const REVISION: &str = "r";
 /// Who takes an explicit decision in a checked state.
 const PRINCIPAL: &str = "canon-check";
 
+/// The revision of an upstream artifact a record recorded when it was observed before that artifact
+/// moved: an earlier one than [`REVISION`], the case's current revision of every artifact.
+const EARLIER: &str = "r0";
+
 /// One evidence dimension: the records of one kind about one artifact. Its classes are each
 /// result a match that reads such a record matches, in code-point order, then `None`, a record
-/// with no result, which stands for every other result. A value is a set of classes, one bit each.
+/// with no result, which stands for every other result. Each class comes in one variant per
+/// upstream vector: for each of the dimension's upstream artifacts, whether the record was observed
+/// before it moved. A value is a set of (class, vector) variants, one bit each, class-major, so a
+/// dimension without upstream artifacts has one bit per class as before, and records of one class
+/// observed before and after a move can be present together.
 struct Kind<'a> {
     id: &'a EvidenceKindId,
     /// A record of the dimension with no result: every record of it is this one, with its own id
@@ -33,6 +41,10 @@ struct Kind<'a> {
     /// is not bound stands for records about an artifact no match of the kind names.
     bound: bool,
     classes: Vec<Option<&'a str>>,
+    /// The upstream artifacts of the invalidation rules that can keep a record of this dimension
+    /// from a claim, in identifier order: those whose rules invalidate a claim that reaches an
+    /// evidence match reading it, in its own predicate or a claim it tests. Empty when no rule can.
+    upstreams: Vec<&'a ArtifactId>,
 }
 
 impl Kind<'_> {
@@ -45,6 +57,38 @@ impl Kind<'_> {
             }
             _ => format!("`{id}`"),
         }
+    }
+
+    /// How many upstream vectors each class has: `2^upstreams`.
+    fn vectors(&self) -> Option<u32> {
+        1u32.checked_shl(self.upstreams.len() as u32)
+    }
+
+    /// How many bits a value has: one per class and upstream vector. `None` when it does not fit.
+    fn bits(&self) -> Option<u32> {
+        (self.classes.len() as u32).checked_mul(self.vectors()?)
+    }
+
+    /// The class and upstream vector of bit `bit`.
+    fn variant(&self, bit: u32) -> (Option<&str>, u32) {
+        let vectors = self
+            .vectors()
+            .expect("a state exists only when the bits fit");
+        (self.classes[(bit / vectors) as usize], bit % vectors)
+    }
+
+    /// `` `k` ``, or `` `k` about `b` ``, followed by `` with upstream `a`, `c` `` when the
+    /// dimension has upstream artifacts: how the bound refusal names it.
+    fn dimension_name(&self) -> String {
+        if self.upstreams.is_empty() {
+            return self.name();
+        }
+        let upstreams: Vec<String> = self
+            .upstreams
+            .iter()
+            .map(|artifact| format!("`{}`", one_line(artifact.as_str())))
+            .collect();
+        format!("{} with upstream {}", self.name(), upstreams.join(", "))
     }
 
     /// Whether `matching` reads the records of this dimension, by the evaluator's own rule.
@@ -83,6 +127,7 @@ impl<'a> Space<'a> {
                     record: None,
                     bound: false,
                     classes: Vec::new(),
+                    upstreams: Vec::new(),
                 });
                 continue;
             }
@@ -111,9 +156,11 @@ impl<'a> Space<'a> {
                         subject: artifact.clone(),
                         subject_revision: Revision::new(REVISION),
                         observed_at: None,
+                        upstream_revisions: Declarations::default(),
                     }),
                     bound,
                     classes: Vec::new(),
+                    upstreams: Vec::new(),
                 };
                 let results: BTreeSet<&str> = of_kind
                     .iter()
@@ -135,6 +182,23 @@ impl<'a> Space<'a> {
                 decisions.entry(name).or_default().push(outcome);
             }
         }
+        for rule in ir.invalidation.values() {
+            for claim in invalidated_claims(ir, &rule.invalidates) {
+                let Some(declared) = ir.claims.get(&claim) else {
+                    continue;
+                };
+                for matching in matches_read(ir, &declared.true_when) {
+                    for kind in kinds.iter_mut() {
+                        if kind.read_by(matching) && !kind.upstreams.contains(&&rule.upstream) {
+                            kind.upstreams.push(&rule.upstream);
+                        }
+                    }
+                }
+            }
+        }
+        for kind in &mut kinds {
+            kind.upstreams.sort();
+        }
         Space {
             kinds,
             capabilities: capabilities.into_iter().collect(),
@@ -148,7 +212,7 @@ impl<'a> Space<'a> {
         let kinds = self
             .kinds
             .iter()
-            .map(|kind| 1u128.checked_shl(kind.classes.len() as u32));
+            .map(|kind| 1u128.checked_shl(kind.bits()?));
         let capabilities = self.capabilities.iter().map(|_| Some(3));
         let decisions = self.decisions.iter().map(|_| Some(2));
         kinds.chain(capabilities).chain(decisions).collect()
@@ -165,10 +229,13 @@ impl<'a> Space<'a> {
     /// them.
     pub(super) fn dimensions(&self) -> String {
         let kinds = self.kinds.iter().map(|kind| {
-            let count = 1u128
-                .checked_shl(kind.classes.len() as u32)
-                .map_or_else(|| format!("2^{}", kind.classes.len()), |n| n.to_string());
-            format!("evidence kind {} {count}", kind.name())
+            let count = match kind.bits() {
+                Some(bits) => 1u128
+                    .checked_shl(bits)
+                    .map_or_else(|| format!("2^{bits}"), |n| n.to_string()),
+                None => format!("2^({} * 2^{})", kind.classes.len(), kind.upstreams.len()),
+            };
+            format!("evidence kind {} {count}", kind.dimension_name())
         });
         let capabilities = self
             .capabilities
@@ -257,8 +324,10 @@ impl<'a> Space<'a> {
             .collect()
     }
 
-    /// How far `state` is from the empty state: present classes, decided capabilities and taken
-    /// decisions. A witness is the state of least weight, ties broken by its rendering.
+    /// How far `state` is from the empty state: present records, decided capabilities and taken
+    /// decisions. A record weighs one, and one more for each upstream artifact it was observed
+    /// before the move of, so a witness prefers current records. A witness is the state of least
+    /// weight, ties broken by its rendering.
     pub(super) fn weight(&self, state: &State) -> u32 {
         let kinds = self.kinds.len();
         let capabilities = self.capabilities.len();
@@ -267,7 +336,11 @@ impl<'a> Space<'a> {
             .enumerate()
             .map(|(at, value)| {
                 if at < kinds {
-                    value.count_ones()
+                    let kind = &self.kinds[at];
+                    (0..kind.bits().unwrap_or(0))
+                        .filter(|bit| value & (1 << bit) != 0)
+                        .map(|bit| 1 + kind.variant(bit).1.count_ones())
+                        .sum()
                 } else if at < kinds + capabilities {
                     u32::from(*value != UNDECIDED)
                 } else {
@@ -278,19 +351,35 @@ impl<'a> Space<'a> {
     }
 
     /// The state as a report writes it: `{}`, or each present class, decided capability and taken
-    /// decision in dimension order.
+    /// decision in dimension order. A record observed before an upstream artifact moved is written
+    /// `` evidence `k` observed before upstream `a` moved ``.
     pub(super) fn render(&self, state: &State) -> String {
         let mut items = Vec::new();
         for (kind, value) in self.kinds.iter().zip(state) {
-            for (bit, class) in kind.classes.iter().enumerate() {
+            for bit in 0..kind.bits().unwrap_or(0) {
                 if value & (1 << bit) == 0 {
                     continue;
                 }
+                let (class, vector) = kind.variant(bit);
                 let name = kind.name();
-                items.push(match class {
+                let mut item = match class {
                     Some(result) => format!("evidence {name} result `{}`", one_line(result)),
                     None => format!("evidence {name}"),
-                });
+                };
+                let moved: Vec<String> = kind
+                    .upstreams
+                    .iter()
+                    .enumerate()
+                    .filter(|(at, _)| vector & (1 << at) != 0)
+                    .map(|(_, artifact)| format!("`{}`", one_line(artifact.as_str())))
+                    .collect();
+                if !moved.is_empty() {
+                    item.push_str(&format!(
+                        " observed before upstream {} moved",
+                        moved.join(", ")
+                    ));
+                }
+                items.push(item);
             }
         }
         let capabilities = &state[self.kinds.len()..];
@@ -313,22 +402,39 @@ impl<'a> Space<'a> {
         format!("{{{}}}", items.join(", "))
     }
 
-    /// The evidence records `state` stands for: one per present class, about its dimension's
-    /// artifact at [`REVISION`], with no observation instant, so none expires.
+    /// The evidence records `state` stands for: one per present class and upstream vector, each
+    /// with its own id, about its dimension's artifact at [`REVISION`], with no observation
+    /// instant, so none expires. A record of a dimension with upstream artifacts records a revision
+    /// of each: [`EARLIER`] for one its vector marks moved, [`REVISION`] otherwise. The evaluator's own
+    /// invalidation stage then decides which claims it is kept from.
     pub(super) fn evidence(&self, state: &State) -> Vec<EvidenceRecord> {
         let mut records = Vec::new();
         for (kind, value) in self.kinds.iter().zip(state) {
             let Some(record) = &kind.record else {
                 continue;
             };
-            for (bit, class) in kind.classes.iter().enumerate() {
-                if value & (1 << bit) != 0 {
-                    records.push(EvidenceRecord {
-                        id: EvidenceId::new(format!("e{}", records.len())),
-                        result: class.map(str::to_owned),
-                        ..record.clone()
-                    });
+            for bit in 0..kind.bits().unwrap_or(0) {
+                if value & (1 << bit) == 0 {
+                    continue;
                 }
+                let (class, vector) = kind.variant(bit);
+                let upstream_revisions = Declarations::new(
+                    kind.upstreams
+                        .iter()
+                        .enumerate()
+                        .map(|(at, artifact)| {
+                            let moved = vector & (1 << at) != 0;
+                            let revision = if moved { EARLIER } else { REVISION };
+                            ((*artifact).clone(), Revision::new(revision))
+                        })
+                        .collect(),
+                );
+                records.push(EvidenceRecord {
+                    id: EvidenceId::new(format!("e{}", records.len())),
+                    result: class.map(str::to_owned),
+                    upstream_revisions,
+                    ..record.clone()
+                });
             }
         }
         records

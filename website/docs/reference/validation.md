@@ -14,9 +14,9 @@ does not depend on the order the sections are written in:
 
 1. the format;
 2. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
-   claims, obligations, actions and outcomes, in that section order, then the capabilities and
-   effect classes actions name, in action order, then the decisions outcomes require, in
-   outcome order;
+   claims, obligations, actions, outcomes and invalidation rules, in that section order, then
+   the capabilities and effect classes actions name, in action order, then the decisions
+   outcomes require, in outcome order;
 3. duplicate identifiers, in the same section order;
 4. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
    or `d`, or that are but are too long to count in seconds (each with its own message), in the
@@ -25,10 +25,13 @@ does not depend on the order the sections are written in:
    its subject, which is reported after the kind it is written beside): those in claims first,
    then those in obligations (their discharge predicates, each followed by every evidence match
    it holds, which a discharge predicate may not: it tests only claim values), then those in
-   actions, then those in outcomes;
-   within a section, in the order its declarations are written, and within a declaration, in
-   the order its references are written;
-6. cycles between claims.
+   actions, then those in outcomes, then those in invalidation rules (the upstream artifact,
+   then each claim the rule invalidates); within a section, in the order its declarations are
+   written, and within a declaration, in the order its references are written;
+6. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
+   claim it tests through any number of claim references (`inert-invalidation`), in the order
+   the rules and their claims are written;
+7. cycles between claims.
 
 Within a section, entries come in the order they are written. Every message renders document
 text on one line. The same document always yields the same problems in the same order.
@@ -40,11 +43,12 @@ text on one line. The same document always yields the same problems in the same 
 | `unsupported-format` | The document's `format` is not `protocol/1`. |
 | `invalid-identifier` | An identifier is empty or contains whitespace or a control character. |
 | `duplicate-identifier` | An identifier is declared more than once in one section. |
-| `undeclared-claim` | A predicate tests a claim that is not declared. |
+| `undeclared-claim` | A predicate tests, or an invalidation rule invalidates, a claim that is not declared. |
 | `undeclared-evidence-kind` | A predicate matches, or an action may produce, an evidence kind that is not declared. |
-| `undeclared-artifact` | An evidence match names as its subject an artifact that is not declared. |
+| `undeclared-artifact` | An evidence match names as its subject, or an invalidation rule as its upstream artifact, an artifact that is not declared. |
 | `invalid-max-age` | An evidence kind's `max_age` is not a whole number without leading zeros, followed by `s`, `m`, `h` or `d`, or is too long to count in seconds. |
 | `evidence-in-discharge` | A discharge predicate tests evidence; it may test only claim values. `path` locates the evidence match inside the predicate, as `discharged_when.all[1].evidence`. |
+| `inert-invalidation` | An invalidation rule names a claim that reaches no evidence match, in its own predicate or in a claim it tests, so no record could be kept from it. |
 | `claim-cycle` | Claims whose predicates test each other in a cycle; the first claim is repeated at the end. |
 
 A document that is not well-formed YAML, or not shaped like `protocol/1`, fails earlier, while parsing; the command line reports it as `parse`.

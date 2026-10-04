@@ -80,6 +80,7 @@ mod tests {
             subject: ArtifactId::new(subject),
             subject_revision: Revision::new(revision),
             observed_at: None,
+            upstream_revisions: crate::model::Declarations::default(),
         }
     }
 
