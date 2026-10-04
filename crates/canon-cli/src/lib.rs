@@ -18,13 +18,14 @@ pub const UNREADABLE: u8 = 2;
 pub const EXIT_STATUSES: [(u8, &str); 3] = [
     (
         0,
-        "Success: the document is valid or compiled, the case was evaluated, or every conformance \
-         scenario ran and passed.",
+        "Success: the document is valid or compiled, the case was evaluated, every conformance \
+         scenario ran and passed, or a check found nothing.",
     ),
     (
         REJECTED,
-        "Rejected: a document was read and rejected, an evaluation was refused, a conformance \
-         scenario failed or was unreadable, or no scenario ran.",
+        "Rejected: a document was read and rejected, an evaluation or a check was refused, a \
+         conformance scenario failed or was unreadable, no scenario ran, or a check found \
+         something.",
     ),
     (
         UNREADABLE,
@@ -83,6 +84,21 @@ pub enum Command {
         /// `max_age` at this instant does not apply; without it, no evidence expires.
         #[arg(long)]
         at: Option<String>,
+    },
+    /// Check a `protocol/1` document over its whole finite state space: report outcomes no state
+    /// reaches, actions whose precondition holds in no state, claims, obligations, preconditions and
+    /// outcome requirements that read evidence no action produces, outcomes that hold on evidence an
+    /// authority-requiring action may produce without any authority decision, and each declared
+    /// property that fails, with a counterexample. A state space of more than 65536 states is
+    /// refused.
+    Check {
+        /// The protocol document to check.
+        #[arg(long)]
+        path: PathBuf,
+        /// A `canon-properties/1` document: properties declared beside the protocol, each saying an
+        /// action's or outcome's status is independent of a claim. Each is checked in every state.
+        #[arg(long)]
+        properties: Option<PathBuf>,
     },
     /// The semantic difference between two compiled protocol revisions. Not built yet.
     Diff {

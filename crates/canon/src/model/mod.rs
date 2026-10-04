@@ -1,7 +1,7 @@
 //! Canon's data model: the `protocol/1` source model, and the `canon-case/1`, `canon-evidence/1`
 //! and `canon-decision/1` documents an evaluation reads and writes (`case.rs`, `evidence.rs`,
-//! `decision.rs`), and the `canon-decisions/1` explicit decisions an evaluation may read
-//! (`explicit.rs`).
+//! `decision.rs`), the `canon-decisions/1` explicit decisions an evaluation may read
+//! (`explicit.rs`), and the `canon-properties/1` properties `canon check` reads (`properties.rs`).
 //!
 //! A protocol document declares a protocol id and revision, artifacts, evidence kinds, claims with
 //! their predicates, obligations, actions and outcomes. Every declaration section is a map keyed by
@@ -12,10 +12,12 @@ mod case;
 mod decision;
 mod evidence;
 mod explicit;
+#[macro_use]
 mod ids;
 mod parse;
 mod predicate;
 mod present;
+mod properties;
 mod requirement;
 mod time;
 
@@ -38,6 +40,9 @@ pub use ids::{
 };
 pub use parse::{FORMAT, ParseError, parse};
 pub use predicate::{ClaimTest, EvidenceMatch, Predicate, Truth};
+pub use properties::{
+    PROPERTIES_FORMAT, Properties, Property, PropertyDependency, PropertyId, PropertySubject,
+};
 pub use requirement::OutcomeRequirement;
 
 /// A `protocol/1` source document as written.

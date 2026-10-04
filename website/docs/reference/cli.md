@@ -16,6 +16,7 @@ Generated from the clap definition of the `canon` command line in [`crates/canon
 | [`canon validate`](#canon-validate) | Parse and validate a `protocol/1` document |
 | [`canon compile`](#canon-compile) | Compile a valid `protocol/1` document into `canon-ir/1` and print it |
 | [`canon evaluate`](#canon-evaluate) | Evaluate a case under a compiled protocol from an evidence set: every claim, and each declared obligation, action and outcome. Print the `canon-decision/1` document |
+| [`canon check`](#canon-check) | Check a `protocol/1` document over its whole finite state space: report outcomes no state reaches, actions whose precondition holds in no state, claims, obligations, preconditions and outcome requirements that read evidence no action produces, outcomes that hold on evidence an authority-requiring action may produce without any authority decision, and each declared property that fails, with a counterexample. A state space of more than 65536 states is refused |
 | [`canon diff`](#canon-diff) | The semantic difference between two compiled protocol revisions. Not built yet |
 | [`canon conform`](#canon-conform) | Conformance scenarios |
 | [`canon conform run`](#canon-conform-run) | Run every `canon-conformance/1` scenario of a registry directory and report each |
@@ -103,6 +104,31 @@ Options:
           Print help
 ```
 
+## `canon check`
+
+Check a `protocol/1` document over its whole finite state space: report outcomes no state reaches, actions whose precondition holds in no state, claims, obligations, preconditions and outcome requirements that read evidence no action produces, outcomes that hold on evidence an authority-requiring action may produce without any authority decision, and each declared property that fails, with a counterexample. A state space of more than 65536 states is refused
+
+| Option | Required | Default | Meaning |
+|---|---|---|---|
+| `--path <PATH>` | yes | none | The protocol document to check |
+| `--properties <PROPERTIES>` | no | none | A `canon-properties/1` document: properties declared beside the protocol, each saying an action's or outcome's status is independent of a claim. Each is checked in every state |
+
+```text
+Check a `protocol/1` document over its whole finite state space: report outcomes no state reaches, actions whose precondition holds in no state, claims, obligations, preconditions and outcome requirements that read evidence no action produces, outcomes that hold on evidence an authority-requiring action may produce without any authority decision, and each declared property that fails, with a counterexample. A state space of more than 65536 states is refused
+
+Usage: canon check [OPTIONS] --path <PATH>
+
+Options:
+      --path <PATH>
+          The protocol document to check
+
+      --properties <PROPERTIES>
+          A `canon-properties/1` document: properties declared beside the protocol, each saying an action's or outcome's status is independent of a claim. Each is checked in every state
+
+  -h, --help
+          Print help
+```
+
 ## `canon diff`
 
 The semantic difference between two compiled protocol revisions. Not built yet
@@ -175,6 +201,6 @@ Options:
 
 | Status | Meaning |
 |---|---|
-| `0` | Success: the document is valid or compiled, the case was evaluated, or every conformance scenario ran and passed. |
-| `1` | Rejected: a document was read and rejected, an evaluation was refused, a conformance scenario failed or was unreadable, or no scenario ran. |
+| `0` | Success: the document is valid or compiled, the case was evaluated, every conformance scenario ran and passed, or a check found nothing. |
+| `1` | Rejected: a document was read and rejected, an evaluation or a check was refused, a conformance scenario failed or was unreadable, no scenario ran, or a check found something. |
 | `2` | Unreadable: an input file or directory could not be read. |

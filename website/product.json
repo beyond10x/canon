@@ -64,6 +64,7 @@
         {"label": "Action admissibility", "status": "shipped", "detail": "Admissible, approval-required or blocked, from preconditions and authority decisions; scenario CANON-AUTHORITY-001.", "href": "/docs/reference/evaluation#sections"},
         {"label": "Outcomes", "status": "shipped", "detail": "Legitimate or blocked; no completion through an undeclared or blocked outcome; scenario CANON-OUTCOME-001.", "href": "/docs/reference/evaluation#sections"},
         {"label": "Decision-based outcomes", "status": "shipped", "detail": "An outcome may require an explicit decision taken at the current case revision; scenario CANON-OUTCOME-002.", "href": "/docs/reference/evaluation#explicit-decisions"},
+        {"label": "canon check", "status": "shipped", "detail": "Every state of a protocol's finite state space: unreachable outcomes, unsatisfiable preconditions, unproduced evidence, authority bypasses and failing properties, each with a witness.", "href": "/docs/reference/cli#canon-check"},
         {"label": "Semantic diff", "status": "planned", "detail": "Classify a protocol change as tightening, relaxation or breaking."}
       ]
     },

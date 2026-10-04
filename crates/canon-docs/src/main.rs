@@ -387,6 +387,28 @@ mod tests {
     }
 
     #[test]
+    fn the_properties_document_has_a_section_and_a_schema() {
+        let files = generated();
+        let documents = &files["website/docs/reference/documents.md"];
+        assert!(documents.contains("\n## `canon-properties/1`\n"));
+        assert!(documents.contains("Read by `canon check --properties`."));
+        for key in ["subject", "independent_of", "action", "outcome", "claim"] {
+            assert!(documents.contains(&format!("| `{key}` |")), "{key}");
+        }
+        let schema = &files["website/static/schemas/properties-1.schema.json"];
+        assert!(schema.contains("\"const\": \"canon-properties/1\""));
+        let compact: String = schema.chars().filter(|c| !c.is_whitespace()).collect();
+        assert!(compact.contains("\"required\":[\"format\",\"protocol\"]"));
+        assert!(compact.contains("\"required\":[\"subject\",\"independent_of\"]"));
+        for key in ["action", "outcome", "claim"] {
+            assert!(
+                compact.contains(&format!("\"required\":[\"{key}\"]")),
+                "{key}"
+            );
+        }
+    }
+
+    #[test]
     fn the_example_is_compiled_by_canon_itself() {
         let example = &generated()["website/docs/reference/investigation-example.md"];
         assert!(example.contains("\"format\": \"canon-ir/1\""));
