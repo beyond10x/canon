@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:conformance-runner
 kind: story
-status: proposed
+status: implemented
 title: Run conformance scenarios with canon conform run
 refs:
 - provider: taskboard
@@ -17,9 +17,11 @@ scope:
   path: crates/canon-cli/
 - confidence: cited
   path: crates/canon/src/conform/
-revision: 5
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "proposed", to: "active", at: "2026-10-04T02:18:12Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "active", to: "implemented", at: "2026-10-04T02:53:12Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1,"review_outcome":5,"verification":1}}}
 ---
 ## Outcome
 

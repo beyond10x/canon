@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T02:53:12Z",
+  "actor": "human:timo",
+  "artifact": "story:conformance-runner",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test --test conform_run: phase-1 commit ef4bcf7 vs treatment 0cf6823",
+    "reference": "ga-wave-2026-10-04-w3/canon-conformance-runner/scratch/phase1-red.log: phase 1 exit 101 (unrecognized subcommand conform); treatment conform_run_reports_each_scenario passes; VERIFIED"
+  }
+}
