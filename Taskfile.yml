@@ -8,11 +8,17 @@ tasks:
     cmds: [{task: check}]
 
   check:
-    desc: Format, lint, test.
+    desc: ESS gate, format, lint, test.
     cmds:
+      - task: ess-gate
       - cargo fmt --all --check
       - cargo clippy --workspace --all-targets --locked -- -D warnings
       - cargo test --workspace --locked
+
+  ess-gate:
+    desc: Atlas ADR 0076 gate on ess/, and ess/ equal to the Rust model.
+    cmds:
+      - cargo test -p b10x-canon --test ess_gate --test ess_model_matches --locked
 
   plan:
     desc: Validate the AEP planning store.

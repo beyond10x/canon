@@ -1,0 +1,238 @@
+# Retrofitted from the protocol/1 source model in crates/canon/src/model/ (story:protocol-source-model).
+# This is the typed model, not the protocol/1 surface syntax: parsing that syntax, and every
+# validation rule (duplicate identifiers, references that resolve), is tested by Canon itself.
+# crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
+domain: canon.protocol
+
+summary: >-
+  A protocol document: its identity and revision, and the artifacts, evidence kinds, claims,
+  obligations, actions and outcomes it declares. A predicate over evidence and claim values
+  decides each claim, guards each action and states what each outcome requires.
+
+naming:
+  wire: protocol
+  display: Protocol
+
+types:
+  # read from: crates/canon/src/model/ids.rs:55-58
+  - name: canon.protocol.ProtocolId
+    kind: newtype
+    of: String
+
+  # read from: crates/canon/src/model/ids.rs:63-66
+  - name: canon.protocol.ArtifactId
+    kind: newtype
+    of: String
+
+  # read from: crates/canon/src/model/ids.rs:79-82
+  - name: canon.protocol.EvidenceKindId
+    kind: newtype
+    of: String
+
+  # read from: crates/canon/src/model/ids.rs:71-74
+  - name: canon.protocol.ClaimId
+    kind: newtype
+    of: String
+
+  # read from: crates/canon/src/model/ids.rs:83-86
+  - name: canon.protocol.ObligationId
+    kind: newtype
+    of: String
+
+  # read from: crates/canon/src/model/ids.rs:87-90
+  - name: canon.protocol.ActionId
+    kind: newtype
+    of: String
+
+  # read from: crates/canon/src/model/ids.rs:91-94
+  - name: canon.protocol.OutcomeId
+    kind: newtype
+    of: String
+
+  # read from: crates/canon/src/model/ids.rs:95-98
+  - name: canon.protocol.CapabilityId
+    kind: newtype
+    of: String
+
+  # read from: crates/canon/src/model/ids.rs:99-102
+  - name: canon.protocol.EffectClass
+    kind: newtype
+    of: String
+
+  # read from: crates/canon/src/model/mod.rs:60-65
+  - name: canon.protocol.Artifact
+    kind: struct
+    fields:
+      # read from: crates/canon/src/model/mod.rs:64
+      - name: description
+        type: Optional<String>
+
+  # read from: crates/canon/src/model/mod.rs:68-73
+  - name: canon.protocol.EvidenceKind
+    kind: struct
+    fields:
+      # read from: crates/canon/src/model/mod.rs:72
+      - name: description
+        type: Optional<String>
+
+  # read from: crates/canon/src/model/mod.rs:76-82
+  - name: canon.protocol.Claim
+    kind: struct
+    fields:
+      # read from: crates/canon/src/model/mod.rs:80
+      - name: description
+        type: Optional<String>
+      # read from: crates/canon/src/model/mod.rs:81
+      - name: true_when
+        type: canon.protocol.Predicate
+
+  # read from: crates/canon/src/model/mod.rs:85-90
+  - name: canon.protocol.Obligation
+    kind: struct
+    fields:
+      # read from: crates/canon/src/model/mod.rs:89
+      - name: description
+        type: Optional<String>
+
+  # read from: crates/canon/src/model/mod.rs:94-107
+  - name: canon.protocol.Action
+    kind: struct
+    fields:
+      # read from: crates/canon/src/model/mod.rs:98
+      - name: description
+        type: Optional<String>
+      # read from: crates/canon/src/model/mod.rs:100
+      - name: precondition
+        type: Optional<canon.protocol.Predicate>
+      # read from: crates/canon/src/model/mod.rs:102
+      - name: requires
+        type: List<canon.protocol.CapabilityRequirement>
+      # read from: crates/canon/src/model/mod.rs:104
+      - name: effect
+        type: Optional<canon.protocol.EffectClass>
+      # read from: crates/canon/src/model/mod.rs:106
+      - name: may_produce
+        type: List<canon.protocol.EvidenceProduction>
+
+  # read from: crates/canon/src/model/mod.rs:110-114
+  - name: canon.protocol.CapabilityRequirement
+    kind: struct
+    fields:
+      # read from: crates/canon/src/model/mod.rs:113
+      - name: capability
+        type: canon.protocol.CapabilityId
+
+  # read from: crates/canon/src/model/mod.rs:117-121
+  - name: canon.protocol.EvidenceProduction
+    kind: struct
+    fields:
+      # read from: crates/canon/src/model/mod.rs:120
+      - name: evidence
+        type: canon.protocol.EvidenceKindId
+
+  # read from: crates/canon/src/model/mod.rs:124-130
+  - name: canon.protocol.Outcome
+    kind: struct
+    fields:
+      # read from: crates/canon/src/model/mod.rs:128
+      - name: description
+        type: Optional<String>
+      # read from: crates/canon/src/model/mod.rs:129
+      - name: requires
+        type: canon.protocol.Predicate
+
+  # A three-valued truth value; unknown is not false.
+  # read from: crates/canon/src/model/predicate.rs:13-19
+  - name: canon.protocol.Truth
+    kind: enum
+    variants: ["true", "false", "unknown"]
+
+  # Source text writes a predicate as a map with exactly one of the keys all, any, not, evidence or
+  # claim (crates/canon/src/model/predicate.rs:110-173); the typed model is this union.
+  # read from: crates/canon/src/model/predicate.rs:54-65
+  - name: canon.protocol.Predicate
+    kind: union
+    tag: kind
+    variants:
+      # read from: crates/canon/src/model/predicate.rs:59
+      all: List<canon.protocol.Predicate>
+      # read from: crates/canon/src/model/predicate.rs:61
+      any: List<canon.protocol.Predicate>
+      # read from: crates/canon/src/model/predicate.rs:62
+      not: canon.protocol.Predicate
+      # read from: crates/canon/src/model/predicate.rs:63
+      evidence: canon.protocol.EvidenceMatch
+      # read from: crates/canon/src/model/predicate.rs:64
+      claim: canon.protocol.ClaimTest
+
+  # read from: crates/canon/src/model/predicate.rs:67-74
+  - name: canon.protocol.EvidenceMatch
+    kind: struct
+    fields:
+      # read from: crates/canon/src/model/predicate.rs:71
+      - name: kind
+        type: canon.protocol.EvidenceKindId
+      # read from: crates/canon/src/model/predicate.rs:73
+      - name: result
+        type: Optional<String>
+
+  # Source text may leave `is` out; it then reads as true (crates/canon/src/model/predicate.rs:169).
+  # read from: crates/canon/src/model/predicate.rs:76-81
+  - name: canon.protocol.ClaimTest
+    kind: struct
+    fields:
+      # read from: crates/canon/src/model/predicate.rs:79
+      - name: claim
+        type: canon.protocol.ClaimId
+      # read from: crates/canon/src/model/predicate.rs:80
+      - name: is
+        type: canon.protocol.Truth
+
+entities:
+  # The source model's root, with its header (id, revision, description) written in place. Every
+  # declaration section is a map keyed by identifier (crates/canon/src/model/mod.rs:132-136); the
+  # declarations are values with no identity outside their protocol, so they are types, not
+  # entities, and need no relations. The case a protocol governs is not in the source model yet.
+  # read from: crates/canon/src/model/mod.rs:27-57
+  - name: canon.protocol.Protocol
+    identity:
+      # read from: crates/canon/src/model/mod.rs:53
+      name: protocol_id
+      type: canon.protocol.ProtocolId
+    fields:
+      # The only accepted value is protocol/1 (crates/canon/src/model/parse.rs:8).
+      # read from: crates/canon/src/model/mod.rs:33
+      - name: format
+        type: String
+      # read from: crates/canon/src/model/mod.rs:54
+      - name: revision
+        type: Integer
+      # read from: crates/canon/src/model/mod.rs:56
+      - name: description
+        type: Optional<String>
+      # read from: crates/canon/src/model/mod.rs:36
+      - name: artifacts
+        type: Map<canon.protocol.ArtifactId, canon.protocol.Artifact>
+      # read from: crates/canon/src/model/mod.rs:38
+      - name: evidence_kinds
+        type: Map<canon.protocol.EvidenceKindId, canon.protocol.EvidenceKind>
+      # read from: crates/canon/src/model/mod.rs:40
+      - name: claims
+        type: Map<canon.protocol.ClaimId, canon.protocol.Claim>
+      # read from: crates/canon/src/model/mod.rs:42
+      - name: obligations
+        type: Map<canon.protocol.ObligationId, canon.protocol.Obligation>
+      # read from: crates/canon/src/model/mod.rs:44
+      - name: actions
+        type: Map<canon.protocol.ActionId, canon.protocol.Action>
+      # read from: crates/canon/src/model/mod.rs:46
+      - name: outcomes
+        type: Map<canon.protocol.OutcomeId, canon.protocol.Outcome>
+    # revision is a u64 (crates/canon/src/model/mod.rs:54); ESS Integer is signed.
+    invariants:
+      - revision >= 0
+    # The model has no lifecycle: a protocol is declared and stays declared. No commands.
+    lifecycle:
+      initial: Declared
+      states: [Declared]
+      terminal: [Declared]
