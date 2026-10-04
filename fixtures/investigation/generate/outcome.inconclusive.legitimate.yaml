@@ -1,0 +1,45 @@
+format: "canon-conformance/1"
+id: "investigation.outcome.inconclusive.legitimate"
+covers: []
+fixture: "fixtures/investigation/check/base/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "investigation"
+        revision: "r"
+        artifacts:
+          "explanation":
+            revision: "r"
+      evidence: []
+      decisions:
+        - decision: "explicitly_inconclusive"
+          outcome: "inconclusive"
+          principal: "canon-generate"
+          case_revision: "r"
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "inconclusive": {
+              "decided_by": {
+                "decision": "explicitly_inconclusive",
+                "principals": [
+                  "canon-generate"
+                ]
+              },
+              "status": "legitimate"
+            },
+            "supported": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }

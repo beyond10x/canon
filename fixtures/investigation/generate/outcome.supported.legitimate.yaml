@@ -1,0 +1,45 @@
+format: "canon-conformance/1"
+id: "investigation.outcome.supported.legitimate"
+covers: []
+fixture: "fixtures/investigation/check/base/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "investigation"
+        revision: "r"
+        artifacts:
+          "explanation":
+            revision: "r"
+      evidence:
+        - format: "canon-evidence/1"
+          id: "e0"
+          kind: "falsification_attempt"
+          result: "survived"
+          subject: "explanation"
+          subject_revision: "r"
+        - format: "canon-evidence/1"
+          id: "e1"
+          kind: "supporting_observation"
+          subject: "explanation"
+          subject_revision: "r"
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "inconclusive": {
+              "reasons": [
+                {
+                  "decision": "explicitly_inconclusive",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            },
+            "supported": {
+              "status": "legitimate"
+            }
+          }
+        }
