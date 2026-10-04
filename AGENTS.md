@@ -29,9 +29,27 @@ it must know. The cross-repository architecture is Atlas ADRs 0066–0075 and At
 
 ## ESS
 
-Canon opts out of ESS for its language semantics: Canon's own conformance suite is authoritative for
-what a protocol means (Atlas ADR 0067). If the Canon toolchain is later specified as software, that
-specification lives under `ess/` and covers the toolchain, not the language.
+Canon's ESS specification lives under `ess/`. Today it specifies only the `protocol/1` source
+model (`crates/canon/src/model/`), with no commands. Atlas ADR 0076 still owes, each with the story
+that introduces it: the `canon` CLI's commands (`canon validate` and its successors), the case
+snapshot, and the evidence and decision documents.
+
+`ess/` is held to a hard gate (Atlas ADR 0076): `ess specify validate --path ess
+--strict-requires`, `ess specify compile --path ess`, `ess verify conform synthesize --path ess`
+with 0 refusals, and no `UNMAPPED:` anywhere under `ess/`. `task ess-gate` enforces all four
+(`crates/canon/tests/ess_gate.rs`) and runs first in `task check`. `ess/ess-inputs.yaml` pins the
+ess release, which `ess specify toolchain which` reports when run from `ess/`; CI installs the same
+one. No story in this repository is implemented while the gate is red. The `UNMAPPED:` scan exists because ess
+0.52.0 does not see open questions; remove it once the pinned ess release refuses open entries
+itself (beyond10x/ess `epic:typed-open-questions`).
+
+The meaning of a protocol stays in Canon's own conformance suite, not in ESS (Atlas ADR 0067 as
+amended by ADR 0076).
+
+The Rust model in `crates/canon/src/model/` is hand-written. `crates/canon/tests/ess_model_matches.rs`
+fails, naming the difference, when its fields, field types or variants differ from `ess/`, so a story
+that changes the model updates `ess/` in the same change. Each declaration in `ess/` carries a
+`# read from: <file>:<line>` comment; keep those current.
 
 ## Work
 

@@ -1,0 +1,11 @@
+format: ess/20
+system: canon
+version: v1
+
+summary: >-
+  Canon's data model: the protocol/1 source model a protocol document is read into. What a protocol
+  means is Canon's own conformance suite, not this specification (Atlas ADR 0067 as amended by
+  Atlas ADR 0076).
+
+domains:
+  - canon.protocol
