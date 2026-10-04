@@ -8,88 +8,13 @@ mod conform;
 mod diff;
 mod evaluate;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand};
+use clap::Parser;
 
 use b10x_canon::{ir, model, validate};
-
-/// A document was read and rejected.
-const REJECTED: u8 = 1;
-/// A document could not be read.
-const UNREADABLE: u8 = 2;
-
-#[derive(Debug, Parser)]
-#[command(
-    name = "canon",
-    version,
-    about = "Evidence-governed protocol toolchain"
-)]
-struct Cli {
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Debug, Subcommand)]
-enum Command {
-    /// Parse and validate a `protocol/1` document.
-    Validate {
-        /// The protocol document to validate.
-        #[arg(long)]
-        path: PathBuf,
-    },
-    /// Compile a valid `protocol/1` document into `canon-ir/1` and print it.
-    Compile {
-        /// The protocol document to compile.
-        #[arg(long)]
-        path: PathBuf,
-    },
-    /// Evaluate every claim of a compiled protocol for a case from an evidence set, and print the
-    /// `canon-decision/1` document.
-    Evaluate {
-        /// The compiled protocol: `canon-ir/1` exactly as `canon compile` prints it.
-        #[arg(long)]
-        ir: PathBuf,
-        /// The `canon-case/1` case snapshot.
-        #[arg(long)]
-        case: PathBuf,
-        /// A directory holding only `canon-evidence/1` records, one per `*.yaml` or `*.json` file.
-        #[arg(long)]
-        evidence: PathBuf,
-        /// A `canon-authority/1` document of authority decisions. Read and passed through; not
-        /// supported yet.
-        #[arg(long)]
-        authority: Option<PathBuf>,
-        /// The evaluation instant. Passed through as written; not supported yet.
-        #[arg(long)]
-        at: Option<String>,
-    },
-    /// The semantic difference between two compiled protocol revisions. Not built yet.
-    Diff {
-        /// The earlier revision, as `canon compile` prints it.
-        #[arg(long)]
-        from: PathBuf,
-        /// The later revision, as `canon compile` prints it.
-        #[arg(long)]
-        to: PathBuf,
-    },
-    /// Conformance scenarios.
-    Conform {
-        #[command(subcommand)]
-        command: ConformCommand,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-enum ConformCommand {
-    /// Run every `canon-conformance/1` scenario of a registry directory and report each.
-    Run {
-        /// The registry directory; every `*.yaml` file in it is one scenario.
-        #[arg(long, default_value = "conformance/scenarios")]
-        scenarios: PathBuf,
-    },
-}
+use canon_cli::{Cli, Command, ConformCommand, REJECTED, UNREADABLE};
 
 fn main() -> ExitCode {
     match Cli::parse().command {

@@ -8,17 +8,35 @@ tasks:
     cmds: [{task: check}]
 
   check:
-    desc: ESS gate, format, lint, test.
+    desc: ESS gate, format, lint, test, generated documentation drift.
     cmds:
       - task: ess-gate
       - cargo fmt --all --check
       - cargo clippy --workspace --all-targets --locked -- -D warnings
       - cargo test --workspace --locked
+      - task: docs-check
 
   ess-gate:
     desc: Atlas ADR 0076 gate on ess/, and ess/ equal to the Rust model.
     cmds:
       - cargo test -p b10x-canon --test ess_gate --test ess_model_matches --locked
+
+  docs-generate:
+    desc: Regenerate the derived documentation pages under website/ from the repository.
+    cmds:
+      - cargo run --locked -p canon-docs -- generate
+
+  docs-check:
+    desc: Fail when a generated documentation page differs from what the repository generates.
+    cmds:
+      - cargo run --locked -p canon-docs -- generate --check
+
+  site-build:
+    desc: Build the Docusaurus documentation site (Node), after the drift check.
+    cmds:
+      - task: docs-check
+      - npm --prefix website ci
+      - npm --prefix website run build
 
   plan:
     desc: Validate the AEP planning store.
