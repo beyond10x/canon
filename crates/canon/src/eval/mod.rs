@@ -211,7 +211,9 @@ pub use decision::{render, render_sections};
 pub use evidence::{evidence_from_value, read_evidence};
 pub use read::{MAX_IR_DEPTH, read_ir};
 
+pub(crate) use authority::Authority;
 pub(crate) use claims::reads;
+pub(crate) use decisions::Decisions;
 
 /// Why an evaluation was refused: a stable machine-readable code and a one-line message.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -307,8 +309,13 @@ pub fn evaluate_with(
             outcomes,
             explanation: None,
         };
+        let inputs = crate::explain::Inputs {
+            authority: authority.as_ref(),
+            decisions: decisions.as_ref(),
+            at: supplied.at,
+        };
         decision.explanation =
-            crate::explain::explain(ir, case, evidence, &excluded, supplied, &decision);
+            crate::explain::explain(ir, case, evidence, &excluded, inputs, &decision);
         Ok(decision)
     })
 }

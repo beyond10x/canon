@@ -37,7 +37,10 @@ pub struct Decision {
     /// `decided_by` (`{"decision": <name>, "principals": [...]}`), and a blocked one gives the
     /// reason `{"decision": <name>, "present": false}`.
     pub outcomes: Option<Json>,
-    /// The structured explanation; not written yet (story:explanation).
+    /// Why each claim that is not `true`, each open obligation, each action that is not
+    /// admissible and each blocked outcome has its status, traced to the evidence records that
+    /// applied or were excluded, and what the decision was computed from (`computed_from`); the
+    /// evaluator writes it on every decision. Its shape is fixed by CANON-EXPLAIN-001.
     pub explanation: Option<Json>,
 }
 

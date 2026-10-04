@@ -51,14 +51,13 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
-use crate::eval::{Supplied, reads, unmet_reasons};
+use crate::eval::{Authority, Decisions, reads, unmet_reasons};
 use crate::ir::Ir;
 use crate::model::{
     ArtifactId, Case, ClaimId, DECISION_FORMAT, Decision, EvidenceExclusion, EvidenceKindId,
-    EvidenceRecord, ExplicitDecision, Json, Predicate, Truth,
+    EvidenceRecord, Json, Predicate, Truth,
 };
 
 /// An explanation, the payload of the decision's `explanation` slot, as the module docs give it.
@@ -67,15 +66,29 @@ pub type Explanation = Json;
 /// The version of the Canon crate whose semantics applied.
 const CANON_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// The supplied inputs the decision was evaluated from, as the evaluator read them: the
+/// explanation records the values that applied and reads no input text a second time, so it
+/// cannot record a decision other than the one the evaluator applied.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct Inputs<'a> {
+    /// The authority decisions `eval::authority` read from `--authority`.
+    pub(crate) authority: Option<&'a Authority>,
+    /// The explicit decisions `eval::decisions` read from `--decisions`.
+    pub(crate) decisions: Option<&'a Decisions>,
+    /// The evaluation instant, as given: `--at` has exactly one written form per instant, which
+    /// `eval::freshness` has checked.
+    pub(crate) at: Option<&'a str>,
+}
+
 /// The explanation of `decision`, computed from `ir`, `case`, `evidence`, the records the
-/// exclusion stages `excluded` (each with its reason) and the `supplied` inputs it was evaluated
+/// exclusion stages `excluded` (each with its reason) and the supplied `inputs` it was evaluated
 /// from. Always written: it records at least what the decision was computed from.
-pub fn explain(
+pub(crate) fn explain(
     ir: &Ir,
     case: &Case,
     evidence: &[EvidenceRecord],
     excluded: &[EvidenceExclusion],
-    supplied: Supplied<'_>,
+    inputs: Inputs<'_>,
     decision: &Decision,
 ) -> Option<Explanation> {
     let records = Records::new(evidence, excluded);
@@ -104,7 +117,7 @@ pub fn explain(
     let mut sections = Map::new();
     sections.insert(
         "computed_from".to_owned(),
-        computed_from(ir, case, evidence, supplied),
+        computed_from(ir, case, evidence, inputs),
     );
     for (name, entries) in [
         ("claims", claims),
@@ -197,12 +210,7 @@ fn sorted<T: Ord>(mut items: Vec<T>) -> Vec<T> {
     items
 }
 
-fn computed_from(
-    ir: &Ir,
-    case: &Case,
-    evidence: &[EvidenceRecord],
-    supplied: Supplied<'_>,
-) -> Value {
+fn computed_from(ir: &Ir, case: &Case, evidence: &[EvidenceRecord], inputs: Inputs<'_>) -> Value {
     let mut from = Map::new();
     from.insert("protocol".to_owned(), json!(ir.protocol.id.as_str()));
     from.insert("protocol_revision".to_owned(), json!(ir.protocol.revision));
@@ -213,13 +221,13 @@ fn computed_from(
     from.insert("case".to_owned(), case_snapshot(case));
     let ids = sorted(evidence.iter().map(|record| record.id.as_str()).collect());
     from.insert("evidence".to_owned(), json!(ids));
-    if let Some(text) = supplied.authority {
-        from.insert("authority".to_owned(), authority(text));
+    if let Some(read) = inputs.authority {
+        from.insert("authority".to_owned(), authority(read));
     }
-    if let Some(text) = supplied.decisions {
-        from.insert("decisions".to_owned(), decisions(text));
+    if let Some(read) = inputs.decisions {
+        from.insert("decisions".to_owned(), decisions(read));
     }
-    if let Some(at) = supplied.at {
+    if let Some(at) = inputs.at {
         from.insert("at".to_owned(), json!(at));
     }
     Value::Object(from)
@@ -250,68 +258,46 @@ fn case_snapshot(case: &Case) -> Value {
     Value::Object(snapshot)
 }
 
-/// One `canon-authority/1` entry. The evaluator has read the same text before the explanation is
-/// computed and refused it unless every entry reads.
-#[derive(Deserialize)]
-struct AuthorityEntry {
-    capability: String,
-    decision: String,
+/// The authority decisions as the evaluator read and applied them, by capability.
+fn authority(authority: &Authority) -> Value {
+    sorted(
+        authority
+            .decisions()
+            .map(|(capability, decision)| (capability.as_str(), decision))
+            .collect(),
+    )
+    .into_iter()
+    .map(|(capability, decision)| json!({"capability": capability, "decision": decision}))
+    .collect()
 }
 
-/// The authority decisions, by capability. Text that does not read — which the evaluator has
-/// already refused — is recorded as given.
-fn authority(text: &str) -> Value {
-    match serde_yaml_ng::from_str::<Vec<AuthorityEntry>>(text) {
-        Ok(entries) => {
-            let entries = sorted(
-                entries
-                    .into_iter()
-                    .map(|entry| (entry.capability, entry.decision))
-                    .collect(),
-            );
-            entries
-                .into_iter()
-                .map(|(capability, decision)| {
-                    json!({"capability": capability, "decision": decision})
-                })
-                .collect()
-        }
-        Err(_) => json!(text),
-    }
-}
-
-/// The explicit decisions, by decision, outcome, principal and case revision. Text that does not
-/// read — which the evaluator has already refused — is recorded as given.
-fn decisions(text: &str) -> Value {
-    match serde_yaml_ng::from_str::<Vec<ExplicitDecision>>(text) {
-        Ok(entries) => {
-            let entries = sorted(
-                entries
-                    .iter()
-                    .map(|entry| {
-                        (
-                            entry.decision.as_str(),
-                            entry.outcome.as_str(),
-                            entry.principal.as_str(),
-                            entry.case_revision.as_str(),
-                        )
-                    })
-                    .collect(),
-            );
-            entries
-                .into_iter()
-                .map(|(decision, outcome, principal, case_revision)| {
-                    json!({
-                        "case_revision": case_revision,
-                        "decision": decision,
-                        "outcome": outcome,
-                        "principal": principal,
-                    })
-                })
-                .collect()
-        }
-        Err(_) => json!(text),
-    }
+/// The explicit decisions as the evaluator read them, by decision, outcome, principal and case
+/// revision.
+fn decisions(decisions: &Decisions) -> Value {
+    sorted(
+        decisions
+            .entries()
+            .iter()
+            .map(|entry| {
+                (
+                    entry.decision.as_str(),
+                    entry.outcome.as_str(),
+                    entry.principal.as_str(),
+                    entry.case_revision.as_str(),
+                )
+            })
+            .collect(),
+    )
+    .into_iter()
+    .map(|(decision, outcome, principal, case_revision)| {
+        json!({
+            "case_revision": case_revision,
+            "decision": decision,
+            "outcome": outcome,
+            "principal": principal,
+        })
+    })
+    .collect()
 }
 
 /// `{"claim": <id>, "value": <value>}` for each claim `predicate` tests, in claim-id order.
@@ -448,7 +434,7 @@ fn not_with_status(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eval::{evaluate_with, read_case, read_evidence};
+    use crate::eval::{Supplied, evaluate_with, read_case, read_evidence};
 
     const PROTOCOL: &str = "format: protocol/1\n\
         protocol: {id: p, revision: 2}\n\

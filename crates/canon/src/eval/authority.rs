@@ -49,7 +49,7 @@ impl Grant {
 
 /// The authority decisions, read from the text given as `--authority`, keyed by capability.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct Authority {
+pub(crate) struct Authority {
     decisions: BTreeMap<CapabilityId, Grant>,
 }
 
@@ -57,6 +57,14 @@ impl Authority {
     /// The decision on `capability`, or `None` when the authority does not decide it.
     pub(super) fn decision(&self, capability: &CapabilityId) -> Option<Grant> {
         self.decisions.get(capability).copied()
+    }
+
+    /// Every decision as it applies, `(capability, "granted" | "denied")`, in capability order:
+    /// what the explanation records (`crate::explain`), so it and the evaluator read one value.
+    pub(crate) fn decisions(&self) -> impl Iterator<Item = (&CapabilityId, &'static str)> {
+        self.decisions
+            .iter()
+            .map(|(capability, grant)| (capability, grant.as_str()))
     }
 }
 

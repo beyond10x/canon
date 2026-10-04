@@ -40,13 +40,13 @@ const INPUT: &str = "`--decisions`";
 
 /// The explicit decisions, read from the text given as `--decisions`, in the order given.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct Decisions {
+pub(crate) struct Decisions {
     entries: Vec<ExplicitDecision>,
 }
 
 impl Decisions {
     /// Every decision, in the order given.
-    pub(super) fn entries(&self) -> &[ExplicitDecision] {
+    pub(crate) fn entries(&self) -> &[ExplicitDecision] {
         &self.entries
     }
 

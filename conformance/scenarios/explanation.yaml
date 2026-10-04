@@ -14,15 +14,19 @@ fixture: fixtures/investigation/explanation.yaml
 #   An input not supplied is not written.
 # - `outcomes`, `actions`, `obligations`: each blocked outcome, non-admissible action and open
 #   obligation with its status and `because`, the reasons that decide it (an obligation's walked
-#   as an outcome's requirement is), each evidence-match reason followed by every record of its
-#   kind, applied or excluded with its reason. A claim reason `{"claim": <id>, "value": <value>}`
-#   continues under `claims`.
+#   as an outcome's requirement is), each evidence-match reason (with its `subject` when the
+#   match names one) followed by every record that match reads, applied or excluded with its
+#   reason. A claim reason `{"claim": <id>, "value": <value>}` continues under `claims`.
 # - `claims`: each claim whose value is not `true`, each claim a reason names and each claim one
 #   of those tests, `true` ones included, with its value and `because`: the claims it tests, as
-#   claim reasons, then each evidence record of a kind it reaches, in evidence-id order,
+#   claim reasons, then each record an evidence match it reaches reads, in evidence-id order,
 #   `{"evidence": <id>, "status": "applied"}`, or `{"evidence": <id>, "reason": <reason>,
 #   "status": "excluded"}` with the reason the claim's `excluded_evidence` list records, then each
-#   kind it reaches that no record has, `{"kind": <kind>, "status": "absent"}`.
+#   evidence match it reaches that reads no record, `{"kind": <kind>, "status": "absent"}`, with
+#   `"subject": <artifact>` added when the match names one.
+#
+# A match reads a record of its kind and, when it names a subject, only one about that artifact
+# (the rule claim values are decided by); a record about another artifact is not listed under it.
 #
 # A section with nothing to explain is not written. Serialization is canonical: equivalent inputs
 # give byte-identical output (CANON-DETERMINISM-001), so each step expects the whole decision, and

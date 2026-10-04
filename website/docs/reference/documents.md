@@ -70,7 +70,7 @@ A `canon-decision/1` document. A section slot that is `None` is not serialized.
 | `obligations` | any JSON value | when present | Each declared obligation, `open` or `discharged`, in identifier order; written when the protocol declares an obligation. Its shape is fixed by CANON-OBLIGATION-001. |
 | `actions` | any JSON value | when present | Each declared action, `admissible`, `approval-required` or `blocked`, with the reasons for a status other than `admissible`; written when the protocol declares an action. Its shape is fixed by CANON-AUTHORITY-001. |
 | `outcomes` | any JSON value | when present | Each declared outcome, `legitimate` or `blocked`, with the reasons it is blocked; written when the protocol declares an outcome. Its shape is fixed by CANON-OUTCOME-001 and, for an outcome that requires an explicit decision, by CANON-OUTCOME-002: a legitimate one records `decided_by` (`{"decision": <name>, "principals": [...]}`), and a blocked one gives the reason `{"decision": <name>, "present": false}`. |
-| `explanation` | any JSON value | when present | The structured explanation; not written yet (story:explanation). |
+| `explanation` | any JSON value | when present | Why each claim that is not `true`, each open obligation, each action that is not admissible and each blocked outcome has its status, traced to the evidence records that applied or were excluded, and what the decision was computed from (`computed_from`); the evaluator writes it on every decision. Its shape is fixed by CANON-EXPLAIN-001. |
 
 ### `ClaimDecision`
 
