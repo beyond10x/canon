@@ -4,7 +4,8 @@ version: v1
 
 summary: >-
   Canon's data model: the protocol/1 source model a protocol document is read into, and the
-  canon-case/1, canon-evidence/1 and canon-decision/1 documents an evaluation reads and writes. What a protocol
+  canon-case/1, canon-evidence/1, canon-decisions/1 and canon-decision/1 documents an evaluation
+  reads and writes. What a protocol
   means is Canon's own conformance suite, not this specification (Atlas ADR 0067 as amended by
   Atlas ADR 0076).
 

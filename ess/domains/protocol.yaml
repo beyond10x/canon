@@ -2,16 +2,18 @@
 # This is the typed model, not the protocol/1 surface syntax: parsing that syntax, and every
 # validation rule (duplicate identifiers, references that resolve), is tested by Canon itself.
 # The evaluation documents (canon-case/1, canon-evidence/1, canon-decision/1) are specified first
-# here (story:three-valued-claims).
+# here (story:three-valued-claims), and the explicit decisions an evaluation reads
+# (canon-decisions/1) too (story:decision-outcomes).
 # crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
 domain: canon.protocol
 
 summary: >-
   A protocol document: its identity and revision, and the artifacts, evidence kinds, claims,
   obligations, actions and outcomes it declares. A predicate over evidence and claim values
-  decides each claim, guards each action and states what each outcome requires. A case governed
-  by a protocol is evaluated from a case snapshot and evidence records into a decision that gives
-  each claim a three-valued truth value.
+  decides each claim and guards each action, and states what each outcome requires unless the
+  outcome requires an explicit decision instead. A case governed by a protocol is evaluated from a
+  case snapshot, evidence records and explicit decisions into a decision that gives each claim a
+  three-valued truth value.
 
 naming:
   wire: protocol
@@ -157,9 +159,45 @@ types:
       # read from: crates/canon/src/model/mod.rs:128
       - name: description
         type: Optional<String>
+      # What the outcome requires: a predicate over claim values and evidence, or an explicit
+      # decision (story:decision-outcomes).
       # read from: crates/canon/src/model/mod.rs:129
+      # read from: .engineering/planning/story/decision-outcomes.md:44-48
       - name: requires
-        type: canon.protocol.Predicate
+        type: canon.protocol.OutcomeRequirement
+
+  # Source text writes an outcome's `requires` as a predicate, or as a map with the one key
+  # decision naming the explicit decision the outcome requires (design § 12:
+  # `inconclusive: requires: decision: explicitly_inconclusive`); the typed model is this union.
+  # Such an outcome is legitimate only with a canon-decisions/1 decision of that name, for that
+  # outcome, taken at the case snapshot's current revision; it is blocked otherwise, naming the
+  # decision (CANON-OUTCOME-002). A decision is a requirement on its own: it is not a predicate
+  # form, so no claim, obligation or action precondition can name one.
+  # read from: docs/design/canon-protocol-calculus-design.md:660-662
+  # read from: .engineering/planning/story/decision-outcomes.md:44-54
+  - name: canon.protocol.OutcomeRequirement
+    kind: union
+    tag: kind
+    variants:
+      # read from: crates/canon/src/model/mod.rs:129
+      predicate: canon.protocol.Predicate
+      # read from: docs/design/canon-protocol-calculus-design.md:662
+      decision: canon.protocol.DecisionName
+
+  # The name of an explicit decision an outcome requires (explicitly_inconclusive). An identifier:
+  # not empty, no whitespace, control or Unicode format characters.
+  # read from: docs/design/canon-protocol-calculus-design.md:662
+  - name: canon.protocol.DecisionName
+    kind: newtype
+    of: String
+
+  # Who took an explicit decision (lead-investigator). Canon resolves no identity: the principal
+  # is recorded as given, an identifier like every other.
+  # read from: .engineering/planning/story/decision-outcomes.md:47
+  # read from: docs/design/canon-protocol-calculus-design.md:501
+  - name: canon.protocol.Principal
+    kind: newtype
+    of: String
 
   # A three-valued truth value; unknown is not false.
   # read from: crates/canon/src/model/predicate.rs:13-19
@@ -210,9 +248,10 @@ types:
 
   # The evaluation documents (story:three-valued-claims). `canon evaluate` reads a canon-case/1
   # case snapshot and canon-evidence/1 records against a compiled protocol and writes one
-  # canon-decision/1 document. Later stories add optional fields and sections to these shapes and
-  # never replace them; what an evaluation means is Canon's conformance suite
-  # (conformance/scenarios/three-valued-claims.yaml), not this file.
+  # canon-decision/1 document; story:decision-outcomes adds the canon-decisions/1 explicit
+  # decisions it may also read (ExplicitDecision below). Later stories add optional fields and
+  # sections to these shapes and never replace them; what an evaluation means is Canon's
+  # conformance suite (conformance/scenarios/three-valued-claims.yaml), not this file.
 
   # read from: .engineering/planning/story/three-valued-claims.md:57
   - name: canon.protocol.CaseId
@@ -289,6 +328,36 @@ types:
       # read from: .engineering/planning/story/evidence-freshness.md:77-78
       - name: observed_at
         type: Optional<canon.protocol.Instant>
+
+  # One explicit decision of a canon-decisions/1 document. `canon evaluate --decisions` names that
+  # document: a YAML (or JSON) list of these entries, the way canon-authority/1 is a list of
+  # authority decisions; an empty list decides nothing. A decision applies to the outcome it names
+  # when the outcome requires a decision of its name and its case_revision is the case snapshot's
+  # revision; a decision taken at a superseded case revision does not apply, and the outcome stays
+  # blocked (CANON-OUTCOME-002).
+  # read from: .engineering/planning/story/decision-outcomes.md:46-48
+  # read from: .engineering/planning/story/decision-outcomes.md:53-54
+  - name: canon.protocol.ExplicitDecision
+    kind: struct
+    fields:
+      # Which decision was taken; an outcome's `requires: decision:` names it.
+      # read from: docs/design/canon-protocol-calculus-design.md:662
+      - name: decision
+        type: canon.protocol.DecisionName
+      # The outcome the decision is taken for, which the protocol declares.
+      # read from: .engineering/planning/story/decision-outcomes.md:47
+      - name: outcome
+        type: canon.protocol.OutcomeId
+      # Who took it.
+      # read from: .engineering/planning/story/decision-outcomes.md:47
+      - name: principal
+        type: canon.protocol.Principal
+      # The case revision the decision was taken at, compared for equality with the case
+      # snapshot's revision.
+      # read from: .engineering/planning/story/decision-outcomes.md:47-48
+      # read from: .engineering/planning/story/decision-outcomes.md:106-108
+      - name: case_revision
+        type: canon.protocol.Revision
 
   # One claim's entry in a decision. An object rather than a bare value, so that later stories add
   # to it (story:evidence-revision-binding adds the excluded evidence).
@@ -448,6 +517,15 @@ entities:
       # read from: .engineering/planning/story/outcomes.md:38-39
       - name: termination
         type: Optional<canon.protocol.OutcomeId>
+      # The case's own current revision, which an explicit decision is bound to: a decision applies
+      # only while its case_revision is this one (story:decision-outcomes). A snapshot without one
+      # has no current revision, so no explicit decision applies to it and every earlier
+      # expectation holds.
+      # read from: .engineering/planning/story/decision-outcomes.md:47-48
+      # read from: .engineering/planning/story/decision-outcomes.md:53-54
+      # read from: docs/design/canon-protocol-calculus-design.md:1604
+      - name: revision
+        type: Optional<canon.protocol.Revision>
     relations:
       # Every case is governed by exactly one protocol (design § 4.2).
       # read from: docs/design/canon-protocol-calculus-design.md:247
