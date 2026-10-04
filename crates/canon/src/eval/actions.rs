@@ -37,11 +37,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value};
 
-use super::authority::{Authority, Grant};
+use super::authority::Authority;
 use super::claims::{predicate, reads};
 use crate::ir::{Action, Ir};
 use crate::model::{
-    ArtifactId, CapabilityId, ClaimId, EvidenceKindId, EvidenceRecord, Json, Predicate, Truth,
+    ArtifactId, CapabilityId, ClaimId, EvidenceKindId, EvidenceRecord, Grant, Json, Predicate,
+    Truth,
 };
 
 /// The section, or `None` to leave the slot empty. `evidence` is what the claims were evaluated
@@ -122,7 +123,7 @@ struct Named<'a> {
 /// claim's value, then each evidence match (kind and subject) that decides it, with whether a
 /// record it reads applies; or, when no test and no match decides it,
 /// `{"requirement": "unsatisfiable"}`.
-fn unmet(
+pub(super) fn unmet(
     precondition: &Predicate,
     claims: &BTreeMap<ClaimId, Truth>,
     evidence: &[EvidenceRecord],

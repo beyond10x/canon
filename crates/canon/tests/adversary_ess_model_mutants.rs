@@ -137,8 +137,8 @@ fn a_changed_identifier_representation_is_caught() {
             ),
             (
                 "ids.rs",
-                "super::present::required::<D, String>(deserializer)",
-                "super::present::required::<D, u64>(deserializer)",
+                "super::present::identifier::<D, String>(deserializer)",
+                "super::present::identifier::<D, u64>(deserializer)",
             ),
         ],
     );

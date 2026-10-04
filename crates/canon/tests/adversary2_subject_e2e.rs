@@ -187,11 +187,19 @@ fn reasons_of_one_kind_with_and_without_a_subject_come_in_kind_then_subject_orde
         {not: {evidence: {kind: k, result: pass, subject: a}}}, \
         {evidence: {kind: k, result: fail}}, \
         {evidence: {kind: k, result: fail, subject: b}}]}";
+    // An `any` none of whose members is `true` is decided by every member, `false` or `unknown`,
+    // so all four kind and subject pairs are named.
+    let every = "{any: [\
+        {evidence: {kind: l, result: pass}}, \
+        {evidence: {kind: k, result: pass, subject: b}}, \
+        {evidence: {kind: k, result: fail, subject: a}}, \
+        {evidence: {kind: k, result: fail}}, \
+        {evidence: {kind: k, result: fail, subject: b}}]}";
     let ir = compile(&format!(
         "format: protocol/1\nprotocol: {{id: p, revision: 1}}\n\
          artifacts: {{a: {{}}, b: {{}}}}\nevidence_kinds: {{k: {{}}, l: {{}}}}\n\
-         actions:\n  act: {{precondition: {requirement}}}\n\
-         outcomes:\n  out: {{requires: {requirement}}}\n"
+         actions:\n  act: {{precondition: {requirement}}}\n  act_every: {{precondition: {every}}}\n\
+         outcomes:\n  out: {{requires: {requirement}}}\n  out_every: {{requires: {every}}}\n"
     ));
     let case = eval::read_case(
         "format: canon-case/1\nid: C-1\nprotocol: p\n\
@@ -209,20 +217,33 @@ fn reasons_of_one_kind_with_and_without_a_subject_come_in_kind_then_subject_orde
         {"evidence": "k", "present": false, "subject": "b"},
         {"evidence": "l", "present": false},
     ]);
-    assert_eq!(
-        decision.outcomes.as_ref().expect("outcomes")["out"]["reasons"],
-        expected,
-        "outcome"
-    );
-    // An action names only the `false` members of a `false` `all`: `{k, fail}` and the `not`
-    // over `{k, pass, a}` are `false`; the `unknown` members are not named.
+    for (section, entry) in [("outcomes", "out_every"), ("actions", "act_every")] {
+        let found = match section {
+            "outcomes" => &decision.outcomes,
+            _ => &decision.actions,
+        };
+        assert_eq!(
+            found.as_ref().expect(section)[entry]["reasons"],
+            expected,
+            "{entry}"
+        );
+    }
+    // Only the `false` members of a `false` `all` decide it: `{k, fail}` and the `not` over
+    // `{k, pass, a}` are `false`; the `unknown` members are not named. An outcome's reasons follow
+    // the action rule (story:review-hardening-w7).
+    let decided_by_false = json!([
+        {"evidence": "k", "present": true},
+        {"evidence": "k", "present": true, "subject": "a"},
+    ]);
     assert_eq!(
         decision.actions.as_ref().expect("actions")["act"]["reasons"],
-        json!([
-            {"evidence": "k", "present": true},
-            {"evidence": "k", "present": true, "subject": "a"},
-        ]),
+        decided_by_false,
         "action"
+    );
+    assert_eq!(
+        decision.outcomes.as_ref().expect("outcomes")["out"]["reasons"],
+        decided_by_false,
+        "outcome"
     );
     // The rendered bytes put `subject` after `present` inside each reason.
     let rendered = eval::render(&decision);

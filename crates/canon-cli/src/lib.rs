@@ -13,9 +13,12 @@ use clap::{Parser, Subcommand};
 pub const REJECTED: u8 = 1;
 /// A document could not be read.
 pub const UNREADABLE: u8 = 2;
+/// The command line was not understood: an unknown command or option, a missing required one, or
+/// a value clap refuses (`EX_USAGE` of BSD `sysexits.h`).
+pub const USAGE: u8 = 64;
 
 /// Every exit status `canon` uses and what it means.
-pub const EXIT_STATUSES: [(u8, &str); 3] = [
+pub const EXIT_STATUSES: [(u8, &str); 4] = [
     (
         0,
         "Success: the document is valid or compiled, the case was evaluated, every conformance \
@@ -31,6 +34,11 @@ pub const EXIT_STATUSES: [(u8, &str); 3] = [
         UNREADABLE,
         "Unreadable: an input file or directory could not be read, or an output file could not \
          be written.",
+    ),
+    (
+        USAGE,
+        "Usage error: the command line was not understood (an unknown command or option, a \
+         missing required option, or a value that cannot be parsed); nothing was read.",
     ),
 ];
 

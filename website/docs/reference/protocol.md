@@ -7,7 +7,8 @@ description: "Every key of a protocol/1 document, generated from Canon's model t
 
 Generated from the model types in [`crates/canon/src/model`](https://github.com/beyond10x/canon/blob/main/crates/canon/src/model): their doc comments, fields, field types and serde attributes. The [JSON Schema](https://beyond10x.github.io/canon/schemas/protocol-1.schema.json) is generated from the same types. For what the parts mean together, read [the language](../concepts/protocols.md); for the documents an evaluation reads and writes, see [evaluation documents](./documents.md).
 
-Optional fields: a key left out takes its default; a key written with no value is an error.
+Keys written with no value: a key left out takes its default, or is refused when it has none; a
+key written with no value is an error.
 
 
 ## The document

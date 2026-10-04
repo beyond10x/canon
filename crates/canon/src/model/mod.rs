@@ -1,7 +1,8 @@
 //! Canon's data model: the `protocol/1` source model, and the `canon-case/1`, `canon-evidence/1`
 //! and `canon-decision/1` documents an evaluation reads and writes (`case.rs`, `evidence.rs`,
-//! `decision.rs`), the `canon-decisions/1` explicit decisions an evaluation may read
-//! (`explicit.rs`), and the `canon-properties/1` properties `canon check` reads (`properties.rs`).
+//! `decision.rs`), the `canon-authority/1` authority decisions (`authority.rs`) and
+//! `canon-decisions/1` explicit decisions (`explicit.rs`) an evaluation may read, and the
+//! `canon-properties/1` properties `canon check` reads (`properties.rs`).
 //!
 //! A protocol document declares a protocol id and revision, artifacts, evidence kinds, claims with
 //! their predicates, obligations, actions, outcomes and invalidation rules. Every declaration
@@ -9,6 +10,7 @@
 //! keeps repeated keys, so the validator can report a duplicate identifier instead of the parser
 //! silently dropping one.
 
+mod authority;
 mod case;
 mod decision;
 mod evidence;
@@ -29,6 +31,7 @@ use serde::Deserialize;
 use serde::de::{MapAccess, Visitor};
 use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 
+pub use authority::{AUTHORITY_FORMAT, AuthorityDecision, Grant};
 pub use case::{CASE_FORMAT, Case, CaseArtifact};
 pub use decision::{
     ClaimDecision, DECISION_FORMAT, Decision, EvidenceExclusion, ExclusionReason, Json,
@@ -55,20 +58,20 @@ pub struct Protocol {
     #[serde(deserialize_with = "present::required")]
     pub format: String,
     pub protocol: ProtocolHeader,
-    #[serde(default, deserialize_with = "present::required")]
+    #[serde(default, deserialize_with = "present::defaulted")]
     pub artifacts: Declarations<ArtifactId, Artifact>,
-    #[serde(default, deserialize_with = "present::required")]
+    #[serde(default, deserialize_with = "present::defaulted")]
     pub evidence_kinds: Declarations<EvidenceKindId, EvidenceKind>,
-    #[serde(default, deserialize_with = "present::required")]
+    #[serde(default, deserialize_with = "present::defaulted")]
     pub claims: Declarations<ClaimId, Claim>,
-    #[serde(default, deserialize_with = "present::required")]
+    #[serde(default, deserialize_with = "present::defaulted")]
     pub obligations: Declarations<ObligationId, Obligation>,
-    #[serde(default, deserialize_with = "present::required")]
+    #[serde(default, deserialize_with = "present::defaulted")]
     pub actions: Declarations<ActionId, Action>,
-    #[serde(default, deserialize_with = "present::required")]
+    #[serde(default, deserialize_with = "present::defaulted")]
     pub outcomes: Declarations<OutcomeId, Outcome>,
     /// The invalidation rules, keyed by rule id; a protocol without the section declares none.
-    #[serde(default, deserialize_with = "present::required")]
+    #[serde(default, deserialize_with = "present::defaulted")]
     pub invalidation: Declarations<InvalidationRuleId, InvalidationRule>,
 }
 
@@ -76,6 +79,7 @@ pub struct Protocol {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProtocolHeader {
+    #[serde(deserialize_with = "present::required")]
     pub id: ProtocolId,
     pub revision: u64,
     #[serde(default, deserialize_with = "present::optional")]
@@ -130,11 +134,11 @@ pub struct Action {
     pub description: Option<String>,
     #[serde(default, deserialize_with = "present::optional")]
     pub precondition: Option<Predicate>,
-    #[serde(default, deserialize_with = "present::required")]
+    #[serde(default, deserialize_with = "present::defaulted")]
     pub requires: Vec<CapabilityRequirement>,
     #[serde(default, deserialize_with = "present::optional")]
     pub effect: Option<EffectClass>,
-    #[serde(default, deserialize_with = "present::required")]
+    #[serde(default, deserialize_with = "present::defaulted")]
     pub may_produce: Vec<EvidenceProduction>,
 }
 
@@ -142,6 +146,7 @@ pub struct Action {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CapabilityRequirement {
+    #[serde(deserialize_with = "present::required")]
     pub capability: CapabilityId,
 }
 
@@ -149,6 +154,7 @@ pub struct CapabilityRequirement {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EvidenceProduction {
+    #[serde(deserialize_with = "present::required")]
     pub evidence: EvidenceKindId,
 }
 
@@ -171,6 +177,7 @@ pub struct InvalidationRule {
     #[serde(default, deserialize_with = "present::optional")]
     pub description: Option<String>,
     /// The artifact whose revision the rule watches.
+    #[serde(deserialize_with = "present::required")]
     pub upstream: ArtifactId,
     /// The claims whose support a change of that revision invalidates.
     #[serde(deserialize_with = "present::required")]

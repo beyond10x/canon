@@ -17,8 +17,10 @@ pub struct Case {
     /// The document format; the evaluator accepts only [`CASE_FORMAT`].
     #[serde(deserialize_with = "super::present::required")]
     pub format: String,
+    #[serde(deserialize_with = "super::present::required")]
     pub id: CaseId,
     /// The protocol that governs the case.
+    #[serde(deserialize_with = "super::present::required")]
     pub protocol: ProtocolId,
     /// The current revision of each declared artifact, keyed by artifact id.
     #[serde(deserialize_with = "super::present::required")]
@@ -38,5 +40,6 @@ pub struct Case {
 #[serde(deny_unknown_fields)]
 pub struct CaseArtifact {
     /// The artifact's current revision.
+    #[serde(deserialize_with = "super::present::required")]
     pub revision: Revision,
 }

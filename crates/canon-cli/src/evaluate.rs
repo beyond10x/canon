@@ -5,7 +5,7 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use b10x_canon::eval;
+use b10x_canon::{eval, model};
 
 use crate::{REJECTED, read_text, unreadable};
 
@@ -22,8 +22,13 @@ fn is_record_name(name: &std::ffi::OsStr) -> bool {
 /// or `*.json`, read in sorted file-name order. Any other entry — another file, a subdirectory —
 /// is refused as unreadable, naming it, rather than skipped, so no evidence the operator put
 /// there is silently dropped. The `--authority` and `--decisions` files, when given, are read as
-/// text; they and the `--at` instant are passed through unparsed. A file that cannot be read exits 2; a refusal exits
-/// 1 naming its code.
+/// text; they and the `--at` instant are passed through unparsed. A file that cannot be read
+/// exits 2; a refusal exits 1 naming its code. Every evidence refusal names the file of each record
+/// it cites: an evidence file the library refuses to read as a record (`` error[malformed-input]:
+/// <file>: evidence `e1` is not a canon-evidence/1 document: missing field `subject` ``), and a
+/// record refused after reading, by every file holding a record of its id, so a repeated id names
+/// both files (`` error[duplicate-identifier]: <file>, <file>: evidence `e1` is given more than
+/// once ``).
 pub(crate) fn run(
     ir_path: &Path,
     case_path: &Path,
@@ -54,7 +59,8 @@ pub(crate) fn run(
                      `*.json` files",
                 ));
             }
-            evidence.push(read(&path)?);
+            let text = read(&path)?;
+            evidence.push((path, text));
         }
         Ok((ir, case, evidence, authority, decisions))
     })();
@@ -62,26 +68,52 @@ pub(crate) fn run(
         Ok(inputs) => inputs,
         Err(code) => return code,
     };
-    let decision = eval::read_ir(&ir).and_then(|ir| {
-        let case = eval::read_case(&case)?;
-        let evidence = evidence
-            .iter()
-            .map(|text| eval::read_evidence(text))
-            .collect::<Result<Vec<_>, _>>()?;
-        let supplied = eval::Supplied {
-            authority: authority.as_deref(),
-            at,
-            decisions: decisions.as_deref(),
-        };
-        eval::evaluate_with(&ir, &case, &evidence, supplied)
-    });
+    // A refusal that cites evidence records names the file of each: `error[<code>]: <file>[, <file>…]:
+    // <why>`. A record that cannot be read is cited by its file alone; a record refused after reading
+    // by its id, which names every file holding a record of that id (a repeated id names both).
+    let decision = eval::read_ir(&ir)
+        .map_err(|r| (Vec::new(), r))
+        .and_then(|ir| {
+            let case = eval::read_case(&case).map_err(|r| (Vec::new(), r))?;
+            let records = evidence
+                .iter()
+                .map(|(path, text)| eval::read_evidence(text).map_err(|r| (vec![path], r)))
+                .collect::<Result<Vec<_>, _>>()?;
+            let supplied = eval::Supplied {
+                authority: authority.as_deref(),
+                at,
+                decisions: decisions.as_deref(),
+            };
+            eval::evaluate_with(&ir, &case, &records, supplied).map_err(|refusal| {
+                let files = refusal
+                    .evidence()
+                    .iter()
+                    .flat_map(|cited| {
+                        records
+                            .iter()
+                            .zip(&evidence)
+                            .filter(move |(record, _)| record.id == *cited)
+                            .map(|(_, (path, _))| path)
+                    })
+                    .collect();
+                (files, refusal)
+            })
+        });
     match decision {
         Ok(decision) => {
             print!("{}", eval::render(&decision));
             ExitCode::SUCCESS
         }
-        Err(refusal) => {
-            eprintln!("error[{}]: {refusal}", refusal.code());
+        Err((files, refusal)) => {
+            if files.is_empty() {
+                eprintln!("error[{}]: {refusal}", refusal.code());
+            } else {
+                let files: Vec<String> = files
+                    .iter()
+                    .map(|path| model::one_line(&path.display().to_string()))
+                    .collect();
+                eprintln!("error[{}]: {}: {refusal}", refusal.code(), files.join(", "));
+            }
             ExitCode::from(REJECTED)
         }
     }

@@ -488,52 +488,61 @@ fn references(
 /// set of claims that test each other in a cycle, not every distinct cycle through that set (for
 /// `a` testing `b` and `c`, `b` testing `c`, `c` testing `a`, it reports `a -> b -> c -> a` and not
 /// `a -> c -> a`). Claims are visited in declaration order and their references in the order
-/// written, so the cycles reported are the same on every run.
+/// written, so the cycles reported are the same on every run. The walk keeps its own stack, so a
+/// chain of any length is walked without recursion.
 fn claim_cycles(protocol: &Protocol, problems: &mut Vec<Problem>) {
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum Mark {
-        Unvisited,
         OnPath,
         Done,
     }
 
-    fn visit<'a>(
-        protocol: &'a Protocol,
-        claim: &'a ClaimId,
-        marks: &mut BTreeMap<&'a ClaimId, Mark>,
-        path: &mut Vec<&'a ClaimId>,
-        problems: &mut Vec<Problem>,
-    ) {
-        marks.insert(claim, Mark::OnPath);
-        path.push(claim);
-        if let Some(declared) = protocol.claims.get(claim) {
-            for next in declared.true_when.claim_references() {
-                match marks.get(next).copied().unwrap_or(Mark::Unvisited) {
-                    Mark::Unvisited if protocol.claims.contains(next) => {
-                        visit(protocol, next, marks, path, problems);
-                    }
-                    Mark::OnPath => {
-                        let start = path
-                            .iter()
-                            .position(|on_path| *on_path == next)
-                            .expect("a claim marked on the path is on the path");
-                        let mut cycle: Vec<ClaimId> =
-                            path[start..].iter().map(|id| (*id).clone()).collect();
-                        cycle.push(next.clone());
-                        problems.push(Problem::ClaimCycle { claims: cycle });
-                    }
-                    Mark::Unvisited | Mark::Done => {}
-                }
-            }
-        }
-        path.pop();
-        marks.insert(claim, Mark::Done);
-    }
+    // The claims a claim tests, in the order written; none for a claim not declared.
+    let references = |claim: &ClaimId| {
+        protocol
+            .claims
+            .get(claim)
+            .map(|declared| declared.true_when.claim_references())
+            .unwrap_or_default()
+            .into_iter()
+    };
 
-    let mut marks = BTreeMap::new();
-    for claim in protocol.claims.ids() {
-        if !marks.contains_key(claim) {
-            visit(protocol, claim, &mut marks, &mut Vec::new(), problems);
+    // A depth-first walk with a stack of its own, not recursion, so a long chain of claims cannot
+    // overflow the caller's stack: `path` holds the claims being walked, outermost first, and
+    // `pending` the references each of them has still to follow.
+    let mut marks: BTreeMap<&ClaimId, Mark> = BTreeMap::new();
+    for root in protocol.claims.ids() {
+        if marks.contains_key(root) {
+            continue;
+        }
+        marks.insert(root, Mark::OnPath);
+        let mut path = vec![root];
+        let mut pending = vec![references(root)];
+        while let Some(next) = pending.last_mut().map(Iterator::next) {
+            let Some(next) = next else {
+                pending.pop();
+                let done = path.pop().expect("a claim for each list of references");
+                marks.insert(done, Mark::Done);
+                continue;
+            };
+            match marks.get(next).copied() {
+                None if protocol.claims.contains(next) => {
+                    marks.insert(next, Mark::OnPath);
+                    path.push(next);
+                    pending.push(references(next));
+                }
+                Some(Mark::OnPath) => {
+                    let start = path
+                        .iter()
+                        .position(|on_path| *on_path == next)
+                        .expect("a claim marked on the path is on the path");
+                    let mut cycle: Vec<ClaimId> =
+                        path[start..].iter().map(|id| (*id).clone()).collect();
+                    cycle.push(next.clone());
+                    problems.push(Problem::ClaimCycle { claims: cycle });
+                }
+                None | Some(Mark::Done) => {}
+            }
         }
     }
 }

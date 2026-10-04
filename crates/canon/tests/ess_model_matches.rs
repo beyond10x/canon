@@ -1,7 +1,8 @@
 //! Canon's ESS specification and its hand-written Rust model stay equal.
 //!
 //! The model under `crates/canon/src/model/` — the `protocol/1` source model and the
-//! `canon-case/1`, `canon-evidence/1`, `canon-decision/1` and `canon-properties/1` documents — is
+//! `canon-case/1`, `canon-evidence/1`, `canon-authority/1`, `canon-decisions/1`,
+//! `canon-decision/1` and `canon-properties/1` documents — is
 //! hand-written beside its specification under `ess/`. This test compiles the specification (`ess
 //! specify compile --format json`) and reads the model's Rust source, then compares, for every
 //! entity and value type the specification declares, its fields and their types and every enum or
@@ -25,7 +26,8 @@
 //!   is the Rust struct `Case`: its `id` field is the identity `id`, its other fields are entity
 //!   fields. An entity the specification declares and [`ENTITIES`] does not map fails the test.
 //! * The value types compared are those the entities reach, and those [`DOCUMENTS`] reach: the
-//!   evidence record, the explicit decision, the decision and the properties, which no entity holds.
+//!   evidence record, the authority decision, the explicit decision, the decision and the
+//!   properties, which no entity holds.
 //! * Only module-level items count. Items inside functions, inline modules (`mod tests { … }`) and
 //!   anything under `#[cfg(test)]` are not the model. Two module-level types with one name, in any
 //!   model files, fail the test rather than one shadowing the other.
@@ -70,12 +72,13 @@ const ENTITIES: &[EntityMapping] = &[
     },
 ];
 
-/// Value types no entity holds that are still part of the model: the evidence record and the
-/// explicit decision (`canon-decisions/1`) an evaluation reads, the decision it writes, and the
-/// properties (`canon-properties/1`) `canon check` reads. They, and what they reach, are compared
-/// too.
+/// Value types no entity holds that are still part of the model: the evidence record, the
+/// authority decision (`canon-authority/1`) and the explicit decision (`canon-decisions/1`) an
+/// evaluation reads, the decision it writes, and the properties (`canon-properties/1`) `canon
+/// check` reads. They, and what they reach, are compared too.
 const DOCUMENTS: &[&str] = &[
     "EvidenceRecord",
+    "AuthorityDecision",
     "ExplicitDecision",
     "Decision",
     "Properties",

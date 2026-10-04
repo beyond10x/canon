@@ -23,11 +23,15 @@ pub const DECISIONS_FORMAT: &str = "canon-decisions/1";
 #[serde(deny_unknown_fields)]
 pub struct ExplicitDecision {
     /// Which decision was taken.
+    #[serde(deserialize_with = "super::present::required")]
     pub decision: DecisionName,
     /// The outcome it was taken for.
+    #[serde(deserialize_with = "super::present::required")]
     pub outcome: OutcomeId,
     /// Who took it.
+    #[serde(deserialize_with = "super::present::required")]
     pub principal: Principal,
     /// The case revision it was taken at.
+    #[serde(deserialize_with = "super::present::required")]
     pub case_revision: Revision,
 }

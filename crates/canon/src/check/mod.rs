@@ -109,8 +109,11 @@
 //!
 //! # Refusals
 //!
-//! Before the bound, the properties are checked against the protocol, as
-//! `properties.rs` says: `unsupported-format`, `protocol-mismatch`, `invalid-identifier`,
+//! First, an IR a caller builds is held to the evaluator's depth bound, before anything walks its
+//! predicates: one nested beyond `eval::MAX_IR_DEPTH`, itself or along its claim references, is
+//! refused as `predicate-too-deep`, and claims that test each other in a cycle as `claim-cycle`
+//! (the module docs of `eval`, "Depth"). Then, before the bound, the properties are checked
+//! against the protocol, as `properties.rs` says: `unsupported-format`, `protocol-mismatch`, `invalid-identifier`,
 //! `duplicate-identifier`, `undeclared-action`, `undeclared-outcome`, `undeclared-claim`. Text
 //! that is not a `canon-properties/1` document is refused by [`read_properties`] as
 //! `malformed-input`. An evaluation the evaluator refuses is refused with the evaluator's code.
@@ -322,6 +325,7 @@ pub(crate) struct Evaluated {
 /// Checks `ir` over its whole state space, and each of `properties` when given, as the module docs
 /// say. Pure and deterministic.
 pub fn check(ir: &Ir, properties: Option<&Properties>) -> Result<Report, Refusal> {
+    eval::check_depth(ir).map_err(|refusal| Refusal::new(refusal.code(), refusal.to_string()))?;
     if let Some(properties) = properties {
         properties::validate(ir, properties)?;
     }
