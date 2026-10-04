@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T09:50:52Z",
+  "actor": "human:timo",
+  "artifact": "story:invalidation-rules",
+  "kind": "story",
+  "revision": 21,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test --workspace --locked: 509 passed, 0 failed",
+    "reference": "https://github.com/beyond10x/canon/commit/5e06cad"
+  }
+}

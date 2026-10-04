@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T09:50:52Z",
+  "actor": "human:timo",
+  "artifact": "story:invalidation-rules",
+  "kind": "story",
+  "revision": 21,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "wave 2026-10-04-w11 integration gate: fmt, clippy, ess validate+synthesize (0 refusals), canon-docs --check, conform run 10 passed",
+    "reference": "https://github.com/beyond10x/canon/commit/5e06cad"
+  }
+}

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:invalidation-rules
 kind: story
-status: proposed
+status: implemented
 title: Invalidation rules for upstream artifact changes
 refs:
 - provider: taskboard
@@ -19,22 +19,52 @@ scope:
 - confidence: cited
   path: conformance/scenarios/invalidation-rules.yaml
 - confidence: cited
+  path: crates/canon-docs/src/pages.rs
+- confidence: cited
+  path: crates/canon/src/check/
+- confidence: cited
+  path: crates/canon/src/eval/actions.rs
+- confidence: cited
+  path: crates/canon/src/eval/binding.rs
+- confidence: cited
+  path: crates/canon/src/eval/claims.rs
+- confidence: cited
+  path: crates/canon/src/eval/decision.rs
+- confidence: cited
   path: crates/canon/src/eval/evidence.rs
 - confidence: cited
   path: crates/canon/src/eval/invalidation.rs
+- confidence: cited
+  path: crates/canon/src/eval/mod.rs
+- confidence: cited
+  path: crates/canon/src/eval/read.rs
+- confidence: cited
+  path: crates/canon/src/explain/mod.rs
 - confidence: cited
   path: crates/canon/src/ir/
 - confidence: cited
   path: crates/canon/src/model/
 - confidence: cited
+  path: crates/canon/src/model/decision.rs
+- confidence: cited
   path: crates/canon/src/validate/
+- confidence: cited
+  path: crates/canon/tests/adversary2_invalidation.rs
+- confidence: cited
+  path: crates/canon/tests/adversary2_ir_order.rs
+- confidence: cited
+  path: crates/canon/tests/adversary_invalidation.rs
 - confidence: cited
   path: ess/
 - confidence: cited
   path: fixtures/investigation/invalidation-rules.yaml
-revision: 12
+- confidence: cited
+  path: website/
+revision: 22
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:51Z", actor: "human:timo", revision: 8}
+- {from: "proposed", to: "active", at: "2026-10-04T08:27:40Z", actor: "human:timo", revision: 13}
+- {from: "active", to: "implemented", at: "2026-10-04T09:50:52Z", actor: "human:timo", revision: 22, decided_on: {"recorded":{"test_result":1,"review_outcome":3,"verification":1}}}
 ---
 ## Outcome
 
@@ -104,3 +134,31 @@ revision moves; and a rule naming an undeclared artifact is refused by `canon va
 ## Source
 
 Design § 4.1, § 32; docs/contracts/protocol-core.md; decision-blocker:upstream-revision-binding (cleared 2026-10-04); TASKBOARD C-008.
+
+## Coordinator decisions (wave 2026-10-04-w11)
+
+- Per-claim exclusion: a record is excluded as `invalidated` only from the claims a rule names and
+  every claim built on them; a claim the rule does not name that reads the same kind keeps it. This
+  supersedes "does not touch `eval/mod.rs`": the scope adds `eval/mod.rs`, `eval/claims.rs` and the
+  places that enumerate exclusion reasons (binding, decision, explain, model/decision, canon-docs
+  pages, website).
+- `canon check` models invalidation: per-claim exclusion lets the evaluator reach claim
+  combinations no check state held (probe: `unreachable-outcome` reported for an outcome `evaluate`
+  finds legitimate). The state space gains one two-valued dimension per (rule, evidence dimension
+  a claim the rule invalidates reads): upstream moved or not; when moved, that dimension's record is
+  excluded for the named claims and every claim built on them. Scope adds `check/`, `eval/read.rs`
+  (the IR read-back) and two struct-literal touches.
+- As built and accepted: the moved flags are keyed by (upstream artifact, evidence dimension), not
+  by rule, because a record stores one revision per upstream artifact and rules on one artifact move
+  together; flagged dimensions are those the invalidated claim set (named plus built-on, from
+  `eval::invalidated_claims`) reads through its own matches. An absent record adds no states
+  (`1 + (2^c - 1) * 2^m` values per dimension); a protocol with no rules keeps its state count.
+- Adversary pass 1: a record is listed as `invalidated` only under a claim whose own evidence
+  matches would read it; a rule naming a claim with no evidence match of its own is refused as
+  `inert-invalidation`. `canon check` lets a moved and a current record of one dimension coexist:
+  each present result class carries the set of moved-vectors among its records.
+- Adversary pass 2: a claim is evaluated with the records invalidated for it excluded throughout,
+  including inside the claims it tests (their reported values stay their own); a record is listed
+  under a claim when invalidated for it and read by some match reached from it; `inert-invalidation`
+  refuses a rule naming a claim that reaches no evidence match at all. Witnesses prefer current
+  records over records observed before an upstream move.
