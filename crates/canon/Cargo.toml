@@ -4,3 +4,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_yaml_ng = "0.10"
+unicode-properties = { version = "0.1", default-features = false, features = ["general-category"] }
