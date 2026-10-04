@@ -1,0 +1,53 @@
+format: protocol/1
+
+protocol:
+  id: investigation
+  revision: 1
+  description: Decide whether an explanation is supported by observations of a dataset, and whether it survives an attempt to falsify it.
+
+artifacts:
+  explanation:
+    description: The explanation under investigation.
+  dataset:
+    description: The observations the explanation is tested against.
+
+evidence_kinds:
+  supporting_observation:
+    description: An observation of the dataset consistent with the explanation.
+  falsification_attempt:
+    description: An attempt to refute the explanation; its result is survived or refuted.
+
+claims:
+  explanation.supported:
+    description: The explanation is supported by observation of the dataset.
+    true_when:
+      evidence:
+        kind: supporting_observation
+
+  observation.recorded:
+    description: An observation consistent with the explanation was recorded, whichever dataset revision it was made against.
+    true_when:
+      evidence:
+        kind: supporting_observation
+
+  explanation.plausible:
+    description: The explanation is supported, or an observation is consistent with it.
+    true_when:
+      any:
+        - claim: explanation.supported
+        - evidence:
+            kind: supporting_observation
+
+  explanation.survived:
+    description: The explanation has survived an attempt to falsify it.
+    true_when:
+      evidence:
+        kind: falsification_attempt
+        result: survived
+
+invalidation:
+  dataset.revised:
+    description: An observation made against an earlier revision of the dataset no longer supports the explanation.
+    upstream: dataset
+    invalidates:
+      - explanation.supported

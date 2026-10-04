@@ -9,7 +9,7 @@ domain: canon.protocol
 
 summary: >-
   A protocol document: its identity and revision, and the artifacts, evidence kinds, claims,
-  obligations, actions and outcomes it declares. A predicate over evidence and claim values
+  obligations, actions, outcomes and invalidation rules it declares. A predicate over evidence and claim values
   decides each claim and guards each action, and states what each outcome requires unless the
   outcome requires an explicit decision instead. A case governed by a protocol is evaluated from a
   case snapshot, evidence records and explicit decisions into a decision that gives each claim a
@@ -199,6 +199,49 @@ types:
     kind: newtype
     of: String
 
+  # The identifier of an invalidation rule (story:invalidation-rules): not empty, no whitespace,
+  # control or Unicode format characters, declared once.
+  # read from: .engineering/planning/story/invalidation-rules.md:41-43
+  # read from: docs/contracts/protocol-core.md:27
+  - name: canon.protocol.InvalidationRuleId
+    kind: newtype
+    of: String
+
+  # An invalidation rule (design § 4.1, contract sketch InvalidationRule, CANON-INVALIDATION-001):
+  # it names an upstream artifact and the claims whose support a change of that artifact's
+  # revision invalidates. Exclusion is per claim: an evidence record that records a revision of
+  # the rule's upstream artifact (EvidenceRecord.upstream_revisions) other than the case
+  # snapshot's current revision of it is excluded, with reason invalidated, from each claim the
+  # rule names and from every claim built on one of them through any number of claim references
+  # (a record excluded from a claim is excluded from every claim built on it): no evidence match
+  # in those claims reads it, and each of them that reaches a match of the record's kind lists it
+  # in excluded_evidence. With no other applicable evidence such a claim is unknown, never false.
+  # Every other claim keeps the record: a claim the rule does not name, and that is not built on
+  # one it names, reads it as before and does not list it, even when it reads the same kind. A
+  # record that records no revision of the upstream artifact is not invalidated by the rule.
+  # canon validate refuses a rule whose upstream artifact the protocol does not declare
+  # (undeclared-artifact), and one naming a claim it does not declare (undeclared-claim), each
+  # naming the rule and what it names.
+  # read from: .engineering/planning/story/invalidation-rules.md:41-46
+  # read from: .engineering/planning/story/invalidation-rules.md:50-52
+  # read from: docs/contracts/protocol-core.md:27
+  # read from: docs/design/canon-protocol-calculus-design.md:1450-1452
+  - name: canon.protocol.InvalidationRule
+    kind: struct
+    fields:
+      # read from: .engineering/planning/story/invalidation-rules.md:41-43
+      - name: description
+        type: Optional<String>
+      # The artifact whose revision the rule watches; one the protocol declares.
+      # read from: .engineering/planning/story/invalidation-rules.md:42-43
+      - name: upstream
+        type: canon.protocol.ArtifactId
+      # The claims whose support the rule invalidates; each one the protocol declares. A set:
+      # canon-ir/1 lists each once, in identifier order.
+      # read from: .engineering/planning/story/invalidation-rules.md:42-44
+      - name: invalidates
+        type: List<canon.protocol.ClaimId>
+
   # A three-valued truth value; unknown is not false.
   # read from: crates/canon/src/model/predicate.rs:14-20
   - name: canon.protocol.Truth
@@ -339,6 +382,17 @@ types:
       # read from: .engineering/planning/story/evidence-freshness.md:77-78
       - name: observed_at
         type: Optional<canon.protocol.Instant>
+      # The revision of each upstream artifact the observation was made against, keyed by
+      # artifact id (story:invalidation-rules). Optional: a record that leaves it out records no
+      # upstream revision and is never invalidated, so no earlier expectation changes. Each key is
+      # an artifact the protocol declares and each revision an identifier; the evaluator refuses
+      # an undeclared one as undeclared-artifact, naming the record and the artifact, as it
+      # refuses an undeclared subject.
+      # read from: .engineering/planning/story/invalidation-rules.md:43-45
+      # read from: .engineering/planning/story/invalidation-rules.md:50-51
+      # read from: .engineering/planning/story/invalidation-rules.md:69-70
+      - name: upstream_revisions
+        type: Map<canon.protocol.ArtifactId, canon.protocol.Revision>
 
   # One explicit decision of a canon-decisions/1 document. `canon evaluate --decisions` names that
   # document: a YAML (or JSON) list of these entries, the way canon-authority/1 is a list of
@@ -494,6 +548,14 @@ entities:
       # read from: crates/canon/src/model/mod.rs:46
       - name: outcomes
         type: Map<canon.protocol.OutcomeId, canon.protocol.Outcome>
+      # The invalidation rules, keyed by rule id (story:invalidation-rules). Source text writes the
+      # section `invalidation:`; a protocol without one declares no rule, and its canon-ir/1 has no
+      # `invalidation` key, so the IR of every earlier protocol is unchanged.
+      # read from: .engineering/planning/story/invalidation-rules.md:41-46
+      # read from: .engineering/planning/story/invalidation-rules.md:50-52
+      # read from: docs/design/canon-protocol-calculus-design.md:239
+      - name: invalidation
+        type: Map<canon.protocol.InvalidationRuleId, canon.protocol.InvalidationRule>
     # revision is a u64 (crates/canon/src/model/mod.rs:54); ESS Integer is signed.
     invariants:
       - revision >= 0
