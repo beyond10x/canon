@@ -352,9 +352,27 @@ pub fn terminal(
                 version.trim()
             )),
         ),
+        (
+            "tones",
+            Json::Obj(
+                TONES
+                    .iter()
+                    .map(|(word, tone)| ((*word).to_owned(), json::str(*tone)))
+                    .collect(),
+            ),
+        ),
     ])
     .pretty())
 }
+
+/// The output words `canon` prints and the tone the terminal renderer gives every occurrence: a
+/// verdict that passed reads as true, one that failed or a rejection as false.
+const TONES: [(&str, &str); 4] = [
+    ("valid:", "true"),
+    ("passed:", "true"),
+    ("failed:", "false"),
+    ("error", "false"),
+];
 
 /// Runs the `canon` binary at `canon` from `root`, recording standard output then standard error.
 pub fn run_canon(canon: &Path, root: &Path, args: &[&str]) -> Result<Run, String> {
@@ -419,6 +437,10 @@ mod tests {
         assert!(!recorded.contains("line 9"));
         assert!(recorded.contains("\"output\": \"conform output\""));
         assert!(recorded.contains("\"recordedWith\": \"canon 0.0.0, recorded by canon-docs"));
+        let compact: String = recorded.chars().filter(|c| !c.is_whitespace()).collect();
+        assert!(compact.contains(
+            "\"tones\":{\"valid:\":\"true\",\"passed:\":\"true\",\"failed:\":\"false\",\"error\":\"false\"}"
+        ));
     }
 
     #[test]

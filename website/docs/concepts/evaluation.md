@@ -27,7 +27,7 @@ Equivalent normalized inputs give equivalent normalized outputs.
 
 ## What exists today
 
-:::note[Shipped: claims, obligations, actions, outcomes and the explanation]
+:::shipped[Claims, obligations, actions, outcomes and the explanation]
 
 `canon evaluate` takes the compiled protocol, a `canon-case/1` snapshot, a set of
 `canon-evidence/1` records and, optionally, `canon-authority/1` authority decisions (`--authority`),
@@ -53,7 +53,7 @@ fit the protocol are refused with a stable code. See the
 
 :::
 
-:::caution[Planned: invalidation]
+:::planned[Invalidation]
 
 An upstream artifact change invalidates nothing yet.
 

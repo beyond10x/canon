@@ -98,4 +98,4 @@ const config: Config = {
   } satisfies Preset.ThemeConfig,
 };
 
-export default withProductSite(config, {landing: './product.json', mark: 'C'});
+export default withProductSite(config, {landing: './product.json', product: 'canon'});

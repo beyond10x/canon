@@ -29,7 +29,7 @@ These come from the design document.
 
 ## What exists today
 
-:::note[Shipped: claim evaluation]
+:::shipped[Claim evaluation]
 
 `canon evaluate` gives every claim of a case one of the three values from its evidence records. An
 evidence match with a result is `unknown` when no record of the kind exists, `false` when records
@@ -41,14 +41,14 @@ evidence situations.
 
 :::
 
-:::note[Shipped: the row about revisions]
+:::shipped[The row about revisions]
 
 A record bound to a revision of its artifact that is not the case's current one is left out of
 claim evaluation, so the R1/R2 row is `UNKNOWN` as shown.
 
 :::
 
-:::note[Shipped: the row about age]
+:::shipped[The row about age]
 
 A record older than its evidence kind's `max_age` at the evaluation instant (`canon evaluate
 --at`) is left out of claim evaluation, so the last row is `UNKNOWN` as shown.
