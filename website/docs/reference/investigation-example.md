@@ -235,6 +235,14 @@ and `canon evaluate --ir investigation.ir.json --case case.yaml --evidence evide
 
 ```json
 {
+  "actions": {
+    "attempt_falsification": {
+      "status": "admissible"
+    },
+    "inspect": {
+      "status": "admissible"
+    }
+  },
   "case": "INV-18",
   "claims": {
     "explanation.supported": {

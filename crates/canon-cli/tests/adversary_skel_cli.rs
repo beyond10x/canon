@@ -11,14 +11,15 @@ use std::process::{Command, Output};
 const SKELETON_FIXTURE: &str = "fixtures/investigation/evaluator-skeleton.yaml";
 
 /// The decision the base fixture gives `INV-18` with no evidence (CANON-CLAIM-001's
-/// `no-evidence` step), with the `outcomes` section story:outcomes writes (CANON-OUTCOME-001's
+/// `no-evidence` step), with the `actions` section story:action-admissibility writes (both base
+/// actions admissible) and the `outcomes` section story:outcomes writes (CANON-OUTCOME-001's
 /// `claim-unknown` step); no other section slot is written.
-const NO_EVIDENCE_DECISION: &str = "{\n  \"case\": \"INV-18\",\n  \"claims\": {\n    \"explanation.supported\": {\n      \"value\": \"unknown\"\n    }\n  },\n  \"format\": \"canon-decision/1\",\n  \"outcomes\": {\n    \"supported\": {\n      \"reasons\": [\n        {\n          \"claim\": \"explanation.supported\",\n          \"value\": \"unknown\"\n        }\n      ],\n      \"status\": \"blocked\"\n    }\n  },\n  \"protocol\": \"investigation\",\n  \"protocol_revision\": 1\n}\n";
+const NO_EVIDENCE_DECISION: &str = "{\n  \"actions\": {\n    \"attempt_falsification\": {\n      \"status\": \"admissible\"\n    },\n    \"inspect\": {\n      \"status\": \"admissible\"\n    }\n  },\n  \"case\": \"INV-18\",\n  \"claims\": {\n    \"explanation.supported\": {\n      \"value\": \"unknown\"\n    }\n  },\n  \"format\": \"canon-decision/1\",\n  \"outcomes\": {\n    \"supported\": {\n      \"reasons\": [\n        {\n          \"claim\": \"explanation.supported\",\n          \"value\": \"unknown\"\n        }\n      ],\n      \"status\": \"blocked\"\n    }\n  },\n  \"protocol\": \"investigation\",\n  \"protocol_revision\": 1\n}\n";
 
 /// The decision the skeleton fixture gives `INV-18` with no evidence: the base fixture's (its
 /// `outcomes` section included), plus the `obligations` section story:obligations fills, with
 /// `establish.explanation` open because `explanation.supported` is `unknown`.
-const SKELETON_NO_EVIDENCE_DECISION: &str = "{\n  \"case\": \"INV-18\",\n  \"claims\": {\n    \"explanation.supported\": {\n      \"value\": \"unknown\"\n    }\n  },\n  \"format\": \"canon-decision/1\",\n  \"obligations\": [\n    {\n      \"id\": \"establish.explanation\",\n      \"status\": \"open\"\n    }\n  ],\n  \"outcomes\": {\n    \"supported\": {\n      \"reasons\": [\n        {\n          \"claim\": \"explanation.supported\",\n          \"value\": \"unknown\"\n        }\n      ],\n      \"status\": \"blocked\"\n    }\n  },\n  \"protocol\": \"investigation\",\n  \"protocol_revision\": 1\n}\n";
+const SKELETON_NO_EVIDENCE_DECISION: &str = "{\n  \"actions\": {\n    \"attempt_falsification\": {\n      \"status\": \"admissible\"\n    },\n    \"inspect\": {\n      \"status\": \"admissible\"\n    }\n  },\n  \"case\": \"INV-18\",\n  \"claims\": {\n    \"explanation.supported\": {\n      \"value\": \"unknown\"\n    }\n  },\n  \"format\": \"canon-decision/1\",\n  \"obligations\": [\n    {\n      \"id\": \"establish.explanation\",\n      \"status\": \"open\"\n    }\n  ],\n  \"outcomes\": {\n    \"supported\": {\n      \"reasons\": [\n        {\n          \"claim\": \"explanation.supported\",\n          \"value\": \"unknown\"\n        }\n      ],\n      \"status\": \"blocked\"\n    }\n  },\n  \"protocol\": \"investigation\",\n  \"protocol_revision\": 1\n}\n";
 
 fn repository_root() -> PathBuf {
     let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")

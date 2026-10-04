@@ -5,9 +5,10 @@
 //! predicate into `canon-ir/1`; and `canon validate` refuses a discharge predicate that tests an
 //! undeclared claim, naming it.
 //!
-//! The CLI inputs later stories own are declared here and inert: `canon evaluate --authority` and
-//! `--at` parse and are refused naming the flag, and `canon diff --from --to` parses and is refused
-//! as not built.
+//! The CLI inputs later stories own are declared here and inert: `canon evaluate --at` parses and
+//! is refused naming the flag, and `canon diff --from --to` parses and is refused as not built.
+//! `--authority` was inert here too; story:action-admissibility now reads it, and its test below
+//! checks that it is read (refused naming the flag when malformed, evaluated when well-formed).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -362,15 +363,41 @@ fn assert_evaluate_flag_is_inert(flag: &str, value: &str, args: Vec<String>) {
     );
 }
 
-/// `canon evaluate --authority <file>` is declared and read, and refused until
-/// story:action-admissibility parses it.
+/// `canon evaluate --authority <file>` is declared and read.
+///
+/// Changed by story:action-admissibility, which parses it: the skeleton refused any text naming
+/// the flag. Text that is not `canon-authority/1` is still refused naming the flag (the same
+/// checks as before); a well-formed list is now evaluated, and the decision carries the
+/// `actions` section.
 #[test]
-fn evaluate_authority_parses_and_is_inert() {
+fn evaluate_authority_parses_and_is_read() {
     let (args, dir) = evaluate_inputs("authority-flag");
     let authority = dir.join("authority.yaml");
-    std::fs::write(&authority, "any text: the skeleton does not parse it\n")
+    std::fs::write(&authority, "any text: not a canon-authority/1 list\n")
         .expect("authority file writes");
-    assert_evaluate_flag_is_inert("--authority", authority.to_str().expect("utf-8 path"), args);
+    assert_evaluate_flag_is_inert(
+        "--authority",
+        authority.to_str().expect("utf-8 path"),
+        args.clone(),
+    );
+
+    let granted = dir.join("granted.yaml");
+    std::fs::write(
+        &granted,
+        "- capability: finding.publish\n  decision: granted\n",
+    )
+    .expect("authority file writes");
+    let mut with_flag = args;
+    with_flag.push("--authority".to_owned());
+    with_flag.push(granted.to_str().expect("utf-8 path").to_owned());
+    let run = canon_owned(&with_flag);
+    assert_eq!(text(&run.stderr), "", "well-formed --authority: stderr");
+    assert_eq!(run.status.code(), Some(0), "well-formed --authority: exit");
+    assert!(
+        text(&run.stdout).contains("\"actions\": {"),
+        "well-formed --authority: the decision carries actions: {}",
+        text(&run.stdout)
+    );
 }
 
 /// `canon evaluate --at <instant>` is declared and passed through unparsed, and refused until
