@@ -19,17 +19,18 @@ pub const EXIT_STATUSES: [(u8, &str); 3] = [
     (
         0,
         "Success: the document is valid or compiled, the case was evaluated, every conformance \
-         scenario ran and passed, or a check found nothing.",
+         scenario ran and passed, a check found nothing, or the scenarios were generated.",
     ),
     (
         REJECTED,
         "Rejected: a document was read and rejected, an evaluation or a check was refused, a \
-         conformance scenario failed or was unreadable, no scenario ran, or a check found \
-         something.",
+         conformance scenario failed or was unreadable, no scenario ran, a check found \
+         something, or generation was refused.",
     ),
     (
         UNREADABLE,
-        "Unreadable: an input file or directory could not be read.",
+        "Unreadable: an input file or directory could not be read, or an output file could not \
+         be written.",
     ),
 ];
 
@@ -101,6 +102,25 @@ pub enum Command {
         /// action's or outcome's status is independent of a claim. Each is checked in every state.
         #[arg(long)]
         properties: Option<PathBuf>,
+    },
+    /// Generate `canon-conformance/1` scenarios into an empty directory: one minimal witness per
+    /// declared outcome and per action blocked in some state, over the state space `canon check`
+    /// enumerates. Each names the protocol path, as given, as its fixture, so `canon conform run`
+    /// runs them from the working directory `canon generate` ran in. Refused, writing nothing: a
+    /// protocol path that resolves outside the working directory, an outcome no state reaches, a
+    /// protocol that yields no scenario, an outcome or action identifier holding a character a file
+    /// name cannot hold (`/ \ : * ? " < > |` or a control character), two scenario file names
+    /// equal up to letter case or Unicode normalisation, and a non-empty `--out`. On failure,
+    /// nothing this run created is left.
+    Generate {
+        /// The protocol document, as a relative path without `..` components.
+        #[arg(long)]
+        path: PathBuf,
+        /// The directory to write the scenarios to: absent or empty. When absent it is created, with
+        /// any missing parents; an existing one, or a symbolic link to one, is written into as it
+        /// is.
+        #[arg(long)]
+        out: PathBuf,
     },
     /// The semantic difference between two compiled protocol revisions. Not built yet.
     Diff {

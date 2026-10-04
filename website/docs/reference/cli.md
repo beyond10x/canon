@@ -17,6 +17,7 @@ Generated from the clap definition of the `canon` command line in [`crates/canon
 | [`canon compile`](#canon-compile) | Compile a valid `protocol/1` document into `canon-ir/1` and print it |
 | [`canon evaluate`](#canon-evaluate) | Evaluate a case under a compiled protocol from an evidence set: every claim, and each declared obligation, action and outcome. Print the `canon-decision/1` document |
 | [`canon check`](#canon-check) | Check a `protocol/1` document over its whole finite state space: report outcomes no state reaches, actions whose precondition holds in no state, claims, obligations, preconditions and outcome requirements that read evidence no action produces, outcomes that rest on evidence an authority-requiring action may produce yet hold without any authority decision, and each declared property that fails, with a counterexample. A state is a set of evidence records, authority decisions and explicit decisions; a record an invalidation rule can keep from a claim is there in any combination of observed before and after each upstream artifact moved, one record each. A state space of more than 65536 states is refused |
+| [`canon generate`](#canon-generate) | Generate `canon-conformance/1` scenarios into an empty directory: one minimal witness per declared outcome and per action blocked in some state, over the state space `canon check` enumerates. Each names the protocol path, as given, as its fixture, so `canon conform run` runs them from the working directory `canon generate` ran in. Refused, writing nothing: a protocol path that resolves outside the working directory, an outcome no state reaches, a protocol that yields no scenario, an outcome or action identifier holding a character a file name cannot hold (`/ \ : * ? " < > \|` or a control character), two scenario file names equal up to letter case or Unicode normalisation, and a non-empty `--out`. On failure, nothing this run created is left |
 | [`canon diff`](#canon-diff) | The semantic difference between two compiled protocol revisions. Not built yet |
 | [`canon conform`](#canon-conform) | Conformance scenarios |
 | [`canon conform run`](#canon-conform-run) | Run every `canon-conformance/1` scenario of a registry directory and report each |
@@ -129,6 +130,31 @@ Options:
           Print help
 ```
 
+## `canon generate`
+
+Generate `canon-conformance/1` scenarios into an empty directory: one minimal witness per declared outcome and per action blocked in some state, over the state space `canon check` enumerates. Each names the protocol path, as given, as its fixture, so `canon conform run` runs them from the working directory `canon generate` ran in. Refused, writing nothing: a protocol path that resolves outside the working directory, an outcome no state reaches, a protocol that yields no scenario, an outcome or action identifier holding a character a file name cannot hold (`/ \ : * ? " < > \|` or a control character), two scenario file names equal up to letter case or Unicode normalisation, and a non-empty `--out`. On failure, nothing this run created is left
+
+| Option | Required | Default | Meaning |
+|---|---|---|---|
+| `--path <PATH>` | yes | none | The protocol document, as a relative path without `..` components |
+| `--out <OUT>` | yes | none | The directory to write the scenarios to: absent or empty. When absent it is created, with any missing parents; an existing one, or a symbolic link to one, is written into as it is |
+
+```text
+Generate `canon-conformance/1` scenarios into an empty directory: one minimal witness per declared outcome and per action blocked in some state, over the state space `canon check` enumerates. Each names the protocol path, as given, as its fixture, so `canon conform run` runs them from the working directory `canon generate` ran in. Refused, writing nothing: a protocol path that resolves outside the working directory, an outcome no state reaches, a protocol that yields no scenario, an outcome or action identifier holding a character a file name cannot hold (`/ \ : * ? " < > |` or a control character), two scenario file names equal up to letter case or Unicode normalisation, and a non-empty `--out`. On failure, nothing this run created is left
+
+Usage: canon generate --path <PATH> --out <OUT>
+
+Options:
+      --path <PATH>
+          The protocol document, as a relative path without `..` components
+
+      --out <OUT>
+          The directory to write the scenarios to: absent or empty. When absent it is created, with any missing parents; an existing one, or a symbolic link to one, is written into as it is
+
+  -h, --help
+          Print help
+```
+
 ## `canon diff`
 
 The semantic difference between two compiled protocol revisions. Not built yet
@@ -201,6 +227,6 @@ Options:
 
 | Status | Meaning |
 |---|---|
-| `0` | Success: the document is valid or compiled, the case was evaluated, every conformance scenario ran and passed, or a check found nothing. |
-| `1` | Rejected: a document was read and rejected, an evaluation or a check was refused, a conformance scenario failed or was unreadable, no scenario ran, or a check found something. |
-| `2` | Unreadable: an input file or directory could not be read. |
+| `0` | Success: the document is valid or compiled, the case was evaluated, every conformance scenario ran and passed, a check found nothing, or the scenarios were generated. |
+| `1` | Rejected: a document was read and rejected, an evaluation or a check was refused, a conformance scenario failed or was unreadable, no scenario ran, a check found something, or generation was refused. |
+| `2` | Unreadable: an input file or directory could not be read, or an output file could not be written. |

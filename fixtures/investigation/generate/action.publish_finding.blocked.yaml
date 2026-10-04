@@ -1,0 +1,37 @@
+format: "canon-conformance/1"
+id: "investigation.action.publish_finding.blocked"
+covers: []
+fixture: "fixtures/investigation/check/base/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "investigation"
+        revision: "r"
+        artifacts:
+          "explanation":
+            revision: "r"
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "status": "admissible"
+            },
+            "inspect": {
+              "status": "admissible"
+            },
+            "publish_finding": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
