@@ -1,0 +1,80 @@
+{
+  "format": "b10x-product-landing/1",
+  "product": {
+    "name": "Canon",
+    "mark": "C",
+    "eyebrow": "Protocol calculus · bootstrap",
+    "promise": ["What is known.", "What is owed.", "What has been earned."],
+    "lede": "Canon is a formal language and a deterministic calculus for evidence-governed protocols. For one case under one protocol it is built to answer what is known, what is unknown, which obligations remain open, which actions are admissible, and whether an outcome has been earned. Today it answers the first two.",
+    "actions": [
+      {"label": "Get started", "href": "/docs/getting-started", "kind": "primary"},
+      {"label": "See a protocol", "href": "#protocol"}
+    ],
+    "meta": "Rust · protocol/1 source · canon-ir/1 compiled form · Apache-2.0",
+    "terminal": "data/canon.terminal.json",
+    "terminalCaption": "Real canon output, recorded by canon-docs and checked for drift on every change."
+  },
+  "sections": [
+    {
+      "kind": "features",
+      "eyebrow": "What it does",
+      "title": "Legitimacy, not sequencing.",
+      "lede": "A workflow answers what executes next. Canon answers what is currently legitimate: the claims that can be made, the evidence that can establish them, the actions that are possible and the outcomes a case may conclude under. It does not execute anything.",
+      "items": [
+        {"title": "Declared as data", "description": "A protocol is a YAML document in the protocol/1 format. Canon parses it, checks every reference and compiles it into canon-ir/1, a normalized form stable enough to hash.", "status": "shipped", "href": "/docs/concepts/protocols"},
+        {"title": "Pure and deterministic", "description": "The library reads no clock, environment, network or filesystem. Callers pass documents in; the same normalized input gives the same normalized output.", "status": "shipped", "href": "/docs/concepts/evaluation"},
+        {"title": "Three-valued claims", "description": "Every claim is TRUE, FALSE or UNKNOWN. Missing evidence leaves a claim UNKNOWN; it never makes it FALSE.", "status": "shipped", "href": "/docs/concepts/three-valued-truth"}
+      ]
+    },
+    {
+      "kind": "flow",
+      "eyebrow": "How it works",
+      "title": "From a document to a decision.",
+      "lede": "Each step is a command that runs today. The evaluation reads a case snapshot and an evidence set and prints a canon-decision/1 document with a value for every claim.",
+      "steps": [
+        {"label": "Author", "title": "protocol/1", "description": "Artifacts, evidence kinds, claims, obligations, actions and outcomes, as YAML."},
+        {"label": "Validate", "title": "canon validate", "description": "Every reference resolves, every identifier is unique, no claim cycles."},
+        {"label": "Compile", "title": "canon-ir/1", "description": "Canonical order, explicit defaults, one serialization."},
+        {"label": "Evaluate", "title": "canon evaluate", "description": "Claims for one case and one evidence set, three-valued."}
+      ]
+    },
+    {
+      "kind": "protocol-graph",
+      "eyebrow": "A protocol",
+      "title": "What a protocol declares, as a graph.",
+      "lede": "The investigation protocol from Canon's own fixtures, drawn from its compiled form. Actions may produce evidence; evidence establishes claims; claims earn outcomes. Hover a node to trace what it rests on.",
+      "data": "data/investigation.protocol-graph.json"
+    },
+    {
+      "kind": "status",
+      "eyebrow": "Status",
+      "title": "Bootstrap. Here is exactly what exists.",
+      "lede": "Shipped means a command or library call that runs today. Decided means recorded in an accepted architecture decision, not built. Planned means on the roadmap only.",
+      "items": [
+        {"label": "protocol/1 source model and parser", "status": "shipped", "detail": "Unknown keys and explicit nulls are refused.", "href": "/docs/reference/protocol"},
+        {"label": "Deterministic validation", "status": "shipped", "detail": "References, duplicates and claim cycles, in a stable order.", "href": "/docs/reference/validation"},
+        {"label": "canon-ir/1 compilation", "status": "shipped", "detail": "Canonical ordering and explicit defaults.", "href": "/docs/reference/canon-ir"},
+        {"label": "Three-valued claim evaluation", "status": "shipped", "detail": "canon evaluate over a case snapshot and an evidence directory.", "href": "/docs/reference/evaluation"},
+        {"label": "canon conform run", "status": "shipped", "detail": "Runs canon-conformance/1 scenarios; one scenario covers CANON-CLAIM-001 and -002.", "href": "/docs/reference/conformance"},
+        {"label": "Cases compose at run time", "status": "decided", "detail": "Child cases and their outcomes as evidence; Atlas ADR 0081."},
+        {"label": "Protocols express step order", "status": "decided", "detail": "Atlas ADR 0084."},
+        {"label": "Evidence bound to revisions", "status": "planned", "detail": "Records name a revision today; it does not affect the result yet."},
+        {"label": "Evidence freshness", "status": "planned", "detail": "Evidence expires against the evaluation instant."},
+        {"label": "Obligations", "status": "planned", "detail": "Each obligation declares discharged_when; evaluating it as open or discharged is not built."},
+        {"label": "Action admissibility", "status": "planned", "detail": "From preconditions and authority decisions."},
+        {"label": "Outcomes", "status": "planned", "detail": "Earned or blocked; no completion through an undeclared outcome."},
+        {"label": "Semantic diff", "status": "planned", "detail": "Classify a protocol change as tightening, relaxation or breaking."}
+      ]
+    },
+    {
+      "kind": "related",
+      "eyebrow": "Related tools",
+      "title": "Built on Canon, and beside it.",
+      "tools": [
+        {"name": "ELS", "description": "Engineering protocols written in Canon: which claims must hold, which evidence counts, which actions need authority.", "href": "https://beyond10x.github.io/els/"},
+        {"name": "Loom", "description": "The native agent harness: a model that acts, only inside its frontier.", "href": "https://beyond10x.github.io/loom/"},
+        {"name": "ESS", "description": "Executable system specifications: Canon's data model is held to one.", "href": "https://beyond10x.github.io/ess/"}
+      ]
+    }
+  ]
+}

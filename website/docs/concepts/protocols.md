@@ -47,8 +47,9 @@ which other claims establish it. Claims must not test each other in a cycle.
 
 ## Obligations
 
-An obligation is something that must be done before the case can be complete. Its discharge
-predicate, `discharged_when`, is written over claims.
+An obligation is something that must be done before the case can be complete. Its
+`discharged_when` predicate says when it is done; it may test only claim values, never evidence
+directly.
 
 ```yaml
 obligations:

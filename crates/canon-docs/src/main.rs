@@ -7,6 +7,7 @@
 //! file differs from what the repository would generate now.
 
 mod json;
+mod landing;
 mod md;
 mod pages;
 mod source;
@@ -38,6 +39,10 @@ enum Action {
         /// Compare instead of writing; exit 1 when a generated file is missing, differs or is stale.
         #[arg(long)]
         check: bool,
+        /// The `canon` binary whose runs are recorded; defaults to the `canon` built beside this
+        /// binary (`cargo build -p canon-cli -p canon-docs`).
+        #[arg(long)]
+        canon: Option<PathBuf>,
     },
     /// Write `.well-known/b10x-site.json` into a built site, binding it to the commit it was
     /// built from, for the project-site publisher.
@@ -107,10 +112,24 @@ impl std::fmt::Display for Drift {
     }
 }
 
-/// The generated files currently on disk: every file in the generated directories whose text
-/// carries the marker, keyed by path relative to the root.
+/// The generated files currently on disk, keyed by path relative to the root: every file of the
+/// landing data directory, which `canon-docs` owns whole, and every file in the other generated
+/// directories whose text carries the marker.
 fn generated_on_disk(root: &Path) -> BTreeMap<String, String> {
     let mut found = BTreeMap::new();
+    if let Ok(entries) = fs::read_dir(root.join(landing::DATA_DIR)) {
+        for entry in entries.flatten() {
+            let relative = format!(
+                "{}/{}",
+                landing::DATA_DIR,
+                entry.file_name().to_string_lossy()
+            );
+            found.insert(
+                relative,
+                fs::read_to_string(entry.path()).unwrap_or_default(),
+            );
+        }
+    }
     for dir in [pages::REFERENCE, pages::SCHEMA_DIR] {
         let Ok(entries) = fs::read_dir(root.join(dir)) else {
             continue;
@@ -149,8 +168,41 @@ fn drift(
     found
 }
 
-fn generate(root: &Path, check: bool) -> Result<bool, String> {
-    let expected = pages::all(root)?;
+/// Every generated file: the pages, and the landing inputs, recorded with the `canon` binary.
+fn expected(root: &Path, canon: &Path) -> Result<BTreeMap<String, String>, String> {
+    let mut files = pages::all(root)?;
+    files.insert(
+        format!("{}/{}", landing::DATA_DIR, landing::GRAPH_FILE),
+        landing::investigation_graph(root)?,
+    );
+    let version = landing::run_canon(canon, root, &["--version"])?.output;
+    files.insert(
+        format!("{}/{}", landing::DATA_DIR, landing::TERMINAL_FILE),
+        landing::terminal(|args| landing::run_canon(canon, root, args), &version)?,
+    );
+    Ok(files)
+}
+
+/// The `canon` binary built beside this one.
+fn sibling_canon() -> Result<PathBuf, String> {
+    let me = std::env::current_exe().map_err(|error| format!("locating canon-docs: {error}"))?;
+    let canon = me.with_file_name(format!("canon{}", std::env::consts::EXE_SUFFIX));
+    if canon.is_file() {
+        Ok(canon)
+    } else {
+        Err(format!(
+            "no canon binary at {}; build it with `cargo build -p canon-cli` or pass --canon",
+            canon.display()
+        ))
+    }
+}
+
+fn generate(root: &Path, check: bool, canon: Option<PathBuf>) -> Result<bool, String> {
+    let canon = match canon {
+        Some(canon) => canon,
+        None => sibling_canon()?,
+    };
+    let expected = expected(root, &canon)?;
     let on_disk = generated_on_disk(root);
     let read = |path: &str| fs::read_to_string(root.join(path)).ok();
     if check {
@@ -185,7 +237,7 @@ fn generate(root: &Path, check: bool) -> Result<bool, String> {
 
 fn main() -> ExitCode {
     let result = match Cli::parse().command {
-        Action::Generate { root, check } => generate(&root, check),
+        Action::Generate { root, check, canon } => generate(&root, check, canon),
         Action::SiteManifest { out, commit } => write_site_manifest(&out, &commit).map(|()| true),
     };
     match result {
@@ -228,7 +280,12 @@ mod tests {
     #[test]
     fn the_committed_pages_are_current() {
         let root = repository_root();
-        let found = drift(&generated(), &generated_on_disk(&root), |path| {
+        // The landing inputs need a built `canon`; `generate --check` covers them.
+        let on_disk: BTreeMap<String, String> = generated_on_disk(&root)
+            .into_iter()
+            .filter(|(path, _)| !path.starts_with(landing::DATA_DIR))
+            .collect();
+        let found = drift(&generated(), &on_disk, |path| {
             fs::read_to_string(root.join(path)).ok()
         });
         assert!(found.is_empty(), "run `task docs-generate`: {found:?}");
