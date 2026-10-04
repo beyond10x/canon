@@ -1,0 +1,207 @@
+format: canon-conformance/1
+id: CANON-OUTCOME-001
+covers: [CANON-OUTCOME-001]
+fixture: fixtures/investigation/outcomes.yaml
+steps:
+  # No evidence: the claim the outcome requires is UNKNOWN, so the outcome is blocked, naming the
+  # claim and its value. UNKNOWN does not satisfy a requirement.
+  - id: claim-unknown
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+      evidence: []
+    expect:
+      decision: |
+        {
+          "case": "INV-18",
+          "claims": {
+            "explanation.supported": {
+              "value": "unknown"
+            }
+          },
+          "format": "canon-decision/1",
+          "outcomes": {
+            "supported": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "protocol": "investigation",
+          "protocol_revision": 1
+        }
+
+  # The only falsification attempt refuted the explanation: the claim is FALSE, so the outcome is
+  # blocked, naming the claim and its value.
+  - id: claim-false
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: refuted
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "case": "INV-18",
+          "claims": {
+            "explanation.supported": {
+              "value": "false"
+            }
+          },
+          "format": "canon-decision/1",
+          "outcomes": {
+            "supported": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "protocol": "investigation",
+          "protocol_revision": 1
+        }
+
+  # Observed, and the only falsification attempt survived: the claim is TRUE, so the outcome is
+  # legitimate, with no reasons.
+  - id: claim-true
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "case": "INV-18",
+          "claims": {
+            "explanation.supported": {
+              "value": "true"
+            }
+          },
+          "format": "canon-decision/1",
+          "outcomes": {
+            "supported": {
+              "status": "legitimate"
+            }
+          },
+          "protocol": "investigation",
+          "protocol_revision": 1
+        }
+
+  # The case terminated through `supported`, which the protocol declares and which is legitimate:
+  # it is evaluated, not refused. The control for the next step, which differs only in the outcome
+  # named, and for `terminated-blocked`, which differs only in the evidence.
+  - id: terminated-declared
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+        termination: supported
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "case": "INV-18",
+          "outcomes": {
+            "supported": {
+              "status": "legitimate"
+            }
+          },
+          "protocol": "investigation"
+        }
+
+  # The case terminated through `abandoned`, which the protocol does not declare: a case reaches
+  # completion only through a declared outcome, so the snapshot is refused. The refusal names
+  # `abandoned`; `crates/canon/src/eval/outcomes.rs` holds that message.
+  - id: terminated-undeclared
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+        termination: abandoned
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          subject: explanation
+          subject_revision: r1
+    expect:
+      refusal: undeclared-outcome
+
+  # The case terminated through `supported`, which the protocol declares, while it is blocked (no
+  # evidence, so its claim is UNKNOWN): an outcome is a legitimate terminal interpretation, so the
+  # snapshot is refused. The control is `terminated-declared`, where `supported` is legitimate.
+  - id: terminated-blocked
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+        termination: supported
+      evidence: []
+    expect:
+      refusal: illegitimate-termination

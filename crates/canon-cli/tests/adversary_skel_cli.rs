@@ -11,13 +11,14 @@ use std::process::{Command, Output};
 const SKELETON_FIXTURE: &str = "fixtures/investigation/evaluator-skeleton.yaml";
 
 /// The decision the base fixture gives `INV-18` with no evidence (CANON-CLAIM-001's
-/// `no-evidence` step): no section slot is written.
-const NO_EVIDENCE_DECISION: &str = "{\n  \"case\": \"INV-18\",\n  \"claims\": {\n    \"explanation.supported\": {\n      \"value\": \"unknown\"\n    }\n  },\n  \"format\": \"canon-decision/1\",\n  \"protocol\": \"investigation\",\n  \"protocol_revision\": 1\n}\n";
+/// `no-evidence` step), with the `outcomes` section story:outcomes writes (CANON-OUTCOME-001's
+/// `claim-unknown` step); no other section slot is written.
+const NO_EVIDENCE_DECISION: &str = "{\n  \"case\": \"INV-18\",\n  \"claims\": {\n    \"explanation.supported\": {\n      \"value\": \"unknown\"\n    }\n  },\n  \"format\": \"canon-decision/1\",\n  \"outcomes\": {\n    \"supported\": {\n      \"reasons\": [\n        {\n          \"claim\": \"explanation.supported\",\n          \"value\": \"unknown\"\n        }\n      ],\n      \"status\": \"blocked\"\n    }\n  },\n  \"protocol\": \"investigation\",\n  \"protocol_revision\": 1\n}\n";
 
-/// The decision the skeleton fixture gives `INV-18` with no evidence: the base fixture's, plus the
-/// `obligations` section story:obligations fills, with `establish.explanation` open because
-/// `explanation.supported` is `unknown`.
-const SKELETON_NO_EVIDENCE_DECISION: &str = "{\n  \"case\": \"INV-18\",\n  \"claims\": {\n    \"explanation.supported\": {\n      \"value\": \"unknown\"\n    }\n  },\n  \"format\": \"canon-decision/1\",\n  \"obligations\": [\n    {\n      \"id\": \"establish.explanation\",\n      \"status\": \"open\"\n    }\n  ],\n  \"protocol\": \"investigation\",\n  \"protocol_revision\": 1\n}\n";
+/// The decision the skeleton fixture gives `INV-18` with no evidence: the base fixture's (its
+/// `outcomes` section included), plus the `obligations` section story:obligations fills, with
+/// `establish.explanation` open because `explanation.supported` is `unknown`.
+const SKELETON_NO_EVIDENCE_DECISION: &str = "{\n  \"case\": \"INV-18\",\n  \"claims\": {\n    \"explanation.supported\": {\n      \"value\": \"unknown\"\n    }\n  },\n  \"format\": \"canon-decision/1\",\n  \"obligations\": [\n    {\n      \"id\": \"establish.explanation\",\n      \"status\": \"open\"\n    }\n  ],\n  \"outcomes\": {\n    \"supported\": {\n      \"reasons\": [\n        {\n          \"claim\": \"explanation.supported\",\n          \"value\": \"unknown\"\n        }\n      ],\n      \"status\": \"blocked\"\n    }\n  },\n  \"protocol\": \"investigation\",\n  \"protocol_revision\": 1\n}\n";
 
 fn repository_root() -> PathBuf {
     let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
@@ -117,21 +118,37 @@ fn a_declared_obligation_adds_only_the_obligations_section() {
     assert_eq!(base.status.code(), Some(0), "base: exit");
 }
 
-/// `canon-case/1` gains `termination`, and "its check stays in `outcomes.rs`" which is a stub that
-/// accepts any termination. A case recording one, declared or not, evaluates exactly as without.
+/// `canon-case/1` gains `termination`, and its check stays in `outcomes.rs` (story:outcomes,
+/// CANON-OUTCOME-001). With no evidence the declared outcome `supported` is blocked, so a case
+/// recording it is refused, naming it and its status; one recording an outcome the protocol does
+/// not declare is refused, naming it.
 #[test]
-fn a_recorded_termination_changes_no_decision() {
-    for (name, outcome) in [("declared", "supported"), ("undeclared", "abandoned")] {
-        let case = format!("{CASE}termination: {outcome}\n");
-        let run = evaluate(&format!("termination-{name}"), SKELETON_FIXTURE, &case);
-        assert_eq!(text(&run.stderr), "", "{outcome}: stderr");
-        assert_eq!(
-            text(&run.stdout),
-            SKELETON_NO_EVIDENCE_DECISION,
-            "{outcome}: canon-decision/1"
-        );
-        assert_eq!(run.status.code(), Some(0), "{outcome}: exit");
-    }
+fn a_recorded_termination_through_an_unsupported_outcome_is_refused() {
+    let declared = evaluate(
+        "termination-declared",
+        SKELETON_FIXTURE,
+        &format!("{CASE}termination: supported\n"),
+    );
+    assert_eq!(text(&declared.stdout), "", "supported: stdout");
+    assert_eq!(
+        text(&declared.stderr),
+        "error[illegitimate-termination]: case `INV-18` terminated through outcome `supported`, which is blocked\n",
+        "supported: stderr"
+    );
+    assert_eq!(declared.status.code(), Some(1), "supported: exit");
+
+    let undeclared = evaluate(
+        "termination-undeclared",
+        SKELETON_FIXTURE,
+        &format!("{CASE}termination: abandoned\n"),
+    );
+    assert_eq!(text(&undeclared.stdout), "", "abandoned: stdout");
+    assert_eq!(
+        text(&undeclared.stderr),
+        "error[undeclared-outcome]: case `INV-18` terminated through outcome `abandoned`, which the protocol does not declare\n",
+        "abandoned: stderr"
+    );
+    assert_eq!(undeclared.status.code(), Some(1), "abandoned: exit");
 }
 
 /// The model (`crates/canon/src/model/mod.rs`, `Obligation`) and `ess/domains/protocol.yaml`
