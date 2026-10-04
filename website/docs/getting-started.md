@@ -45,9 +45,14 @@ An evaluation needs the compiled protocol, a `canon-case/1` snapshot of the case
 canon evaluate --ir investigation.ir.json --case case.yaml --evidence evidence/
 ```
 
-It prints a `canon-decision/1` document giving every claim the value `true`, `false` or `unknown`.
-The [worked example](./reference/investigation-example.md) shows the inputs and the output for
-several evidence situations. Only claims are evaluated today.
+It prints a `canon-decision/1` document giving every claim the value `true`, `false` or `unknown`,
+each declared obligation `open` or `discharged`, each declared action `admissible`,
+`approval-required` or `blocked`, and each declared outcome `legitimate` or `blocked`. Two options
+add inputs: `--authority` names a `canon-authority/1` document of granted and denied capabilities,
+and `--at` gives the evaluation instant against which evidence expires. The
+[worked example](./reference/investigation-example.md) shows the inputs and the output for
+several evidence situations, and the [evaluation reference](./reference/evaluation.md) gives the
+rules.
 
 ## Run the conformance scenarios
 
@@ -56,8 +61,8 @@ canon conform run
 ```
 
 From the repository root this runs every [`canon-conformance/1` scenario](./reference/conformance.md)
-in `conformance/scenarios`. Scenarios can compile a fixture and evaluate a case; the `authority`
-and `at` inputs a scenario may name are not read yet.
+in `conformance/scenarios`. Scenarios can compile a fixture and evaluate a case, with the
+authority decisions and evaluation instant a step names.
 
 ## Next
 

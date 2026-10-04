@@ -1,11 +1,15 @@
 //! Deterministic evaluation of a case under a compiled protocol (design § 8, § 13).
 //!
-//! [`evaluate`] is a pure function of a compiled protocol ([`Ir`]), a `canon-case/1` case snapshot
-//! and a set of `canon-evidence/1` records. It reads nothing else: no clock, network, filesystem,
-//! credentials or implicit `latest`. Its result is a `canon-decision/1` [`Decision`] giving every
-//! declared claim the value `true`, `false` or `unknown`, or a [`Refusal`] when the inputs do not
-//! fit the protocol. [`render`] is the decision's one serialization: canonical JSON, the
-//! serialization `canon-ir/1` uses.
+//! [`evaluate_with`] is a pure function of a compiled protocol ([`Ir`]), a `canon-case/1` case
+//! snapshot, a set of `canon-evidence/1` records and the inputs a caller supplies ([`Supplied`]):
+//! `canon-authority/1` authority decisions (`--authority`) and the evaluation instant (`--at`).
+//! [`evaluate`] is the same with nothing supplied. It reads nothing else: no clock, network,
+//! filesystem, credentials or implicit `latest`. Its result is a `canon-decision/1` [`Decision`]
+//! giving every declared claim the value `true`, `false` or `unknown`, each declared obligation
+//! `open` or `discharged`, each declared action `admissible`, `approval-required` or `blocked`,
+//! and each declared outcome `legitimate` or `blocked` (the sections below), or a
+//! [`Refusal`] when the inputs do not fit the protocol. [`render`] is the decision's one
+//! serialization: canonical JSON, the serialization `canon-ir/1` uses.
 //!
 //! # Three-valued claims
 //!
@@ -43,9 +47,12 @@
 //! revision-binding stage reads them.
 //!
 //! Then the supplied inputs are read, in this order: the authority decisions (`--authority`), the
-//! evaluation instant (`--at`) and the explicit decisions. The instant is read by `freshness.rs`
-//! and refused as `invalid-instant` when it is not one. The others are not read yet: each one
-//! given is refused as `unsupported-input`, naming it (`` `--authority` is not supported yet ``).
+//! evaluation instant (`--at`) and the explicit decisions. The authority decisions are read by
+//! `authority.rs` as `canon-authority/1`, refused as the section "Authority decisions" below
+//! says. The instant is read by `freshness.rs` and refused as `invalid-instant` when it is not
+//! one. Explicit decisions are not read yet (story:decision-outcomes): given, they are refused as
+//! `unsupported-input`, naming them (`` `decisions` is not supported yet ``); `canon evaluate`
+//! has no option that supplies them.
 //!
 //! Then the exclusion stages run, in pipeline order: revision binding, freshness, invalidation.
 //! Each may refuse the inputs it reads. Revision binding checks each record in the order given: a
@@ -54,14 +61,17 @@
 //! declare ``), and a record bound to a revision of its subject that is not the case snapshot's
 //! current one is excluded as `revision_mismatch`. Freshness refuses a `max_age` it cannot read
 //! (`invalid-max-age`) and excludes a record older than its kind's `max_age` at the evaluation
-//! instant as `expired`. Invalidation refuses nothing yet.
+//! instant as `expired`. Invalidation is not built yet (story:invalidation-rules): it refuses and
+//! excludes nothing.
 //!
 //! Then claims are evaluated. An IR whose claims test each other in a cycle — which `canon
 //! compile` never produces, but a caller can build — is refused as `claim-cycle`, naming the claims
 //! from the first one reached again: `claims test each other in a cycle: c -> d -> c`.
 //!
-//! Last, the `outcomes` section may refuse the case snapshot (a termination through an outcome the
-//! protocol does not declare, story:outcomes); it refuses nothing yet.
+//! Last, the `outcomes` section checks the case snapshot's `termination`: one naming an outcome
+//! the protocol does not declare is refused as `undeclared-outcome`, naming the outcome, and one
+//! naming a declared outcome that is blocked as `illegitimate-termination`, naming the outcome and
+//! its status (CANON-OUTCOME-001).
 //!
 //! # Depth
 //!
@@ -92,10 +102,48 @@
 //!    the claim values, action preconditions and outcome requirements over the claim values and
 //!    the evidence left after step 3.
 //!
-//! Of the exclusion stages, revision binding and freshness are built: a record bound to another
-//! revision is excluded as `revision_mismatch`, and a record older than its kind's `max_age` at the
-//! evaluation instant as `expired`, each listed as excluded under each claim that reaches its kind.
-//! Invalidation excludes nothing yet.
+//! Revision binding excludes a record bound to another revision as `revision_mismatch`, and
+//! freshness a record older than its kind's `max_age` at the evaluation instant as `expired`,
+//! each listed as excluded under each claim that reaches its kind. The `obligations`, `actions`
+//! and `outcomes` sections are written as the next section says. Three parts are not built yet:
+//! the invalidation stage excludes nothing (story:invalidation-rules), explicit decisions are
+//! refused when given (story:decision-outcomes), and no decision carries an `explanation`
+//! (story:explanation).
+//!
+//! # Sections
+//!
+//! A section is written only when the protocol declares something it reports on: a protocol that
+//! declares no obligation has no `obligations` key, and likewise for actions and outcomes.
+//!
+//! - `obligations` is an array with one `{"id": <obligation>, "status": <status>}` entry per
+//!   declared obligation, in identifier order. The status is `discharged` only when the
+//!   obligation's `discharged_when` predicate is `true` over the claim values; `unknown` and
+//!   `false` both leave it `open` (CANON-OBLIGATION-001).
+//! - `actions` maps each declared action to its `status` and, unless it is admissible, the
+//!   `reasons` that decide it. `blocked` when the precondition is not `true`: each claim test and
+//!   evidence match that decides it is a reason, `{"claim": <id>, "value": <the claim's value>}`
+//!   or `{"evidence": <kind>, "present": <whether a record of the kind applies>}`, or
+//!   `{"requirement": "unsatisfiable"}` when none does. `blocked` too when the precondition is
+//!   `true` and the authority decisions deny a capability the action requires, each a reason
+//!   `{"capability": <id>, "decision": "denied"}`. `approval-required` when the precondition is
+//!   `true`, nothing is denied and some required capability is not decided, each a reason
+//!   `{"capability": <id>, "decision": "none"}`. `admissible` when the precondition is `true` and
+//!   every required capability is granted (CANON-AUTHORITY-001).
+//! - `outcomes` maps each declared outcome to `{"status": "legitimate"}` when its `requires`
+//!   predicate is `true` over the claim values and the evidence left, and otherwise to
+//!   `{"status": "blocked", "reasons": [...]}`, the reasons written as an action precondition's.
+//!   The case snapshot's `termination` is checked against it, as the refusals above say
+//!   (CANON-OUTCOME-001).
+//!
+//! # Authority decisions
+//!
+//! `--authority` names a `canon-authority/1` document: a YAML (or JSON) list of decisions, each a
+//! capability and whether it is granted, `- {capability: finding.publish, decision: granted}` (or
+//! `denied`). An empty list decides nothing. Canon grants nothing and resolves no identity: the
+//! caller decides and passes the decisions in. Refused, in this order: text that is not such a
+//! list, or an entry with another key or another decision, as `malformed-input`; then, entry by
+//! entry, a capability that is not an identifier as `invalid-identifier`, and a capability decided
+//! a second time as `duplicate-identifier`.
 
 mod actions;
 mod authority;

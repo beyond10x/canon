@@ -260,7 +260,7 @@ and `canon evaluate --ir investigation.ir.json --case case.yaml --evidence evide
 }
 ```
 
-Only claims are evaluated today: obligations, actions and outcomes are not. Both records are bound to `explanation` at its current revision; a record bound to any other revision would be listed under the claim as excluded and would not count.
+Besides the claims, the decision gives each declared action `admissible`, `approval-required` or `blocked` under the authority decisions given (none here), and each declared outcome `legitimate` or `blocked`. This protocol declares no obligation, so the decision has no `obligations` section. See [evaluation](./evaluation.md) for each section. Both records are bound to `explanation` at its current revision; a record bound to any other revision would be listed under the claim as excluded and would not count.
 
 ## Broken variants
 

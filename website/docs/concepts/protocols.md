@@ -47,12 +47,23 @@ which other claims establish it. Claims must not test each other in a cycle.
 
 ## Obligations
 
-An obligation is something that must be done before the case can be complete.
+An obligation is something that must be done before the case can be complete. Its discharge
+predicate, `discharged_when`, is written over claims.
 
-:::caution[Today an obligation is a name and a description]
+```yaml
+obligations:
+  establish.explanation:
+    discharged_when:
+      claim: explanation.supported
+```
 
-Nothing in `protocol/1` yet says when an obligation is discharged, and nothing references one.
-Evaluating obligations as open or discharged is planned.
+:::note[Shipped: open or discharged]
+
+`canon evaluate` reports every declared obligation as `open` or `discharged`. It is discharged
+only when the predicate is `TRUE`; `UNKNOWN` and `FALSE` both leave it open. Whether deciding a
+claim or establishing it discharges an obligation is the author's choice, written with the claim
+tests of the predicate: `{claim: c}` needs `c` to be `TRUE`, and `{not: {claim: c, is: unknown}}`
+needs it decided either way.
 
 :::
 
@@ -77,20 +88,42 @@ actions:
 ```
 
 Canon checks that capabilities and effect classes are well-formed identifiers. It does not resolve
-who holds a capability, and it gives effect classes no built-in meaning today. Deciding whether an
-action is admissible is planned.
+who holds a capability: whoever runs the evaluation passes the authority decisions in, as a
+`canon-authority/1` list of capabilities granted or denied (`canon evaluate --authority`). It gives
+effect classes no built-in meaning today.
+
+:::note[Shipped: action admissibility]
+
+`canon evaluate` reports every declared action as `blocked` when its precondition is not `TRUE`
+or a capability it requires is denied, `approval-required` when the precondition is `TRUE`,
+nothing is denied and some required capability is not decided, and `admissible` when the
+precondition is `TRUE` and every required capability is granted. A status other than
+`admissible` comes with the claims, evidence or capabilities that decide it. Conformance scenario
+`CANON-AUTHORITY-001` holds this.
+
+:::
 
 ## Outcomes
 
 An outcome is a declared terminal interpretation of a case, such as `supported`, `restored` or
-`abandoned`, together with the predicate it requires. A case is meant to end only through an
-outcome its protocol declares. Evaluating outcomes is planned.
+`abandoned`, together with the predicate it requires. A case ends only through an outcome its
+protocol declares.
+
+:::note[Shipped: legitimate or blocked]
+
+`canon evaluate` reports every declared outcome as `legitimate` when its requirement is `TRUE`
+and `blocked`, with the reasons, otherwise. A case snapshot that records termination through an
+outcome the protocol does not declare is refused (`undeclared-outcome`), and so is one through a
+blocked outcome (`illegitimate-termination`). Conformance scenario `CANON-OUTCOME-001` holds this.
+Outcomes that require an explicit decision are planned.
+
+:::
 
 ## Predicates
 
-Claims, preconditions and outcomes are written as predicates: a small, total expression language
-with five forms, `all`, `any`, `not`, an `evidence` match and a `claim` test. There are no
-variables, loops or function calls.
+Claims, discharge predicates, preconditions and outcome requirements are written as predicates: a
+small, total expression language with five forms, `all`, `any`, `not`, an `evidence` match and a
+`claim` test. There are no variables, loops or function calls.
 
 ```yaml
 true_when:

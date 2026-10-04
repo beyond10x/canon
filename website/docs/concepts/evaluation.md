@@ -23,22 +23,31 @@ Equivalent normalized inputs give equivalent normalized outputs.
 
 ## What exists today
 
-:::note[Shipped: claims]
+:::note[Shipped: claims, obligations, actions and outcomes]
 
-`canon evaluate` takes the compiled protocol, a `canon-case/1` snapshot and a set of
-`canon-evidence/1` records, and writes a `canon-decision/1` document with the three-valued value of
-every claim. The order of the evidence does not matter, and the same inputs give the same bytes.
-Inputs that do not fit the protocol are refused with a stable code. See the
+`canon evaluate` takes the compiled protocol, a `canon-case/1` snapshot, a set of
+`canon-evidence/1` records and, optionally, `canon-authority/1` authority decisions (`--authority`)
+and the evaluation instant (`--at`). It writes a `canon-decision/1` document with:
+
+- the three-valued value of every claim, from the evidence that applies: evidence bound to another
+  revision of its artifact, or older than its kind allows at the evaluation instant, is listed as
+  excluded and does not count;
+- each declared obligation, `open` or `discharged`;
+- each declared action, `admissible`, `approval-required` or `blocked`, with the reasons;
+- each declared outcome, `legitimate` or `blocked`, with the reasons.
+
+A case snapshot that records termination through an undeclared or blocked outcome is refused. The
+order of the evidence does not matter, and the same inputs give the same bytes. Inputs that do not
+fit the protocol are refused with a stable code. See the
 [evaluation reference](../reference/evaluation.md) and the
 [evaluation documents](../reference/documents.md).
 
 :::
 
-:::caution[Planned: everything beyond claims]
+:::caution[Planned: invalidation, explicit decisions and the explanation]
 
-Authority decisions and the evaluation instant are not inputs yet. The decision does not yet say
-which obligations are open, which actions are admissible or blocked, or which outcomes are earned,
-and it carries no explanation.
+An upstream artifact change invalidates nothing yet, explicit decisions are not an input yet, and
+the decision carries no explanation.
 
 :::
 

@@ -15,7 +15,7 @@ Generated from the clap definition of the `canon` command line in [`crates/canon
 |---|---|
 | [`canon validate`](#canon-validate) | Parse and validate a `protocol/1` document |
 | [`canon compile`](#canon-compile) | Compile a valid `protocol/1` document into `canon-ir/1` and print it |
-| [`canon evaluate`](#canon-evaluate) | Evaluate every claim of a compiled protocol for a case from an evidence set, and print the `canon-decision/1` document |
+| [`canon evaluate`](#canon-evaluate) | Evaluate a case under a compiled protocol from an evidence set: every claim, and each declared obligation, action and outcome. Print the `canon-decision/1` document |
 | [`canon diff`](#canon-diff) | The semantic difference between two compiled protocol revisions. Not built yet |
 | [`canon conform`](#canon-conform) | Conformance scenarios |
 | [`canon conform run`](#canon-conform-run) | Run every `canon-conformance/1` scenario of a registry directory and report each |
@@ -64,18 +64,18 @@ Options:
 
 ## `canon evaluate`
 
-Evaluate every claim of a compiled protocol for a case from an evidence set, and print the `canon-decision/1` document
+Evaluate a case under a compiled protocol from an evidence set: every claim, and each declared obligation, action and outcome. Print the `canon-decision/1` document
 
 | Option | Required | Default | Meaning |
 |---|---|---|---|
 | `--ir <IR>` | yes | none | The compiled protocol: `canon-ir/1` exactly as `canon compile` prints it |
 | `--case <CASE>` | yes | none | The `canon-case/1` case snapshot |
 | `--evidence <EVIDENCE>` | yes | none | A directory holding only `canon-evidence/1` records, one per `*.yaml` or `*.json` file |
-| `--authority <AUTHORITY>` | no | none | A `canon-authority/1` document of authority decisions. Read and passed through; not supported yet |
+| `--authority <AUTHORITY>` | no | none | A `canon-authority/1` document: which capabilities are granted or denied. An action is admissible only when every capability it requires is granted; without it, none is granted |
 | `--at <AT>` | no | none | The evaluation instant, in UTC as `YYYY-MM-DDTHH:MM:SSZ`. Evidence older than its kind's `max_age` at this instant does not apply; without it, no evidence expires |
 
 ```text
-Evaluate every claim of a compiled protocol for a case from an evidence set, and print the `canon-decision/1` document
+Evaluate a case under a compiled protocol from an evidence set: every claim, and each declared obligation, action and outcome. Print the `canon-decision/1` document
 
 Usage: canon evaluate [OPTIONS] --ir <IR> --case <CASE> --evidence <EVIDENCE>
 
@@ -90,7 +90,7 @@ Options:
           A directory holding only `canon-evidence/1` records, one per `*.yaml` or `*.json` file
 
       --authority <AUTHORITY>
-          A `canon-authority/1` document of authority decisions. Read and passed through; not supported yet
+          A `canon-authority/1` document: which capabilities are granted or denied. An action is admissible only when every capability it requires is granted; without it, none is granted
 
       --at <AT>
           The evaluation instant, in UTC as `YYYY-MM-DDTHH:MM:SSZ`. Evidence older than its kind's `max_age` at this instant does not apply; without it, no evidence expires

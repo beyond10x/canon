@@ -89,7 +89,6 @@ impl Walk<'_> {
 /// A predicate's value over claim values already decided and the evidence a section may read: the
 /// one evaluator the `obligations`, `actions` and `outcomes` sections use, with the rules claims
 /// are evaluated by (the module docs of [`super`]). A claim `claims` does not hold is `unknown`.
-#[allow(dead_code)] // The section stubs do not evaluate anything yet; their stories call this.
 pub(super) fn predicate(
     predicate: &Predicate,
     claims: &BTreeMap<ClaimId, Truth>,

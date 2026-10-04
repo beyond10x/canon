@@ -1,6 +1,6 @@
 //! The `canon-decision/1` document: which protocol revision applied to which case, the
 //! three-valued value of every claim the protocol declares (design § 8, § 14), and one optional
-//! slot per section the later evaluator stories fill.
+//! slot per further section: obligations, actions, outcomes and the explanation.
 
 use super::Declarations;
 use super::ids::{CaseId, ClaimId, EvidenceId, ProtocolId};
@@ -24,17 +24,17 @@ pub struct Decision {
     pub protocol_revision: u64,
     /// Every declared claim, in identifier order.
     pub claims: Declarations<ClaimId, ClaimDecision>,
-    /// Each obligation's status; filled by story:obligations, its shape fixed by that story's
-    /// conformance scenarios.
+    /// Each declared obligation, `open` or `discharged`, in identifier order; written when the
+    /// protocol declares an obligation. Its shape is fixed by CANON-OBLIGATION-001.
     pub obligations: Option<Json>,
-    /// The admissible actions; filled by story:action-admissibility, its shape fixed by that
-    /// story's conformance scenarios.
+    /// Each declared action, `admissible`, `approval-required` or `blocked`, with the reasons for
+    /// a status other than `admissible`; written when the protocol declares an action. Its shape is
+    /// fixed by CANON-AUTHORITY-001.
     pub actions: Option<Json>,
-    /// Each outcome's status; filled by story:outcomes, its shape fixed by that story's
-    /// conformance scenarios.
+    /// Each declared outcome, `legitimate` or `blocked`, with the reasons it is blocked; written
+    /// when the protocol declares an outcome. Its shape is fixed by CANON-OUTCOME-001.
     pub outcomes: Option<Json>,
-    /// The structured explanation; filled by story:explanation, its shape fixed by that story's
-    /// conformance scenarios.
+    /// The structured explanation; not written yet (story:explanation).
     pub explanation: Option<Json>,
 }
 

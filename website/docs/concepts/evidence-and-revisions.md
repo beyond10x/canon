@@ -41,9 +41,20 @@ each claim that reaches its kind, in `excluded_evidence`, with the reason `revis
 
 :::
 
-:::caution[Planned: freshness and invalidation]
+:::note[Shipped: freshness]
 
-Records carry no time yet, and an upstream change invalidates nothing yet; see
+An evidence kind may declare a `max_age`, and a `canon-evidence/1` record may give its
+`observed_at`. Given an evaluation instant (`canon evaluate --at`), a record older than its kind's
+`max_age` at that instant is left out of claim evaluation and listed as excluded with the reason
+`expired`, so a claim it alone decided is `UNKNOWN`, never `FALSE`. Without an instant, or without
+`observed_at`, nothing expires: Canon reads no clock. Conformance scenario `CANON-EVIDENCE-002`
+holds this.
+
+:::
+
+:::caution[Planned: invalidation]
+
+An upstream change invalidates nothing yet; see
 [where this stands](../status/where-this-stands.md).
 
 :::

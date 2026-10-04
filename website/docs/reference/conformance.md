@@ -90,8 +90,9 @@ standard output. The same registry produces byte-identical output on every run.
 
 An evaluate step compiles the fixture, reads `case` as a `canon-case/1` document and each
 `evidence` entry as a `canon-evidence/1` document, and calls `eval::evaluate_with`, passing
-`authority` (as YAML text) and `at` through unread: the evaluator decides what they mean, and
-refuses one it does not read yet as `unsupported-input`. The `authority` list is written back
+`authority` (as YAML text) and `at` through unread: the evaluator reads them as
+`canon-authority/1` decisions and the evaluation instant, and refuses either when it is not
+one (`malformed-input`, `invalid-instant`, …). The `authority` list is written back
 as YAML that reads as the same list (in flow style where block style cannot write an entry); a
 list that cannot be fails the step as `authority entry <n> cannot be serialized: <why>`, and the
 registry run goes on.

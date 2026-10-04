@@ -16,11 +16,13 @@ earned.
 
 :::note[Status: bootstrap]
 
-Canon is early. Today it parses, validates and compiles protocols, evaluates every claim of a
-case in three-valued truth (`canon evaluate`), applying evidence only to the revision it is bound
-to, and runs conformance scenarios. Obligations, action admissibility, outcomes and freshness are
-not built yet. Every page says which parts are shipped
-and which are planned; [where this stands](./status/where-this-stands.md) has the full list.
+Canon is early. Today it parses, validates and compiles protocols, and runs conformance
+scenarios. `canon evaluate` gives every claim of a case a three-valued value, applying evidence
+only to the revision it is bound to and only while it is fresh, and says which obligations are
+open, which actions are admissible under the authority decisions given, and which outcomes are
+legitimate. Invalidation, decision-based outcomes and the explanation are not built yet. Every
+page says which parts are shipped and which are planned;
+[where this stands](./status/where-this-stands.md) has the full list.
 
 :::
 
@@ -49,9 +51,9 @@ consume what Canon decides.
 
 ## Where to go next
 
-- [Getting started](./getting-started.md): build `canon`, validate and compile a protocol.
+- [Getting started](./getting-started.md): build `canon`, then validate, compile and evaluate a protocol.
 - [The `protocol/1` language](./concepts/protocols.md): how a protocol is put together.
 - [Three-valued truth](./concepts/three-valued-truth.md) and
   [evidence bound to revisions](./concepts/evidence-and-revisions.md): the two ideas Canon is built
   around.
-- [A worked example](./reference/investigation-example.md): one protocol, validated and compiled.
+- [A worked example](./reference/investigation-example.md): one protocol, validated, compiled and evaluated.

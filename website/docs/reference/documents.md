@@ -66,10 +66,10 @@ A `canon-decision/1` document. A section slot that is `None` is not serialized.
 | `protocol` | [identifier](#identifiers) (`ProtocolId`) | always | — |
 | `protocol_revision` | integer, 0 or more | always | The revision of the compiled protocol that applied. |
 | `claims` | map from [identifier](#identifiers) (`ClaimId`) to [`ClaimDecision`](#claimdecision) | always | Every declared claim, in identifier order. |
-| `obligations` | any JSON value | always | Each obligation's status; filled by story:obligations, its shape fixed by that story's conformance scenarios. |
-| `actions` | any JSON value | always | The admissible actions; filled by story:action-admissibility, its shape fixed by that story's conformance scenarios. |
-| `outcomes` | any JSON value | always | Each outcome's status; filled by story:outcomes, its shape fixed by that story's conformance scenarios. |
-| `explanation` | any JSON value | always | The structured explanation; filled by story:explanation, its shape fixed by that story's conformance scenarios. |
+| `obligations` | any JSON value | when present | Each declared obligation, `open` or `discharged`, in identifier order; written when the protocol declares an obligation. Its shape is fixed by CANON-OBLIGATION-001. |
+| `actions` | any JSON value | when present | Each declared action, `admissible`, `approval-required` or `blocked`, with the reasons for a status other than `admissible`; written when the protocol declares an action. Its shape is fixed by CANON-AUTHORITY-001. |
+| `outcomes` | any JSON value | when present | Each declared outcome, `legitimate` or `blocked`, with the reasons it is blocked; written when the protocol declares an outcome. Its shape is fixed by CANON-OUTCOME-001. |
+| `explanation` | any JSON value | when present | The structured explanation; not written yet (story:explanation). |
 
 ### `ClaimDecision`
 
@@ -78,7 +78,7 @@ One claim's entry in a decision.
 | Key | Value | Present | Meaning |
 |---|---|---|---|
 | `value` | [`Truth`](./protocol.md#truth) | always | — |
-| `excluded_evidence` | list of [`EvidenceExclusion`](#evidenceexclusion) | always | The evidence an exclusion stage kept from this claim, in evidence-id order. Empty unless a stage excluded something; an empty list is not serialized. |
+| `excluded_evidence` | list of [`EvidenceExclusion`](#evidenceexclusion) | when not empty | The evidence an exclusion stage kept from this claim, in evidence-id order. Empty unless a stage excluded something; an empty list is not serialized. |
 
 ### `EvidenceExclusion`
 

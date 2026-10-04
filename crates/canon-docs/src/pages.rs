@@ -59,7 +59,7 @@ pub fn all(root: &Path) -> Result<BTreeMap<String, String>, String> {
             "crates/canon/src/eval/mod.rs",
             "Evaluation",
             "Evaluation",
-            "How canon evaluate gives every claim a three-valued value, and when it refuses.",
+            "How canon evaluate decides claims, obligations, actions and outcomes, and when it refuses.",
         )?,
     );
     files.insert(
@@ -492,10 +492,15 @@ fn fields_table(fields: &[source::Field], links: &Links, model: &Model, read: bo
     let rows: Vec<Vec<String>> = fields
         .iter()
         .map(|field| {
-            let presence = match (read, field.optional) {
-                (false, _) => "always",
-                (true, true) => "optional",
-                (true, false) => "required",
+            // A written document (`canon-decision/1`) leaves out an absent slot and an empty
+            // list (`crates/canon/src/eval/decision.rs`), so only its other fields are always
+            // there.
+            let presence = match (read, field.optional, &field.ty) {
+                (false, _, Ty::Option(_)) => "when present",
+                (false, _, Ty::List(_)) => "when not empty",
+                (false, _, _) => "always",
+                (true, true, _) => "optional",
+                (true, false, _) => "required",
             };
             vec![
                 code(&field.name),
@@ -1317,13 +1322,59 @@ fn evaluations(compiled: &ir::Ir) -> Result<String, String> {
     }
     out.push_str(&format!(
         "and `canon evaluate --ir investigation.ir.json --case case.yaml --evidence evidence/` \
-         prints:\n\n```json\n{}\n```\n\nOnly claims are evaluated today: obligations, actions \
-         and outcomes are not. Both records are bound to `explanation` at its current revision; \
-         a record bound to any other revision would be listed under the claim as excluded and \
-         would not count.\n",
-        decision.trim_end()
+         prints:\n\n```json\n{}\n```\n\n{} Both records are bound to `explanation` at its \
+         current revision; a record bound to any other revision would be listed under the claim \
+         as excluded and would not count.\n",
+        decision.trim_end(),
+        sections_sentence(compiled)
     ));
     Ok(out)
+}
+
+/// What the example's decision says besides the claims, and which sections it leaves out because
+/// the protocol declares nothing for them. Read off the compiled protocol, as the decision is.
+fn sections_sentence(compiled: &ir::Ir) -> String {
+    let sections = [
+        (
+            compiled.obligations.is_empty(),
+            "obligation",
+            "obligations",
+            "each declared obligation `open` or `discharged`",
+        ),
+        (
+            compiled.actions.is_empty(),
+            "action",
+            "actions",
+            "each declared action `admissible`, `approval-required` or `blocked` under the \
+             authority decisions given (none here)",
+        ),
+        (
+            compiled.outcomes.is_empty(),
+            "outcome",
+            "outcomes",
+            "each declared outcome `legitimate` or `blocked`",
+        ),
+    ];
+    let written: Vec<&str> = sections
+        .iter()
+        .filter(|(empty, ..)| !empty)
+        .map(|(.., gives)| *gives)
+        .collect();
+    let mut sentence = match written.split_last() {
+        None => String::from("The decision gives the claims only."),
+        Some((only, [])) => format!("Besides the claims, the decision gives {only}."),
+        Some((last, rest)) => format!(
+            "Besides the claims, the decision gives {}, and {last}.",
+            rest.join(", ")
+        ),
+    };
+    for (_, singular, key, _) in sections.iter().filter(|(empty, ..)| *empty) {
+        sentence.push_str(&format!(
+            " This protocol declares no {singular}, so the decision has no `{key}` section."
+        ));
+    }
+    sentence.push_str(" See [evaluation](./evaluation.md) for each section.");
+    sentence
 }
 
 fn example(root: &Path) -> Result<String, String> {

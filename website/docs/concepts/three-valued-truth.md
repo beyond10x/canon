@@ -47,8 +47,9 @@ claim evaluation, so the R1/R2 row is `UNKNOWN` as shown.
 
 :::
 
-:::caution[Planned: the row about age]
+:::note[Shipped: the row about age]
 
-The last row needs freshness, which is not built yet: records carry no time.
+A record older than its evidence kind's `max_age` at the evaluation instant (`canon evaluate
+--at`) is left out of claim evaluation, so the last row is `UNKNOWN` as shown.
 
 :::

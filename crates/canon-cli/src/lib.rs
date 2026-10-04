@@ -57,8 +57,8 @@ pub enum Command {
         #[arg(long)]
         path: PathBuf,
     },
-    /// Evaluate every claim of a compiled protocol for a case from an evidence set, and print the
-    /// `canon-decision/1` document.
+    /// Evaluate a case under a compiled protocol from an evidence set: every claim, and each
+    /// declared obligation, action and outcome. Print the `canon-decision/1` document.
     Evaluate {
         /// The compiled protocol: `canon-ir/1` exactly as `canon compile` prints it.
         #[arg(long)]
@@ -69,8 +69,9 @@ pub enum Command {
         /// A directory holding only `canon-evidence/1` records, one per `*.yaml` or `*.json` file.
         #[arg(long)]
         evidence: PathBuf,
-        /// A `canon-authority/1` document of authority decisions. Read and passed through; not
-        /// supported yet.
+        /// A `canon-authority/1` document: which capabilities are granted or denied. An action is
+        /// admissible only when every capability it requires is granted; without it, none is
+        /// granted.
         #[arg(long)]
         authority: Option<PathBuf>,
         /// The evaluation instant, in UTC as `YYYY-MM-DDTHH:MM:SSZ`. Evidence older than its kind's
