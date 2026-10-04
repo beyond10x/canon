@@ -1,0 +1,30 @@
+//! The `canon-evidence/1` evidence record: a typed observation about one subject artifact at one
+//! revision (design § 4.5, § 9).
+
+use serde::Deserialize;
+
+use super::ids::{ArtifactId, EvidenceId, EvidenceKindId, Revision};
+
+/// The evidence record format this model reads.
+pub const EVIDENCE_FORMAT: &str = "canon-evidence/1";
+
+/// One `canon-evidence/1` record as written. `subject` and `subject_revision` are read and
+/// type-checked; they do not yet affect evaluation.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EvidenceRecord {
+    /// The document format; the evaluator accepts only [`EVIDENCE_FORMAT`].
+    #[serde(deserialize_with = "super::present::required")]
+    pub format: String,
+    pub id: EvidenceId,
+    /// The evidence kind, which the protocol declares.
+    pub kind: EvidenceKindId,
+    /// What the observation found; a record without one matches only an evidence match that names
+    /// no result.
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub result: Option<String>,
+    /// The artifact the record is about.
+    pub subject: ArtifactId,
+    /// The revision of that artifact the record is about.
+    pub subject_revision: Revision,
+}

@@ -1,0 +1,236 @@
+//! Three-valued claim evaluation over an evidence set (the rules are in the module docs of
+//! [`super`]).
+
+use std::collections::BTreeMap;
+
+use super::Refusal;
+use crate::ir::Ir;
+use crate::model::{ClaimId, EvidenceMatch, EvidenceRecord, Predicate, Truth, one_line};
+
+/// The value of every claim `ir` declares, keyed by claim id. An IR whose claims test each other
+/// in a cycle is refused as `claim-cycle`: a compiled protocol has none (the validator refuses
+/// one), but [`super::evaluate`] takes any [`Ir`] a caller builds.
+pub(super) fn values(
+    ir: &Ir,
+    evidence: &[EvidenceRecord],
+) -> Result<BTreeMap<ClaimId, Truth>, Refusal> {
+    let mut walk = Walk {
+        ir,
+        evidence,
+        values: BTreeMap::new(),
+        in_progress: Vec::new(),
+    };
+    for id in ir.claims.keys() {
+        walk.value_of(id)?;
+    }
+    Ok(walk.values)
+}
+
+/// One evaluation: the claims decided so far, and the claims being decided, outermost first.
+struct Walk<'a> {
+    ir: &'a Ir,
+    evidence: &'a [EvidenceRecord],
+    values: BTreeMap<ClaimId, Truth>,
+    in_progress: Vec<ClaimId>,
+}
+
+impl Walk<'_> {
+    /// The value of one claim, memoized, so each claim's predicate is evaluated once. A claim
+    /// reached again while it is still being decided closes a cycle, which is refused.
+    fn value_of(&mut self, id: &ClaimId) -> Result<Truth, Refusal> {
+        if let Some(value) = self.values.get(id) {
+            return Ok(*value);
+        }
+        if let Some(start) = self.in_progress.iter().position(|open| open == id) {
+            let path: Vec<String> = self.in_progress[start..]
+                .iter()
+                .chain([id])
+                .map(|claim| one_line(claim.as_str()))
+                .collect();
+            return Err(Refusal::new(
+                "claim-cycle",
+                format!("claims test each other in a cycle: {}", path.join(" -> ")),
+            ));
+        }
+        let ir = self.ir;
+        let value = match ir.claims.get(id) {
+            Some(claim) => {
+                self.in_progress.push(id.clone());
+                let value = self.predicate(&claim.true_when);
+                self.in_progress.pop();
+                value?
+            }
+            // A compiled protocol resolves every claim reference; nothing establishes an
+            // undeclared one.
+            None => Truth::Unknown,
+        };
+        self.values.insert(id.clone(), value);
+        Ok(value)
+    }
+
+    fn predicate(&mut self, predicate: &Predicate) -> Result<Truth, Refusal> {
+        Ok(match predicate {
+            Predicate::All(members) => all(&self.members(members)?),
+            Predicate::Any(members) => any(&self.members(members)?),
+            Predicate::Not(inner) => not(self.predicate(inner)?),
+            Predicate::Evidence(matching) => evidence_match(matching, self.evidence),
+            Predicate::Claim(test) => {
+                let value = self.value_of(&test.claim)?;
+                match test.is {
+                    Truth::True => value,
+                    Truth::False => not(value),
+                    Truth::Unknown if value == Truth::Unknown => Truth::True,
+                    Truth::Unknown => Truth::False,
+                }
+            }
+        })
+    }
+
+    fn members(&mut self, members: &[Predicate]) -> Result<Vec<Truth>, Refusal> {
+        members
+            .iter()
+            .map(|member| self.predicate(member))
+            .collect()
+    }
+}
+
+fn all(values: &[Truth]) -> Truth {
+    if values.contains(&Truth::False) {
+        Truth::False
+    } else if values.iter().all(|value| *value == Truth::True) {
+        Truth::True
+    } else {
+        Truth::Unknown
+    }
+}
+
+fn any(values: &[Truth]) -> Truth {
+    if values.contains(&Truth::True) {
+        Truth::True
+    } else if values.iter().all(|value| *value == Truth::False) {
+        Truth::False
+    } else {
+        Truth::Unknown
+    }
+}
+
+fn not(value: Truth) -> Truth {
+    match value {
+        Truth::True => Truth::False,
+        Truth::False => Truth::True,
+        Truth::Unknown => Truth::Unknown,
+    }
+}
+
+fn evidence_match(matching: &EvidenceMatch, evidence: &[EvidenceRecord]) -> Truth {
+    let mut of_kind = evidence
+        .iter()
+        .filter(|record| record.kind == matching.kind)
+        .peekable();
+    if of_kind.peek().is_none() {
+        return Truth::Unknown;
+    }
+    let Some(result) = &matching.result else {
+        return Truth::True;
+    };
+    let (with, without) = of_kind.fold((0usize, 0usize), |(with, without), record| {
+        if record.result.as_ref() == Some(result) {
+            (with + 1, without)
+        } else {
+            (with, without + 1)
+        }
+    });
+    match (with, without) {
+        (_, 0) => Truth::True,
+        (0, _) => Truth::False,
+        _ => Truth::Unknown,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{ArtifactId, EvidenceId, EvidenceKindId, Revision};
+
+    fn record(kind: &str, result: Option<&str>) -> EvidenceRecord {
+        EvidenceRecord {
+            format: "canon-evidence/1".to_owned(),
+            id: EvidenceId::new(format!("{kind}-{result:?}")),
+            kind: EvidenceKindId::new(kind),
+            result: result.map(str::to_owned),
+            subject: ArtifactId::new("a"),
+            subject_revision: Revision::new("r1"),
+        }
+    }
+
+    fn matching(kind: &str, result: Option<&str>) -> EvidenceMatch {
+        EvidenceMatch {
+            kind: EvidenceKindId::new(kind),
+            result: result.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn an_evidence_match_with_a_result_is_three_valued() {
+        let m = matching("k", Some("pass"));
+        assert_eq!(evidence_match(&m, &[]), Truth::Unknown, "no record");
+        assert_eq!(
+            evidence_match(&m, &[record("other", Some("pass"))]),
+            Truth::Unknown,
+            "no record of the kind"
+        );
+        assert_eq!(
+            evidence_match(&m, &[record("k", Some("fail"))]),
+            Truth::False,
+            "only other results"
+        );
+        assert_eq!(
+            evidence_match(&m, &[record("k", None)]),
+            Truth::False,
+            "a record without a result does not have the result"
+        );
+        assert_eq!(
+            evidence_match(&m, &[record("k", Some("pass")), record("k", Some("pass"))]),
+            Truth::True,
+            "only that result"
+        );
+        assert_eq!(
+            evidence_match(&m, &[record("k", Some("pass")), record("k", Some("fail"))]),
+            Truth::Unknown,
+            "records disagree"
+        );
+    }
+
+    #[test]
+    fn an_evidence_match_without_a_result_needs_only_a_record_of_the_kind() {
+        let m = matching("k", None);
+        assert_eq!(evidence_match(&m, &[]), Truth::Unknown);
+        assert_eq!(
+            evidence_match(&m, &[record("k", Some("fail"))]),
+            Truth::True
+        );
+        assert_eq!(evidence_match(&m, &[record("k", None)]), Truth::True);
+    }
+
+    #[test]
+    fn connectives_follow_strong_kleene_logic() {
+        use Truth::{False as F, True as T, Unknown as U};
+        for (members, expected_all, expected_any) in [
+            (vec![], T, F),
+            (vec![T], T, T),
+            (vec![F], F, F),
+            (vec![U], U, U),
+            (vec![T, U], U, T),
+            (vec![F, U], F, U),
+            (vec![T, F], F, T),
+            (vec![T, T], T, T),
+            (vec![F, F], F, F),
+        ] {
+            assert_eq!(all(&members), expected_all, "all {members:?}");
+            assert_eq!(any(&members), expected_any, "any {members:?}");
+        }
+        assert_eq!(not(T), F);
+        assert_eq!(not(F), T);
+        assert_eq!(not(U), U);
+    }
+}

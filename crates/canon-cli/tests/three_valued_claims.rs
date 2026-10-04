@@ -246,3 +246,120 @@ fn canon_evaluate_prints_the_decision_each_step_expects() {
         assert_eq!(run.status.code(), Some(0), "step `{}`: exit", step.id);
     }
 }
+
+/// A refusal exits 1 naming its code on standard error; an input that cannot be read exits 2.
+#[test]
+fn canon_evaluate_exits_1_on_a_refusal_and_2_on_an_unreadable_input() {
+    let fixture = scenario().fixture;
+    // The step's files, then the IR made non-canonical: it is refused, not evaluated.
+    let dir = scratch("refusal");
+    let compiled = canon(&["compile", "--path", &fixture]);
+    let ir = dir.join("protocol.ir.json");
+    let ir_text = String::from_utf8(compiled.stdout).expect("utf-8 IR");
+    std::fs::write(&ir, ir_text.trim_end()).expect("IR written");
+    let case = dir.join("case.yaml");
+    std::fs::write(&case, CASE).expect("case written");
+    let evidence = dir.join("evidence");
+    std::fs::create_dir(&evidence).expect("evidence directory created");
+    let path = |p: &Path| p.to_str().expect("utf-8 path").to_owned();
+    let args = |ir: &Path, evidence: &Path| {
+        vec![
+            "evaluate".to_owned(),
+            "--ir".to_owned(),
+            path(ir),
+            "--case".to_owned(),
+            path(&case),
+            "--evidence".to_owned(),
+            path(evidence),
+        ]
+    };
+    let run = |args: Vec<String>| {
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        canon(&args)
+    };
+
+    let refused = run(args(&ir, &evidence));
+    assert_eq!(text(&refused.stdout), "", "refusal: stdout");
+    assert!(
+        text(&refused.stderr)
+            .starts_with("error[malformed-input]: not canon-ir/1: not the canonical text"),
+        "refusal: stderr {}",
+        text(&refused.stderr)
+    );
+    assert_eq!(refused.status.code(), Some(1), "refusal: exit");
+
+    let missing = run(args(&ir, &dir.join("no-such-directory")));
+    assert_eq!(text(&missing.stdout), "", "unreadable: stdout");
+    assert!(
+        text(&missing.stderr).starts_with("error[unreadable]: "),
+        "unreadable: stderr {}",
+        text(&missing.stderr)
+    );
+    assert_eq!(missing.status.code(), Some(2), "unreadable: exit");
+}
+
+/// The evidence directory reads `*.yaml` and `*.json` records alike, and refuses any other entry
+/// by name (exit 2) instead of dropping it.
+#[test]
+fn the_evidence_directory_reads_yaml_and_json_and_refuses_anything_else() {
+    let fixture = scenario().fixture;
+    let dir = scratch("evidence-directory");
+    let compiled = canon(&["compile", "--path", &fixture]);
+    let ir = dir.join("protocol.ir.json");
+    std::fs::write(&ir, &compiled.stdout).expect("IR written");
+    let case = dir.join("case.yaml");
+    std::fs::write(&case, CASE).expect("case written");
+    let evidence = dir.join("evidence");
+    std::fs::create_dir(&evidence).expect("evidence directory created");
+    let path = |p: &Path| p.to_str().expect("utf-8 path").to_owned();
+    let run = || {
+        canon(&[
+            "evaluate",
+            "--ir",
+            &path(&ir),
+            "--case",
+            &path(&case),
+            "--evidence",
+            &path(&evidence),
+        ])
+    };
+    // The `survived` step's records, one of them as JSON: TRUE, so the JSON record was read.
+    std::fs::write(
+        evidence.join("00.yaml"),
+        record("observation-1", "supporting_observation", None),
+    )
+    .expect("written");
+    std::fs::write(
+        evidence.join("01.json"),
+        "{\"format\": \"canon-evidence/1\", \"id\": \"falsification-1\", \"kind\": \"falsification_attempt\", \"result\": \"survived\", \"subject\": \"explanation\", \"subject_revision\": \"r1\"}\n",
+    )
+    .expect("written");
+    let read = run();
+    assert_eq!(read.status.code(), Some(0), "{}", text(&read.stderr));
+    assert!(text(&read.stdout).contains("\"value\": \"true\""));
+
+    for (name, make) in [("02.txt", true), ("02.yml", true), ("nested.yaml", false)] {
+        let other = evidence.join(name);
+        if make {
+            std::fs::write(&other, "not read").expect("written");
+        } else {
+            std::fs::create_dir(&other).expect("created");
+        }
+        let refused = run();
+        assert_eq!(refused.status.code(), Some(2), "{name}");
+        assert_eq!(text(&refused.stdout), "", "{name}");
+        assert!(
+            text(&refused.stderr).starts_with(&format!(
+                "error[unreadable]: {}: not an evidence record",
+                path(&other)
+            )),
+            "{name}: {}",
+            text(&refused.stderr)
+        );
+        if make {
+            std::fs::remove_file(&other).expect("removed");
+        } else {
+            std::fs::remove_dir(&other).expect("removed");
+        }
+    }
+}

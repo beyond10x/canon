@@ -1,10 +1,15 @@
-//! The `protocol/1` source model.
+//! Canon's data model: the `protocol/1` source model, and the `canon-case/1`, `canon-evidence/1`
+//! and `canon-decision/1` documents an evaluation reads and writes (`case.rs`, `evidence.rs`,
+//! `decision.rs`).
 //!
 //! A protocol document declares a protocol id and revision, artifacts, evidence kinds, claims with
 //! their predicates, obligations, actions and outcomes. Every declaration section is a map keyed by
 //! identifier; [`Declarations`] keeps the entries in source order and keeps repeated keys, so the
 //! validator can report a duplicate identifier instead of the parser silently dropping one.
 
+mod case;
+mod decision;
+mod evidence;
 mod ids;
 mod parse;
 mod predicate;
@@ -17,9 +22,12 @@ use serde::Deserialize;
 use serde::de::{MapAccess, Visitor};
 use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 
+pub use case::{CASE_FORMAT, Case, CaseArtifact};
+pub use decision::{ClaimDecision, DECISION_FORMAT, Decision};
+pub use evidence::{EVIDENCE_FORMAT, EvidenceRecord};
 pub use ids::{
     ActionId, ArtifactId, CapabilityId, CaseId, ClaimId, EffectClass, EvidenceId, EvidenceKindId,
-    ObligationId, OutcomeId, ProtocolId, RevisionId,
+    ObligationId, OutcomeId, ProtocolId, Revision,
 };
 pub use parse::{FORMAT, ParseError, parse};
 pub use predicate::{ClaimTest, EvidenceMatch, Predicate, Truth};

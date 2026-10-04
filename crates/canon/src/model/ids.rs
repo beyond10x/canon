@@ -66,7 +66,7 @@ identifier!(
 );
 identifier!(
     /// Identifies one revision of an artifact.
-    RevisionId
+    Revision
 );
 identifier!(
     /// Identifies a claim a protocol declares.

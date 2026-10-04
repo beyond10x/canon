@@ -79,9 +79,17 @@
 //! cannot be read, with `error[unreadable]: <dir>: <why>` on standard error and nothing on
 //! standard output. The same registry produces byte-identical output on every run.
 //!
-//! Evaluate steps call the library entry point story:three-valued-claims provides. Until it lands,
-//! an evaluate step fails as `failed: scenario `<id>` step `<step>`: evaluate steps are not
-//! supported yet`.
+//! An evaluate step compiles the fixture, reads `case` as a `canon-case/1` document and each
+//! `evidence` entry as a `canon-evidence/1` document, and calls [`eval::evaluate`]. A step expecting
+//! `decision` passes when the evaluation gives a decision whose canonical JSON ([`eval::render`])
+//! equals the expectation byte for byte; otherwise `<what differed>` is `canon-decision/1 differs
+//! from the expectation at line <n>`, or `evaluation refused: <code>: <why>`. A step expecting
+//! `refusal` passes when the evaluation is refused with exactly that code (a case or evidence entry
+//! that is not a document of its format is refused as `malformed-input`); otherwise `<what
+//! differed>` is `expected refusal `<code>`, the evaluation gave a decision` or `expected refusal
+//! `<code>`, the evaluation refused with `<code>`: <why>`. The inputs `authority` and `at` are not
+//! read yet: a step that gives either fails as `` `authority` is not supported yet `` (or `` `at`
+//! ``).
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -89,7 +97,7 @@ use std::fmt;
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer};
 
-use crate::{ir, model};
+use crate::{eval, ir, model};
 
 /// The scenario format this module reads.
 pub const FORMAT: &str = "canon-conformance/1";
@@ -117,15 +125,15 @@ pub struct Step {
 pub enum StepKind {
     /// Compile the fixture and expect exactly these `canon-ir/1` bytes.
     Compile { expected_ir: String },
-    /// Evaluate a case against the compiled fixture. Kept as written until the evaluator lands.
+    /// Evaluate a case against the compiled fixture.
     Evaluate {
         inputs: EvaluateInputs,
         expected: EvaluateExpectation,
     },
 }
 
-/// The inputs of an evaluate step. Their shapes are defined by story:three-valued-claims; until
-/// then they are read as YAML values and not interpreted.
+/// The inputs of an evaluate step, as YAML values; [`run`] reads `case` and `evidence` as
+/// `canon-case/1` and `canon-evidence/1` documents.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EvaluateInputs {
     pub case: serde_yaml_ng::Value,
@@ -404,7 +412,9 @@ pub fn run(scenario: &Scenario, fixture: Result<&str, &str>) -> Verdict {
     for step in &scenario.steps {
         let failure = match &step.kind {
             StepKind::Compile { expected_ir } => compile_step(scenario, fixture, expected_ir),
-            StepKind::Evaluate { .. } => Some("evaluate steps are not supported yet".to_owned()),
+            StepKind::Evaluate { inputs, expected } => {
+                evaluate_step(scenario, fixture, inputs, expected)
+            }
         };
         if let Some(reason) = failure {
             return Verdict::Failed {
@@ -416,42 +426,82 @@ pub fn run(scenario: &Scenario, fixture: Result<&str, &str>) -> Verdict {
     Verdict::Passed
 }
 
+/// The fixture's compiled protocol, or why the step that needs it fails.
+fn compiled_fixture(scenario: &Scenario, fixture: Result<&str, &str>) -> Result<ir::Ir, String> {
+    let source = fixture.map_err(|why| {
+        format!(
+            "fixture `{}` is unreadable: {}",
+            model::one_line(&scenario.fixture),
+            model::one_line(why)
+        )
+    })?;
+    let protocol = model::parse(source)
+        .map_err(|_| format!("fixture does not parse: {}", fixture_parse_failure(source)))?;
+    ir::compile(&protocol).map_err(|problems| {
+        let problems: Vec<String> = problems
+            .iter()
+            .map(|problem| format!("{}: {problem}", problem.code()))
+            .collect();
+        format!("fixture does not compile: {}", problems.join("; "))
+    })
+}
+
 fn compile_step(
     scenario: &Scenario,
     fixture: Result<&str, &str>,
     expected_ir: &str,
 ) -> Option<String> {
-    let source = match fixture {
-        Ok(source) => source,
-        Err(why) => {
-            return Some(format!(
-                "fixture `{}` is unreadable: {}",
-                model::one_line(&scenario.fixture),
-                model::one_line(why)
-            ));
-        }
-    };
-    let protocol = match model::parse(source) {
-        Ok(protocol) => protocol,
-        Err(_) => {
-            return Some(format!(
-                "fixture does not parse: {}",
-                fixture_parse_failure(source)
-            ));
-        }
-    };
-    let compiled = match ir::compile(&protocol) {
+    let compiled = match compiled_fixture(scenario, fixture) {
         Ok(compiled) => compiled.canonical_json(),
-        Err(problems) => {
-            let problems: Vec<String> = problems
-                .iter()
-                .map(|problem| format!("{}: {problem}", problem.code()))
-                .collect();
-            return Some(format!("fixture does not compile: {}", problems.join("; ")));
-        }
+        Err(why) => return Some(why),
     };
     first_difference(&compiled, expected_ir)
         .map(|line| format!("canon-ir/1 differs from the expectation at line {line}"))
+}
+
+fn evaluate_step(
+    scenario: &Scenario,
+    fixture: Result<&str, &str>,
+    inputs: &EvaluateInputs,
+    expected: &EvaluateExpectation,
+) -> Option<String> {
+    let compiled = match compiled_fixture(scenario, fixture) {
+        Ok(compiled) => compiled,
+        Err(why) => return Some(why),
+    };
+    if inputs.authority.is_some() {
+        return Some("`authority` is not supported yet".to_owned());
+    }
+    if inputs.at.is_some() {
+        return Some("`at` is not supported yet".to_owned());
+    }
+    let evaluation = eval::case_from_value(&inputs.case).and_then(|case| {
+        let evidence = inputs
+            .evidence
+            .iter()
+            .map(eval::evidence_from_value)
+            .collect::<Result<Vec<_>, _>>()?;
+        eval::evaluate(&compiled, &case, &evidence)
+    });
+    match (expected, evaluation) {
+        (EvaluateExpectation::Decision(expected), Ok(decision)) => {
+            first_difference(&eval::render(&decision), expected)
+                .map(|line| format!("canon-decision/1 differs from the expectation at line {line}"))
+        }
+        (EvaluateExpectation::Decision(_), Err(refusal)) => {
+            Some(format!("evaluation refused: {}: {refusal}", refusal.code()))
+        }
+        (EvaluateExpectation::Refusal(code), Ok(_)) => Some(format!(
+            "expected refusal `{}`, the evaluation gave a decision",
+            model::one_line(code)
+        )),
+        (EvaluateExpectation::Refusal(code), Err(refusal)) if refusal.code() == code => None,
+        (EvaluateExpectation::Refusal(code), Err(refusal)) => Some(format!(
+            "expected refusal `{}`, the evaluation refused with `{}`: {refusal}",
+            model::one_line(code),
+            refusal.code()
+        )),
+    }
 }
 
 /// Why a fixture that [`model::parse`] refused does not parse, by kind and position only. A
@@ -777,18 +827,107 @@ mod tests {
         }
     }
 
+    const CASE: &str = "{format: canon-case/1, id: c, protocol: p, artifacts: {}}";
+
+    const DECISION: &str = "        {\n          \"case\": \"c\",\n          \"claims\": {},\n          \"format\": \"canon-decision/1\",\n          \"protocol\": \"p\",\n          \"protocol_revision\": 1\n        }\n";
+
+    fn evaluate_verdict(inputs: &str, expect: &str) -> Verdict {
+        let source =
+            format!("{HEAD}steps:\n  - id: e\n    evaluate:\n{inputs}    expect:\n{expect}");
+        run(&parse(&source).expect("parses"), Ok(PROTOCOL))
+    }
+
+    fn failed(reason: &str) -> Verdict {
+        Verdict::Failed {
+            step: "e".to_owned(),
+            reason: reason.to_owned(),
+        }
+    }
+
     #[test]
-    fn an_evaluate_step_fails_as_unsupported_after_the_steps_before_it() {
+    fn an_evaluate_step_compares_the_decision_byte_for_byte() {
+        let inputs = format!("      case: {CASE}\n      evidence: []\n");
+        assert_eq!(
+            evaluate_verdict(&inputs, &format!("      decision: |\n{DECISION}")),
+            Verdict::Passed
+        );
+        assert_eq!(
+            evaluate_verdict(
+                &inputs,
+                &format!(
+                    "      decision: |\n{}",
+                    DECISION.replace("\"c\"", "\"other\"")
+                )
+            ),
+            failed("canon-decision/1 differs from the expectation at line 2")
+        );
+        assert_eq!(
+            evaluate_verdict(
+                &inputs.replace("protocol: p", "protocol: q"),
+                &format!("      decision: |\n{DECISION}")
+            ),
+            failed(
+                "evaluation refused: protocol-mismatch: case `c` is governed by protocol `q`, not by `p`"
+            )
+        );
+    }
+
+    #[test]
+    fn an_evaluate_step_expecting_a_refusal_compares_its_code() {
+        let mismatched = format!(
+            "      case: {}\n      evidence: []\n",
+            CASE.replace("p,", "q,")
+        );
+        assert_eq!(
+            evaluate_verdict(&mismatched, "      refusal: protocol-mismatch\n"),
+            Verdict::Passed
+        );
+        assert_eq!(
+            evaluate_verdict(&mismatched, "      refusal: undeclared-artifact\n"),
+            failed(
+                "expected refusal `undeclared-artifact`, the evaluation refused with `protocol-mismatch`: case `c` is governed by protocol `q`, not by `p`"
+            )
+        );
+        assert_eq!(
+            evaluate_verdict(
+                &format!("      case: {CASE}\n      evidence: []\n"),
+                "      refusal: protocol-mismatch\n"
+            ),
+            failed("expected refusal `protocol-mismatch`, the evaluation gave a decision")
+        );
+        assert_eq!(
+            evaluate_verdict(
+                "      case: {id: c}\n      evidence: []\n",
+                "      refusal: malformed-input\n"
+            ),
+            Verdict::Passed,
+            "a case that is not a canon-case/1 document is refused as malformed-input"
+        );
+    }
+
+    #[test]
+    fn an_evaluate_step_giving_authority_or_an_instant_fails_as_unsupported() {
+        let base = format!("      case: {CASE}\n      evidence: []\n");
+        let expect = format!("      decision: |\n{DECISION}");
+        assert_eq!(
+            evaluate_verdict(&format!("{base}      authority: []\n"), &expect),
+            failed("`authority` is not supported yet")
+        );
+        assert_eq!(
+            evaluate_verdict(&format!("{base}      at: 2026-10-04T00:00:00Z\n"), &expect),
+            failed("`at` is not supported yet")
+        );
+    }
+
+    #[test]
+    fn an_evaluate_step_reports_a_fixture_that_does_not_compile_first() {
         let source = format!(
-            "{HEAD}steps:\n  - id: e\n    evaluate:\n      case: {{id: c}}\n      evidence: []\n      authority: []\n      at: 2026-10-04T00:00:00Z\n    expect: {{refusal: undeclared-outcome}}\n"
+            "{HEAD}steps:\n  - id: e\n    evaluate:\n      case: {CASE}\n      evidence: []\n      authority: []\n    expect: {{refusal: r}}\n"
         );
         let scenario = parse(&source).expect("parses");
         assert_eq!(
-            run(&scenario, Ok(PROTOCOL)),
-            Verdict::Failed {
-                step: "e".to_owned(),
-                reason: "evaluate steps are not supported yet".to_owned()
-            }
+            run(&scenario, Err("gone")),
+            failed("fixture `p.yaml` is unreadable: gone")
         );
     }
 

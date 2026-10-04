@@ -29,10 +29,11 @@ it must know. The cross-repository architecture is Atlas ADRs 0066–0075 and At
 
 ## ESS
 
-Canon's ESS specification lives under `ess/`. Today it specifies only the `protocol/1` source
-model (`crates/canon/src/model/`), with no commands. Atlas ADR 0076 still owes, each with the story
-that introduces it: the `canon` CLI's commands (`canon validate` and its successors), the case
-snapshot, and the evidence and decision documents.
+Canon's ESS specification lives under `ess/`. It specifies the `protocol/1` source model
+(`crates/canon/src/model/`) and the evaluation documents `canon-case/1` (the Case entity),
+`canon-evidence/1` and `canon-decision/1` (story:three-valued-claims), with no commands. Atlas ADR
+0076 still owes the `canon` CLI's commands (`canon validate` and its successors), with the story
+that introduces them.
 
 `ess/` is held to a hard gate (Atlas ADR 0076): `ess specify validate --path ess
 --strict-requires`, `ess specify compile --path ess`, `ess verify conform synthesize --path ess`
