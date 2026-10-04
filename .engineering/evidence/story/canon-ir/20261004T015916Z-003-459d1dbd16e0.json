@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T01:59:16Z",
+  "actor": "human:timo",
+  "artifact": "story:canon-ir",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "whole gate on wave/2026-10-04-w2 at 4d2ba3b: fmt, clippy -D warnings, test (120 passed, 0 failed); every step exit 0",
+    "reference": "ga-wave-2026-10-04-w2/canon-integration-gate.log"
+  }
+}

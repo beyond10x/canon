@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T01:59:16Z",
+  "actor": "human:timo",
+  "artifact": "story:ess-hard-gate",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test --test ess_gate --test ess_model_matches: baseline wave/2026-10-04-w2 at dac4265 vs treatment impl/ess-hard-gate at f39701c",
+    "reference": "ga-wave-2026-10-04-w2/canon-ess-hard-gate/scratch/red.log: baseline 1 passed 15 failed (no ess/); treatment 31 passed exit 0; VERIFIED"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T01:59:16Z",
+  "actor": "human:timo",
+  "artifact": "story:canon-ir",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "canon compile: baseline wave/2026-10-04-w2 at dac4265 vs treatment impl/canon-ir at 5094817",
+    "reference": "ga-wave-2026-10-04-w2/canon-canon-ir/scratch/red-compile.log: baseline exit 101 (unrecognized subcommand compile); treatment canon_ir_canonical_form passes, byte-identical canon-ir/1; VERIFIED"
+  }
+}

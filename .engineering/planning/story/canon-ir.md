@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:canon-ir
 kind: story
-status: proposed
+status: implemented
 title: Define the canon-ir/1 normalized model
 refs:
 - provider: taskboard
@@ -19,9 +19,11 @@ scope:
   path: crates/canon/src/ir/
 - confidence: cited
   path: fixtures/investigation/canon-ir.yaml
-revision: 5
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "proposed", to: "active", at: "2026-10-04T01:17:40Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "active", to: "implemented", at: "2026-10-04T01:59:16Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1,"review_outcome":5,"verification":1}}}
 ---
 ## Outcome
 

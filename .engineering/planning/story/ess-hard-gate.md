@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ess-hard-gate
 kind: story
-status: draft
+status: implemented
 title: Specify the protocol/1 data model in ESS under the ADR 0076 hard gate
 refs:
 - provider: atlas
@@ -23,7 +23,11 @@ scope:
   path: crates/canon/tests/ess_gate.rs
 - confidence: cited
   path: ess/
-revision: 3
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-04T01:17:40Z", actor: "human:timo", revision: 4}
+- {from: "proposed", to: "active", at: "2026-10-04T01:17:40Z", actor: "human:timo", revision: 5}
+- {from: "active", to: "implemented", at: "2026-10-04T01:59:16Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1,"review_outcome":2,"verification":1}}}
 ---
 ## Outcome
 
@@ -144,7 +148,7 @@ runs it through `task ess-gate`. It holds these expectations:
    `# UNMAPPED: probe` to the copied `domains/protocol.yaml`, and runs the step-4 scan on the
    copy. The scan must report exactly that file and line. Re-adding a `# UNMAPPED:` line to the
    real `ess/` therefore makes `ess_gate`, and with it `task check`, fail.
-6. `ess specify toolchain which`, run from the repository root, names ess 0.52.0, which is the
+6. `ess specify toolchain which`, run from `ess/` (the directory holding `ess-inputs.yaml`; from the repository root the dispatcher finds no pin and reports the binary on `PATH`), names ess 0.52.0, which is the
    release that `requires:` pins.
 
 ## Later stories
@@ -172,3 +176,4 @@ the spec declares, its fields and their types (and every union variant) with the
 `crates/canon/src/model/`, failing and naming the first difference. It runs in `task ess-gate`, so a
 model change that leaves `ess/` behind fails the hard gate. Acceptance expectation 7: adding a field
 to a model struct without adding it to `ess/` makes this test fail naming the field.
+
