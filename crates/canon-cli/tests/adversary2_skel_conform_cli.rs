@@ -1,6 +1,11 @@
 //! Adversary cases for story:evaluator-skeleton (wave 2026-10-04-w6, pass 2), driving `canon
 //! conform run`: a step's `authority` is passed to the evaluator as YAML text, re-serialized from
 //! the YAML values the scenario holds (conform/mod.rs module docs).
+//!
+//! Changed by story:action-admissibility: the evaluator now reads `canon-authority/1`, so each
+//! scenario states the expectation that fits its authority (a decision for an empty list, a
+//! `malformed-input` refusal for a mapping key) instead of the skeleton's `unsupported-input`. The
+//! intent is unchanged: one such entry does not abort the registry.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -25,11 +30,14 @@ fn scratch(name: &str) -> PathBuf {
     dir
 }
 
-/// One evaluate step over the three-valued-claims fixture, giving `authority`, expecting the
-/// refusal the skeleton gives any authority.
-fn scenario(id: &str, authority: &str) -> String {
+/// A decision listing only the `case` section.
+const DECISION: &str = "decision: |\n        {\n          \"case\": \"INV-18\"\n        }";
+
+/// One evaluate step over the three-valued-claims fixture, giving `authority`, expecting `expect`
+/// (an expectation line of the step: `decision: …` or `refusal: <code>`).
+fn scenario(id: &str, authority: &str, expect: &str) -> String {
     format!(
-        "format: canon-conformance/1\nid: {id}\ncovers: []\nfixture: fixtures/investigation/three-valued-claims.yaml\nsteps:\n  - id: e\n    evaluate:\n      case: {{format: canon-case/1, id: INV-18, protocol: investigation, artifacts: {{explanation: {{revision: r1}}}}}}\n      evidence: []\n      authority: {authority}\n    expect: {{refusal: unsupported-input}}\n"
+        "format: canon-conformance/1\nid: {id}\ncovers: []\nfixture: fixtures/investigation/three-valued-claims.yaml\nsteps:\n  - id: e\n    evaluate:\n      case: {{format: canon-case/1, id: INV-18, protocol: investigation, artifacts: {{explanation: {{revision: r1}}}}}}\n      evidence: []\n      authority: {authority}\n    expect:\n      {expect}\n"
     )
 }
 
@@ -40,8 +48,12 @@ fn scenario(id: &str, authority: &str) -> String {
 #[test]
 fn an_authority_with_a_mapping_key_does_not_abort_the_registry() {
     let dir = scratch("mapping-key");
-    std::fs::write(dir.join("a.yaml"), scenario("A-OK", "[]")).expect("writes");
-    std::fs::write(dir.join("b.yaml"), scenario("B-KEY", "[{{x: 1}: c}]")).expect("writes");
+    std::fs::write(dir.join("a.yaml"), scenario("A-OK", "[]", DECISION)).expect("writes");
+    std::fs::write(
+        dir.join("b.yaml"),
+        scenario("B-KEY", "[{{x: 1}: c}]", "refusal: malformed-input"),
+    )
+    .expect("writes");
     let output = Command::new(env!("CARGO_BIN_EXE_canon"))
         .current_dir(repository_root())
         .args([

@@ -2,7 +2,7 @@
 //! `canon conform run`, with four expectations for `explanation.supported` (`UNKNOWN` with no
 //! evidence, `FALSE` when the falsification attempt was refuted, `TRUE` when it survived, `UNKNOWN`
 //! when two attempts disagree), and `canon evaluate --ir --case --evidence` prints the same
-//! `canon-decision/1` bytes the scenario expects.
+//! `canon-decision/1` bytes the scenario expects for each section it lists.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -218,6 +218,40 @@ fn evaluate(fixture: &str, step: &str) -> Output {
     ])
 }
 
+/// The top-level members of canonical JSON `document`, each its lines with the separating comma
+/// removed, in order. A member opens on a line indented by exactly two spaces.
+fn members(document: &str) -> Vec<(String, Vec<&str>)> {
+    let lines: Vec<&str> = document.lines().collect();
+    let body = &lines[1..lines.len().saturating_sub(1)];
+    let mut members: Vec<(String, Vec<&str>)> = Vec::new();
+    for line in body {
+        if let Some(rest) = line.strip_prefix("  \"")
+            && !rest.starts_with(' ')
+        {
+            let key = rest.split('"').next().unwrap_or_default().to_owned();
+            members.push((key, Vec::new()));
+        }
+        let (_, member) = members.last_mut().expect("a member opens first");
+        member.push(line);
+    }
+    for (_, member) in &mut members {
+        let last = member.last_mut().expect("a member has a line");
+        *last = last.strip_suffix(',').unwrap_or(last);
+    }
+    members
+}
+
+/// `document` holding only the top-level members `expected` lists, written as canonical JSON.
+fn listed_sections(document: &str, expected: &str) -> String {
+    let listed: Vec<String> = members(expected).into_iter().map(|(key, _)| key).collect();
+    let kept: Vec<String> = members(document)
+        .into_iter()
+        .filter(|(key, _)| listed.contains(key))
+        .map(|(_, member)| member.join("\n"))
+        .collect();
+    format!("{{\n{}\n}}\n", kept.join(",\n"))
+}
+
 #[test]
 fn canon_evaluate_prints_the_decision_each_step_expects() {
     let scenario = scenario();
@@ -237,9 +271,12 @@ fn canon_evaluate_prints_the_decision_each_step_expects() {
             "step `{}`: canon evaluate stderr",
             step.id
         );
+        // Changed by story:action-admissibility: the decision of this fixture now carries an
+        // `actions` section the expectation does not list. Like `canon conform run`, compare the
+        // sections the expectation lists, each byte for byte as `canon evaluate` printed it.
         assert_eq!(
-            text(&run.stdout),
-            decision,
+            listed_sections(text(&run.stdout), decision),
+            *decision,
             "step `{}`: canon evaluate stdout",
             step.id
         );

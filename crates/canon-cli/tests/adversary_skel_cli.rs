@@ -11,8 +11,9 @@ use std::process::{Command, Output};
 const SKELETON_FIXTURE: &str = "fixtures/investigation/evaluator-skeleton.yaml";
 
 /// The decision the base fixture gives `INV-18` with no evidence (CANON-CLAIM-001's
-/// `no-evidence` step): no section slot is written.
-const NO_EVIDENCE_DECISION: &str = "{\n  \"case\": \"INV-18\",\n  \"claims\": {\n    \"explanation.supported\": {\n      \"value\": \"unknown\"\n    }\n  },\n  \"format\": \"canon-decision/1\",\n  \"protocol\": \"investigation\",\n  \"protocol_revision\": 1\n}\n";
+/// `no-evidence` step). Changed by story:action-admissibility: the `actions` section is written
+/// (both base actions admissible); no other section slot is.
+const NO_EVIDENCE_DECISION: &str = "{\n  \"actions\": {\n    \"attempt_falsification\": {\n      \"status\": \"admissible\"\n    },\n    \"inspect\": {\n      \"status\": \"admissible\"\n    }\n  },\n  \"case\": \"INV-18\",\n  \"claims\": {\n    \"explanation.supported\": {\n      \"value\": \"unknown\"\n    }\n  },\n  \"format\": \"canon-decision/1\",\n  \"protocol\": \"investigation\",\n  \"protocol_revision\": 1\n}\n";
 
 fn repository_root() -> PathBuf {
     let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")

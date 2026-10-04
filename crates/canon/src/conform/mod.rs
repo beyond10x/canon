@@ -1241,9 +1241,19 @@ mod tests {
     fn an_evaluate_step_passes_authority_and_an_instant_to_the_evaluator() {
         let base = format!("      case: {CASE}\n      evidence: []\n");
         let expect = format!("      decision: |\n{DECISION}");
+        // Changed by story:action-admissibility, which reads `canon-authority/1`: an empty list is
+        // evaluated, and an entry that is not a decision is refused as `malformed-input`, which
+        // only the evaluator can do. The skeleton refused any authority as `unsupported-input`.
         assert_eq!(
             evaluate_verdict(&format!("{base}      authority: []\n"), &expect),
-            failed("evaluation refused: unsupported-input: `--authority` is not supported yet")
+            Verdict::Passed
+        );
+        assert_eq!(
+            evaluate_verdict(
+                &format!("{base}      authority: [1]\n"),
+                "      refusal: malformed-input\n"
+            ),
+            Verdict::Passed
         );
         assert_eq!(
             evaluate_verdict(&format!("{base}      at: 2026-10-04T00:00:00Z\n"), &expect),
