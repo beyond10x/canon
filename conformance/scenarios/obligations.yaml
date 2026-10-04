@@ -1,0 +1,107 @@
+format: canon-conformance/1
+id: CANON-OBLIGATION-001
+covers: [CANON-OBLIGATION-001]
+fixture: fixtures/investigation/obligations.yaml
+steps:
+  # No evidence: `explanation.supported` is UNKNOWN, which does not satisfy the discharge
+  # predicate, so the obligation is open.
+  - id: claim-unknown
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+      evidence: []
+    expect:
+      decision: |
+        {
+          "claims": {
+            "explanation.supported": {
+              "value": "unknown"
+            }
+          },
+          "obligations": [
+            {
+              "id": "establish.explanation",
+              "status": "open"
+            }
+          ]
+        }
+
+  # The only falsification attempt refuted the explanation: `explanation.supported` is FALSE,
+  # which does not satisfy the discharge predicate either, so the obligation stays open.
+  - id: claim-false
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: refuted
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "claims": {
+            "explanation.supported": {
+              "value": "false"
+            }
+          },
+          "obligations": [
+            {
+              "id": "establish.explanation",
+              "status": "open"
+            }
+          ]
+        }
+
+  # Observed, and the only falsification attempt survived: `explanation.supported` is TRUE, the
+  # discharge predicate is TRUE, so the obligation is discharged.
+  - id: claim-true
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "claims": {
+            "explanation.supported": {
+              "value": "true"
+            }
+          },
+          "obligations": [
+            {
+              "id": "establish.explanation",
+              "status": "discharged"
+            }
+          ]
+        }
