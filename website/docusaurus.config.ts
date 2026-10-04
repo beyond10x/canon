@@ -84,14 +84,6 @@ const config: Config = {
             {label: 'Source', href: 'https://github.com/beyond10x/canon'},
           ],
         },
-        {
-          title: 'Family',
-          items: [
-            {label: 'ELS', href: 'https://beyond10x.github.io/els/'},
-            {label: 'Loom', href: 'https://beyond10x.github.io/loom/'},
-            {label: 'ESS', href: 'https://beyond10x.github.io/ess/'},
-          ],
-        },
       ],
       copyright: 'A beyond10x project · Apache-2.0 · built with Docusaurus and the docs-system product template.',
     },

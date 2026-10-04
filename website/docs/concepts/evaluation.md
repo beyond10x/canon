@@ -1,12 +1,15 @@
 ---
 title: Evaluation
 description: An evaluation is a pure function of the protocol, the case, the evidence, authority decisions, explicit decisions and an instant.
+status: shipped
+lede: An evaluation interprets one case under one protocol at one instant.
+source: crates/canon/src/eval/, the evaluator
+source_url: https://github.com/beyond10x/canon/tree/main/crates/canon/src/eval
 ---
 
 # Evaluation
 
-An evaluation interprets one case under one protocol at one instant. In the design its inputs are
-explicit:
+In the design its inputs are explicit:
 
 ```text
 Evaluation = f(

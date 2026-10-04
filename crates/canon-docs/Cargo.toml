@@ -10,4 +10,6 @@ publish = false
 b10x-canon = { path = "../canon" }
 canon-cli = { path = "../canon-cli" }
 clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_yaml_ng = "0.10"
 syn = { version = "3", features = ["full"] }

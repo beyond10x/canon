@@ -47,14 +47,22 @@ fn the_documents_page_names_the_scenario_that_fixes_the_decided_outcome_shape() 
     );
 }
 
-/// `website/docs/status/where-this-stands.md` is hand-written; the brief asks that its rows stay
-/// true. The "Evaluation documents" row links the documents page, which now lists four documents
-/// (`canon-case/1`, `canon-evidence/1`, `canon-decisions/1`, `canon-decision/1`); the row still
-/// names three.
+/// The status rows are hand-written in `website/status.yaml` and rendered from
+/// `website/data/status.json`; the brief asks that they stay true. The "Evaluation documents" row
+/// links the documents page, which now lists four documents (`canon-case/1`, `canon-evidence/1`,
+/// `canon-decisions/1`, `canon-decision/1`); the row still names three.
 #[test]
 fn the_status_row_for_evaluation_documents_names_canon_decisions_1() {
-    let page = read("website/docs/status/where-this-stands.md");
-    let documents = row(&page, "Evaluation documents");
+    let status: serde_json::Value =
+        serde_json::from_str(&read("website/data/status.json")).expect("the status file is JSON");
+    let documents = status["items"]
+        .as_array()
+        .expect("the status file has items")
+        .iter()
+        .find(|item| item["label"] == "Evaluation documents")
+        .expect("a status row labelled `Evaluation documents`")["detail"]
+        .as_str()
+        .expect("the row has a detail");
     assert!(
         documents.contains("canon-decisions/1"),
         "the shipped `Evaluation documents` row does not name canon-decisions/1:\n{documents}"
