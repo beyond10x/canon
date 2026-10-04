@@ -2,12 +2,15 @@
 title: The protocol/1 language
 sidebar_label: The protocol/1 language
 description: How a Canon protocol is put together, section by section.
+status: shipped
+lede: A protocol is a YAML document. It names itself with an id and a revision, then declares six sections.
+source: crates/canon/src/model/, the protocol/1 source model
+source_url: https://github.com/beyond10x/canon/tree/main/crates/canon/src/model
 ---
 
 # The `protocol/1` language
 
-A protocol is a YAML document. It names itself with an id and a revision, then declares six
-sections. Each section is a map from an identifier to a declaration. This page explains what the
+Each section is a map from an identifier to a declaration. This page explains what the
 sections are for; the [`protocol/1` reference](../reference/protocol.md) lists every key, generated
 from Canon's model.
 

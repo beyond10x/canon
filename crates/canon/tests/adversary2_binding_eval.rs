@@ -114,7 +114,7 @@ fn exclusion_listing_names_every_record_bound_to_another_revision() {
     .join("../..");
     for page in [
         "website/docs/reference/evaluation.md",
-        "website/docs/status/where-this-stands.md",
+        "website/data/status.json",
     ] {
         let text = std::fs::read_to_string(root.join(page))
             .unwrap_or_else(|error| panic!("{page}: {error}"));

@@ -3,7 +3,9 @@
 //! `canon-docs`: generates every page of the Canon documentation site that can be derived from
 //! the repository, as Markdown under `website/docs/reference/` (and the `protocol/1` JSON Schema
 //! under `website/static/schemas/`). The site itself is built by Docusaurus in `website/`; nothing
-//! here builds or publishes it. `generate --check` writes nothing and fails when any generated
+//! here builds or publishes it. The landing inputs under `website/data/` include the
+//! `b10x-status/1` status document, built from `website/status.yaml` and the AEP story statuses.
+//! `generate --check` writes nothing and fails when any generated
 //! file differs from what the repository would generate now.
 
 mod json;
@@ -11,6 +13,7 @@ mod landing;
 mod md;
 mod pages;
 mod source;
+mod status;
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -233,6 +236,10 @@ fn expected(root: &Path, canon: &Path) -> Result<BTreeMap<String, String>, Strin
     files.insert(
         format!("{}/{}", landing::DATA_DIR, landing::GRAPH_FILE),
         landing::investigation_graph(root)?,
+    );
+    files.insert(
+        format!("{}/{}", landing::DATA_DIR, status::FILE),
+        status::generate(root)?,
     );
     let version = landing::run_canon(canon, root, &["--version"])?.output;
     files.insert(

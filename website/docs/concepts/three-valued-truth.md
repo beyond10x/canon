@@ -1,13 +1,13 @@
 ---
 title: Three-valued truth
 description: Every claim is TRUE, FALSE or UNKNOWN, and UNKNOWN is never FALSE.
+status: shipped
+lede: Every claim has one of three values. The difference between "contradicted" and "not yet established" decides what should happen next, so the two are never collapsed. Missing or stale evidence is never a contradiction.
+source: crates/canon/src/eval/claims.rs, scenario CANON-CLAIM-001
+source_url: https://github.com/beyond10x/canon/blob/main/crates/canon/src/eval/claims.rs
 ---
 
 # Three-valued truth
-
-Every claim has one of three values. The difference between "contradicted" and "not yet
-established" decides what should happen next, so the two are never collapsed. Missing or stale
-evidence is never a contradiction.
 
 | Value | Meaning |
 |---|---|
