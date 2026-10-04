@@ -17,8 +17,9 @@ earned.
 :::note[Status: bootstrap]
 
 Canon is early. Today it parses, validates and compiles protocols, evaluates every claim of a
-case in three-valued truth (`canon evaluate`), and runs conformance scenarios. Obligations, action
-admissibility, outcomes, revision binding and freshness are not built yet. Every page says which parts are shipped
+case in three-valued truth (`canon evaluate`), applying evidence only to the revision it is bound
+to, and runs conformance scenarios. Obligations, action admissibility, outcomes and freshness are
+not built yet. Every page says which parts are shipped
 and which are planned; [where this stands](./status/where-this-stands.md) has the full list.
 
 :::

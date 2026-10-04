@@ -31,7 +31,7 @@ key out.
 ## Artifacts
 
 An artifact is a thing that has revisions, such as an explanation, a design or a deployment.
-Evidence is meant to be bound to the revision of an artifact it was observed on; see
+Evidence is bound to the revision of an artifact it was observed on; see
 [evidence bound to revisions](./evidence-and-revisions.md).
 
 ## Evidence kinds

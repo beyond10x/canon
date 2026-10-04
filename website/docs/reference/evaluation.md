@@ -47,15 +47,19 @@ artifact id and revision in the order written), its protocol against the compile
 each artifact it lists (declared by the protocol, listed once), each artifact the protocol
 declares (listed by the case); then each evidence record in the order given: its format, its
 identifiers (id, kind, subject, subject revision), its id (used once in the set) and its kind
-(declared by the protocol). A record's subject and subject revision are checked as identifiers
-only; they do not affect evaluation.
+(declared by the protocol). A record's subject and subject revision are checked here as
+identifiers only; the revision-binding stage reads them.
 
 Then the supplied inputs are read, in this order: the authority decisions (`--authority`), the
 evaluation instant (`--at`) and the explicit decisions. None is read yet: each one given is
 refused as `unsupported-input`, naming it (`` `--authority` is not supported yet ``).
 
 Then the exclusion stages run, in pipeline order: revision binding, freshness, invalidation.
-Each may refuse the inputs it reads; none refuses anything yet.
+Each may refuse the inputs it reads. Revision binding checks each record in the order given: a
+record whose subject the protocol does not declare is refused as `undeclared-artifact`, naming
+the record and its subject (`` evidence `e1` is about artifact `x`, which the protocol does not
+declare ``), and a record bound to a revision of its subject that is not the case snapshot's
+current one is excluded as `revision_mismatch`. Freshness and invalidation refuse nothing yet.
 
 Then claims are evaluated. An IR whose claims test each other in a cycle — which `canon
 compile` never produces, but a caller can build — is refused as `claim-cycle`, naming the claims
@@ -93,6 +97,8 @@ concept; this module holds only the order:
    the claim values, action preconditions and outcome requirements over the claim values and
    the evidence left after step 3.
 
-The stages, sections and inputs of steps 2, 3 and 5 are not built yet: each stage excludes
-nothing, each section is absent, and a supplied input is refused as `unsupported-input`, naming
-it. So the decision is the one three-valued claim evaluation gives, byte for byte.
+Of steps 2, 3 and 5 only revision binding is built: the other stages exclude nothing, each
+section is absent, and a supplied input is refused as `unsupported-input`, naming it. So the
+decision is the one three-valued claim evaluation gives over the evidence bound to the current
+revisions, byte for byte, with a record bound to another revision listed as excluded under
+each claim that reaches its kind.
