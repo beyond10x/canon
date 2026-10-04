@@ -3,7 +3,9 @@
 //!
 //! Those docs are the contract: walking from `requires` with the wanted value `true`, `not` flips
 //! the wanted value, `all` and `any` descend only into the members whose value is not the wanted
-//! one, and a claim test or evidence match whose own value is not the wanted one is a reason; each
+//! one (and, since story:review-hardening-w7, the action rule: a connective that has members of
+//! the opposite value is decided by those alone), and a claim test or evidence match whose own
+//! value is not the wanted one is a reason; each
 //! reason is named once; claims come first in claim-id order, then evidence kinds in kind order;
 //! `{"requirement": "unsatisfiable"}` only when no test is named; a legitimate outcome carries no
 //! reasons. Termination is refused last, after every other refusal (module docs of `eval`).
@@ -100,8 +102,9 @@ fn an_any_inside_a_not_inside_an_all_names_only_the_members_that_are_not_false()
 }
 
 /// `not: {all: [...]}` and `not: {any: [...]}` want their connective `false`: an `all` is blocked
-/// by every member that is not `false`, an `any` by every member that is not `false`, and a member
-/// that is already `false` is not named.
+/// by every member that is not `false`; an `any` by its `true` members when it has any, and
+/// otherwise by every member that is not `false`; and a member that is already `false` is not
+/// named.
 #[test]
 fn a_negated_connective_names_the_members_that_are_not_false() {
     let ir = protocol(
@@ -117,14 +120,13 @@ fn a_negated_connective_names_the_members_that_are_not_false() {
         ])),
         "{both:#}"
     );
+    // Story review-hardening-w7: outcome reasons follow the action rule. Under `not`, an `any`
+    // that is `true` is decided only by its `true` members; the `unknown` `l` match beside `c`
+    // is not a reason.
     let only_c = outcomes(&ir, &[record("k", Some("pass"))]);
     assert_eq!(
         only_c["not_any"],
-        blocked(serde_json::json!([
-            {"claim": "c", "value": "true"},
-            // Coordinator decision, adversary pass 2 item 1: an evidence reason states `present`.
-            {"evidence": "l", "present": false},
-        ])),
+        blocked(serde_json::json!([{"claim": "c", "value": "true"}])),
         "{only_c:#}"
     );
 }

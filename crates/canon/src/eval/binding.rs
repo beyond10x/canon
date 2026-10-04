@@ -32,7 +32,8 @@ pub(super) fn exclude(
                     one_line(record.id.as_str()),
                     one_line(record.subject.as_str())
                 ),
-            ));
+            )
+            .citing(&record.id));
         }
         let current = case
             .artifacts
@@ -127,5 +128,6 @@ mod tests {
             refusal.to_string(),
             "evidence `e1` is about artifact `nowhere`, which the protocol does not declare"
         );
+        assert_eq!(refusal.evidence(), [crate::model::EvidenceId::new("e1")]);
     }
 }

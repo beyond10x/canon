@@ -12,12 +12,14 @@
 //!   <name>, "principals": [<principal>, ...]}}`: every principal whose decision applied, sorted
 //!   by Unicode code point (CANON-OUTCOME-002);
 //! - `{"status": "blocked", "reasons": [...]}` otherwise (`false` or `unknown`). The reasons are
-//!   the tests that decide the requirement against it, each named once: walking from `requires`
-//!   with the wanted value `true`, `not` flips the wanted value, `all` and `any` descend only into
-//!   the members whose value is not the wanted one, and a claim test or evidence match whose own
-//!   value is not the wanted one is a reason. So `{not: {claim: c}}` gives the reasons
-//!   `{claim: c, is: false}` gives, and a test that already has the wanted value is never named.
-//!   A claim test gives `{"claim": <id>, "value": <the claim's own value>}`, an evidence match
+//!   the ones an action precondition that is not `true` gives (`actions.rs`); one rule decides
+//!   both. They are the tests that decide the requirement against it, each named once, with
+//!   polarity carried through `not`: `{not: {claim: c}}` gives the reasons `{claim: c, is: false}`
+//!   gives, and a test that already has the wanted value is never named, nor is one in an `any`
+//!   branch that holds. In an `all` that is `false`, only its `false` members decide it: an
+//!   `unknown` member beside a `false` one is not a reason (and likewise, under `not`, in an `any`
+//!   that is `true`, only its `true` members). A claim test gives
+//!   `{"claim": <id>, "value": <the claim's own value>}`, an evidence match
 //!   `{"evidence": <kind>, "present": <whether a record the match reads is in the evidence left
 //!   after the exclusion stages>}`, with `"subject": <artifact>` added when the match names one:
 //!   `false` for a required record that is missing, `true` for a record present under `not`. A
@@ -43,15 +45,14 @@
 //!
 //! A protocol that declares no outcome leaves the section out.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use super::Refusal;
-use super::claims::{predicate, reads};
+use super::claims::predicate;
 use super::decisions::Decisions;
 use crate::ir::Ir;
 use crate::model::{
-    ArtifactId, Case, ClaimId, EvidenceKindId, EvidenceRecord, Json, OutcomeRequirement, Predicate,
-    Truth, one_line,
+    Case, ClaimId, EvidenceRecord, Json, OutcomeRequirement, Predicate, Truth, one_line,
 };
 
 /// The section, or `None` to leave the slot empty; or a refusal of the case snapshot. `evidence`
@@ -151,95 +152,16 @@ pub(super) fn section(
     Ok(Some(Json::Object(entries)))
 }
 
-/// What keeps a requirement from being met, collected by [`Unmet::walk`].
-#[derive(Default)]
-struct Unmet<'a> {
-    /// Each claim whose test decides against the requirement, with the claim's own value.
-    claims: BTreeMap<&'a ClaimId, Truth>,
-    /// Each evidence match, by kind and subject, that decides against the requirement.
-    evidence: BTreeSet<(&'a EvidenceKindId, Option<&'a ArtifactId>)>,
-}
-
-impl<'a> Unmet<'a> {
-    /// Collects the tests that keep `node` from having the value `wanted` (`true`, or `false`
-    /// under an odd number of `not`s): a claim test or an evidence match whose own value is not
-    /// `wanted`; through `not`, the inner predicate's tests against the opposite value; through
-    /// `all` and `any`, those of each member whose value is not `wanted`. A member that already
-    /// has the wanted value is not visited, so a test it holds is never named.
-    fn walk(
-        &mut self,
-        node: &'a Predicate,
-        wanted: Truth,
-        claims: &BTreeMap<ClaimId, Truth>,
-        evidence: &[EvidenceRecord],
-    ) {
-        match node {
-            Predicate::Not(inner) => {
-                let opposite = match wanted {
-                    Truth::True => Truth::False,
-                    _ => Truth::True,
-                };
-                self.walk(inner, opposite, claims, evidence);
-            }
-            Predicate::All(members) | Predicate::Any(members) => {
-                for member in members {
-                    if predicate(member, claims, evidence) != wanted {
-                        self.walk(member, wanted, claims, evidence);
-                    }
-                }
-            }
-            Predicate::Claim(test) => {
-                if predicate(node, claims, evidence) != wanted {
-                    let value = claims.get(&test.claim).copied().unwrap_or(Truth::Unknown);
-                    self.claims.insert(&test.claim, value);
-                }
-            }
-            Predicate::Evidence(matching) => {
-                if predicate(node, claims, evidence) != wanted {
-                    self.evidence
-                        .insert((&matching.kind, matching.subject.as_ref()));
-                }
-            }
-        }
-    }
-}
-
-/// The reasons a blocked requirement states: claims first, in claim-id order, then evidence
-/// matches, in kind and then subject order, with whether a record the match reads is present,
-/// each once;
-/// `{"requirement": "unsatisfiable"}` when no test is named.
+/// The reasons a blocked requirement states: the reasons an action precondition that is not `true`
+/// states (`actions.rs`), by the one rule both sections follow: claims first, in claim-id order,
+/// then evidence matches, in kind and then subject order, each once; `{"requirement":
+/// "unsatisfiable"}` when no test decides it.
 pub(super) fn reasons(
     requires: &Predicate,
     claims: &BTreeMap<ClaimId, Truth>,
     evidence: &[EvidenceRecord],
 ) -> Vec<Json> {
-    let mut unmet = Unmet::default();
-    unmet.walk(requires, Truth::True, claims, evidence);
-    let mut reasons: Vec<Json> = unmet
-        .claims
-        .into_iter()
-        .map(|(claim, value)| {
-            serde_json::json!({"claim": claim.as_str(), "value": value.to_string()})
-        })
-        .chain(
-            unmet
-                .evidence
-                .into_iter()
-                .map(|(kind, subject)| {
-                    let present = evidence.iter().any(|record| reads(kind, subject, record));
-                    let mut reason =
-                        serde_json::json!({"evidence": kind.as_str(), "present": present});
-                    if let Some(subject) = subject {
-                        reason["subject"] = serde_json::json!(subject.as_str());
-                    }
-                    reason
-                }),
-        )
-        .collect();
-    if reasons.is_empty() {
-        reasons.push(serde_json::json!({"requirement": "unsatisfiable"}));
-    }
-    reasons
+    super::actions::unmet(requires, claims, evidence)
 }
 
 #[cfg(test)]
@@ -409,9 +331,11 @@ mod tests {
                 {"evidence": "l", "present": false},
             ]})
         );
+        // Its `false` members decide the `false` `all`, and they name no test: the requirement
+        // cannot be met whatever `c` is, so `c`, `unknown` beside them, is not a reason.
         assert_eq!(
             decided["never"],
-            serde_json::json!({"status": "blocked", "reasons": [{"claim": "c", "value": "unknown"}]})
+            serde_json::json!({"status": "blocked", "reasons": [{"requirement": "unsatisfiable"}]})
         );
         // With no `k` record the negated match is `unknown`, not `false`: still blocked, by a
         // record that is missing.

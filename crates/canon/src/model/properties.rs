@@ -40,9 +40,10 @@ pub struct Properties {
     #[serde(deserialize_with = "super::present::required")]
     pub format: String,
     /// The id of the protocol the properties are about; `canon check` refuses another.
+    #[serde(deserialize_with = "super::present::required")]
     pub protocol: ProtocolId,
     /// The properties, keyed by identifier. A property declared twice is refused.
-    #[serde(default, deserialize_with = "super::present::required")]
+    #[serde(default, deserialize_with = "super::present::defaulted")]
     pub properties: Declarations<PropertyId, Property>,
 }
 
@@ -82,9 +83,9 @@ pub enum PropertyDependency {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WrittenSubject {
-    #[serde(default, deserialize_with = "super::present::optional")]
+    #[serde(default, deserialize_with = "super::present::form")]
     action: Option<ActionId>,
-    #[serde(default, deserialize_with = "super::present::optional")]
+    #[serde(default, deserialize_with = "super::present::form")]
     outcome: Option<OutcomeId>,
 }
 
@@ -104,6 +105,7 @@ impl TryFrom<WrittenSubject> for PropertySubject {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WrittenDependency {
+    #[serde(deserialize_with = "super::present::required")]
     claim: ClaimId,
 }
 

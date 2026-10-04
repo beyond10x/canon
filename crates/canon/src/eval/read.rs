@@ -42,6 +42,25 @@ pub(super) fn yaml(text: &str, what: &str) -> Result<Value, Refusal> {
     serde_yaml_ng::from_str(text).map_err(|error| malformed(what, error))
 }
 
+/// Reads each entry of a list document (`--authority`, `--decisions`) in turn, so a refusal says
+/// which entry, counting from 1: `<what>: entry <n>: <why>`. `value` is already known to be a list.
+pub(super) fn entries<T: serde::de::DeserializeOwned>(
+    value: Value,
+    what: &str,
+) -> Result<Vec<T>, Refusal> {
+    let Value::Sequence(items) = value else {
+        return Err(malformed(what, "expected a list"));
+    };
+    items
+        .into_iter()
+        .enumerate()
+        .map(|(at, item)| {
+            serde_yaml_ng::from_value(item)
+                .map_err(|error| malformed(what, format!("entry {}: {error}", at + 1)))
+        })
+        .collect()
+}
+
 /// Reads `canon-ir/1` text as `canon compile` prints it.
 pub fn read_ir(text: &str) -> Result<Ir, Refusal> {
     let not_ir = |why: &str| malformed("not canon-ir/1", why);
@@ -588,7 +607,74 @@ mod tests {
         assert!(
             refusal
                 .to_string()
-                .starts_with("evidence is not a canon-evidence/1 document: ")
+                .starts_with("evidence `e` is not a canon-evidence/1 document: ")
         );
+    }
+
+    /// `levels` predicate levels: an evidence match inside `levels - 1` `not`s.
+    fn nested(levels: usize) -> Predicate {
+        let mut predicate = Predicate::Evidence(EvidenceMatch {
+            kind: EvidenceKindId::new("k"),
+            result: None,
+            subject: None,
+        });
+        for _ in 1..levels {
+            predicate = Predicate::Not(Box::new(predicate));
+        }
+        predicate
+    }
+
+    /// Every place an IR holds a predicate is checked against the bound: a claim's `true_when`, an
+    /// obligation's `discharged_when`, an action's precondition and an outcome's requirement. One
+    /// level over the bound is refused, naming where; at the bound the IR evaluates.
+    #[test]
+    fn every_predicate_of_a_caller_built_ir_is_held_to_the_depth_bound() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}}\n\
+            evidence_kinds: {k: {}}\nclaims: {c: {true_when: {evidence: {kind: k}}}}\n\
+            obligations: {o: {discharged_when: {claim: c}}}\n\
+            actions: {act: {precondition: {claim: c}}}\n\
+            outcomes: {out: {requires: {claim: c}}}\n";
+        let compiled = ir::compile(&model::parse(source).expect("parses")).expect("compiles");
+        let case =
+            read_case("format: canon-case/1\nid: C\nprotocol: p\nartifacts: {a: {revision: r}}\n")
+                .expect("case reads");
+        type Place = fn(&mut Ir, Predicate);
+        let places: [(&str, Place); 4] = [
+            ("claim `c` true_when", |ir, p| {
+                ir.claims.get_mut(&ClaimId::new("c")).expect("c").true_when = p;
+            }),
+            ("obligation `o` discharged_when", |ir, p| {
+                ir.obligations
+                    .get_mut(&model::ObligationId::new("o"))
+                    .expect("o")
+                    .discharged_when = p;
+            }),
+            ("action `act` precondition", |ir, p| {
+                ir.actions
+                    .get_mut(&model::ActionId::new("act"))
+                    .expect("act")
+                    .precondition = p;
+            }),
+            ("outcome `out` requires", |ir, p| {
+                ir.outcomes
+                    .get_mut(&model::OutcomeId::new("out"))
+                    .expect("out")
+                    .requires = OutcomeRequirement::Predicate(p);
+            }),
+        ];
+        for (place, set) in places {
+            let mut over = compiled.clone();
+            set(&mut over, nested(MAX_IR_DEPTH + 1));
+            let refusal = crate::eval::evaluate(&over, &case, &[]).expect_err(place);
+            assert_eq!(refusal.code(), "predicate-too-deep", "{place}: {refusal}");
+            assert_eq!(
+                refusal.to_string(),
+                format!("{place} nests predicates deeper than {MAX_IR_DEPTH}")
+            );
+            let mut at = compiled.clone();
+            set(&mut at, nested(MAX_IR_DEPTH));
+            crate::eval::evaluate(&at, &case, &[])
+                .unwrap_or_else(|refusal| panic!("{place} at the bound: {refusal}"));
+        }
     }
 }

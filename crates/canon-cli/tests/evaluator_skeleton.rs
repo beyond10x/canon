@@ -336,7 +336,7 @@ fn canon_owned(args: &[String]) -> Output {
 
 /// Asserts that `canon evaluate` without `flag` gives a decision, and with it is refused by the
 /// library naming the flag: exit 1, one `error[<code>]: …` line, no decision. A flag clap did not
-/// declare would instead be a usage error, exit 2.
+/// declare would instead be a usage error, exit 64.
 fn assert_evaluate_flag_is_inert(flag: &str, value: &str, args: Vec<String>) {
     let control = canon_owned(&args);
     assert_eq!(

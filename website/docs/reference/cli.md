@@ -204,3 +204,4 @@ Options:
 | `0` | Success: the document is valid or compiled, the case was evaluated, every conformance scenario ran and passed, or a check found nothing. |
 | `1` | Rejected: a document was read and rejected, an evaluation or a check was refused, a conformance scenario failed or was unreadable, no scenario ran, or a check found something. |
 | `2` | Unreadable: an input file or directory could not be read. |
+| `64` | Usage error: the command line was not understood (an unknown command or option, a missing required option, or a value that cannot be parsed); nothing was read. |

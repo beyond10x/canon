@@ -1,0 +1,57 @@
+format: protocol/1
+
+protocol:
+  id: investigation
+  revision: 1
+  description: Publish an explanation, and accept or reject it, only on an attempt to falsify the explanation itself, when the case also declares the dataset it is tested against.
+
+artifacts:
+  explanation:
+    description: The explanation under investigation.
+  dataset:
+    description: The observations the explanation is tested against.
+
+evidence_kinds:
+  falsification_attempt:
+    description: An attempt to refute an artifact; its result is survived or refuted.
+
+claims:
+  explanation.survived:
+    description: The explanation has survived falsification. Only an attempt about the explanation counts.
+    true_when:
+      evidence:
+        kind: falsification_attempt
+        result: survived
+        subject: explanation
+
+actions:
+  publish:
+    description: Publish the explanation. Only a surviving attempt about the explanation allows it.
+    precondition:
+      evidence:
+        kind: falsification_attempt
+        result: survived
+        subject: explanation
+  retract:
+    description: Retract the explanation. Only a refuting attempt about the explanation allows it.
+    precondition:
+      evidence:
+        kind: falsification_attempt
+        result: refuted
+        subject: explanation
+
+outcomes:
+  accepted:
+    description: The explanation survived an attempt about it.
+    requires:
+      evidence:
+        kind: falsification_attempt
+        result: survived
+        subject: explanation
+  rejected:
+    description: An attempt about the explanation refuted it.
+    requires:
+      evidence:
+        kind: falsification_attempt
+        result: refuted
+        subject: explanation

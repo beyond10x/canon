@@ -70,6 +70,7 @@ pub enum Predicate {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EvidenceMatch {
+    #[serde(deserialize_with = "super::present::required")]
     pub kind: EvidenceKindId,
     #[serde(default, deserialize_with = "super::present::optional")]
     pub result: Option<String>,
@@ -116,15 +117,15 @@ impl Predicate {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct WrittenPredicate {
-    #[serde(default, deserialize_with = "super::present::optional")]
+    #[serde(default, deserialize_with = "super::present::form")]
     pub(crate) all: Option<Vec<Predicate>>,
-    #[serde(default, deserialize_with = "super::present::optional")]
+    #[serde(default, deserialize_with = "super::present::form")]
     pub(crate) any: Option<Vec<Predicate>>,
-    #[serde(default, deserialize_with = "super::present::optional")]
+    #[serde(default, deserialize_with = "super::present::form")]
     pub(crate) not: Option<Box<Predicate>>,
-    #[serde(default, deserialize_with = "super::present::optional")]
+    #[serde(default, deserialize_with = "super::present::form")]
     pub(crate) evidence: Option<EvidenceMatch>,
-    #[serde(default, deserialize_with = "super::present::optional")]
+    #[serde(default, deserialize_with = "super::present::form")]
     pub(crate) claim: Option<ClaimId>,
     #[serde(default, deserialize_with = "super::present::optional")]
     pub(crate) is: Option<Truth>,
