@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T07:09:00Z",
+  "actor": "human:timo",
+  "artifact": "story:decision-outcomes",
+  "kind": "story",
+  "revision": 16,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "whole gate on wave/2026-10-04-w8 at 31461e5: fmt, clippy -D warnings, test (396 passed, 0 failed), ESS validate and synthesize (0 refusals), canon-docs --check (14 current), conform run (7 passed); every step exit 0",
+    "reference": "ga-wave-2026-10-04-w8/canon-integration-gate.log"
+  }
+}

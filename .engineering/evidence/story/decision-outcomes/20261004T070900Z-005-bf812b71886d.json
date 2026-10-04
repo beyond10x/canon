@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-04T07:09:00Z",
+  "actor": "human:timo",
+  "artifact": "story:decision-outcomes",
+  "kind": "story",
+  "revision": 16,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "ess_model_matches, decision_outcomes and CANON-OUTCOME-002: phase-1 commit d39d426 vs treatment b735091",
+    "reference": "ga-wave-2026-10-04-w8/canon-decision-outcomes/scratch/phase1-red.log: ess_model_matches 19 FAILED, decision_outcomes 4 FAILED, conform run failed (fixture does not parse the decision requirement); treatment passes; VERIFIED"
+  }
+}

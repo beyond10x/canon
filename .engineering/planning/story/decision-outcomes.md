@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:decision-outcomes
 kind: story
-status: proposed
+status: implemented
 title: Decision-based outcomes
 refs:
 - provider: taskboard
@@ -22,7 +22,15 @@ scope:
 - confidence: cited
   path: crates/canon-cli/src/evaluate.rs
 - confidence: cited
+  path: crates/canon-cli/src/lib.rs
+- confidence: cited
+  path: crates/canon-cli/src/main.rs
+- confidence: cited
+  path: crates/canon/src/conform/mod.rs
+- confidence: cited
   path: crates/canon/src/eval/decisions.rs
+- confidence: cited
+  path: crates/canon/src/eval/mod.rs
 - confidence: cited
   path: crates/canon/src/eval/outcomes.rs
 - confidence: cited
@@ -32,12 +40,18 @@ scope:
 - confidence: cited
   path: crates/canon/src/validate/
 - confidence: cited
+  path: crates/canon/tests/ess_model_matches.rs
+- confidence: cited
   path: ess/
 - confidence: cited
   path: fixtures/investigation/decision-outcomes.yaml
-revision: 12
+- confidence: cited
+  path: website/
+revision: 17
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 8}
+- {from: "proposed", to: "active", at: "2026-10-04T06:15:14Z", actor: "human:timo", revision: 13}
+- {from: "active", to: "implemented", at: "2026-10-04T07:09:00Z", actor: "human:timo", revision: 17, decided_on: {"recorded":{"test_result":1,"review_outcome":6,"verification":1}}}
 ---
 ## Outcome
 
@@ -110,3 +124,21 @@ that decision names a superseded case revision.
 ## Source
 
 Design § 4.6, § 12; decision-blocker:outcome-decision-source (cleared 2026-10-04); TASKBOARD C-007.
+
+### Coordinator and adversary decisions (wave 2026-10-04-w8)
+
+- Spec (phase 1): a decision requirement is its own variant of an outcome requirement, standing alone;
+  `canon-case/1` gains an optional `revision`; a decision applies only when its name, outcome and
+  case revision all match; an outcome without one is blocked with `{decision, present: false}`.
+- decision-blocker:terminated-case-reevaluation cleared with option A: the illegitimate-termination
+  refusal stays.
+- Pass 1: the documents reference lists `canon-decisions/1` (fixed); `Revision` covers the case's
+  own revision (fixed); a decided outcome records `decided_by` {decision, principal} (fixed, spec
+  change found by review); a duplicate entry and a decision its outcome does not require are refused
+  (fixed); an outcome cannot require both a decision and a claim (no-op, as designed).
+- Open: if recording a termination advances the case revision, a decision taken before termination
+  no longer matches the terminated snapshot. Who assigns case revisions is not specified.
+- Pass 2: the documents, status and concept pages name `decided_by`, `canon-decisions/1` and
+  decision requirements (fixed); the decisions schema states `uniqueItems` (fixed); `decided_by` records
+  every principal whose decision applied, sorted (fixed, design § 37); a missing key reading as an
+  explicit null is pre-existing and moves to story:review-hardening-w7 (escalated).
