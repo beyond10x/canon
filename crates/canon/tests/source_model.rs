@@ -99,7 +99,7 @@ actions:
     may_produce:
       - evidence: note
 obligations:
-  review: {description: Someone reviews it.}
+  review: {description: Someone reviews it., discharged_when: {claim: ready}}
 "#;
     let protocol = model::parse(source).expect("parses");
     let action = protocol
@@ -166,7 +166,7 @@ fn malformed_predicates_are_parse_errors() {
 fn undeclared_fields_are_parse_errors() {
     for source in [
         "format: protocol/1\nprotocol: {id: p, revision: 1}\ncase: {inputs: {}}\n",
-        "format: protocol/1\nprotocol: {id: p, revision: 1}\nobligations:\n  o: {discharged_when: {claim: a}}\n",
+        "format: protocol/1\nprotocol: {id: p, revision: 1}\nobligations:\n  o: {discharged_when: {all: []}, due: soon}\n",
         "format: protocol/1\nprotocol: {id: p, revision: 1, owner: x}\n",
     ] {
         assert!(model::parse(source).is_err(), "{source}");
@@ -210,7 +210,7 @@ evidence_kinds: {k: {}, k: {}}
 claims:
   c: {true_when: {evidence: {kind: k}}}
   c: {true_when: {evidence: {kind: k}}}
-obligations: {o: {}, o: {}}
+obligations: {o: {discharged_when: {claim: c}}, o: {discharged_when: {claim: c}}}
 actions: {a: {}, a: {}}
 outcomes:
   w: {requires: {claim: c}}
@@ -368,7 +368,7 @@ const NULLABLE: &[(&str, &str)] = &[
     ("obligations", "obligations: NULL\n"),
     (
         "obligation description",
-        "obligations: {o: {description: NULL}}\n",
+        "obligations: {o: {description: NULL, discharged_when: {all: []}}}\n",
     ),
     ("actions", "actions: NULL\n"),
     ("action description", "actions: {a: {description: NULL}}\n"),
@@ -406,7 +406,7 @@ fn an_explicit_null_is_a_parse_error_for_every_optional_field() {
 
 #[test]
 fn omitted_optional_fields_take_their_defaults() {
-    let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {x: {}}\nevidence_kinds: {k: {}}\nclaims: {c: {true_when: {evidence: {kind: k}}}}\nobligations: {o: {}}\nactions: {a: {}}\noutcomes: {w: {requires: {claim: c}}}\n";
+    let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {x: {}}\nevidence_kinds: {k: {}}\nclaims: {c: {true_when: {evidence: {kind: k}}}}\nobligations: {o: {discharged_when: {claim: c}}}\nactions: {a: {}}\noutcomes: {w: {requires: {claim: c}}}\n";
     assert_eq!(problems(source), Vec::<Problem>::new());
     assert_eq!(
         problems("format: protocol/1\nprotocol: {id: p, revision: 1}\n"),
@@ -457,7 +457,7 @@ evidence_kinds: {"tab\there": {}}
 claims:
   "line\nbreak": {true_when: {all: []}}
   fine.claim: {true_when: {all: []}}
-obligations: {"\u0007bell": {}}
+obligations: {"\u0007bell": {discharged_when: {all: []}}}
 actions:
   " lead": {}
   act:
@@ -541,9 +541,19 @@ fn every_defaulted_model_field_refuses_an_explicit_null() {
     for path in entries {
         let source = std::fs::read_to_string(&path).expect("source file");
         let mut previous = String::new();
+        // Whether the struct being read derives `Deserialize`: only a struct serde reads from
+        // text can read an explicit null as `None`. The decision is written, never read.
+        let (mut derives, mut deserialized) = (false, false);
         for (number, line) in source.lines().enumerate() {
+            let item = line.trim_start();
+            if item.starts_with("#[derive(") {
+                derives = item.contains("Deserialize");
+            } else if item.starts_with("pub struct ") || item.starts_with("struct ") {
+                deserialized = derives;
+                derives = false;
+            }
             let bare_default = line.contains("serde(default") && !line.contains("present::");
-            if bare_default || is_unguarded_option_field(&previous, line) {
+            if bare_default || (deserialized && is_unguarded_option_field(&previous, line)) {
                 bare.push(format!(
                     "{}:{}: {}",
                     path.display(),

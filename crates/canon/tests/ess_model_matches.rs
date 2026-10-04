@@ -16,8 +16,8 @@
 //!   specification name is its Rust name in snake case.
 //! * `String` is `String`; `i64` is `Integer`; `u64` is an `Integer` field whose owner states the
 //!   invariant `<field> >= 0`, or one [`NON_NEGATIVE`] lists; `Option<T>` is `Optional<T>`,
-//!   `Vec<T>` is `List<T>`, `Box<T>` is `T` and `Declarations<K, V>` is `Map<K, V>`. Any other Rust
-//!   type matches nothing.
+//!   `Vec<T>` is `List<T>`, `Box<T>` is `T`, `Declarations<K, V>` is `Map<K, V>` and the model's
+//!   `Json` is `Json`. Any other Rust type matches nothing.
 //! * Each entity is the Rust struct [`ENTITIES`] names. The entity `Protocol` is the Rust struct
 //!   `Protocol` with its `protocol: ProtocolHeader` field written in place: the header's `id` is
 //!   the entity's identity `protocol_id`, and its other fields are entity fields. The entity `Case`
@@ -827,6 +827,8 @@ fn rust_ty(text: &str, scope: &Scope) -> Ty {
         .split("::")
         .all(|s| !s.trim().is_empty() && s.trim().chars().all(is_ident_char));
     match scope.model_name(text) {
+        // The model's untyped section payload, `model::Json`, is the specification's `Json`.
+        Some(name) if is_path && name == "Json" => Ty::Primitive("json".to_owned()),
         Some(name) if is_path && name.starts_with(char::is_uppercase) => Ty::Declared(name),
         _ => unmapped(text),
     }

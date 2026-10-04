@@ -41,9 +41,19 @@
 //! (declared by the protocol). A record's subject and subject revision are checked as identifiers
 //! only; they do not affect evaluation.
 //!
+//! Then the supplied inputs are read, in this order: the authority decisions (`--authority`), the
+//! evaluation instant (`--at`) and the explicit decisions. None is read yet: each one given is
+//! refused as `unsupported-input`, naming it (`` `--authority` is not supported yet ``).
+//!
+//! Then the exclusion stages run, in pipeline order: revision binding, freshness, invalidation.
+//! Each may refuse the inputs it reads; none refuses anything yet.
+//!
 //! Then claims are evaluated. An IR whose claims test each other in a cycle — which `canon
 //! compile` never produces, but a caller can build — is refused as `claim-cycle`, naming the claims
 //! from the first one reached again: `claims test each other in a cycle: c -> d -> c`.
+//!
+//! Last, the `outcomes` section may refuse the case snapshot (a termination through an outcome the
+//! protocol does not declare, story:outcomes); it refuses nothing yet.
 //!
 //! # Depth
 //!
@@ -51,23 +61,61 @@
 //! (4096) before parsing it. Reading and claim evaluation recurse along the nesting of the
 //! predicates, so they run on a thread of their own with a stack sized for that bound
 //! (`DEEP_STACK`): an IR at the bound reads and evaluates from any caller's thread.
+//!
+//! # The pipeline
+//!
+//! [`evaluate_with`] runs the same steps for every evaluation, each in the file that owns its
+//! concept; this module holds only the order:
+//!
+//! 1. check the case snapshot (`case.rs`) and the evidence set (`evidence.rs`);
+//! 2. read the supplied inputs: authority decisions (`authority.rs`), the evaluation instant
+//!    (`freshness.rs`) and explicit decisions (`decisions.rs`);
+//! 3. run the exclusion stages in order: revision binding (`binding.rs`), freshness
+//!    (`freshness.rs`), invalidation (`invalidation.rs`). Each sees only the evidence the stages
+//!    before it left, and returns the records it excludes with its reason;
+//! 4. evaluate every claim over the evidence left (`claims.rs`). Each claim's `excluded_evidence`
+//!    lists, in evidence-id order, every excluded record of a kind the claim reaches: a kind an
+//!    evidence match in its own predicate names, or one a claim it tests reaches, through any
+//!    number of claim references. A record excluded from a claim is excluded from every claim
+//!    built on it;
+//! 5. the `obligations`, `actions` and `outcomes` sections (`obligations.rs`, `actions.rs`,
+//!    `outcomes.rs`), then the explanation (`crate::explain`). Each section evaluates its
+//!    predicates with the one evaluator claims use (`claims::predicate`): discharge predicates over
+//!    the claim values, action preconditions and outcome requirements over the claim values and
+//!    the evidence left after step 3.
+//!
+//! The stages, sections and inputs of steps 2, 3 and 5 are not built yet: each stage excludes
+//! nothing, each section is absent, and a supplied input is refused as `unsupported-input`, naming
+//! it. So the decision is the one three-valued claim evaluation gives, byte for byte.
 
+mod actions;
+mod authority;
+mod binding;
+mod case;
 mod claims;
+mod decision;
+mod decisions;
+mod evidence;
+mod freshness;
+mod invalidation;
 mod json;
+mod obligations;
+mod outcomes;
 mod read;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use crate::ir::Ir;
 use crate::model::{
-    CASE_FORMAT, Case, ClaimDecision, DECISION_FORMAT, Decision, Declarations, EVIDENCE_FORMAT,
-    EvidenceRecord, is_identifier, one_line,
+    Case, ClaimDecision, ClaimId, DECISION_FORMAT, Decision, Declarations, EvidenceExclusion,
+    EvidenceId, EvidenceRecord, Predicate, is_identifier, one_line,
 };
 
-pub use read::{
-    MAX_IR_DEPTH, case_from_value, evidence_from_value, read_case, read_evidence, read_ir,
-};
+pub use case::{case_from_value, read_case};
+pub use decision::{render, render_sections};
+pub use evidence::{evidence_from_value, read_evidence};
+pub use read::{MAX_IR_DEPTH, read_ir};
 
 /// Why an evaluation was refused: a stable machine-readable code and a one-line message.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,51 +143,143 @@ impl fmt::Display for Refusal {
 
 impl std::error::Error for Refusal {}
 
-/// Evaluates every claim of `ir` for `case` from `evidence`. Pure and deterministic: the same
-/// inputs give the same decision, and the order of `evidence` does not matter.
+/// What a caller supplies besides the protocol, the case snapshot and the evidence, each as the
+/// text it was given, unparsed: the file that owns it reads it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Supplied<'a> {
+    /// `canon-authority/1` decisions (`--authority`), read by `authority.rs`.
+    pub authority: Option<&'a str>,
+    /// The evaluation instant (`--at`), read by `freshness.rs`.
+    pub at: Option<&'a str>,
+    /// Explicit decisions (`canon-decisions/1`), read by `decisions.rs`.
+    pub decisions: Option<&'a str>,
+}
+
+/// Evaluates every claim of `ir` for `case` from `evidence`, with nothing else supplied. Pure and
+/// deterministic: the same inputs give the same decision, and the order of `evidence` does not
+/// matter.
 pub fn evaluate(ir: &Ir, case: &Case, evidence: &[EvidenceRecord]) -> Result<Decision, Refusal> {
-    check_case(ir, case)?;
-    check_evidence(ir, evidence)?;
-    let values = on_deep_stack(|| claims::values(ir, evidence))?;
-    Ok(Decision {
-        format: DECISION_FORMAT.to_owned(),
-        case: case.id.clone(),
-        protocol: ir.protocol.id.clone(),
-        protocol_revision: ir.protocol.revision,
-        claims: Declarations::new(
-            values
-                .into_iter()
-                .map(|(id, value)| (id, ClaimDecision { value }))
-                .collect(),
-        ),
+    evaluate_with(ir, case, evidence, Supplied::default())
+}
+
+/// Evaluates `case` under `ir` from `evidence` and the `supplied` inputs, in the order the module
+/// docs give. Pure and deterministic.
+pub fn evaluate_with(
+    ir: &Ir,
+    case: &Case,
+    evidence: &[EvidenceRecord],
+    supplied: Supplied<'_>,
+) -> Result<Decision, Refusal> {
+    case::check(ir, case)?;
+    evidence::check(ir, evidence)?;
+    let authority = authority::read(supplied.authority)?;
+    let at = freshness::instant(supplied.at)?;
+    let decisions = decisions::read(supplied.decisions)?;
+    on_deep_stack(|| {
+        let mut applicable: Vec<&EvidenceRecord> = evidence.iter().collect();
+        let mut excluded: Vec<EvidenceExclusion> = Vec::new();
+        let stage = binding::exclude(ir, case, &applicable)?;
+        set_aside(&mut applicable, &mut excluded, stage);
+        let stage = freshness::exclude(ir, case, &applicable, at.as_ref())?;
+        set_aside(&mut applicable, &mut excluded, stage);
+        let stage = invalidation::exclude(ir, case, &applicable)?;
+        set_aside(&mut applicable, &mut excluded, stage);
+
+        let applicable: Vec<EvidenceRecord> = applicable.into_iter().cloned().collect();
+        let values = claims::values(ir, &applicable)?;
+        let obligations = obligations::section(ir, &values);
+        let actions = actions::section(ir, &values, &applicable, authority.as_ref());
+        let outcomes = outcomes::section(ir, case, &values, &applicable, decisions.as_ref())?;
+        let claims = values
+            .iter()
+            .map(|(id, value)| {
+                let entry = ClaimDecision {
+                    value: *value,
+                    excluded_evidence: excluded_for(ir, id, evidence, &excluded),
+                };
+                (id.clone(), entry)
+            })
+            .collect();
+        let mut decision = Decision {
+            format: DECISION_FORMAT.to_owned(),
+            case: case.id.clone(),
+            protocol: ir.protocol.id.clone(),
+            protocol_revision: ir.protocol.revision,
+            claims: Declarations::new(claims),
+            obligations,
+            actions,
+            outcomes,
+            explanation: None,
+        };
+        decision.explanation = crate::explain::explain(ir, evidence, &decision);
+        Ok(decision)
     })
 }
 
-/// The decision's canonical JSON, ending with a newline: object keys in code-point order, two-space
-/// indentation, the string escaping `canon-ir/1` uses.
-pub fn render(decision: &Decision) -> String {
-    use json::Value;
-    let claims = decision
-        .claims
+/// Moves the records one exclusion stage excluded out of `applicable` and into `excluded`. A stage
+/// that names a record no longer applicable excludes nothing more.
+fn set_aside(
+    applicable: &mut Vec<&EvidenceRecord>,
+    excluded: &mut Vec<EvidenceExclusion>,
+    stage: Vec<EvidenceExclusion>,
+) {
+    for exclusion in stage {
+        if let Some(at) = applicable
+            .iter()
+            .position(|record| record.id == exclusion.evidence)
+        {
+            applicable.remove(at);
+            excluded.push(exclusion);
+        }
+    }
+}
+
+/// The excluded records listed under `claim`: those of a kind the claim reaches, in evidence-id
+/// order. A claim reaches the kinds the evidence matches of its own predicate name, and every kind
+/// a claim it tests reaches, through any number of claim references; each claim is visited once,
+/// so a cycle a caller builds into an IR ends.
+fn excluded_for(
+    ir: &Ir,
+    claim: &ClaimId,
+    evidence: &[EvidenceRecord],
+    excluded: &[EvidenceExclusion],
+) -> Vec<EvidenceExclusion> {
+    if excluded.is_empty() {
+        return Vec::new();
+    }
+    let mut kinds = BTreeSet::new();
+    let mut visited = BTreeSet::new();
+    let mut pending = vec![claim];
+    while let Some(next) = pending.pop() {
+        if !visited.insert(next) {
+            continue;
+        }
+        let Some(declared) = ir.claims.get(next) else {
+            continue;
+        };
+        declared.true_when.visit(&mut |node| match node {
+            Predicate::Evidence(matching) => {
+                kinds.insert(&matching.kind);
+            }
+            Predicate::Claim(test) => pending.push(&test.claim),
+            _ => {}
+        });
+    }
+    let kind_of: BTreeMap<&EvidenceId, _> = evidence
         .iter()
-        .map(|(id, entry)| {
-            (
-                id.as_str().to_owned(),
-                Value::object([("value", Value::string(entry.value.to_string()))]),
-            )
-        })
+        .map(|record| (&record.id, &record.kind))
         .collect();
-    Value::object([
-        ("format", Value::string(decision.format.as_str())),
-        ("case", Value::string(decision.case.as_str())),
-        ("protocol", Value::string(decision.protocol.as_str())),
-        (
-            "protocol_revision",
-            Value::Integer(decision.protocol_revision),
-        ),
-        ("claims", Value::Object(claims)),
-    ])
-    .render()
+    let mut listed: Vec<EvidenceExclusion> = excluded
+        .iter()
+        .filter(|exclusion| {
+            kind_of
+                .get(&exclusion.evidence)
+                .is_some_and(|kind| kinds.contains(kind))
+        })
+        .cloned()
+        .collect();
+    listed.sort();
+    listed
 }
 
 /// The stack the recursive steps of [`read_ir`] and [`evaluate`] run on. Their depth follows the
@@ -172,6 +312,14 @@ fn unsupported_format(found: &str, expected: &str) -> Refusal {
     )
 }
 
+/// A supplied input this evaluator does not read yet, named as the caller gave it.
+fn unsupported_input(input: &str) -> Refusal {
+    Refusal::new(
+        "unsupported-input",
+        format!("`{input}` is not supported yet"),
+    )
+}
+
 fn identifier(what: &str, id: &str) -> Result<(), Refusal> {
     if is_identifier(id) {
         return Ok(());
@@ -183,99 +331,6 @@ fn identifier(what: &str, id: &str) -> Result<(), Refusal> {
             one_line(id)
         ),
     ))
-}
-
-fn check_case(ir: &Ir, case: &Case) -> Result<(), Refusal> {
-    if case.format != CASE_FORMAT {
-        return Err(unsupported_format(&case.format, CASE_FORMAT));
-    }
-    identifier("case identifier", case.id.as_str())?;
-    identifier("case protocol identifier", case.protocol.as_str())?;
-    for (artifact, entry) in case.artifacts.iter() {
-        identifier("case artifact identifier", artifact.as_str())?;
-        identifier("artifact revision", entry.revision.as_str())?;
-    }
-    if case.protocol != ir.protocol.id {
-        return Err(Refusal::new(
-            "protocol-mismatch",
-            format!(
-                "case `{}` is governed by protocol `{}`, not by `{}`",
-                one_line(case.id.as_str()),
-                one_line(case.protocol.as_str()),
-                one_line(ir.protocol.id.as_str())
-            ),
-        ));
-    }
-    let mut seen = BTreeSet::new();
-    for artifact in case.artifacts.ids() {
-        if !ir.artifacts.contains_key(artifact) {
-            return Err(Refusal::new(
-                "undeclared-artifact",
-                format!(
-                    "case `{}` lists artifact `{}`, which the protocol does not declare",
-                    one_line(case.id.as_str()),
-                    one_line(artifact.as_str())
-                ),
-            ));
-        }
-        if !seen.insert(artifact) {
-            return Err(Refusal::new(
-                "duplicate-identifier",
-                format!(
-                    "case `{}` lists artifact `{}` more than once",
-                    one_line(case.id.as_str()),
-                    one_line(artifact.as_str())
-                ),
-            ));
-        }
-    }
-    if let Some(missing) = ir.artifacts.keys().find(|id| !seen.contains(id)) {
-        return Err(Refusal::new(
-            "missing-artifact",
-            format!(
-                "case `{}` does not give the current revision of artifact `{}`",
-                one_line(case.id.as_str()),
-                one_line(missing.as_str())
-            ),
-        ));
-    }
-    Ok(())
-}
-
-fn check_evidence(ir: &Ir, evidence: &[EvidenceRecord]) -> Result<(), Refusal> {
-    let mut seen = BTreeSet::new();
-    for record in evidence {
-        if record.format != EVIDENCE_FORMAT {
-            return Err(unsupported_format(&record.format, EVIDENCE_FORMAT));
-        }
-        identifier("evidence identifier", record.id.as_str())?;
-        identifier("evidence kind identifier", record.kind.as_str())?;
-        identifier("evidence subject identifier", record.subject.as_str())?;
-        identifier(
-            "evidence subject revision",
-            record.subject_revision.as_str(),
-        )?;
-        if !seen.insert(&record.id) {
-            return Err(Refusal::new(
-                "duplicate-identifier",
-                format!(
-                    "evidence `{}` is given more than once",
-                    one_line(record.id.as_str())
-                ),
-            ));
-        }
-        if !ir.evidence_kinds.contains_key(&record.kind) {
-            return Err(Refusal::new(
-                "undeclared-evidence-kind",
-                format!(
-                    "evidence `{}` is of kind `{}`, which the protocol does not declare",
-                    one_line(record.id.as_str()),
-                    one_line(record.kind.as_str())
-                ),
-            ));
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -512,5 +567,104 @@ mod tests {
             .replace("subject: a", "subject: nowhere")
             .replace("subject_revision: r1", "subject_revision: r9");
         assert_eq!(values(&[elsewhere]), values(&[record("e1", "pass")]));
+    }
+
+    /// One record of `kind` about artifact `a` at `r1`, built directly.
+    fn bare(id: &str, kind: &str) -> EvidenceRecord {
+        EvidenceRecord {
+            format: crate::model::EVIDENCE_FORMAT.to_owned(),
+            id: EvidenceId::new(id),
+            kind: crate::model::EvidenceKindId::new(kind),
+            result: None,
+            subject: crate::model::ArtifactId::new("a"),
+            subject_revision: crate::model::Revision::new("r1"),
+        }
+    }
+
+    fn exclusion(id: &str, reason: crate::model::ExclusionReason) -> EvidenceExclusion {
+        EvidenceExclusion {
+            evidence: EvidenceId::new(id),
+            reason,
+        }
+    }
+
+    fn ids(kept: &[&EvidenceRecord]) -> Vec<String> {
+        kept.iter()
+            .map(|record| record.id.as_str().to_owned())
+            .collect()
+    }
+
+    /// Each record a stage names leaves the kept set and joins the excluded list once, in the
+    /// order named; a record no longer kept (excluded by an earlier stage, or never given) is not
+    /// excluded again.
+    #[test]
+    fn set_aside_moves_each_named_record_out_of_the_kept_set_once() {
+        use crate::model::ExclusionReason::{Expired, Invalidated, RevisionMismatch};
+        let records = [bare("e1", "k"), bare("e2", "k"), bare("e3", "k")];
+        let mut kept: Vec<&EvidenceRecord> = records.iter().collect();
+        let mut excluded = Vec::new();
+        set_aside(
+            &mut kept,
+            &mut excluded,
+            vec![
+                exclusion("e2", RevisionMismatch),
+                exclusion("gone", Expired),
+            ],
+        );
+        assert_eq!(ids(&kept), ["e1", "e3"]);
+        assert_eq!(excluded, [exclusion("e2", RevisionMismatch)]);
+        set_aside(
+            &mut kept,
+            &mut excluded,
+            vec![exclusion("e3", Invalidated), exclusion("e2", Expired)],
+        );
+        assert_eq!(ids(&kept), ["e1"]);
+        assert_eq!(
+            excluded,
+            [
+                exclusion("e2", RevisionMismatch),
+                exclusion("e3", Invalidated)
+            ]
+        );
+    }
+
+    /// An excluded record is listed under every claim that reaches its kind, directly or through
+    /// a chain of claim references, in evidence-id order, and under no other claim.
+    #[test]
+    fn excluded_for_lists_the_kinds_a_claim_reaches_in_evidence_id_order() {
+        use crate::model::ExclusionReason::{Expired, RevisionMismatch};
+        let ir = crate::ir::compile(
+            &crate::model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\nevidence_kinds: {k: {}, l: {}}\n\
+                 claims:\n\
+                 \x20\x20direct: {true_when: {evidence: {kind: k}}}\n\
+                 \x20\x20one_level: {true_when: {not: {claim: direct}}}\n\
+                 \x20\x20two_levels: {true_when: {any: [{claim: one_level, is: unknown}]}}\n\
+                 \x20\x20other: {true_when: {evidence: {kind: l}}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let evidence = [bare("e1", "k"), bare("e2", "l"), bare("e3", "k")];
+        // In the order the stages excluded them, which is not evidence-id order.
+        let excluded = [
+            exclusion("e3", RevisionMismatch),
+            exclusion("e2", Expired),
+            exclusion("e1", Expired),
+        ];
+        let listed = |claim: &str| -> Vec<String> {
+            excluded_for(&ir, &ClaimId::new(claim), &evidence, &excluded)
+                .iter()
+                .map(|exclusion| exclusion.evidence.as_str().to_owned())
+                .collect()
+        };
+        for claim in ["direct", "one_level", "two_levels"] {
+            assert_eq!(listed(claim), ["e1", "e3"], "{claim}");
+        }
+        assert_eq!(listed("other"), ["e2"]);
+        assert_eq!(
+            excluded_for(&ir, &ClaimId::new("direct"), &evidence, &[]),
+            Vec::new()
+        );
     }
 }

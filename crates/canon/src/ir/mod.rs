@@ -48,7 +48,7 @@ pub struct Ir {
     pub artifacts: BTreeMap<ArtifactId, Described>,
     pub evidence_kinds: BTreeMap<EvidenceKindId, Described>,
     pub claims: BTreeMap<ClaimId, Claim>,
-    pub obligations: BTreeMap<ObligationId, Described>,
+    pub obligations: BTreeMap<ObligationId, Obligation>,
     pub actions: BTreeMap<ActionId, Action>,
     pub outcomes: BTreeMap<OutcomeId, Outcome>,
 }
@@ -61,8 +61,7 @@ pub struct Header {
     pub description: Option<String>,
 }
 
-/// A declaration that carries nothing but its description: an artifact, an evidence kind or an
-/// obligation.
+/// A declaration that carries nothing but its description: an artifact or an evidence kind.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Described {
     pub description: Option<String>,
@@ -72,6 +71,13 @@ pub struct Described {
 pub struct Claim {
     pub description: Option<String>,
     pub true_when: Predicate,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Obligation {
+    pub description: Option<String>,
+    /// Discharges the obligation when it evaluates true.
+    pub discharged_when: Predicate,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,8 +122,9 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
             description: claim.description.clone(),
             true_when: normalize(&claim.true_when),
         }),
-        obligations: keyed(&protocol.obligations, |obligation| {
-            described(&obligation.description)
+        obligations: keyed(&protocol.obligations, |obligation| Obligation {
+            description: obligation.description.clone(),
+            discharged_when: normalize(&obligation.discharged_when),
         }),
         actions: keyed(&protocol.actions, |action| Action {
             description: action.description.clone(),
@@ -285,7 +292,18 @@ impl Ir {
                     ])
                 }),
             ),
-            ("obligations", section(&self.obligations, described)),
+            (
+                "obligations",
+                section(&self.obligations, |obligation| {
+                    Value::object([
+                        ("description", description(&obligation.description)),
+                        (
+                            "discharged_when",
+                            predicate_value(&obligation.discharged_when),
+                        ),
+                    ])
+                }),
+            ),
             (
                 "actions",
                 section(&self.actions, |action| {
@@ -457,13 +475,20 @@ mod tests {
     #[test]
     fn obligations_compile_keyed_by_identifier_with_their_descriptions() {
         let compiled = ir(&format!(
-            "{HEADER}obligations:\n  z: {{description: Last.}}\n  a: {{}}\n"
+            "{HEADER}claims: {{c: {{true_when: {{all: []}}}}}}\nobligations:\n  z: {{description: Last., discharged_when: {{claim: c}}}}\n  a: {{discharged_when: {{any: [{{claim: c, is: unknown}}, {{claim: c, is: false}}]}}}}\n"
         ));
         assert!(
             compiled.contains(
-                "  \"obligations\": {\n    \"a\": {\n      \"description\": null\n    },\n    \"z\": {\n      \"description\": \"Last.\"\n    }\n  },\n"
+                "  \"obligations\": {\n    \"a\": {\n      \"description\": null,\n      \"discharged_when\": {\n        \"any\": [\n          {\n            \"claim\": {\n              \"id\": \"c\",\n              \"is\": \"false\"\n            }\n          },\n          {\n            \"claim\": {\n              \"id\": \"c\",\n              \"is\": \"unknown\"\n            }\n          }\n        ]\n      }\n    },\n    \"z\": {\n      \"description\": \"Last.\",\n      \"discharged_when\": {\n        \"claim\": {\n          \"id\": \"c\",\n          \"is\": \"true\"\n        }\n      }\n    }\n  },\n"
             ),
             "{compiled}"
+        );
+    }
+
+    #[test]
+    fn an_obligation_without_a_discharge_predicate_does_not_parse() {
+        assert!(
+            model::parse(&format!("{HEADER}obligations:\n  o: {{description: D.}}\n")).is_err()
         );
     }
 

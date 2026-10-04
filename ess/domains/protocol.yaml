@@ -97,6 +97,13 @@ types:
       # read from: crates/canon/src/model/mod.rs:89
       - name: description
         type: Optional<String>
+      # Required on every obligation: the obligation is discharged only when this predicate over
+      # claim values evaluates true; unknown or false leaves it open (design § 8,
+      # docs/design/canon-protocol-calculus-design.md:468). Its claim references resolve.
+      # read from: .engineering/planning/story/evaluator-skeleton.md:91-92
+      # read from: .engineering/planning/story/obligations.md:30-37
+      - name: discharged_when
+        type: canon.protocol.Predicate
 
   # read from: crates/canon/src/model/mod.rs:94-107
   - name: canon.protocol.Action
@@ -261,6 +268,31 @@ types:
       # read from: .engineering/planning/story/three-valued-claims.md:41-43
       - name: value
         type: canon.protocol.Truth
+      # The evidence an exclusion stage kept from this claim, each with its reason. Empty unless a
+      # stage excluded something, and not serialized when empty, so earlier expectations hold.
+      # read from: .engineering/planning/story/evaluator-skeleton.md:74-77
+      - name: excluded_evidence
+        type: List<canon.protocol.EvidenceExclusion>
+
+  # One evidence record an exclusion stage kept from a claim, and why.
+  # read from: .engineering/planning/story/evaluator-skeleton.md:74-76
+  - name: canon.protocol.EvidenceExclusion
+    kind: struct
+    fields:
+      # read from: .engineering/planning/story/evaluator-skeleton.md:75
+      - name: evidence
+        type: canon.protocol.EvidenceId
+      # read from: .engineering/planning/story/evaluator-skeleton.md:75-76
+      - name: reason
+        type: canon.protocol.ExclusionReason
+
+  # Why evidence was excluded: bound to another revision of its subject
+  # (story:evidence-revision-binding), older than its kind allows (story:evidence-freshness), or
+  # invalidated by a rule (story:invalidation-rules).
+  # read from: .engineering/planning/story/evaluator-skeleton.md:75-76
+  - name: canon.protocol.ExclusionReason
+    kind: enum
+    variants: ["revision_mismatch", "expired", "invalidated"]
 
   # The canon-decision/1 document: which protocol revision applied to which case, and each declared
   # claim's value. Serialized as canonical JSON, the serialization canon-ir/1 uses.
@@ -288,6 +320,24 @@ types:
       # read from: .engineering/planning/story/three-valued-claims.md:62-63
       - name: claims
         type: Map<canon.protocol.ClaimId, canon.protocol.ClaimDecision>
+      # The four section slots stay untyped Json. Each section's shape is fixed by its story's
+      # conformance scenarios, not here; typing these slots in ESS is a later model story, not
+      # story:obligations, story:action-admissibility or story:outcomes. A slot is absent until its
+      # story fills it, and not serialized when absent.
+      # read from: .engineering/planning/story/evaluator-skeleton.md:72-75
+      # Filled by story:obligations; its shape is fixed by that story's conformance scenarios.
+      - name: obligations
+        type: Optional<Json>
+      # Filled by story:action-admissibility; its shape is fixed by that story's conformance
+      # scenarios.
+      - name: actions
+        type: Optional<Json>
+      # Filled by story:outcomes; its shape is fixed by that story's conformance scenarios.
+      - name: outcomes
+        type: Optional<Json>
+      # Filled by story:explanation; its shape is fixed by that story's conformance scenarios.
+      - name: explanation
+        type: Optional<Json>
 
 entities:
   # The source model's root, with its header (id, revision, description) written in place. Every
@@ -360,6 +410,13 @@ entities:
       # read from: .engineering/planning/story/three-valued-claims.md:57-58
       - name: artifacts
         type: Map<canon.protocol.ArtifactId, canon.protocol.CaseArtifact>
+      # The outcome the case terminated through; absent while the case is open. A case terminates
+      # only through an outcome its protocol declares (design § 32 CANON-OUTCOME-001,
+      # docs/design/canon-protocol-calculus-design.md:1448); story:outcomes checks it.
+      # read from: .engineering/planning/story/evaluator-skeleton.md:77-78
+      # read from: .engineering/planning/story/outcomes.md:38-39
+      - name: termination
+        type: Optional<canon.protocol.OutcomeId>
     relations:
       # Every case is governed by exactly one protocol (design § 4.2).
       # read from: docs/design/canon-protocol-calculus-design.md:247
