@@ -203,7 +203,7 @@ impl<'a> Unmet<'a> {
 /// The reasons a blocked requirement states: claims first, in claim-id order, then evidence
 /// kinds, in kind order, with whether a record of the kind is present, each once;
 /// `{"requirement": "unsatisfiable"}` when no test is named.
-fn reasons(
+pub(super) fn reasons(
     requires: &Predicate,
     claims: &BTreeMap<ClaimId, Truth>,
     evidence: &[EvidenceRecord],

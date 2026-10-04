@@ -118,9 +118,9 @@ concept; this module holds only the order:
 Revision binding excludes a record bound to another revision as `revision_mismatch`, and
 freshness a record older than its kind's `max_age` at the evaluation instant as `expired`,
 each listed as excluded under each claim that reaches its kind. The `obligations`, `actions`
-and `outcomes` sections are written as the next section says. Two parts are not built yet: the
-invalidation stage excludes nothing (story:invalidation-rules), and no decision carries an
-`explanation` (story:explanation).
+and `outcomes` sections are written as the next section says, and every decision carries an
+`explanation` (`crate::explain`). One part is not built yet: the invalidation stage excludes
+nothing (story:invalidation-rules).
 
 ## Sections
 
@@ -151,6 +151,10 @@ declares no obligation has no `obligations` key, and likewise for actions and ou
   principal whose decision applied, sorted by Unicode code point; otherwise it is blocked with
   the one reason `{"decision": <name>, "present": false}` (CANON-OUTCOME-002). The case snapshot's
   `termination` is checked against it, as the refusals above say (CANON-OUTCOME-001).
+- `explanation` is written for every decision: what the decision was computed from (design
+  § 37), and why each claim that is not `true`, each open obligation, each action that is not
+  admissible and each blocked outcome has its status, down to the evidence records that applied
+  or were excluded. Its shape is given by `crate::explain` (CANON-EXPLAIN-001).
 
 ## Authority decisions
 

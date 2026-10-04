@@ -7,17 +7,22 @@ fixture: fixtures/investigation/explanation.yaml
 # The section holds:
 #
 # - `computed_from`: what the decision was computed from, so it can be reconstructed later: the
-#   protocol id and revision, the Canon semantics version (`canon-semantics/1`), the case snapshot
-#   as given, the ids of the evidence set in code-point order and, when supplied, the authority
-#   decisions, the explicit decisions and the evaluation instant (`at`). An input not supplied is
-#   not written.
+#   protocol id and revision, the Canon semantics that applied (`semantics`: the Canon crate
+#   version and the `canon-decision/1` format; the design names no other semantics identifier),
+#   the case snapshot as given, the ids of the evidence set in code-point order and, when
+#   supplied, the authority decisions, the explicit decisions and the evaluation instant (`at`).
+#   An input not supplied is not written.
 # - `outcomes`, `actions`, `obligations`: each blocked outcome, non-admissible action and open
-#   obligation with its status and `because`, the reasons that decide it. A claim reason
-#   `{"claim": <id>, "value": <value>}` continues under `claims`.
-# - `claims`: each claim whose value is not `true`, with its value and `because`: the claims it
-#   tests, as claim reasons, then each evidence record of a kind it reaches, in evidence-id order,
+#   obligation with its status and `because`, the reasons that decide it (an obligation's walked
+#   as an outcome's requirement is), each evidence-match reason followed by every record of its
+#   kind, applied or excluded with its reason. A claim reason `{"claim": <id>, "value": <value>}`
+#   continues under `claims`.
+# - `claims`: each claim whose value is not `true`, each claim a reason names and each claim one
+#   of those tests, `true` ones included, with its value and `because`: the claims it tests, as
+#   claim reasons, then each evidence record of a kind it reaches, in evidence-id order,
 #   `{"evidence": <id>, "status": "applied"}`, or `{"evidence": <id>, "reason": <reason>,
-#   "status": "excluded"}` with the reason the claim's `excluded_evidence` list records.
+#   "status": "excluded"}` with the reason the claim's `excluded_evidence` list records, then each
+#   kind it reaches that no record has, `{"kind": <kind>, "status": "absent"}`.
 #
 # A section with nothing to explain is not written. Serialization is canonical: equivalent inputs
 # give byte-identical output (CANON-DETERMINISM-001), so each step expects the whole decision, and
@@ -108,7 +113,10 @@ steps:
               ],
               "protocol": "investigation",
               "protocol_revision": 1,
-              "semantics": "canon-semantics/1"
+              "semantics": {
+                "canon": "0.0.0",
+                "format": "canon-decision/1"
+              }
             },
             "outcomes": {
               "supported": {
@@ -221,7 +229,10 @@ steps:
               ],
               "protocol": "investigation",
               "protocol_revision": 1,
-              "semantics": "canon-semantics/1"
+              "semantics": {
+                "canon": "0.0.0",
+                "format": "canon-decision/1"
+              }
             },
             "outcomes": {
               "supported": {
@@ -334,7 +345,10 @@ steps:
               ],
               "protocol": "investigation",
               "protocol_revision": 1,
-              "semantics": "canon-semantics/1"
+              "semantics": {
+                "canon": "0.0.0",
+                "format": "canon-decision/1"
+              }
             },
             "outcomes": {
               "supported": {

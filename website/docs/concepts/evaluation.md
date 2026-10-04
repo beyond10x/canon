@@ -27,7 +27,7 @@ Equivalent normalized inputs give equivalent normalized outputs.
 
 ## What exists today
 
-:::note[Shipped: claims, obligations, actions and outcomes]
+:::note[Shipped: claims, obligations, actions, outcomes and the explanation]
 
 `canon evaluate` takes the compiled protocol, a `canon-case/1` snapshot, a set of
 `canon-evidence/1` records and, optionally, `canon-authority/1` authority decisions (`--authority`),
@@ -40,7 +40,10 @@ writes a `canon-decision/1` document with:
 - each declared obligation, `open` or `discharged`;
 - each declared action, `admissible`, `approval-required` or `blocked`, with the reasons;
 - each declared outcome, `legitimate` or `blocked`, with the reasons; an outcome that requires an
-  explicit decision is `legitimate` only with one taken at the case snapshot's revision.
+  explicit decision is `legitimate` only with one taken at the case snapshot's revision;
+- an `explanation`: what the decision was computed from, and why each claim that is not `true`,
+  open obligation, action that is not admissible and blocked outcome has its status, down to the
+  evidence records that applied or were excluded.
 
 A case snapshot that records termination through an undeclared or blocked outcome is refused. The
 order of the evidence does not matter, and the same inputs give the same bytes. Inputs that do not
@@ -50,9 +53,9 @@ fit the protocol are refused with a stable code. See the
 
 :::
 
-:::caution[Planned: invalidation and the explanation]
+:::caution[Planned: invalidation]
 
-An upstream artifact change invalidates nothing yet, and the decision carries no explanation.
+An upstream artifact change invalidates nothing yet.
 
 :::
 

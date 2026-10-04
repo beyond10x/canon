@@ -208,7 +208,8 @@ fn expired_records_are_listed_once_per_reaching_claim_in_evidence_id_order() {
 }
 
 /// A `max_age` on a kind no record has changes nothing: the decision at any instant is the one
-/// without an instant, byte for byte.
+/// without an instant, byte for byte, but for the explanation's record of the instant it was
+/// computed at (story:explanation, design § 37).
 #[test]
 fn a_maximum_age_on_a_kind_no_record_has_changes_nothing() {
     let ir = compiled(
@@ -217,8 +218,19 @@ fn a_maximum_age_on_a_kind_no_record_has_changes_nothing() {
     );
     let evidence = [record("e", "k", None, Some("2000-01-01T00:00:00Z"))];
     let without = eval::render(&decide(&ir, &evidence, None).expect("decides"));
-    let with =
-        eval::render(&decide(&ir, &evidence, Some("2026-10-04T12:00:00Z")).expect("decides"));
+    let mut with = decide(&ir, &evidence, Some("2026-10-04T12:00:00Z")).expect("decides");
+    let from = &mut with
+        .explanation
+        .as_mut()
+        .expect("the decision carries an explanation")["computed_from"];
+    assert_eq!(
+        from["at"], "2026-10-04T12:00:00Z",
+        "the instant is recorded"
+    );
+    from.as_object_mut()
+        .expect("computed_from is an object")
+        .remove("at");
+    let with = eval::render(&with);
     assert_eq!(with, without);
 }
 
