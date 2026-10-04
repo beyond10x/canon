@@ -1,0 +1,53 @@
+outcomes:
+  supported:
+    requires:
+      is: true
+      claim: explanation.supported
+    description: The explanation is supported.
+
+obligations: {}
+
+actions:
+  attempt_falsification:
+    may_produce:
+      - evidence: falsification_attempt
+    requires: []
+    precondition:
+      all: []
+    description: Try to refute the explanation.
+
+  inspect:
+    requires: []
+    precondition:
+      all: []
+    may_produce:
+      - evidence: supporting_observation
+    description: Look for observations bearing on the explanation.
+
+claims:
+  explanation.supported:
+    true_when:
+      all:
+        - evidence:
+            kind: supporting_observation
+        - evidence:
+            result: survived
+            kind: falsification_attempt
+    description: The explanation is supported by observation and has survived falsification.
+
+evidence_kinds:
+  falsification_attempt:
+    description: An attempt to refute the explanation; its result is survived or refuted.
+  supporting_observation:
+    description: An observation consistent with the explanation.
+
+artifacts:
+  explanation:
+    description: The explanation under investigation.
+
+protocol:
+  description: Decide whether an explanation is supported by observation and survives an attempt to falsify it.
+  revision: 1
+  id: investigation
+
+format: protocol/1
