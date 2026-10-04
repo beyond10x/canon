@@ -215,7 +215,7 @@ fn protocol(requires: Predicate) -> Protocol {
             OutcomeId::new("o"),
             Outcome {
                 description: None,
-                requires,
+                requires: requires.into(),
             },
         )]),
     }
@@ -227,7 +227,10 @@ fn compiled(requires: Predicate) -> ir::Ir {
 }
 
 fn required(ir: &ir::Ir) -> &Predicate {
-    &ir.outcomes[&OutcomeId::new("o")].requires
+    ir.outcomes[&OutcomeId::new("o")]
+        .requires
+        .predicate()
+        .expect("the requirement is a predicate")
 }
 
 /// Property: for 4000 generated predicates, the compiled predicate is exactly the documented

@@ -196,7 +196,7 @@
       }
     },
     "Outcome": {
-      "description": "A legitimate terminal interpretation of a case and what it requires.",
+      "description": "A legitimate terminal interpretation of a case and what it requires: a predicate, or an explicit decision (`requires: decision: <name>`).",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -204,7 +204,7 @@
           "type": "string"
         },
         "requires": {
-          "$ref": "#/$defs/Predicate"
+          "$ref": "#/$defs/OutcomeRequirement"
         }
       },
       "required": [
@@ -311,6 +311,28 @@
       },
       "required": [
         "evidence"
+      ]
+    },
+    "OutcomeRequirement": {
+      "description": "What an outcome requires.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "decision": {
+              "description": "The outcome is legitimate only with an explicit decision of this name, for the outcome, taken at the case snapshot's current revision.",
+              "$ref": "#/$defs/Identifier"
+            }
+          },
+          "required": [
+            "decision"
+          ]
+        },
+        {
+          "description": "The outcome is legitimate when the predicate is `true`.",
+          "$ref": "#/$defs/Predicate"
+        }
       ]
     },
     "EvidenceMatch": {

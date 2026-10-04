@@ -30,6 +30,7 @@ steps:
       case: { ... a canon-case/1 document ... }
       evidence: [ ... canon-evidence/1 records ... ]
       authority: [ ... canon-authority/1 decisions ... ]  # optional
+      decisions: [ ... canon-decisions/1 decisions ... ]  # optional
       at: 2026-10-04T00:00:00Z                           # optional evaluation instant
     expect:
       decision: |
@@ -90,12 +91,13 @@ standard output. The same registry produces byte-identical output on every run.
 
 An evaluate step compiles the fixture, reads `case` as a `canon-case/1` document and each
 `evidence` entry as a `canon-evidence/1` document, and calls `eval::evaluate_with`, passing
-`authority` (as YAML text) and `at` through unread: the evaluator reads them as
-`canon-authority/1` decisions and the evaluation instant, and refuses either when it is not
-one (`malformed-input`, `invalid-instant`, …). The `authority` list is written back
-as YAML that reads as the same list (in flow style where block style cannot write an entry); a
-list that cannot be fails the step as `authority entry <n> cannot be serialized: <why>`, and the
-registry run goes on.
+`authority` and `decisions` (each as YAML text) and `at` through unread: the evaluator reads
+them as `canon-authority/1` decisions, `canon-decisions/1` explicit decisions and the evaluation
+instant, and refuses each when it is not one (`malformed-input`, `invalid-instant`, …). The
+`authority` and `decisions` lists are each written back as YAML that reads as the same list (in
+flow style where block style cannot write an entry); a list that cannot be fails the step as
+`<list> entry <n> cannot be serialized: <why>` (`authority entry 2 …`, `decisions entry 1 …`),
+and the registry run goes on.
 
 A step expecting `decision` compares section by section. The expectation's top-level keys are
 the sections it lists; only those are compared, each on its own and byte for byte: written one

@@ -65,7 +65,8 @@ identifier!(
     ArtifactId
 );
 identifier!(
-    /// Identifies one revision of an artifact.
+    /// Identifies one revision of an artifact, or of the case itself: the case snapshot's own
+    /// revision, and the case revision an explicit decision was taken at.
     Revision
 );
 identifier!(
@@ -110,4 +111,12 @@ identifier!(
     /// A length of time: a whole number without leading zeros, followed by `s`, `m`, `h` or `d`
     /// (`5m`, `24h`).
     Age
+);
+identifier!(
+    /// Names an explicit decision an outcome may require (`explicitly_inconclusive`).
+    DecisionName
+);
+identifier!(
+    /// Who took an explicit decision, recorded as given: Canon resolves no identity.
+    Principal
 );

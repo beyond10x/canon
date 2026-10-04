@@ -496,7 +496,9 @@ fn evaluate_step(
         Err(why) => return Some(why),
     };
     let written = |list: &Option<Vec<serde_yaml_ng::Value>>, name: &str| {
-        list.as_deref().map(|list| list_text(name, list)).transpose()
+        list.as_deref()
+            .map(|list| list_text(name, list))
+            .transpose()
     };
     let authority = match written(&inputs.authority, "authority") {
         Ok(authority) => authority,
@@ -579,8 +581,7 @@ fn parse_failure(
 /// counted from 1.
 fn list_text(name: &str, list: &[serde_yaml_ng::Value]) -> Result<String, String> {
     let reads_back = |text: &str| {
-        serde_yaml_ng::from_str::<Vec<serde_yaml_ng::Value>>(text)
-            .is_ok_and(|back| back == list)
+        serde_yaml_ng::from_str::<Vec<serde_yaml_ng::Value>>(text).is_ok_and(|back| back == list)
     };
     if let Some(text) = serde_yaml_ng::to_string(list)
         .ok()
@@ -590,11 +591,7 @@ fn list_text(name: &str, list: &[serde_yaml_ng::Value]) -> Result<String, String
     }
     let flow = format!(
         "[{}]\n",
-        list
-            .iter()
-            .map(flow_yaml)
-            .collect::<Vec<_>>()
-            .join(", ")
+        list.iter().map(flow_yaml).collect::<Vec<_>>().join(", ")
     );
     if reads_back(&flow) {
         return Ok(flow);
@@ -615,10 +612,7 @@ fn list_text(name: &str, list: &[serde_yaml_ng::Value]) -> Result<String, String
             };
             Some((index + 1, why))
         })
-        .unwrap_or((
-            list.len(),
-            "it does not read back as written".to_owned(),
-        ));
+        .unwrap_or((list.len(), "it does not read back as written".to_owned()));
     Err(format!(
         "{name} entry {entry} cannot be serialized: {}",
         model::one_line(&why)

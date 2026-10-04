@@ -1,6 +1,6 @@
 ---
 title: Evaluation
-description: An evaluation is a pure function of the protocol, the case, the evidence, authority decisions and an instant.
+description: An evaluation is a pure function of the protocol, the case, the evidence, authority decisions, explicit decisions and an instant.
 ---
 
 # Evaluation
@@ -18,6 +18,10 @@ Evaluation = f(
 )
 ```
 
+Canon adds one input to the design's list: the explicit decisions (`canon-decisions/1`) an outcome
+may require instead of a predicate. They are passed in like the authority decisions, never looked
+up.
+
 There is no hidden clock, network access, model call, persistence lookup or implicit "latest".
 Equivalent normalized inputs give equivalent normalized outputs.
 
@@ -26,15 +30,17 @@ Equivalent normalized inputs give equivalent normalized outputs.
 :::note[Shipped: claims, obligations, actions and outcomes]
 
 `canon evaluate` takes the compiled protocol, a `canon-case/1` snapshot, a set of
-`canon-evidence/1` records and, optionally, `canon-authority/1` authority decisions (`--authority`)
-and the evaluation instant (`--at`). It writes a `canon-decision/1` document with:
+`canon-evidence/1` records and, optionally, `canon-authority/1` authority decisions (`--authority`),
+`canon-decisions/1` explicit decisions (`--decisions`) and the evaluation instant (`--at`). It
+writes a `canon-decision/1` document with:
 
 - the three-valued value of every claim, from the evidence that applies: evidence bound to another
   revision of its artifact, or older than its kind allows at the evaluation instant, is listed as
   excluded and does not count;
 - each declared obligation, `open` or `discharged`;
 - each declared action, `admissible`, `approval-required` or `blocked`, with the reasons;
-- each declared outcome, `legitimate` or `blocked`, with the reasons.
+- each declared outcome, `legitimate` or `blocked`, with the reasons; an outcome that requires an
+  explicit decision is `legitimate` only with one taken at the case snapshot's revision.
 
 A case snapshot that records termination through an undeclared or blocked outcome is refused. The
 order of the evidence does not matter, and the same inputs give the same bytes. Inputs that do not
@@ -44,10 +50,9 @@ fit the protocol are refused with a stable code. See the
 
 :::
 
-:::caution[Planned: invalidation, explicit decisions and the explanation]
+:::caution[Planned: invalidation and the explanation]
 
-An upstream artifact change invalidates nothing yet, explicit decisions are not an input yet, and
-the decision carries no explanation.
+An upstream artifact change invalidates nothing yet, and the decision carries no explanation.
 
 :::
 

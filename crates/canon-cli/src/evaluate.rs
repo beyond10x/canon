@@ -1,5 +1,6 @@
 //! `canon evaluate`: reads the compiled protocol, the case snapshot, the evidence directory and the
-//! optional `--authority` file and `--at` instant, and hands them to the library unparsed.
+//! optional `--authority` and `--decisions` files and `--at` instant, and hands them to the library
+//! unparsed.
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -20,14 +21,15 @@ fn is_record_name(name: &std::ffi::OsStr) -> bool {
 /// only records: every entry must be a regular file (a symbolic link to one counts) named `*.yaml`
 /// or `*.json`, read in sorted file-name order. Any other entry — another file, a subdirectory —
 /// is refused as unreadable, naming it, rather than skipped, so no evidence the operator put
-/// there is silently dropped. The `--authority` file, when given, is read as text; it and the
-/// `--at` instant are passed through unparsed. A file that cannot be read exits 2; a refusal exits
+/// there is silently dropped. The `--authority` and `--decisions` files, when given, are read as
+/// text; they and the `--at` instant are passed through unparsed. A file that cannot be read exits 2; a refusal exits
 /// 1 naming its code.
 pub(crate) fn run(
     ir_path: &Path,
     case_path: &Path,
     evidence_dir: &Path,
     authority_path: Option<&Path>,
+    decisions_path: Option<&Path>,
     at: Option<&str>,
 ) -> ExitCode {
     let read = |path: &Path| read_text(path).map_err(|error| unreadable(path, error));
@@ -35,6 +37,7 @@ pub(crate) fn run(
         let ir = read(ir_path)?;
         let case = read(case_path)?;
         let authority = authority_path.map(read).transpose()?;
+        let decisions = decisions_path.map(read).transpose()?;
         let mut names = Vec::new();
         for entry in std::fs::read_dir(evidence_dir).map_err(|e| unreadable(evidence_dir, e))? {
             names.push(entry.map_err(|e| unreadable(evidence_dir, e))?.file_name());
@@ -53,9 +56,9 @@ pub(crate) fn run(
             }
             evidence.push(read(&path)?);
         }
-        Ok((ir, case, evidence, authority))
+        Ok((ir, case, evidence, authority, decisions))
     })();
-    let (ir, case, evidence, authority) = match inputs {
+    let (ir, case, evidence, authority, decisions) = match inputs {
         Ok(inputs) => inputs,
         Err(code) => return code,
     };
@@ -68,7 +71,7 @@ pub(crate) fn run(
         let supplied = eval::Supplied {
             authority: authority.as_deref(),
             at,
-            decisions: None,
+            decisions: decisions.as_deref(),
         };
         eval::evaluate_with(&ir, &case, &evidence, supplied)
     });

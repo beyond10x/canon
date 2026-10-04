@@ -258,7 +258,8 @@ types:
     kind: newtype
     of: String
 
-  # An artifact revision is opaque text, compared for equality only (design § 9).
+  # A revision of an artifact, or of the case itself (Case.revision, ExplicitDecision.case_revision):
+  # opaque text, compared for equality only (design § 9).
   # read from: .engineering/planning/story/three-valued-claims.md:57-60
   - name: canon.protocol.Revision
     kind: newtype
@@ -432,7 +433,11 @@ types:
       # scenarios.
       - name: actions
         type: Optional<Json>
-      # Filled by story:outcomes; its shape is fixed by that story's conformance scenarios.
+      # Filled by story:outcomes; its shape is fixed by that story's conformance scenarios
+      # (CANON-OUTCOME-001) and, for an outcome that requires an explicit decision, by
+      # CANON-OUTCOME-002 (story:decision-outcomes): a legitimate one records decided_by
+      # ({"decision": <name>, "principals": [...]}), and a blocked one gives the reason
+      # {"decision": <name>, "present": false}.
       - name: outcomes
         type: Optional<Json>
       # Filled by story:explanation; its shape is fixed by that story's conformance scenarios.

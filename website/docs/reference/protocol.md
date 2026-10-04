@@ -86,12 +86,13 @@ has and what evidence it may produce (design § 10).
 
 ## `Outcome`
 
-A legitimate terminal interpretation of a case and what it requires.
+A legitimate terminal interpretation of a case and what it requires: a predicate, or an explicit
+decision (`requires: decision: <name>`).
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `description` | text | optional | — |
-| `requires` | [`Predicate`](#predicate) | required | — |
+| `requires` | [`OutcomeRequirement`](#outcomerequirement) | required | — |
 
 ## `Predicate`
 
@@ -127,6 +128,15 @@ One evidence kind an action may produce.
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `evidence` | [identifier](#identifiers) (`EvidenceKindId`) | required | — |
+
+## `OutcomeRequirement`
+
+What an outcome requires.
+
+| Key | Value | Meaning |
+|---|---|---|
+| `decision` | [identifier](#identifiers) (`DecisionName`) | The outcome is legitimate only with an explicit decision of this name, for the outcome, taken at the case snapshot's current revision. |
+| — | [`Predicate`](#predicate) | Written as the [`Predicate`](#predicate) itself, with its keys and no key of its own. The outcome is legitimate when the predicate is `true`. |
 
 ## `EvidenceMatch`
 
@@ -164,6 +174,7 @@ An identifier is text. A well-formed identifier is not empty, and without whites
 | `OutcomeId` | Identifies an outcome a protocol declares. |
 | `CapabilityId` | Names a capability an action requires authority for. |
 | `EffectClass` | Names the class of effect an action has. |
+| `DecisionName` | Names an explicit decision an outcome may require (`explicitly_inconclusive`). |
 
 ## Text formats
 

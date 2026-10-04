@@ -209,7 +209,7 @@ fn a_legitimate_outcome_carries_no_reasons() {
     );
 }
 
-/// The outcome refusals come last: a claim cycle and an unsupported input are refused before a
+/// The outcome refusals come last: a claim cycle and a malformed input are refused before a
 /// termination is looked at, and a termination through a legitimate outcome is evaluated while
 /// another declared outcome is blocked.
 #[test]
@@ -230,6 +230,9 @@ fn termination_refusals_come_after_every_other_refusal() {
         let refusal = eval::evaluate(&cyclic, &terminated(outcome), &[]).expect_err(outcome);
         assert_eq!(refusal.code(), "claim-cycle", "{outcome}: {refusal}");
     }
+    // Changed by story:decision-outcomes, which reads `canon-decisions/1`: text that is not a list
+    // of decisions is refused as `malformed-input`, still before the termination is checked. The
+    // skeleton refused any decisions as `unsupported-input`.
     let ir = protocol("  done: {requires: {claim: c}}\n  other: {requires: {claim: d}}\n");
     for outcome in ["abandoned", "done"] {
         let refusal = eval::evaluate_with(
@@ -242,7 +245,7 @@ fn termination_refusals_come_after_every_other_refusal() {
             },
         )
         .expect_err(outcome);
-        assert_eq!(refusal.code(), "unsupported-input", "{outcome}: {refusal}");
+        assert_eq!(refusal.code(), "malformed-input", "{outcome}: {refusal}");
     }
     let decided = eval::evaluate(&ir, &terminated("done"), &[record("k", Some("pass"))])
         .expect("a termination through a legitimate outcome is evaluated")
@@ -270,7 +273,7 @@ fn a_deeply_negated_requirement_is_walked_from_any_thread() {
     ir.outcomes
         .get_mut(&OutcomeId::new("deep"))
         .expect("declared")
-        .requires = requires;
+        .requires = requires.into();
     let decided = outcomes(&ir, &[record("k", Some("fail"))]);
     assert_eq!(
         decided["deep"],

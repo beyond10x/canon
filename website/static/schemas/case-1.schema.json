@@ -42,6 +42,10 @@
         "termination": {
           "description": "The outcome the case terminated through; absent while the case is open. Whether the protocol declares it is checked by the outcomes section (story:outcomes).",
           "$ref": "#/$defs/Identifier"
+        },
+        "revision": {
+          "description": "The case's own current revision. An explicit decision applies only while its `case_revision` is this one; a snapshot without one has no explicit decision applying.",
+          "$ref": "#/$defs/Identifier"
         }
       },
       "required": [

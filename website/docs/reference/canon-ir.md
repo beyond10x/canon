@@ -24,7 +24,8 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   `max_age`: written, as authored, only when the kind declares one, so the IR of a protocol
   that declares none is the IR it was before `max_age` existed.
 - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
-  it was written.
+  it was written. An outcome that requires an explicit decision has the requirement
+  `{"decision": <name>}`, as written; any other requirement is its predicate.
 - **Resolved references.** Only a document the validator accepts compiles, so every claim and
   evidence kind the IR references is declared in it.
 

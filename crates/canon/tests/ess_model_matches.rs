@@ -24,7 +24,7 @@
 //!   is the Rust struct `Case`: its `id` field is the identity `id`, its other fields are entity
 //!   fields. An entity the specification declares and [`ENTITIES`] does not map fails the test.
 //! * The value types compared are those the entities reach, and those [`DOCUMENTS`] reach: the
-//!   evidence record and the decision, which no entity holds.
+//!   evidence record, the explicit decision and the decision, which no entity holds.
 //! * Only module-level items count. Items inside functions, inline modules (`mod tests { … }`) and
 //!   anything under `#[cfg(test)]` are not the model. Two module-level types with one name, in any
 //!   model files, fail the test rather than one shadowing the other.
@@ -67,9 +67,10 @@ const ENTITIES: &[EntityMapping] = &[
     },
 ];
 
-/// Value types no entity holds that are still part of the model: the evidence record an
-/// evaluation reads and the decision it writes. They, and what they reach, are compared too.
-const DOCUMENTS: &[&str] = &["EvidenceRecord", "Decision"];
+/// Value types no entity holds that are still part of the model: the evidence record and the
+/// explicit decision (`canon-decisions/1`) an evaluation reads, and the decision it writes. They,
+/// and what they reach, are compared too.
+const DOCUMENTS: &[&str] = &["EvidenceRecord", "ExplicitDecision", "Decision"];
 
 /// `(owner, field)` Integer fields that are never negative although `ess/` cannot say so: ess
 /// 0.52.0 refuses an invariant on a struct type no view publishes (ESS-SYNTH-013), and this

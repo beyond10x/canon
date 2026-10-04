@@ -11,7 +11,8 @@ Deterministic evaluation of a case under a compiled protocol (design § 8, § 13
 
 `evaluate_with` is a pure function of a compiled protocol (`Ir`), a `canon-case/1` case
 snapshot, a set of `canon-evidence/1` records and the inputs a caller supplies (`Supplied`):
-`canon-authority/1` authority decisions (`--authority`) and the evaluation instant (`--at`).
+`canon-authority/1` authority decisions (`--authority`), the evaluation instant (`--at`) and
+`canon-decisions/1` explicit decisions (`--decisions`).
 `evaluate` is the same with nothing supplied. It reads nothing else: no clock, network,
 filesystem, credentials or implicit `latest`. Its result is a `canon-decision/1` `Decision`
 giving every declared claim the value `true`, `false` or `unknown`, each declared obligation
@@ -46,8 +47,8 @@ A claim's value is its `true_when` predicate's value over the evidence set:
 ## Refusals
 
 Inputs are checked before any claim is evaluated, in this order, and the first problem found is
-the refusal: the case snapshot's format, its identifiers (case id, protocol id, then each
-artifact id and revision in the order written), its protocol against the compiled protocol's,
+the refusal: the case snapshot's format, its identifiers (case id, protocol id, the case
+revision when given, then each artifact id and revision in the order written), its protocol against the compiled protocol's,
 each artifact it lists (declared by the protocol, listed once), each artifact the protocol
 declares (listed by the case); then each evidence record in the order given: its format, its
 identifiers (id, kind, subject, subject revision), its `observed_at` when given (an instant,
@@ -59,9 +60,8 @@ Then the supplied inputs are read, in this order: the authority decisions (`--au
 evaluation instant (`--at`) and the explicit decisions. The authority decisions are read by
 `authority.rs` as `canon-authority/1`, refused as the section "Authority decisions" below
 says. The instant is read by `freshness.rs` and refused as `invalid-instant` when it is not
-one. Explicit decisions are not read yet (story:decision-outcomes): given, they are refused as
-`unsupported-input`, naming them (`` `decisions` is not supported yet ``); `canon evaluate`
-has no option that supplies them.
+one. The explicit decisions are read by `decisions.rs` as `canon-decisions/1`, refused as the
+section "Explicit decisions" below says.
 
 Then the exclusion stages run, in pipeline order: revision binding, freshness, invalidation.
 Each may refuse the inputs it reads. Revision binding checks each record in the order given: a
@@ -78,9 +78,12 @@ compile` never produces, but a caller can build — is refused as `claim-cycle`,
 from the first one reached again: `claims test each other in a cycle: c -> d -> c`.
 
 Last, the `outcomes` section checks the case snapshot's `termination`: one naming an outcome
-the protocol does not declare is refused as `undeclared-outcome`, naming the outcome, and one
-naming a declared outcome that is blocked as `illegitimate-termination`, naming the outcome and
-its status (CANON-OUTCOME-001).
+the protocol does not declare is refused as `undeclared-outcome`, naming the outcome; then an
+explicit decision taken for an outcome the protocol does not declare is refused as
+`undeclared-outcome`, and one taken for a declared outcome that does not require a decision of
+its name as `undeclared-decision`, each naming the decision and the outcome; and a
+`termination` naming a declared outcome that is blocked as `illegitimate-termination`, naming
+the outcome and its status (CANON-OUTCOME-001).
 
 ## Depth
 
@@ -109,15 +112,15 @@ concept; this module holds only the order:
    `outcomes.rs`), then the explanation (`crate::explain`). Each section evaluates its
    predicates with the one evaluator claims use (`claims::predicate`): discharge predicates over
    the claim values, action preconditions and outcome requirements over the claim values and
-   the evidence left after step 3.
+   the evidence left after step 3. An outcome that requires an explicit decision is decided by
+   the explicit decisions instead.
 
 Revision binding excludes a record bound to another revision as `revision_mismatch`, and
 freshness a record older than its kind's `max_age` at the evaluation instant as `expired`,
 each listed as excluded under each claim that reaches its kind. The `obligations`, `actions`
-and `outcomes` sections are written as the next section says. Three parts are not built yet:
-the invalidation stage excludes nothing (story:invalidation-rules), explicit decisions are
-refused when given (story:decision-outcomes), and no decision carries an `explanation`
-(story:explanation).
+and `outcomes` sections are written as the next section says. Two parts are not built yet: the
+invalidation stage excludes nothing (story:invalidation-rules), and no decision carries an
+`explanation` (story:explanation).
 
 ## Sections
 
@@ -141,8 +144,13 @@ declares no obligation has no `obligations` key, and likewise for actions and ou
 - `outcomes` maps each declared outcome to `{"status": "legitimate"}` when its `requires`
   predicate is `true` over the claim values and the evidence left, and otherwise to
   `{"status": "blocked", "reasons": [...]}`, the reasons written as an action precondition's.
-  The case snapshot's `termination` is checked against it, as the refusals above say
-  (CANON-OUTCOME-001).
+  An outcome that requires an explicit decision (`requires: decision: <name>`) is
+  `legitimate` only when an explicit decision of that name, for that outcome, was taken at the
+  case snapshot's `revision`, and its entry then records who decided (design § 37):
+  `{"status": "legitimate", "decided_by": {"decision": <name>, "principals": [...]}}`, every
+  principal whose decision applied, sorted by Unicode code point; otherwise it is blocked with
+  the one reason `{"decision": <name>, "present": false}` (CANON-OUTCOME-002). The case snapshot's
+  `termination` is checked against it, as the refusals above say (CANON-OUTCOME-001).
 
 ## Authority decisions
 
@@ -153,3 +161,19 @@ caller decides and passes the decisions in. Refused, in this order: text that is
 list, or an entry with another key or another decision, as `malformed-input`; then, entry by
 entry, a capability that is not an identifier as `invalid-identifier`, and a capability decided
 a second time as `duplicate-identifier`.
+
+## Explicit decisions
+
+`--decisions` names a `canon-decisions/1` document: a YAML (or JSON) list of decisions, each
+naming the decision, the outcome it was taken for, the principal who took it and the case
+revision it was taken at, `- {decision: explicitly_inconclusive, outcome: inconclusive,
+principal: lead-investigator, case_revision: c2}`. An empty list decides nothing. Canon decides
+nothing and resolves no identity: the caller passes in the decisions that were taken. A
+decision applies only while its case revision is the case snapshot's `revision`: one taken at a
+superseded revision, or given for a snapshot without a revision, applies to nothing. Refused,
+in this order: text that is not such a list, or an entry with another key or a missing one, as
+`malformed-input`; then, entry by entry, a decision, outcome, principal or case revision that
+is not an identifier as `invalid-identifier`, and an entry that repeats an earlier one exactly as
+`duplicate-identifier`, naming it; then, in the `outcomes` section and at any case revision, a
+decision for an outcome the protocol does not declare as `undeclared-outcome`, and one for an
+outcome that does not require a decision of its name as `undeclared-decision`.

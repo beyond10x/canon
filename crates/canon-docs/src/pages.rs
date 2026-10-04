@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
-use b10x_canon::model::{Predicate, Protocol};
+use b10x_canon::model::{OutcomeRequirement, Predicate, Protocol};
 use b10x_canon::{eval, ir, model, validate};
 use clap::CommandFactory;
 
@@ -237,29 +237,42 @@ struct Document {
     format: &'static str,
     /// Where its JSON Schema goes, under `SCHEMA_DIR`, if Canon reads it.
     schema: Option<&'static str>,
+    /// The document is a list of `root` entries rather than one `root`, read by the named
+    /// `canon evaluate` option.
+    list: Option<&'static str>,
 }
 
 const PROTOCOL: Document = Document {
     root: "Protocol",
     format: "FORMAT",
     schema: Some("protocol-1.schema.json"),
+    list: None,
 };
 
-const EVALUATION_DOCUMENTS: [Document; 3] = [
+const EVALUATION_DOCUMENTS: [Document; 4] = [
     Document {
         root: "Case",
         format: "CASE_FORMAT",
         schema: Some("case-1.schema.json"),
+        list: None,
     },
     Document {
         root: "EvidenceRecord",
         format: "EVIDENCE_FORMAT",
         schema: Some("evidence-1.schema.json"),
+        list: None,
     },
     Document {
         root: "Decision",
         format: "DECISION_FORMAT",
         schema: None,
+        list: None,
+    },
+    Document {
+        root: "ExplicitDecision",
+        format: "DECISIONS_FORMAT",
+        schema: Some("decisions-1.schema.json"),
+        list: Some("--decisions"),
     },
 ];
 
@@ -340,10 +353,29 @@ struct WrittenKey {
     ty: Ty,
     doc: String,
     beside: Option<String>,
+    /// A variant written as its payload, with no key of its own: `key` is the variant's name and
+    /// `ty` the payload, itself a `try_from` enum whose keys this written form also has.
+    inline: bool,
+}
+
+/// The fields of the written struct of `ty`, when `ty` is a `try_from` enum.
+fn written_fields(model: &Model, ty: &Ty) -> Option<BTreeSet<String>> {
+    let Ty::Named(name) = ty else {
+        return None;
+    };
+    let Reading::TryFrom(written) = &model.get(name).ok()?.reading else {
+        return None;
+    };
+    let Shape::Struct(fields) = &model.get(written).ok()?.shape else {
+        return None;
+    };
+    Some(fields.iter().map(|field| field.name.clone()).collect())
 }
 
 /// The written form of a `try_from` enum: one key per variant, plus each modifier key, which
-/// belongs beside the variant whose payload struct has a field of that name.
+/// belongs beside the variant whose payload struct has a field of that name. A variant whose
+/// payload is itself a `try_from` enum may instead be written as that payload, with its keys: an
+/// outcome's `requires` is a predicate, or the key `decision`.
 fn written_keys(model: &Model, def: &TypeDef, written: &str) -> Result<Vec<WrittenKey>, String> {
     let Shape::Enum(variants) = &def.shape else {
         return Err(format!("{}: try_from is read only for enums", def.name));
@@ -351,6 +383,15 @@ fn written_keys(model: &Model, def: &TypeDef, written: &str) -> Result<Vec<Writt
     let Shape::Struct(fields) = &model.get(written)?.shape else {
         return Err(format!("{written} must be a struct"));
     };
+    let inline: Vec<(&source::Variant, BTreeSet<String>)> = variants
+        .iter()
+        .filter(|variant| {
+            !fields
+                .iter()
+                .any(|field| field.name == variant.name.to_lowercase())
+        })
+        .filter_map(|variant| Some((variant, written_fields(model, variant.payload.as_ref()?)?)))
+        .collect();
     let mut keys = Vec::new();
     for field in fields {
         if let Some(variant) = variants
@@ -362,7 +403,11 @@ fn written_keys(model: &Model, def: &TypeDef, written: &str) -> Result<Vec<Writt
                 ty: unwrap_option(&field.ty).clone(),
                 doc: variant.doc.clone(),
                 beside: None,
+                inline: false,
             });
+            continue;
+        }
+        if inline.iter().any(|(_, keys)| keys.contains(&field.name)) {
             continue;
         }
         let owner = variants.iter().find_map(|variant| {
@@ -397,6 +442,19 @@ fn written_keys(model: &Model, def: &TypeDef, written: &str) -> Result<Vec<Writt
                 .collect::<Vec<_>>()
                 .join(" "),
             beside: Some(beside),
+            inline: false,
+        });
+    }
+    for (variant, _) in &inline {
+        keys.push(WrittenKey {
+            key: variant.name.to_lowercase(),
+            ty: variant
+                .payload
+                .clone()
+                .expect("an inline variant has a payload"),
+            doc: variant.doc.clone(),
+            beside: None,
+            inline: true,
         });
     }
     for variant in variants {
@@ -558,6 +616,14 @@ fn type_sections(
                 let rows: Vec<Vec<String>> = written_keys(model, def, written)?
                     .iter()
                     .map(|key| {
+                        if key.inline {
+                            let meaning = format!(
+                                "Written as the {} itself, with its keys and no key of its own. {}",
+                                render_ty(&key.ty, links),
+                                cell(&key.doc)
+                            );
+                            return vec!["—".to_owned(), render_ty(&key.ty, links), meaning];
+                        }
                         let meaning = match &key.beside {
                             Some(beside) => {
                                 format!("Allowed only beside `{beside}`. {}", cell(&key.doc))
@@ -734,11 +800,13 @@ fn documents(model: &Model) -> Result<String, String> {
     let mut out = front_matter(
         "Evaluation documents",
         "Evaluation documents",
-        "The case snapshot and evidence records canon evaluate reads, and the decision it writes.",
+        "The case snapshot, evidence records and explicit decisions canon evaluate reads, and the \
+         decision it writes.",
     );
     out.push_str(&format!(
         "Generated from the model types in {}. `canon evaluate` reads a compiled protocol, one \
-         case snapshot and a set of evidence records, and writes a decision. Every key is listed; \
+         case snapshot, a set of evidence records and, optionally, a list of explicit decisions, \
+         and writes a decision. Every key is listed; \
          a key Canon does not know is refused.\n",
         source_link(source::MODEL_DIR),
     ));
@@ -747,12 +815,18 @@ fn documents(model: &Model) -> Result<String, String> {
         let format = model.format(document.format)?;
         let root = model.get(document.root)?;
         out.push_str(&format!("\n## `{format}`\n\n"));
-        match document.schema {
-            Some(file) => out.push_str(&format!(
+        match (document.schema, document.list) {
+            (Some(file), Some(option)) => out.push_str(&format!(
+                "Read by `canon evaluate {option}`: a list of `{}` entries; an empty list is \
+                 allowed, and an entry given twice is refused. The {} is generated from the same types.\n",
+                document.root,
+                schema_link(file)
+            )),
+            (Some(file), None) => out.push_str(&format!(
                 "Read by `canon evaluate`. The {} is generated from the same types.\n",
                 schema_link(file)
             )),
-            None => out.push_str("Written by `canon evaluate`.\n"),
+            (None, _) => out.push_str("Written by `canon evaluate`.\n"),
         }
         let rest: Vec<&TypeDef> = defs
             .iter()
@@ -899,6 +973,9 @@ fn schema(model: &Model, document: &Document) -> Result<Json, String> {
                     .iter()
                     .filter(|key| key.beside.is_none())
                     .map(|key| {
+                        if key.inline {
+                            return with_description(ty_schema(&key.ty), &key.doc);
+                        }
                         let mut properties = vec![(
                             key.key.clone(),
                             with_description(ty_schema(&key.ty), &key.doc),
@@ -948,7 +1025,8 @@ fn schema(model: &Model, document: &Document) -> Result<Json, String> {
         ));
     }
     let root = model.get(document.root)?;
-    Ok(obj([
+    let root_ref = json::str(format!("#/$defs/{}", document.root));
+    let Json::Obj(mut members) = obj([
         ("$comment", json::str(crate::md::MARKER)),
         (
             "$schema",
@@ -956,10 +1034,31 @@ fn schema(model: &Model, document: &Document) -> Result<Json, String> {
         ),
         ("$id", json::str(format!("{SITE}/schemas/{file}"))),
         ("title", json::str(model.format(document.format)?)),
-        ("description", json::str(plain(&resolve(&root.doc, model)))),
-        ("$ref", json::str(format!("#/$defs/{}", document.root))),
-        ("$defs", Json::Obj(defs)),
-    ]))
+        (
+            "description",
+            json::str(match document.list {
+                Some(_) => format!(
+                    "A list of `{}` entries. {}",
+                    document.root,
+                    plain(&resolve(&root.doc, model))
+                ),
+                None => plain(&resolve(&root.doc, model)),
+            }),
+        ),
+    ]) else {
+        unreachable!("obj builds an object");
+    };
+    // A list document is an array of root entries, none repeated (Canon refuses an entry given
+    // twice as `duplicate-identifier`); any other is one root.
+    if document.list.is_some() {
+        members.push(("type".to_owned(), json::str("array")));
+        members.push(("items".to_owned(), obj([("$ref", root_ref)])));
+        members.push(("uniqueItems".to_owned(), Json::Bool(true)));
+    } else {
+        members.push(("$ref".to_owned(), root_ref));
+    }
+    members.push(("$defs".to_owned(), Json::Obj(defs)));
+    Ok(Json::Obj(members))
 }
 
 /// Every JSON Schema, keyed by file name.
@@ -1171,7 +1270,12 @@ fn declarations(protocol: &Protocol) -> String {
             .map(|(id, outcome)| {
                 vec![
                     code(id.as_str()),
-                    words(&outcome.requires),
+                    match &outcome.requires {
+                        OutcomeRequirement::Predicate(requires) => words(requires),
+                        OutcomeRequirement::Decision(name) => {
+                            format!("the explicit decision {}", code(name.as_str()))
+                        }
+                    },
                     describe(&outcome.description),
                 ]
             })

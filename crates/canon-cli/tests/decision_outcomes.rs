@@ -2,8 +2,11 @@
 //! `canon conform run` over `fixtures/investigation/decision-outcomes.yaml`, with three
 //! expectations: `inconclusive` is `blocked` naming `explicitly_inconclusive` with no decision
 //! input; `legitimate` with a `canon-decisions/1` decision at the current case revision; `blocked`
-//! again when that decision names a superseded case revision. `canon evaluate --decisions` prints
-//! the same `outcomes` the scenario expects.
+//! again when that decision names a superseded case revision. A legitimate decided outcome records
+//! who decided (`decided_by`, adversary pass 1 finding F4), and a fourth step gives the right
+//! decision for another outcome, `supported`, which is refused as `undeclared-decision` (finding F5;
+//! both coordinator decisions). `canon evaluate --decisions` prints the same `outcomes`, or refuses
+//! with the same code, as the scenario expects.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -28,21 +31,55 @@ const ADDED: &str = "\n  inconclusive:\n    description: The investigation ends 
 const BLOCKED: &str = "\"inconclusive\": {\n      \"reasons\": [\n        {\n          \
                        \"decision\": \"explicitly_inconclusive\",\n          \"present\": false\n        \
                        }\n      ],\n      \"status\": \"blocked\"\n    }";
-/// `inconclusive` legitimate, with no reasons.
-const LEGITIMATE: &str = "\"inconclusive\": {\n      \"status\": \"legitimate\"\n    }";
+/// `inconclusive` legitimate, with no reasons, recording who decided.
+const LEGITIMATE: &str = "\"inconclusive\": {\n      \"decided_by\": {\n        \
+                          \"decision\": \"explicitly_inconclusive\",\n        \
+                          \"principals\": [\n          \"lead-investigator\"\n        ]\n      },\n      \
+                          \"status\": \"legitimate\"\n    }";
 
-/// The three steps the acceptance names, in order: id, the case snapshot's revision, and the
-/// `inconclusive` entry expected.
-const STEPS: [(&str, &str, &str); 3] = [
-    ("no-decision", "c2", BLOCKED),
-    ("decided-at-current-revision", "c2", LEGITIMATE),
-    ("decided-at-superseded-revision", "c3", BLOCKED),
+/// What a step expects: the `inconclusive` entry of a decision, or a refusal's code.
+#[derive(Clone, Copy)]
+enum Expected {
+    Entry(&'static str),
+    Refused(&'static str),
+}
+
+/// The steps, in order: id, the case snapshot's revision, the outcome the one explicit decision
+/// `explicitly_inconclusive` (taken at case revision `c2`) is given for, if any, and the
+/// expectation.
+const STEPS: [(&str, &str, Option<&str>, Expected); 4] = [
+    ("no-decision", "c2", None, Expected::Entry(BLOCKED)),
+    (
+        "decided-at-current-revision",
+        "c2",
+        Some("inconclusive"),
+        Expected::Entry(LEGITIMATE),
+    ),
+    (
+        "decided-at-superseded-revision",
+        "c3",
+        Some("inconclusive"),
+        Expected::Entry(BLOCKED),
+    ),
+    (
+        "decided-for-another-outcome",
+        "c2",
+        Some("supported"),
+        Expected::Refused("undeclared-decision"),
+    ),
 ];
 
-/// The one explicit decision steps two and three give, as a `canon-decisions/1` document: taken
-/// at case revision `c2`.
-const DECISIONS: &str = "- decision: explicitly_inconclusive\n  outcome: inconclusive\n  \
-                         principal: lead-investigator\n  case_revision: c2\n";
+/// One explicit decision as a step gives it: its decision, outcome and case revision.
+type Given<'a> = (Option<&'a str>, Option<&'a str>, Option<&'a str>);
+
+/// The one explicit decision a step gives, taken for `outcome` at case revision `c2`, as a
+/// `canon-decisions/1` document.
+fn decisions(outcome: &str) -> String {
+    format!(
+        "- decision: explicitly_inconclusive\n  outcome: {outcome}\n  principal: lead-investigator\n  \
+         case_revision: c2\n"
+    )
+}
 
 /// Read at run time, not compile time: a test binary reused from a shared build directory must
 /// still read this tree's scenarios and fixtures.
@@ -77,21 +114,15 @@ fn scenario() -> conform::Scenario {
         .unwrap_or_else(|error| panic!("{SCENARIO} does not parse: {error}"))
 }
 
-fn evaluate_step(step: &conform::Step) -> (&EvaluateInputs, &str) {
+fn evaluate_step(step: &conform::Step) -> (&EvaluateInputs, &EvaluateExpectation) {
     let StepKind::Evaluate { inputs, expected } = &step.kind else {
         panic!("{SCENARIO}: step `{}` is not an evaluate step", step.id);
     };
-    let EvaluateExpectation::Decision(decision) = expected else {
-        panic!(
-            "{SCENARIO}: step `{}` expects a refusal, not a decision",
-            step.id
-        );
-    };
-    (inputs, decision)
+    (inputs, expected)
 }
 
 #[test]
-fn the_scenario_holds_the_three_expectations_the_acceptance_names() {
+fn the_scenario_holds_the_expectations_the_acceptance_names() {
     let scenario = scenario();
     assert_eq!(scenario.id, SCENARIO_ID);
     assert_eq!(scenario.covers, [SCENARIO_ID]);
@@ -101,22 +132,48 @@ fn the_scenario_holds_the_three_expectations_the_acceptance_names() {
         STEPS.len(),
         "{SCENARIO}: one step per expectation"
     );
-    for (step, (id, revision, entry)) in scenario.steps.iter().zip(STEPS) {
+    for (step, (id, revision, decided_for, expected)) in scenario.steps.iter().zip(STEPS) {
         assert_eq!(step.id, id, "{SCENARIO}: step order");
-        let (inputs, decision) = evaluate_step(step);
+        let (inputs, written) = evaluate_step(step);
         assert_eq!(
             inputs.case["revision"].as_str(),
             Some(revision),
             "step `{id}`: the case snapshot's revision"
         );
+        let given: Option<Vec<Given>> = inputs.decisions.as_ref().map(|list| {
+            list.iter()
+                .map(|entry| {
+                    (
+                        entry["decision"].as_str(),
+                        entry["outcome"].as_str(),
+                        entry["case_revision"].as_str(),
+                    )
+                })
+                .collect()
+        });
+        assert_eq!(
+            given,
+            decided_for.map(|outcome| vec![(
+                Some("explicitly_inconclusive"),
+                Some(outcome),
+                Some("c2")
+            )]),
+            "step `{id}`: the explicit decisions given"
+        );
         assert!(
             inputs.evidence.is_empty(),
             "step `{id}`: no evidence, so only the decision can make `inconclusive` legitimate"
         );
-        assert!(
-            decision.contains(entry),
-            "step `{id}`: expected the `inconclusive` entry\n{entry}\nin\n{decision}"
-        );
+        match (expected, written) {
+            (Expected::Entry(entry), EvaluateExpectation::Decision(decision)) => assert!(
+                decision.contains(entry),
+                "step `{id}`: expected the `inconclusive` entry\n{entry}\nin\n{decision}"
+            ),
+            (Expected::Refused(code), EvaluateExpectation::Refusal(written)) => {
+                assert_eq!(written, code, "step `{id}`: the refusal expected");
+            }
+            (_, written) => panic!("step `{id}`: the scenario expects {written:?}"),
+        }
     }
 }
 
@@ -209,18 +266,30 @@ fn evaluate(step: &str, revision: &str, decisions: Option<&str>) -> Output {
 }
 
 /// `canon evaluate`, given the decisions each step gives, prints the `inconclusive` entry the step
-/// expects.
+/// expects, or refuses with the code it expects (exit 1, nothing on standard output).
 #[test]
 fn canon_evaluate_decisions_prints_the_outcome_each_step_expects() {
-    for (index, (id, revision, entry)) in STEPS.into_iter().enumerate() {
-        let decisions = (index > 0).then_some(DECISIONS);
-        let run = evaluate(id, revision, decisions);
-        assert_eq!(text(&run.stderr), "", "step `{id}`: canon evaluate stderr");
-        assert!(
-            text(&run.stdout).contains(entry),
-            "step `{id}`: expected the `inconclusive` entry\n{entry}\nin\n{}",
-            text(&run.stdout)
-        );
-        assert_eq!(run.status.code(), Some(0), "step `{id}`: exit");
+    for (id, revision, decided_for, expected) in STEPS {
+        let run = evaluate(id, revision, decided_for.map(decisions).as_deref());
+        match expected {
+            Expected::Entry(entry) => {
+                assert_eq!(text(&run.stderr), "", "step `{id}`: canon evaluate stderr");
+                assert!(
+                    text(&run.stdout).contains(entry),
+                    "step `{id}`: expected the `inconclusive` entry\n{entry}\nin\n{}",
+                    text(&run.stdout)
+                );
+                assert_eq!(run.status.code(), Some(0), "step `{id}`: exit");
+            }
+            Expected::Refused(code) => {
+                assert!(
+                    text(&run.stderr).starts_with(&format!("error[{code}]: ")),
+                    "step `{id}`: canon evaluate stderr {}",
+                    text(&run.stderr)
+                );
+                assert_eq!(text(&run.stdout), "", "step `{id}`: canon evaluate stdout");
+                assert_eq!(run.status.code(), Some(1), "step `{id}`: exit");
+            }
+        }
     }
 }

@@ -15,7 +15,8 @@
 //!   `max_age`: written, as authored, only when the kind declares one, so the IR of a protocol
 //!   that declares none is the IR it was before `max_age` existed.
 //! - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
-//!   it was written.
+//!   it was written. An outcome that requires an explicit decision has the requirement
+//!   `{"decision": <name>}`, as written; any other requirement is its predicate.
 //! - **Resolved references.** Only a document the validator accepts compiles, so every claim and
 //!   evidence kind the IR references is declared in it.
 //!
@@ -34,7 +35,8 @@ use std::collections::BTreeMap;
 
 use crate::model::{
     self, ActionId, Age, ArtifactId, CapabilityId, ClaimId, ClaimTest, EffectClass, EvidenceKindId,
-    EvidenceMatch, ObligationId, OutcomeId, Predicate, Protocol, ProtocolId, Truth,
+    EvidenceMatch, ObligationId, OutcomeId, OutcomeRequirement, Predicate, Protocol, ProtocolId,
+    Truth,
 };
 use crate::validate::{self, Problem};
 
@@ -107,7 +109,8 @@ pub struct Action {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Outcome {
     pub description: Option<String>,
-    pub requires: Predicate,
+    /// A predicate, normalized like every predicate, or the explicit decision the outcome requires.
+    pub requires: OutcomeRequirement,
 }
 
 /// Compiles a `protocol/1` document into `canon-ir/1`. A document the validator rejects does not
@@ -163,7 +166,12 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
         }),
         outcomes: keyed(&protocol.outcomes, |outcome| Outcome {
             description: outcome.description.clone(),
-            requires: normalize(&outcome.requires),
+            requires: match &outcome.requires {
+                OutcomeRequirement::Predicate(predicate) => {
+                    OutcomeRequirement::Predicate(normalize(predicate))
+                }
+                OutcomeRequirement::Decision(name) => OutcomeRequirement::Decision(name.clone()),
+            },
         }),
     })
 }
@@ -371,7 +379,7 @@ impl Ir {
                 section(&self.outcomes, |outcome| {
                     Value::object([
                         ("description", description(&outcome.description)),
-                        ("requires", predicate_value(&outcome.requires)),
+                        ("requires", requirement_value(&outcome.requires)),
                     ])
                 }),
             ),
@@ -381,6 +389,16 @@ impl Ir {
 
 fn description(text: &Option<String>) -> Value {
     Value::optional(text.as_deref())
+}
+
+/// A predicate requirement as its predicate; a decision requirement as `{"decision": <name>}`.
+fn requirement_value(requirement: &OutcomeRequirement) -> Value {
+    match requirement {
+        OutcomeRequirement::Predicate(predicate) => predicate_value(predicate),
+        OutcomeRequirement::Decision(name) => {
+            Value::object([("decision", Value::string(name.as_str()))])
+        }
+    }
 }
 
 fn predicate_value(predicate: &Predicate) -> Value {
@@ -581,6 +599,20 @@ mod tests {
         let problems = compile(&protocol).expect_err("refused");
         assert_eq!(problems.len(), 1);
         assert_eq!(problems[0].code(), "undeclared-claim");
+    }
+
+    /// An outcome that requires an explicit decision compiles to `{"decision": <name>}`.
+    #[test]
+    fn a_decision_requirement_compiles_to_its_name() {
+        let compiled = ir(&format!(
+            "{HEADER}outcomes:\n  inconclusive: {{requires: {{decision: explicitly_inconclusive}}}}\n"
+        ));
+        assert!(
+            compiled.contains(
+                "  \"outcomes\": {\n    \"inconclusive\": {\n      \"description\": null,\n      \"requires\": {\n        \"decision\": \"explicitly_inconclusive\"\n      }\n    }\n  },\n"
+            ),
+            "{compiled}"
+        );
     }
 
     /// A maximum age is written as authored, and only on the kind that declares one.

@@ -107,21 +107,23 @@ impl Predicate {
     }
 }
 
+/// A predicate as written: each form a key, at most one of them present. `requirement.rs` reads an
+/// outcome's requirement through it too.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct WrittenPredicate {
+pub(crate) struct WrittenPredicate {
     #[serde(default, deserialize_with = "super::present::optional")]
-    all: Option<Vec<Predicate>>,
+    pub(crate) all: Option<Vec<Predicate>>,
     #[serde(default, deserialize_with = "super::present::optional")]
-    any: Option<Vec<Predicate>>,
+    pub(crate) any: Option<Vec<Predicate>>,
     #[serde(default, deserialize_with = "super::present::optional")]
-    not: Option<Box<Predicate>>,
+    pub(crate) not: Option<Box<Predicate>>,
     #[serde(default, deserialize_with = "super::present::optional")]
-    evidence: Option<EvidenceMatch>,
+    pub(crate) evidence: Option<EvidenceMatch>,
     #[serde(default, deserialize_with = "super::present::optional")]
-    claim: Option<ClaimId>,
+    pub(crate) claim: Option<ClaimId>,
     #[serde(default, deserialize_with = "super::present::optional")]
-    is: Option<Truth>,
+    pub(crate) is: Option<Truth>,
 }
 
 impl TryFrom<WrittenPredicate> for Predicate {

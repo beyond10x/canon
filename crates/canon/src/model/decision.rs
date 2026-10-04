@@ -32,7 +32,10 @@ pub struct Decision {
     /// fixed by CANON-AUTHORITY-001.
     pub actions: Option<Json>,
     /// Each declared outcome, `legitimate` or `blocked`, with the reasons it is blocked; written
-    /// when the protocol declares an outcome. Its shape is fixed by CANON-OUTCOME-001.
+    /// when the protocol declares an outcome. Its shape is fixed by CANON-OUTCOME-001 and, for an
+    /// outcome that requires an explicit decision, by CANON-OUTCOME-002: a legitimate one records
+    /// `decided_by` (`{"decision": <name>, "principals": [...]}`), and a blocked one gives the
+    /// reason `{"decision": <name>, "present": false}`.
     pub outcomes: Option<Json>,
     /// The structured explanation; not written yet (story:explanation).
     pub explanation: Option<Json>,
