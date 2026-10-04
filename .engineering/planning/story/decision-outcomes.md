@@ -9,16 +9,22 @@ refs:
   reference: C-007
 relations:
 - decomposes: epic:canon-kernel
-- depends_on: story:invalidation-rules
 - depends_on: story:conformance-runner
 - serves: vision:O2
 - serves: vision:governed-autonomy
 - depends_on: story:ess-hard-gate
+- depends_on: story:outcomes
+- depends_on: story:evaluator-skeleton
+- depends_on: story:evidence-freshness
 scope:
 - confidence: cited
-  path: conformance/scenarios/
+  path: conformance/scenarios/decision-outcomes.yaml
 - confidence: cited
-  path: crates/canon/src/eval/
+  path: crates/canon-cli/src/evaluate.rs
+- confidence: cited
+  path: crates/canon/src/eval/decisions.rs
+- confidence: cited
+  path: crates/canon/src/eval/outcomes.rs
 - confidence: cited
   path: crates/canon/src/ir/
 - confidence: cited
@@ -29,7 +35,7 @@ scope:
   path: ess/
 - confidence: cited
   path: fixtures/investigation/decision-outcomes.yaml
-revision: 10
+revision: 12
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 8}
 ---
@@ -47,10 +53,35 @@ Completes the decision half of TASKBOARD C-007.
 `canon-decision/1` `outcomes` entries report a decision-based outcome as `legitimate` only with a
 matching decision for the current case revision, and as `blocked` naming the missing decision otherwise.
 
-## Shared surface
+## Shared surface and order (re-plan 2026-10-04)
 
-`crates/canon/src/{model,validate,ir,eval}/` and `canon-decision/1`; ordered after
-story:invalidation-rules in the evaluator chain.
+story:evaluator-skeleton lands `eval/decisions.rs` and passes a decisions input through the
+pipeline unparsed, so this story does not touch `eval/mod.rs` or `canon-decision/1`. It parses
+`canon-decisions/1` in `decisions.rs`, extends outcome evaluation in `eval/outcomes.rs`, and adds
+the `canon evaluate` flag that reads the decisions file in `crates/canon-cli/src/evaluate.rs` (its
+name is this story's; the skeleton could not land it). The shape of `requires: decision:` and of
+`canon-decisions/1` is not settled anywhere the skeleton could read it, so this story still changes
+`model/`, `validate/`, `ir/` and `ess/`, which story:evidence-freshness and
+story:invalidation-rules change too. It runs between them, before story:invalidation-rules,
+because story:explanation needs it and does not need story:invalidation-rules.
+
+- Kept: depends_on story:conformance-runner (its acceptance is a scenario), story:ess-hard-gate
+  (`ess/`).
+- Added: depends_on story:outcomes (it extends that story's outcome evaluation and its `outcomes`
+  entries; was transitive through the chain before), story:evaluator-skeleton (file, input hook),
+  story:evidence-freshness (shared `model/`, `validate/`, `ir/`, `ess/`: ordering only, because
+  those files are not split).
+- Removed: depends_on story:invalidation-rules (ordering only; the order of the two is reversed,
+  see above).
+
+## Scope
+
+- Surfaces: `crates/canon/src/model/`, `crates/canon/src/validate/`, `crates/canon/src/ir/`,
+  `ess/`, `crates/canon/src/eval/decisions.rs`, `crates/canon/src/eval/outcomes.rs`,
+  `crates/canon-cli/src/evaluate.rs`, `fixtures/investigation/decision-outcomes.yaml`,
+  `conformance/scenarios/decision-outcomes.yaml` (the earlier scope named the whole
+  `conformance/scenarios/` directory; this story writes one file in it, and the earlier scope
+  omitted the CLI flag the new input needs).
 
 ## ESS
 
@@ -58,6 +89,16 @@ This story changes the `protocol/1` source model (`requires: decision:`) and add
 story. Every new declaration cites the file and line it was read from, and `task ess-gate` stays
 green with no `UNMAPPED:` (Atlas ADR 0076). `ess_gate` does not compare `ess/` with the Rust
 model, so the review of this story is what checks that the two agree.
+
+## ESS first
+
+- Specification change, first commit: the decision requirement on `canon.protocol.Outcome`
+  (`requires: decision: <name>`) in `ess/domains/protocol.yaml` and the `canon-decisions/1`
+  declaration in `ess/`; with them, the scenario file `conformance/scenarios/decision-outcomes.yaml`
+  and its fixture.
+- Red on that commit: `ess_model_matches` fails naming the outcome requirement, because the Rust
+  model does not have the decision variant; and scenario `CANON-OUTCOME-002` fails, because the
+  fixture's `requires: decision:` does not parse.
 
 ## Acceptance
 

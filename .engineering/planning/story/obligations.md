@@ -11,26 +11,17 @@ relations:
 - decomposes: epic:canon-kernel
 - depends_on: story:three-valued-claims
 - depends_on: story:conformance-runner
-- depends_on: story:evidence-revision-binding
 - serves: vision:O2
 - serves: vision:governed-autonomy
-- depends_on: story:ess-hard-gate
+- depends_on: story:evaluator-skeleton
 scope:
 - confidence: cited
   path: conformance/scenarios/obligations.yaml
 - confidence: cited
-  path: crates/canon/src/eval/
-- confidence: cited
-  path: crates/canon/src/ir/
-- confidence: cited
-  path: crates/canon/src/model/
-- confidence: cited
-  path: crates/canon/src/validate/
-- confidence: cited
-  path: ess/
+  path: crates/canon/src/eval/obligations.rs
 - confidence: cited
   path: fixtures/investigation/obligations.yaml
-revision: 6
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:51Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":3}}}
 ---
@@ -43,30 +34,35 @@ positive requirement). Whether an obligation is discharged by a claim being deci
 true is the protocol author’s choice, expressed through the claim-value tests of the predicate
 language; Canon does not fix it.
 
-This story adds the discharge predicate field (`discharged_when`) to the obligation construct in
-the source model, the validator (its references resolve) and `canon-ir/1`; story:protocol-source-model
-declares obligations without it.
+The discharge predicate field (`discharged_when`) is added to the obligation construct in the
+source model, the validator (its references resolve), `canon-ir/1` and `ess/` by
+story:evaluator-skeleton (re-plan 2026-10-04: moved there so this story no longer shares `model/`,
+`validate/`, `ir/` and `ess/` with the stories that change the source model). This story evaluates
+it.
 
 ## Extends (operator decision 2026-10-04)
 
 Adds the `obligations` section (each obligation's id and status) to `canon-decision/1`, which
-story:three-valued-claims defines.
+story:three-valued-claims defines. The slot is story:evaluator-skeleton's; this story fills it.
 
-## Shared surface and order (operator decision 2026-10-04)
+## Shared surface and order (re-plan 2026-10-04)
 
-`crates/canon/src/eval/` and `canon-decision/1` are shared by the evaluator chain three-valued-claims
-→ evidence-revision-binding → obligations → action-admissibility → outcomes → evidence-freshness →
-explanation. This story depends_on story:evidence-revision-binding for that reason and runs after
-it. It also edits `model/`, `validate/` and `ir/`, which story:evidence-freshness edits later in the
-same chain.
+The evaluator chain of the earlier plan is gone: this story owns `crates/canon/src/eval/obligations.rs`
+and runs beside story:evidence-revision-binding, story:action-admissibility, story:outcomes and
+story:evidence-freshness.
+
+- Kept: depends_on story:three-valued-claims (it evaluates the discharge predicate over that
+  story's claim values), story:conformance-runner (its acceptance is a scenario),
+  story:evaluator-skeleton (`discharged_when`, its file and slot).
+- Removed: depends_on story:evidence-revision-binding (ordering only, on the shared `eval/`
+  directory, now split); depends_on story:ess-hard-gate (this story no longer edits `ess/`).
 
 ## Scope
 
 - Fixture (operator decision 2026-10-04): the variant `fixtures/investigation/obligations.yaml` is
   the base plus one obligation, `establish.explanation`, discharged when `explanation.supported` is
   `TRUE`. The base is not edited.
-- Surfaces: `crates/canon/src/model/`, `crates/canon/src/validate/`, `crates/canon/src/ir/`,
-  `crates/canon/src/eval/`, `fixtures/investigation/obligations.yaml`,
+- Surfaces: `crates/canon/src/eval/obligations.rs`, `fixtures/investigation/obligations.yaml`,
   `conformance/scenarios/obligations.yaml`.
 
 ## Domain relations
@@ -76,12 +72,13 @@ same chain.
   `docs/contracts/protocol-core.md`; the discharge rule follows design § 8. Not an ess/1 document:
   Canon opts out of ESS for language semantics (AGENTS.md § ESS, Atlas ADR 0067).
 
-## ESS
+## ESS first
 
-This story changes the `protocol/1` source model: it adds `discharged_when` to the obligation. It updates `ess/` (domain `canon.protocol`, set up by story:ess-hard-gate) in this same
-story. Every new declaration cites the file and line it was read from, and `task ess-gate` stays
-green with no `UNMAPPED:` (Atlas ADR 0076). `ess_gate` does not compare `ess/` with the Rust
-model, so the review of this story is what checks that the two agree.
+- Specification change: none in `ess/` here; this story relies on story:evaluator-skeleton's
+  `canon.protocol.Obligation.discharged_when`. The first commit is Canon's semantic specification
+  for this story: the scenario file `conformance/scenarios/obligations.yaml` and its fixture.
+- Red on that commit: scenario `CANON-OBLIGATION-001` fails under `canon conform run`, because the
+  skeleton's obligations stub emits no `obligations` section.
 
 ## Acceptance
 

@@ -27,10 +27,10 @@ scope:
 - confidence: cited
   path: conformance/requirements.yaml
 - confidence: cited
-  path: crates/canon-cli/
+  path: crates/canon-cli/src/conform.rs
 - confidence: cited
   path: crates/canon/src/conform/
-revision: 6
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":5}}}
 ---
@@ -50,9 +50,14 @@ naming it. `task check` runs it with the flag.
 
 The coverage and permutation checks are additive: they apply only when `--requirements <file>` is
 given. Without the flag, `canon conform run` behaves exactly as story:conformance-runner defines it,
-so that story's acceptance is unaffected by this one. The flag lives in `crates/canon-cli`, which is
-why this story's surfaces include it and why story:semantic-diff, which also changes
-`crates/canon-cli`, depends_on this story.
+so that story's acceptance is unaffected by this one. The flag lives in
+`crates/canon-cli/src/conform.rs`, the file story:evaluator-skeleton splits out of `main.rs`.
+
+## Order (re-plan 2026-10-04)
+
+story:semantic-diff no longer depends on this story: it owns `crates/canon-cli/src/diff.rs`, this
+story owns `crates/canon-cli/src/conform.rs`, and the two run in one wave. Every depends_on below
+is kept: each names a story whose requirement the catalogue covers.
 
 ## Operator decision (2026-10-04)
 
@@ -72,8 +77,18 @@ story:conformance-runner.
   catalogue lists them as not yet implemented rather than omitting them.
 - Out: the scenario format and runner (story:conformance-runner); `canon conform synthesize`
   (design § 29).
-- Surfaces: `crates/canon/src/conform/`, `crates/canon-cli/`, `conformance/requirements.yaml`,
-  `Taskfile.yml`.
+- Surfaces: `crates/canon/src/conform/`, `crates/canon-cli/src/conform.rs`,
+  `conformance/requirements.yaml`, `Taskfile.yml`.
+
+## ESS first
+
+- Specification change: none in `ess/` (the `--requirements` flag is part of the command surface
+  story:ess-command-surface declares). The specification this story starts from is the catalogue:
+  the first commit adds `conformance/requirements.yaml`, the two fixture inputs the named test reads
+  (a catalogue with an uncovered implemented requirement; a scenario whose output differs under
+  permuted input) and the test itself.
+- Red on that commit: `conform_run_checks_requirements` fails, because `canon conform run` has no
+  `--requirements` flag.
 
 ## Acceptance
 

@@ -46,6 +46,12 @@ itself (beyond10x/ess `epic:typed-open-questions`).
 The meaning of a protocol stays in Canon's own conformance suite, not in ESS (Atlas ADR 0067 as
 amended by ADR 0076).
 
+Spec first, then red, then implement (Atlas ADR 0080, draft): a unit's first commit changes only
+the specification (`ess/`, and Canon's own scenario and fixture for the meaning it adds); a named
+test fails on that commit and the failing run is recorded; later commits make it pass without
+changing the specification. Only a change with no behaviour change is exempt, and its story says
+so. Each story's `## ESS first` section names the change and the red test.
+
 The Rust model in `crates/canon/src/model/` is hand-written. `crates/canon/tests/ess_model_matches.rs`
 fails, naming the difference, when its fields, field types or variants differ from `ess/`, so a story
 that changes the model updates `ess/` in the same change. Each declaration in `ess/` carries a

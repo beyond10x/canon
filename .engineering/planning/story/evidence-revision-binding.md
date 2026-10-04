@@ -13,14 +13,15 @@ relations:
 - depends_on: story:conformance-runner
 - serves: vision:O2
 - serves: vision:governed-autonomy
+- depends_on: story:evaluator-skeleton
 scope:
 - confidence: cited
   path: conformance/scenarios/evidence-revision-binding.yaml
 - confidence: cited
-  path: crates/canon/src/eval/
+  path: crates/canon/src/eval/binding.rs
 - confidence: cited
   path: fixtures/investigation/evidence-revision-binding.yaml
-revision: 5
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":2}}}
 ---
@@ -43,11 +44,18 @@ This story extends the shapes story:three-valued-claims defines and introduces n
   id and its reason, here `revision_mismatch`. story:evidence-freshness adds the reason `expired`
   to the same list, and story:explanation traces it.
 
-## Shared surface and order (operator decision 2026-10-04)
+## Shared surface and order (re-plan 2026-10-04)
 
-`crates/canon/src/eval/` and `canon-decision/1` are shared by the evaluator chain three-valued-claims
-→ evidence-revision-binding → obligations → action-admissibility → outcomes → evidence-freshness →
-explanation. This story depends_on story:three-valued-claims for that reason and runs after it.
+The evaluator chain of the earlier plan is gone: story:evaluator-skeleton splits
+`crates/canon/src/eval/` into one file per concept and lands the `excluded_evidence` slot in each
+`claims` entry with its three reasons. This story owns `eval/binding.rs`, the revision-binding
+exclusion stage, and runs beside story:obligations, story:action-admissibility, story:outcomes and
+story:evidence-freshness.
+
+- Kept: depends_on story:three-valued-claims (it binds the evidence and case shapes that story
+  defines and changes which evidence the claim evaluation sees), story:conformance-runner (its
+  acceptance is a scenario), story:evaluator-skeleton (its file, stage hook and slot).
+- Not an edge any more: nothing orders it against the other evaluator stories.
 
 ## Scope
 
@@ -58,8 +66,19 @@ explanation. This story depends_on story:three-valued-claims for that reason and
 - Fixture: `fixtures/investigation/evidence-revision-binding.yaml`, a copy of the base (the base
   already declares the explanation artifact); it exists so this story's scenario names a fixture no
   other story edits.
-- Surfaces: `crates/canon/src/eval/`, `fixtures/investigation/evidence-revision-binding.yaml`,
+- Surfaces: `crates/canon/src/eval/binding.rs`,
+  `fixtures/investigation/evidence-revision-binding.yaml`,
   `conformance/scenarios/evidence-revision-binding.yaml`.
+
+## ESS first
+
+- Specification change: none in `ess/`. The subject fields already exist (story:three-valued-claims)
+  and the `excluded_evidence` slot and its reasons are story:evaluator-skeleton's. The first commit
+  is Canon's semantic specification for this story: the scenario file
+  `conformance/scenarios/evidence-revision-binding.yaml` and its fixture.
+- Red on that commit: scenario `CANON-EVIDENCE-001` fails under `canon conform run`, because the
+  skeleton's binding stage excludes nothing: the claim stays `TRUE` after the case snapshot advances
+  the artifact, and an evidence record naming an undeclared subject is not refused.
 
 ## Domain relations
 

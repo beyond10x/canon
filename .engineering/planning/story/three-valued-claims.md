@@ -24,10 +24,12 @@ scope:
 - confidence: cited
   path: crates/canon/src/eval/
 - confidence: cited
+  path: crates/canon/tests/ess_model_matches.rs
+- confidence: cited
   path: ess/
 - confidence: cited
   path: fixtures/investigation/three-valued-claims.yaml
-revision: 6
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:51Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":1}}}
 ---
@@ -64,12 +66,16 @@ Extended later by: story:evidence-revision-binding (revision binding), story:obl
 story:outcomes (`outcomes`, case termination field), story:evidence-freshness (`max_age`, the
 evaluation instant input), story:explanation (`explanation`).
 
-## Shared surface and order (operator decision 2026-10-04)
+## Shared surface and order (re-plan 2026-10-04)
 
-`crates/canon/src/eval/` and `canon-decision/1` are shared by the evaluator chain three-valued-claims
-→ evidence-revision-binding → obligations → action-admissibility → outcomes → evidence-freshness →
-explanation. Each story depends_on the one before it and runs after it, not beside it. This story is
-the first link. It also wires evaluate steps into `canon conform run` (story:conformance-runner).
+This story is the base every evaluator story evaluates on. It owns `crates/canon/src/eval/` while
+it runs and may lay it out as it likes; story:evaluator-skeleton, which runs next, splits it into
+one file per concept and lands the shared slots, so the later evaluator stories run side by side
+rather than in a chain. It also wires evaluate steps into `canon conform run`
+(story:conformance-runner), on which it depends.
+
+So that later stories do not change this story's results, its scenario's evidence names declared
+artifacts at their current revision.
 
 ## Scope
 
@@ -77,8 +83,11 @@ the first link. It also wires evaluate steps into `canon conform run` (story:con
   `fixtures/investigation/three-valued-claims.yaml` (a copy of the base: this story needs no
   protocol change; the file exists so its scenario names a fixture no other story edits), the
   scenario file `conformance/scenarios/three-valued-claims.yaml`.
-- Surfaces: `crates/canon/src/eval/`, `crates/canon/src/conform/`, `crates/canon-cli/`,
-  `fixtures/investigation/three-valued-claims.yaml`, `conformance/scenarios/three-valued-claims.yaml`.
+- `crates/canon/tests/ess_model_matches.rs` (added in the re-plan): it asserts the specification
+  declares exactly one entity, `Protocol`, so declaring the Case entity changes it.
+- Surfaces: `crates/canon/src/eval/`, `crates/canon/src/conform/`, `crates/canon-cli/`, `ess/`,
+  `crates/canon/tests/ess_model_matches.rs`, `fixtures/investigation/three-valued-claims.yaml`,
+  `conformance/scenarios/three-valued-claims.yaml`.
 
 ## Domain relations
 
@@ -93,6 +102,16 @@ This story defines the input shapes `canon-case/1` and `canon-evidence/1`, and t
 story. Every new declaration cites the file and line it was read from, and `task ess-gate` stays
 green with no `UNMAPPED:` (Atlas ADR 0076). `ess_gate` does not compare `ess/` with the Rust
 model, so the review of this story is what checks that the two agree.
+
+## ESS first
+
+- Specification change, first commit: the `canon-case/1` (Case entity and its relation to
+  Protocol), `canon-evidence/1` and `canon-decision/1` declarations in `ess/`, together with
+  Canon's own semantic specification for this story, the scenario file
+  `conformance/scenarios/three-valued-claims.yaml` and its fixture.
+- Red on that commit: `ess_model_matches` fails, because it asserts exactly one entity and the
+  specification now declares two; and scenario `CANON-CLAIM-001` fails under `canon conform run`,
+  because the runner refuses evaluate steps until this story wires `canon evaluate`.
 
 ## Acceptance
 

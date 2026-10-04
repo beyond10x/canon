@@ -17,7 +17,7 @@ scope:
   path: crates/canon-cli/
 - confidence: cited
   path: crates/canon/src/conform/
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":2}}}
 ---
@@ -54,6 +54,22 @@ nothing this story's acceptance checks changes when it lands.
 - Out: the requirement catalogue, coverage check and rerun/permutation determinism check
   (story:conformance-suite); `canon conform synthesize` (design § 29).
 - Surfaces: `crates/canon/src/conform/`, `crates/canon-cli/`.
+
+## Order (re-plan 2026-10-04)
+
+Unchanged by the re-plan: it runs alone, next. story:evaluator-skeleton later changes the
+comparison of evaluate steps to section by section, which this story's acceptance (compile steps
+only) does not observe.
+
+## ESS first
+
+- Specification change: none in `ess/`. `canon conform run` is a command, and the canon command
+  surface is declared in `ess/` by story:ess-command-surface, not here. The specification this
+  story starts from is its own scenario format: the first commit adds the two scenario directories
+  the named test reads (one passing compile scenario; a differing one and an unparseable file) and
+  the test itself.
+- Red on that commit: `conform_run_reports_each_scenario` fails, because `canon conform run` does
+  not exist.
 
 ## Acceptance
 

@@ -11,19 +11,19 @@ relations:
 - decomposes: epic:canon-kernel
 - depends_on: story:three-valued-claims
 - depends_on: story:conformance-runner
-- depends_on: story:obligations
 - serves: vision:O2
 - serves: vision:governed-autonomy
+- depends_on: story:evaluator-skeleton
 scope:
 - confidence: cited
   path: conformance/scenarios/action-admissibility.yaml
 - confidence: cited
-  path: crates/canon-cli/
+  path: crates/canon/src/eval/actions.rs
 - confidence: cited
-  path: crates/canon/src/eval/
+  path: crates/canon/src/eval/authority.rs
 - confidence: cited
   path: fixtures/investigation/action-admissibility.yaml
-revision: 4
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":2}}}
 ---
@@ -45,11 +45,19 @@ authority decisions are input (design § 33).
 - `canon-decision/1`, defined by story:three-valued-claims, gains the `actions` section: each
   action's id, status and reasons.
 
-## Shared surface and order (operator decision 2026-10-04)
+## Shared surface and order (re-plan 2026-10-04)
 
-`crates/canon/src/eval/` and `canon-decision/1` are shared by the evaluator chain three-valued-claims
-→ evidence-revision-binding → obligations → action-admissibility → outcomes → evidence-freshness →
-explanation. This story depends_on story:obligations for that reason and runs after it.
+The evaluator chain of the earlier plan is gone. story:evaluator-skeleton lands the `--authority`
+flag (read and passed through unparsed), the `actions` slot and the files `eval/actions.rs` and
+`eval/authority.rs`. This story parses `canon-authority/1` in `authority.rs`, evaluates actions in
+`actions.rs`, and runs beside story:evidence-revision-binding, story:obligations, story:outcomes
+and story:evidence-freshness.
+
+- Kept: depends_on story:three-valued-claims (preconditions are evaluated over its claim values),
+  story:conformance-runner (its acceptance is a scenario), story:evaluator-skeleton (flag, files,
+  slot).
+- Removed: depends_on story:obligations (ordering only, on the shared `eval/` directory and
+  `crates/canon-cli/`, now split).
 
 ## Scope
 
@@ -58,8 +66,18 @@ explanation. This story depends_on story:obligations for that reason and runs af
   `TRUE` and which requires the capability `finding.publish`. The base fixture has neither
   preconditions nor capability requirements; it is not edited.
 - Out: frontier calculation (`canon frontier`, design § 41 item 10), which the epic does not promise.
-- Surfaces: `crates/canon/src/eval/`, `crates/canon-cli/`,
+- Surfaces: `crates/canon/src/eval/actions.rs`, `crates/canon/src/eval/authority.rs`,
   `fixtures/investigation/action-admissibility.yaml`, `conformance/scenarios/action-admissibility.yaml`.
+
+## ESS first
+
+- Specification change: none in `ess/`. `canon-authority/1` and the `actions` section are not
+  declared in `ess/` by this story or any other (the earlier plan did not give them an ESS owner
+  either, and the shape of an action's reasons is not settled enough to declare up front). The
+  first commit is Canon's semantic specification for this story: the scenario file
+  `conformance/scenarios/action-admissibility.yaml` and its fixture.
+- Red on that commit: scenario `CANON-AUTHORITY-001` fails under `canon conform run`, because the
+  skeleton refuses `--authority` as unsupported and emits no `actions` section.
 
 ## Domain relations
 

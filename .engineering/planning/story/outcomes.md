@@ -11,17 +11,17 @@ relations:
 - decomposes: epic:canon-kernel
 - depends_on: story:three-valued-claims
 - depends_on: story:conformance-runner
-- depends_on: story:action-admissibility
 - serves: vision:O2
 - serves: vision:governed-autonomy
+- depends_on: story:evaluator-skeleton
 scope:
 - confidence: cited
   path: conformance/scenarios/outcomes.yaml
 - confidence: cited
-  path: crates/canon/src/eval/
+  path: crates/canon/src/eval/outcomes.rs
 - confidence: cited
   path: fixtures/investigation/outcomes.yaml
-revision: 4
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:51Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":1}}}
 ---
@@ -39,21 +39,41 @@ not declare is refused, naming that outcome (CANON-OUTCOME-001).
   the case terminated through, absent while the case is open.
 - `canon-decision/1` gains the `outcomes` section: each outcome's id, status and reasons.
 
-## Shared surface and order (operator decision 2026-10-04)
+## Shared surface and order (re-plan 2026-10-04)
 
-`crates/canon/src/eval/` and `canon-decision/1` are shared by the evaluator chain three-valued-claims
-→ evidence-revision-binding → obligations → action-admissibility → outcomes → evidence-freshness →
-explanation. This story depends_on story:action-admissibility for that reason and runs after it.
+The evaluator chain of the earlier plan is gone. story:evaluator-skeleton lands the `termination`
+field of `canon-case/1` (and its ESS declaration), the `outcomes` slot and the file
+`eval/outcomes.rs`. This story evaluates outcomes and refuses an undeclared termination in that
+file, and runs beside story:evidence-revision-binding, story:obligations,
+story:action-admissibility and story:evidence-freshness.
+
+- Kept: depends_on story:three-valued-claims (outcome requirements are evaluated over its claim
+  values), story:conformance-runner (its acceptance is a scenario), story:evaluator-skeleton (field,
+  file, slot).
+- Removed: depends_on story:action-admissibility (ordering only, on the shared `eval/` directory,
+  now split).
 
 ## Scope
 
 - Out: outcomes whose requirement is an explicit decision rather than a claim, such as the
-  `inconclusive` outcome of the design § 12 example (`requires: decision: explicitly_inconclusive`).
-  What supplies such a decision is undecided; see `decision-blocker:outcome-decision-source`.
+  `inconclusive` outcome of the design § 12 example (`requires: decision: explicitly_inconclusive`);
+  story:decision-outcomes builds them on top of this story (decision-blocker:outcome-decision-source,
+  cleared 2026-10-04).
 - Fixture: `fixtures/investigation/outcomes.yaml`, a copy of the base (which declares the
   `supported` outcome); it exists so this story's scenario names a fixture no other story edits.
-- Surfaces: `crates/canon/src/eval/`, `fixtures/investigation/outcomes.yaml`,
+- Surfaces: `crates/canon/src/eval/outcomes.rs`, `fixtures/investigation/outcomes.yaml`,
   `conformance/scenarios/outcomes.yaml`.
+
+## ESS first
+
+- Specification change: none in `ess/` here; this story relies on story:evaluator-skeleton's
+  `termination` on the case snapshot. The `outcomes` section is not declared in `ess/` (no story
+  owned it in the earlier plan, and the shape of its reasons is not settled enough to declare up
+  front). The first commit is Canon's semantic specification for this story: the scenario file
+  `conformance/scenarios/outcomes.yaml` and its fixture.
+- Red on that commit: scenario `CANON-OUTCOME-001` fails under `canon conform run`, because the
+  skeleton's outcomes stub emits no `outcomes` section and accepts a termination through
+  `abandoned`.
 
 ## Domain relations
 

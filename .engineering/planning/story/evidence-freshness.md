@@ -9,19 +9,19 @@ refs:
   reference: C-008
 relations:
 - decomposes: epic:canon-kernel
-- depends_on: story:evidence-revision-binding
 - depends_on: story:conformance-runner
-- depends_on: story:outcomes
 - serves: vision:O2
 - serves: vision:governed-autonomy
 - depends_on: story:ess-hard-gate
+- depends_on: story:three-valued-claims
+- depends_on: story:evaluator-skeleton
 scope:
 - confidence: cited
   path: conformance/scenarios/evidence-freshness.yaml
 - confidence: cited
-  path: crates/canon-cli/
+  path: crates/canon/src/eval/evidence.rs
 - confidence: cited
-  path: crates/canon/src/eval/
+  path: crates/canon/src/eval/freshness.rs
 - confidence: cited
   path: crates/canon/src/ir/
 - confidence: cited
@@ -32,7 +32,7 @@ scope:
   path: ess/
 - confidence: cited
   path: fixtures/investigation/evidence-freshness.yaml
-revision: 7
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":2}}}
 ---
@@ -55,26 +55,39 @@ recorded in the source model, validator, IR and its conformance scenario.
   list in each `claims` entry that story:evidence-revision-binding introduced. story:explanation
   traces that list and adds no reason of its own.
 
-## Shared surface and order (operator decision 2026-10-04)
+## Shared surface and order (re-plan 2026-10-04)
 
-`crates/canon/src/eval/` and `canon-decision/1` are shared by the evaluator chain three-valued-claims
-→ evidence-revision-binding → obligations → action-admissibility → outcomes → evidence-freshness →
-explanation. This story depends_on story:outcomes for that reason and runs after it. It edits
-`model/`, `validate/` and `ir/`, which story:protocol-source-model and story:canon-ir create and
-story:obligations edits earlier in the same chain, so no two of them run at once.
+The evaluator chain of the earlier plan is gone. story:evaluator-skeleton lands the `--at` flag
+(read and passed through unparsed), the freshness exclusion stage in `eval/freshness.rs` and the
+`excluded_evidence` slot with its `expired` reason, so this story runs beside
+story:evidence-revision-binding, story:obligations, story:action-admissibility and story:outcomes.
+It still changes the source model (`max_age`, whose position is this story's decision and is not
+settled anywhere the skeleton could read it), so it heads the three stories that change
+`model/`, `validate/`, `ir/` and `ess/`: this story, then story:decision-outcomes, then
+story:invalidation-rules.
+
+- Kept: depends_on story:conformance-runner (its acceptance is a scenario), story:ess-hard-gate
+  (`ess/`).
+- Added: depends_on story:three-valued-claims (it changes which evidence that story's claim
+  evaluation sees; was transitive before), story:evaluator-skeleton (flag, stage, slot, and the
+  skeleton's own `model/`/`ess/` change lands first).
+- Removed: depends_on story:outcomes (ordering only, on `eval/` and `crates/canon-cli/`, now split);
+  depends_on story:evidence-revision-binding (it only needed the excluded-evidence list to exist,
+  which the skeleton now lands; freshness and revision binding are independent exclusions).
+- `observed_at` is optional on `canon-evidence/1`: evidence without it is never expired, so no
+  earlier scenario changes (re-plan rule, story:evaluator-skeleton).
 
 ## Scope
 
 - Fixture (operator decision 2026-10-04): the variant `fixtures/investigation/evidence-freshness.yaml`
   is the base plus a maximum age on the evidence `explanation.supported` draws on. The base is not
   edited.
-- Out: invalidation of claims when a bound upstream artifact changes (CANON-INVALIDATION-001).
-  Invalidation of evidence bound to the subject artifact’s own superseded revision is C-004. How
-  evidence or a claim is bound to an upstream artifact revision is undecided; see
-  `decision-blocker:upstream-revision-binding`.
+- Out: invalidation of claims when a bound upstream artifact changes (CANON-INVALIDATION-001),
+  which story:invalidation-rules builds. Invalidation of evidence bound to the subject artifact’s
+  own superseded revision is C-004.
 - Surfaces: `crates/canon/src/model/`, `crates/canon/src/validate/`, `crates/canon/src/ir/`,
-  `crates/canon/src/eval/`, `crates/canon-cli/`, `fixtures/investigation/evidence-freshness.yaml`,
-  `conformance/scenarios/evidence-freshness.yaml`.
+  `ess/`, `crates/canon/src/eval/freshness.rs`, `crates/canon/src/eval/evidence.rs`,
+  `fixtures/investigation/evidence-freshness.yaml`, `conformance/scenarios/evidence-freshness.yaml`.
 
 ## ESS
 
@@ -82,6 +95,16 @@ This story changes the `protocol/1` source model (`max_age`) and the `canon-evid
 story. Every new declaration cites the file and line it was read from, and `task ess-gate` stays
 green with no `UNMAPPED:` (Atlas ADR 0076). `ess_gate` does not compare `ess/` with the Rust
 model, so the review of this story is what checks that the two agree.
+
+## ESS first
+
+- Specification change, first commit: `max_age` on the `protocol/1` declaration this story chooses
+  (evidence kind or evidence match) in `ess/domains/protocol.yaml`, and the optional `observed_at`
+  on the `canon-evidence/1` declaration in `ess/`; with them, the scenario file
+  `conformance/scenarios/evidence-freshness.yaml` and its fixture.
+- Red on that commit: `ess_model_matches` fails naming `max_age`, because the Rust model does not
+  have it; and scenario `CANON-EVIDENCE-002` fails, because the fixture's `max_age` does not parse
+  and the skeleton refuses `--at`.
 
 ## Acceptance
 
