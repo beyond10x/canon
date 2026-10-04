@@ -1,0 +1,75 @@
+# Specified first (story:canon-check, Atlas ADR 0080): the canon-properties/1 document
+# `canon check --properties` reads, the properties declared beside a protocol/1 document and checked
+# over its whole state space. protocol/1 itself is unchanged. What a property means, and the state
+# space it is checked over, is Canon's own test suite (crates/canon-cli/tests/canon_check.rs), not
+# this file. crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
+domain: canon.check
+
+summary: >-
+  The properties declared beside a protocol, which canon check verifies in every state of the
+  protocol's finite state space. A property names a subject, an action's admissibility or an
+  outcome's status, and what that subject must not depend on: a claim, meaning the evidence the
+  claim reads.
+
+naming:
+  wire: check
+  display: Check
+
+types:
+  # read from: fixtures/investigation/check/failing-property/properties.yaml:5
+  - name: canon.check.PropertyId
+    kind: newtype
+    of: String
+
+  # The canon-properties/1 document: the protocol it is about and its properties, keyed by id.
+  # read from: fixtures/investigation/check/failing-property/properties.yaml:1-4
+  - name: canon.check.Properties
+    kind: struct
+    fields:
+      # The only accepted value is canon-properties/1.
+      # read from: fixtures/investigation/check/failing-property/properties.yaml:1
+      - name: format
+        type: String
+      # The id of the protocol the properties are about; canon check refuses another.
+      # read from: fixtures/investigation/check/failing-property/properties.yaml:2
+      - name: protocol
+        type: canon.protocol.ProtocolId
+      # read from: fixtures/investigation/check/failing-property/properties.yaml:4-5
+      - name: properties
+        type: Map<canon.check.PropertyId, canon.check.Property>
+
+  # One property, independence: the subject's status is the same in every two states that agree on
+  # everything except the evidence the `independent_of` claim reads.
+  # read from: fixtures/investigation/check/failing-property/properties.yaml:12-17
+  - name: canon.check.Property
+    kind: struct
+    fields:
+      # read from: fixtures/investigation/check/failing-property/properties.yaml:13
+      - name: description
+        type: Optional<String>
+      # read from: fixtures/investigation/check/failing-property/properties.yaml:14-15
+      - name: subject
+        type: canon.check.PropertySubject
+      # read from: fixtures/investigation/check/failing-property/properties.yaml:16-17
+      - name: independent_of
+        type: canon.check.PropertyDependency
+
+  # What a property is about: an action's status (admissible, approval-required or blocked) or an
+  # outcome's status (legitimate or blocked).
+  # read from: fixtures/investigation/check/failing-property/properties.yaml:7-8
+  # read from: fixtures/investigation/check/failing-property/properties.yaml:14-15
+  - name: canon.check.PropertySubject
+    kind: union
+    tag: kind
+    variants:
+      action: canon.protocol.ActionId
+      outcome: canon.protocol.OutcomeId
+
+  # What the subject must not depend on: a claim, standing for the evidence it reads, by kind and
+  # subject, directly or through the claims it tests.
+  # read from: fixtures/investigation/check/failing-property/properties.yaml:16-17
+  - name: canon.check.PropertyDependency
+    kind: union
+    tag: kind
+    variants:
+      claim: canon.protocol.ClaimId

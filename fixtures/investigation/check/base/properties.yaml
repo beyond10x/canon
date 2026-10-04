@@ -1,0 +1,10 @@
+format: canon-properties/1
+protocol: investigation
+
+properties:
+  inconclusive.rests.on.decision:
+    description: Ending inconclusive rests on the explicit decision, never on the evidence about the explanation.
+    subject:
+      outcome: inconclusive
+    independent_of:
+      claim: explanation.supported

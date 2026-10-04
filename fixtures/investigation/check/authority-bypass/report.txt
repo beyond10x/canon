@@ -1,0 +1,2 @@
+authority-bypass: outcome `approved_for_publication` is legitimate without authority in state {evidence `falsification_attempt` result `survived`, evidence `publication_approval`, evidence `supporting_observation`}
+checked: protocol `investigation` revision 1: 288 states, 0 properties, 1 finding

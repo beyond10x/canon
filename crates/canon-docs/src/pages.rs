@@ -238,8 +238,10 @@ struct Document {
     /// Where its JSON Schema goes, under `SCHEMA_DIR`, if Canon reads it.
     schema: Option<&'static str>,
     /// The document is a list of `root` entries rather than one `root`, read by the named
-    /// `canon evaluate` option.
+    /// option of `command`.
     list: Option<&'static str>,
+    /// The command that reads or writes it, with the option that names it when there is one.
+    command: &'static str,
 }
 
 const PROTOCOL: Document = Document {
@@ -247,32 +249,46 @@ const PROTOCOL: Document = Document {
     format: "FORMAT",
     schema: Some("protocol-1.schema.json"),
     list: None,
+    command: "canon validate",
 };
 
-const EVALUATION_DOCUMENTS: [Document; 4] = [
+/// The documents the documents page lists, in order: those `canon evaluate` reads and writes,
+/// then the one `canon check` reads.
+const DOCUMENTS: [Document; 5] = [
     Document {
         root: "Case",
         format: "CASE_FORMAT",
         schema: Some("case-1.schema.json"),
         list: None,
+        command: "canon evaluate",
     },
     Document {
         root: "EvidenceRecord",
         format: "EVIDENCE_FORMAT",
         schema: Some("evidence-1.schema.json"),
         list: None,
+        command: "canon evaluate",
     },
     Document {
         root: "Decision",
         format: "DECISION_FORMAT",
         schema: None,
         list: None,
+        command: "canon evaluate",
     },
     Document {
         root: "ExplicitDecision",
         format: "DECISIONS_FORMAT",
         schema: Some("decisions-1.schema.json"),
         list: Some("--decisions"),
+        command: "canon evaluate",
+    },
+    Document {
+        root: "Properties",
+        format: "PROPERTIES_FORMAT",
+        schema: Some("properties-1.schema.json"),
+        list: None,
+        command: "canon check --properties",
     },
 ];
 
@@ -776,7 +792,7 @@ fn documents(model: &Model) -> Result<String, String> {
         .collect();
     let mut shown = BTreeSet::new();
     let mut per_document = Vec::new();
-    for document in &EVALUATION_DOCUMENTS {
+    for document in &DOCUMENTS {
         let defs: Vec<&TypeDef> = sections(model, document.root)?
             .into_iter()
             .filter(|def| !on_protocol_page.contains(&def.name) && shown.insert(def.name.clone()))
@@ -800,13 +816,14 @@ fn documents(model: &Model) -> Result<String, String> {
     let mut out = front_matter(
         "Evaluation documents",
         "Evaluation documents",
-        "The case snapshot, evidence records and explicit decisions canon evaluate reads, and the \
-         decision it writes.",
+        "The case snapshot, evidence records and explicit decisions canon evaluate reads, the \
+         decision it writes, and the properties canon check reads.",
     );
     out.push_str(&format!(
         "Generated from the model types in {}. `canon evaluate` reads a compiled protocol, one \
          case snapshot, a set of evidence records and, optionally, a list of explicit decisions, \
-         and writes a decision. Every key is listed; \
+         and writes a decision. `canon check` reads a protocol and, optionally, the properties \
+         declared beside it. Every key is listed; \
          a key Canon does not know is refused.\n",
         source_link(source::MODEL_DIR),
     ));
@@ -817,16 +834,18 @@ fn documents(model: &Model) -> Result<String, String> {
         out.push_str(&format!("\n## `{format}`\n\n"));
         match (document.schema, document.list) {
             (Some(file), Some(option)) => out.push_str(&format!(
-                "Read by `canon evaluate {option}`: a list of `{}` entries; an empty list is \
+                "Read by `{} {option}`: a list of `{}` entries; an empty list is \
                  allowed, and an entry given twice is refused. The {} is generated from the same types.\n",
+                document.command,
                 document.root,
                 schema_link(file)
             )),
             (Some(file), None) => out.push_str(&format!(
-                "Read by `canon evaluate`. The {} is generated from the same types.\n",
+                "Read by `{}`. The {} is generated from the same types.\n",
+                document.command,
                 schema_link(file)
             )),
-            (None, _) => out.push_str("Written by `canon evaluate`.\n"),
+            (None, _) => out.push_str(&format!("Written by `{}`.\n", document.command)),
         }
         let rest: Vec<&TypeDef> = defs
             .iter()
@@ -1064,7 +1083,7 @@ fn schema(model: &Model, document: &Document) -> Result<Json, String> {
 /// Every JSON Schema, keyed by file name.
 fn schemas(model: &Model) -> Result<Vec<(&'static str, String)>, String> {
     std::iter::once(&PROTOCOL)
-        .chain(EVALUATION_DOCUMENTS.iter())
+        .chain(DOCUMENTS.iter())
         .filter_map(|document| document.schema.map(|file| (file, document)))
         .map(|(file, document)| Ok((file, schema(model, document)?.pretty())))
         .collect()

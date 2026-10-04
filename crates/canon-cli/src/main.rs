@@ -4,6 +4,7 @@
 //! every semantic decision is the library's. This file holds the subcommands and their dispatch,
 //! and `validate` and `compile`; every other subcommand is in its own file.
 
+mod check;
 mod conform;
 mod diff;
 mod evaluate;
@@ -39,6 +40,7 @@ fn main() -> ExitCode {
             at.as_deref(),
         ),
         Command::Diff { from, to } => diff::run(&from, &to),
+        Command::Check { path, properties } => check::run(&path, properties.as_deref()),
     }
 }
 

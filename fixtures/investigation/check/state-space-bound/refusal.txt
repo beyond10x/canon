@@ -1,0 +1,1 @@
+error[state-space-bound]: protocol `investigation` revision 1 has 98304 states, more than the bound of 65536: evidence kind `falsification_attempt` 4, evidence kind `measurement` 2048, evidence kind `supporting_observation` 2, capability `finding.publish` 3, decision `explicitly_inconclusive` 2

@@ -66,6 +66,7 @@
         {"label": "Outcomes", "status": "shipped", "detail": "Legitimate or blocked; no completion through an undeclared or blocked outcome; scenario CANON-OUTCOME-001.", "href": "/docs/reference/evaluation#sections"},
         {"label": "Decision-based outcomes", "status": "shipped", "detail": "An outcome may require an explicit decision taken at the current case revision; scenario CANON-OUTCOME-002.", "href": "/docs/reference/evaluation#explicit-decisions"},
         {"label": "Structured explanation", "status": "shipped", "detail": "Every decision says what it was computed from and why each value is what it is, down to the evidence records that applied or were excluded; scenario CANON-EXPLAIN-001.", "href": "/docs/reference/evaluation#sections"},
+        {"label": "canon check", "status": "shipped", "detail": "Every state of a protocol's finite state space: unreachable outcomes, unsatisfiable preconditions, unproduced evidence, authority bypasses with a witness state, and failing properties with a counterexample.", "href": "/docs/reference/cli#canon-check"},
         {"label": "Semantic diff", "status": "planned", "detail": "Classify a protocol change as tightening, relaxation or breaking."}
       ]
     },

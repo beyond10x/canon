@@ -1,0 +1,2 @@
+unsatisfiable-precondition: action `retract_finding`: its precondition holds in no state
+checked: protocol `investigation` revision 1: 48 states, 0 properties, 1 finding

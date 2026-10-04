@@ -1,0 +1,91 @@
+format: protocol/1
+
+protocol:
+  id: investigation
+  revision: 1
+  description: Decide whether an explanation is supported by observation and survives an attempt to falsify it.
+
+artifacts:
+  explanation:
+    description: The explanation under investigation.
+
+evidence_kinds:
+  supporting_observation:
+    description: An observation consistent with the explanation.
+  falsification_attempt:
+    description: An attempt to refute the explanation; its result is survived or refuted.
+  publication_approval:
+    description: An approval to publish the finding.
+
+claims:
+  publication.approved:
+    description: Publishing the finding has been approved.
+    true_when:
+      evidence:
+        kind: publication_approval
+
+  explanation.supported:
+    description: The explanation is supported by observation and has survived falsification.
+    true_when:
+      all:
+        - evidence:
+            kind: supporting_observation
+        - evidence:
+            kind: falsification_attempt
+            result: survived
+
+obligations:
+  establish.explanation:
+    description: Establish whether the explanation is supported.
+    discharged_when:
+      claim: explanation.supported
+      is: true
+
+actions:
+  inspect:
+    description: Look for observations bearing on the explanation.
+    may_produce:
+      - evidence: supporting_observation
+
+  attempt_falsification:
+    description: Try to refute the explanation.
+    may_produce:
+      - evidence: falsification_attempt
+
+  publish_finding:
+    description: Publish the finding that the explanation is supported.
+    precondition:
+      claim: explanation.supported
+      is: true
+    requires:
+      - capability: finding.publish
+
+  approve_publication:
+    description: Approve publishing the finding, under authority.
+    requires:
+      - capability: finding.approve
+    may_produce:
+      - evidence: publication_approval
+
+  self_approve:
+    description: Seeded defect, the same approval with no authority required.
+    may_produce:
+      - evidence: publication_approval
+
+outcomes:
+  approved_for_publication:
+    description: The explanation is supported and its publication approved.
+    requires:
+      all:
+        - claim: explanation.supported
+        - claim: publication.approved
+
+  supported:
+    description: The explanation is supported.
+    requires:
+      claim: explanation.supported
+
+  inconclusive:
+    description: The investigation ends without deciding the explanation, by an explicit decision.
+    requires:
+      decision: explicitly_inconclusive
