@@ -1,0 +1,95 @@
+{
+  "format": "b10x-protocol-graph/1",
+  "protocol": {
+    "id": "investigation",
+    "revision": 1,
+    "description": "Decide whether an explanation is supported by observation and survives an attempt to falsify it.",
+    "source": "canon compile fixtures/investigation/protocol.yaml"
+  },
+  "nodes": [
+    {
+      "id": "action:attempt_falsification",
+      "kind": "action",
+      "name": "attempt_falsification",
+      "description": "Try to refute the explanation."
+    },
+    {
+      "id": "action:inspect",
+      "kind": "action",
+      "name": "inspect",
+      "description": "Look for observations bearing on the explanation."
+    },
+    {
+      "id": "evidence:falsification_attempt",
+      "kind": "evidence",
+      "name": "falsification_attempt",
+      "description": "An attempt to refute the explanation; its result is survived or refuted."
+    },
+    {
+      "id": "evidence:supporting_observation",
+      "kind": "evidence",
+      "name": "supporting_observation",
+      "description": "An observation consistent with the explanation."
+    },
+    {
+      "id": "claim:explanation.supported",
+      "kind": "claim",
+      "name": "explanation.supported",
+      "description": "The explanation is supported by observation and has survived falsification.",
+      "predicate": {
+        "all": [
+          {
+            "evidence": {
+              "kind": "falsification_attempt",
+              "result": "survived"
+            }
+          },
+          {
+            "evidence": {
+              "kind": "supporting_observation"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "outcome:supported",
+      "kind": "outcome",
+      "name": "supported",
+      "description": "The explanation is supported.",
+      "predicate": {
+        "claim": {
+          "id": "explanation.supported"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "action:attempt_falsification",
+      "to": "evidence:falsification_attempt",
+      "kind": "produces"
+    },
+    {
+      "from": "action:inspect",
+      "to": "evidence:supporting_observation",
+      "kind": "produces"
+    },
+    {
+      "from": "evidence:falsification_attempt",
+      "to": "claim:explanation.supported",
+      "kind": "establishes",
+      "qualifier": "survived"
+    },
+    {
+      "from": "evidence:supporting_observation",
+      "to": "claim:explanation.supported",
+      "kind": "establishes"
+    },
+    {
+      "from": "claim:explanation.supported",
+      "to": "outcome:supported",
+      "kind": "requires"
+    }
+  ]
+}

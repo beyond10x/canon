@@ -22,13 +22,15 @@ tasks:
       - cargo test -p b10x-canon --test ess_gate --test ess_model_matches --locked
 
   docs-generate:
-    desc: Regenerate the derived documentation pages under website/ from the repository.
+    desc: Regenerate the derived documentation pages and landing data under website/, recording real canon runs.
     cmds:
+      - cargo build --locked -p canon-cli
       - cargo run --locked -p canon-docs -- generate
 
   docs-check:
     desc: Fail when a generated documentation page differs from what the repository generates.
     cmds:
+      - cargo build --locked -p canon-cli
       - cargo run --locked -p canon-docs -- generate --check
 
   site-build:
