@@ -20,7 +20,9 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
 - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
   evidence match without a result has `"result": null`; a claim test without `is` has
   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-  true; absent lists and sections are empty.
+  true; absent lists and sections are empty. The one exception is an evidence kind's
+  `max_age`: written, as authored, only when the kind declares one, so the IR of a protocol
+  that declares none is the IR it was before `max_age` existed.
 - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
   it was written.
 - **Resolved references.** Only a document the validator accepts compiles, so every claim and
@@ -31,4 +33,5 @@ came from: no path, no working directory, no time. `Ir::canonical_json` is its o
 serialization, and the bytes are suitable for hashing: documents that differ only in the ways
 listed above give the same bytes. Other logical equivalences are not normalized, so they give
 different bytes: a one-member `all` or `any` and its member, a nested `all` inside an `all` and
-the flattened list, `not` of `not` and what it negates.
+the flattened list, `not` of `not` and what it negates, and maximum ages of the same length
+written in different units (`60m` and `1h`).

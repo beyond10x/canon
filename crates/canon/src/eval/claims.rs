@@ -190,6 +190,7 @@ mod tests {
             result: result.map(str::to_owned),
             subject: ArtifactId::new("a"),
             subject_revision: Revision::new("r1"),
+            observed_at: None,
         }
     }
 

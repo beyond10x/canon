@@ -298,6 +298,9 @@ fn render_ty(ty: &Ty, links: &Links) -> String {
         Ty::Text => "text".to_owned(),
         Ty::Count => "integer, 0 or more".to_owned(),
         Ty::Any => "any JSON value".to_owned(),
+        Ty::Identifier(name) if text_format(name).is_some() => {
+            format!("[text](#text-formats) (`{name}`)")
+        }
         Ty::Identifier(name) => format!("[identifier](#identifiers) (`{name}`)"),
         Ty::Named(name) => match links.get(name) {
             Some(href) => format!("[`{name}`]({href})"),
@@ -608,11 +611,56 @@ fn identifiers_section(model: &Model, defs: &[&TypeDef], what: &str) -> Result<S
     let rows: Vec<Vec<String>> = model
         .identifiers
         .iter()
-        .filter(|(name, _)| used.contains(name))
+        .filter(|(name, _)| used.contains(name) && text_format(name).is_none())
         .map(|(name, doc)| vec![code(name), cell(doc)])
         .collect();
     out.push_str(&table(&["Type", "Identifies"], &rows));
+    let formats: Vec<Vec<String>> = model
+        .identifiers
+        .iter()
+        .filter(|(name, _)| used.contains(name))
+        .filter_map(|(name, doc)| {
+            let (pattern, note) = text_format(name)?;
+            Some(vec![
+                code(name),
+                cell(&format!("{doc} {note}")),
+                code(pattern),
+            ])
+        })
+        .collect();
+    if !formats.is_empty() {
+        out.push_str(&format!(
+            "\n## Text formats\n\nThese values are text in a fixed form, not identifiers. Canon \
+             refuses text that does not match its pattern, and also checks what the pattern \
+             cannot:\n\n{}",
+            table(&["Type", "Written as", "Pattern"], &formats)
+        ));
+    }
     Ok(out)
+}
+
+/// The `identifier!` newtypes in `ids.rs` that are not identifiers but text in a fixed form: each
+/// with the pattern its JSON Schema states and what Canon checks beyond the pattern.
+const TEXT_FORMATS: &[(&str, &str, &str)] = &[
+    (
+        "Age",
+        "^(0|[1-9][0-9]*)[smhd]$",
+        "Canon also refuses an age too long to count in seconds.",
+    ),
+    (
+        "Instant",
+        "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+        "Calendar validity is checked by Canon, not by the pattern: the date must exist (leap \
+         years included) and the time be at most 23:59:59.",
+    ),
+];
+
+/// The pattern and the note of a type [`TEXT_FORMATS`] lists.
+fn text_format(name: &str) -> Option<(&'static str, &'static str)> {
+    TEXT_FORMATS
+        .iter()
+        .find(|(format, _, _)| *format == name)
+        .map(|(_, pattern, note)| (*pattern, *note))
 }
 
 fn schema_link(file: &str) -> String {
@@ -726,6 +774,9 @@ fn ty_schema(ty: &Ty) -> Json {
         Ty::Text => obj([("type", json::str("string"))]),
         Ty::Count => obj([("type", json::str("integer")), ("minimum", Json::Int(0))]),
         Ty::Any => obj([]),
+        Ty::Identifier(name) if text_format(name).is_some() => {
+            obj([("$ref", json::str(format!("#/$defs/{name}")))])
+        }
         Ty::Identifier(_) => obj([("$ref", json::str("#/$defs/Identifier"))]),
         Ty::Named(name) => obj([("$ref", json::str(format!("#/$defs/{name}")))]),
         Ty::Option(inner) | Ty::Boxed(inner) => ty_schema(inner),
@@ -783,7 +834,36 @@ fn schema(model: &Model, document: &Document) -> Result<Json, String> {
             ),
         ),
     )];
-    for def in sections(model, document.root)? {
+    for (name, _, _) in TEXT_FORMATS {
+        if !model
+            .identifiers
+            .iter()
+            .any(|(declared, _)| declared == name)
+        {
+            return Err(format!(
+                "TEXT_FORMATS lists `{name}`, which ids.rs does not declare"
+            ));
+        }
+    }
+    let document_defs = sections(model, document.root)?;
+    let used = used_identifiers(model, &document_defs)?;
+    for (name, doc) in &model.identifiers {
+        if let Some((pattern, note)) = text_format(name)
+            && used.contains(name)
+        {
+            defs.push((
+                name.clone(),
+                with_description(
+                    obj([
+                        ("type", json::str("string")),
+                        ("pattern", json::str(pattern)),
+                    ]),
+                    &format!("{doc} {note}"),
+                ),
+            ));
+        }
+    }
+    for def in document_defs {
         let schema = match (&def.reading, &def.shape) {
             (Reading::Derived, Shape::Struct(fields)) => {
                 let properties = fields

@@ -11,7 +11,9 @@
 //! - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
 //!   evidence match without a result has `"result": null`; a claim test without `is` has
 //!   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-//!   true; absent lists and sections are empty.
+//!   true; absent lists and sections are empty. The one exception is an evidence kind's
+//!   `max_age`: written, as authored, only when the kind declares one, so the IR of a protocol
+//!   that declares none is the IR it was before `max_age` existed.
 //! - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
 //!   it was written.
 //! - **Resolved references.** Only a document the validator accepts compiles, so every claim and
@@ -22,7 +24,8 @@
 //! serialization, and the bytes are suitable for hashing: documents that differ only in the ways
 //! listed above give the same bytes. Other logical equivalences are not normalized, so they give
 //! different bytes: a one-member `all` or `any` and its member, a nested `all` inside an `all` and
-//! the flattened list, `not` of `not` and what it negates.
+//! the flattened list, `not` of `not` and what it negates, and maximum ages of the same length
+//! written in different units (`60m` and `1h`).
 
 mod json;
 
@@ -30,7 +33,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use crate::model::{
-    self, ActionId, ArtifactId, CapabilityId, ClaimId, ClaimTest, EffectClass, EvidenceKindId,
+    self, ActionId, Age, ArtifactId, CapabilityId, ClaimId, ClaimTest, EffectClass, EvidenceKindId,
     EvidenceMatch, ObligationId, OutcomeId, Predicate, Protocol, ProtocolId, Truth,
 };
 use crate::validate::{self, Problem};
@@ -46,7 +49,7 @@ pub const FORMAT: &str = "canon-ir/1";
 pub struct Ir {
     pub protocol: Header,
     pub artifacts: BTreeMap<ArtifactId, Described>,
-    pub evidence_kinds: BTreeMap<EvidenceKindId, Described>,
+    pub evidence_kinds: BTreeMap<EvidenceKindId, EvidenceKind>,
     pub claims: BTreeMap<ClaimId, Claim>,
     pub obligations: BTreeMap<ObligationId, Obligation>,
     pub actions: BTreeMap<ActionId, Action>,
@@ -61,10 +64,19 @@ pub struct Header {
     pub description: Option<String>,
 }
 
-/// A declaration that carries nothing but its description: an artifact or an evidence kind.
+/// A declaration that carries nothing but its description: an artifact.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Described {
     pub description: Option<String>,
+}
+
+/// An evidence kind: its description, and how old a record of it may be and still apply.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvidenceKind {
+    pub description: Option<String>,
+    /// Readable when compiled: the validator refuses a maximum age [`Age::seconds`] does not read.
+    /// A caller can build an IR with one; the evaluator then refuses it as `invalid-max-age`.
+    pub max_age: Option<Age>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -115,8 +127,9 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
         artifacts: keyed(&protocol.artifacts, |artifact| {
             described(&artifact.description)
         }),
-        evidence_kinds: keyed(&protocol.evidence_kinds, |kind| {
-            described(&kind.description)
+        evidence_kinds: keyed(&protocol.evidence_kinds, |kind| EvidenceKind {
+            description: kind.description.clone(),
+            max_age: kind.max_age.clone(),
         }),
         claims: keyed(&protocol.claims, |claim| Claim {
             description: claim.description.clone(),
@@ -282,7 +295,16 @@ impl Ir {
                 ]),
             ),
             ("artifacts", section(&self.artifacts, described)),
-            ("evidence_kinds", section(&self.evidence_kinds, described)),
+            (
+                "evidence_kinds",
+                section(&self.evidence_kinds, |kind| {
+                    let mut fields = vec![("description", description(&kind.description))];
+                    if let Some(max_age) = &kind.max_age {
+                        fields.push(("max_age", Value::string(max_age.as_str())));
+                    }
+                    Value::object(fields)
+                }),
+            ),
             (
                 "claims",
                 section(&self.claims, |claim| {
@@ -559,5 +581,19 @@ mod tests {
         let problems = compile(&protocol).expect_err("refused");
         assert_eq!(problems.len(), 1);
         assert_eq!(problems[0].code(), "undeclared-claim");
+    }
+
+    /// A maximum age is written as authored, and only on the kind that declares one.
+    #[test]
+    fn a_maximum_age_is_written_only_where_declared() {
+        let compiled = ir(&format!(
+            "{HEADER}evidence_kinds: {{fresh: {{max_age: 90m}}, plain: {{description: d}}}}\n"
+        ));
+        assert!(
+            compiled.contains(
+                "  \"evidence_kinds\": {\n    \"fresh\": {\n      \"description\": null,\n      \"max_age\": \"90m\"\n    },\n    \"plain\": {\n      \"description\": \"d\"\n    }\n  },\n"
+            ),
+            "{compiled}"
+        );
     }
 }

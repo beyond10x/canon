@@ -37,16 +37,19 @@
 //! artifact id and revision in the order written), its protocol against the compiled protocol's,
 //! each artifact it lists (declared by the protocol, listed once), each artifact the protocol
 //! declares (listed by the case); then each evidence record in the order given: its format, its
-//! identifiers (id, kind, subject, subject revision), its id (used once in the set) and its kind
+//! identifiers (id, kind, subject, subject revision), its `observed_at` when given (an instant,
+//! else `invalid-instant`), its id (used once in the set) and its kind
 //! (declared by the protocol). A record's subject and subject revision are checked as identifiers
 //! only; they do not affect evaluation.
 //!
 //! Then the supplied inputs are read, in this order: the authority decisions (`--authority`), the
-//! evaluation instant (`--at`) and the explicit decisions. None is read yet: each one given is
-//! refused as `unsupported-input`, naming it (`` `--authority` is not supported yet ``).
+//! evaluation instant (`--at`) and the explicit decisions. The instant is read by `freshness.rs`
+//! and refused as `invalid-instant` when it is not one. The others are not read yet: each one
+//! given is refused as `unsupported-input`, naming it (`` `--authority` is not supported yet ``).
 //!
 //! Then the exclusion stages run, in pipeline order: revision binding, freshness, invalidation.
-//! Each may refuse the inputs it reads; none refuses anything yet.
+//! Each may refuse the inputs it reads: freshness refuses a `max_age` it cannot read
+//! (`invalid-max-age`); the others refuse nothing yet.
 //!
 //! Then claims are evaluated. An IR whose claims test each other in a cycle — which `canon
 //! compile` never produces, but a caller can build — is refused as `claim-cycle`, naming the claims
@@ -84,9 +87,11 @@
 //!    the claim values, action preconditions and outcome requirements over the claim values and
 //!    the evidence left after step 3.
 //!
-//! The stages, sections and inputs of steps 2, 3 and 5 are not built yet: each stage excludes
-//! nothing, each section is absent, and a supplied input is refused as `unsupported-input`, naming
-//! it. So the decision is the one three-valued claim evaluation gives, byte for byte.
+//! The freshness stage and the evaluation instant are built: evidence older than its kind's
+//! `max_age` at the instant is excluded as `expired`. The other stages, sections and inputs of
+//! steps 2, 3 and 5 are not built yet: each stage excludes nothing, each section is absent, and a
+//! supplied input is refused as `unsupported-input`, naming it. So without an instant the decision
+//! is the one three-valued claim evaluation gives, byte for byte.
 
 mod actions;
 mod authority;
@@ -578,6 +583,7 @@ mod tests {
             result: None,
             subject: crate::model::ArtifactId::new("a"),
             subject_revision: crate::model::Revision::new("r1"),
+            observed_at: None,
         }
     }
 

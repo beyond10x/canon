@@ -14,6 +14,7 @@ mod ids;
 mod parse;
 mod predicate;
 mod present;
+mod time;
 
 use std::fmt;
 use std::marker::PhantomData;
@@ -28,8 +29,8 @@ pub use decision::{
 };
 pub use evidence::{EVIDENCE_FORMAT, EvidenceRecord};
 pub use ids::{
-    ActionId, ArtifactId, CapabilityId, CaseId, ClaimId, EffectClass, EvidenceId, EvidenceKindId,
-    ObligationId, OutcomeId, ProtocolId, Revision,
+    ActionId, Age, ArtifactId, CapabilityId, CaseId, ClaimId, EffectClass, EvidenceId,
+    EvidenceKindId, Instant, ObligationId, OutcomeId, ProtocolId, Revision,
 };
 pub use parse::{FORMAT, ParseError, parse};
 pub use predicate::{ClaimTest, EvidenceMatch, Predicate, Truth};
@@ -80,6 +81,10 @@ pub struct Artifact {
 pub struct EvidenceKind {
     #[serde(default, deserialize_with = "present::optional")]
     pub description: Option<String>,
+    /// How old a record of this kind may be and still apply: at an evaluation instant later than
+    /// its `observed_at` by more than this, it is excluded as expired (design § 8).
+    #[serde(default, deserialize_with = "present::optional")]
+    pub max_age: Option<Age>,
 }
 
 /// A proposition whose value is established from evidence by its predicate.

@@ -17,12 +17,15 @@ does not depend on the order the sections are written in:
    claims, obligations, actions and outcomes, in that section order, then the capabilities and
    effect classes actions name, in action order;
 3. duplicate identifiers, in the same section order;
-4. unresolved references: those in claims first, then those in obligations (their discharge
+4. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
+   or `d`, or that are but are too long to count in seconds (each with its own message), in the
+   order the evidence kinds are written;
+5. unresolved references: those in claims first, then those in obligations (their discharge
    predicates, each followed by every evidence match it holds, which a discharge predicate may
    not: it tests only claim values), then those in actions, then those in outcomes;
    within a section, in the order its declarations are written, and within a declaration, in
    the order its references are written;
-5. cycles between claims.
+6. cycles between claims.
 
 Within a section, entries come in the order they are written. Every message renders document
 text on one line. The same document always yields the same problems in the same order.
@@ -36,6 +39,7 @@ text on one line. The same document always yields the same problems in the same 
 | `duplicate-identifier` | An identifier is declared more than once in one section. |
 | `undeclared-claim` | A predicate tests a claim that is not declared. |
 | `undeclared-evidence-kind` | A predicate matches, or an action may produce, an evidence kind that is not declared. |
+| `invalid-max-age` | An evidence kind's `max_age` is not a whole number without leading zeros, followed by `s`, `m`, `h` or `d`, or is too long to count in seconds. |
 | `evidence-in-discharge` | A discharge predicate tests evidence; it may test only claim values. `path` locates the evidence match inside the predicate, as `discharged_when.all[1].evidence`. |
 | `claim-cycle` | Claims whose predicates test each other in a cycle; the first claim is repeated at the end. |
 

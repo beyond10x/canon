@@ -72,7 +72,7 @@ Evaluate every claim of a compiled protocol for a case from an evidence set, and
 | `--case <CASE>` | yes | none | The `canon-case/1` case snapshot |
 | `--evidence <EVIDENCE>` | yes | none | A directory holding only `canon-evidence/1` records, one per `*.yaml` or `*.json` file |
 | `--authority <AUTHORITY>` | no | none | A `canon-authority/1` document of authority decisions. Read and passed through; not supported yet |
-| `--at <AT>` | no | none | The evaluation instant. Passed through as written; not supported yet |
+| `--at <AT>` | no | none | The evaluation instant, in UTC as `YYYY-MM-DDTHH:MM:SSZ`. Evidence older than its kind's `max_age` at this instant does not apply; without it, no evidence expires |
 
 ```text
 Evaluate every claim of a compiled protocol for a case from an evidence set, and print the `canon-decision/1` document
@@ -93,7 +93,7 @@ Options:
           A `canon-authority/1` document of authority decisions. Read and passed through; not supported yet
 
       --at <AT>
-          The evaluation instant. Passed through as written; not supported yet
+          The evaluation instant, in UTC as `YYYY-MM-DDTHH:MM:SSZ`. Evidence older than its kind's `max_age` at this instant does not apply; without it, no evidence expires
 
   -h, --help
           Print help

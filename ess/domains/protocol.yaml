@@ -230,7 +230,7 @@ types:
     kind: newtype
     of: String
 
-  # An instant in UTC, written as RFC 3339 with whole seconds and the offset Z
+  # An instant written YYYY-MM-DDTHH:MM:SSZ in UTC, whole seconds, uppercase T and Z, no leap second
   # (2026-10-04T12:00:00Z). Evidence records when it was observed in this form, and the evaluation
   # instant (`--at`) is given in it.
   # read from: docs/design/canon-protocol-calculus-design.md:505
@@ -239,7 +239,7 @@ types:
     kind: newtype
     of: String
 
-  # A length of time: a whole number followed by one unit, s, m, h or d (5m, 24h).
+  # A length of time: a whole number without leading zeros, followed by s, m, h or d (5m, 24h).
   # read from: docs/design/canon-protocol-calculus-design.md:477
   # read from: .engineering/planning/story/evidence-freshness.md:50
   - name: canon.protocol.Age

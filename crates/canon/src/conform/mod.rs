@@ -1247,12 +1247,18 @@ mod tests {
         );
         assert_eq!(
             evaluate_verdict(&format!("{base}      at: 2026-10-04T00:00:00Z\n"), &expect),
-            failed("evaluation refused: unsupported-input: `--at` is not supported yet")
+            Verdict::Passed
+        );
+        assert_eq!(
+            evaluate_verdict(&format!("{base}      at: yesterday\n"), &expect),
+            failed(
+                "evaluation refused: invalid-instant: the evaluation instant `yesterday` is not an instant in UTC written YYYY-MM-DDTHH:MM:SSZ"
+            )
         );
         assert_eq!(
             evaluate_verdict(
-                &format!("{base}      at: 2026-10-04T00:00:00Z\n"),
-                "      refusal: unsupported-input\n"
+                &format!("{base}      at: yesterday\n"),
+                "      refusal: invalid-instant\n"
             ),
             Verdict::Passed
         );
