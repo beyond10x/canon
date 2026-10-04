@@ -156,8 +156,9 @@ fn not(value: Truth) -> Truth {
 /// Whether an evidence match of `kind`, naming `subject` or none, reads `record`: a record of its
 /// kind and, when it names a subject, about that artifact. A record about another artifact is not
 /// of the match, so it neither establishes nor contradicts it. The one rule claim values, the
-/// excluded evidence a claim lists and the `present` of an evidence reason all use.
-pub(super) fn reads(
+/// excluded evidence a claim lists, the `present` of an evidence reason and the explanation
+/// (`crate::explain`) all use.
+pub(crate) fn reads(
     kind: &EvidenceKindId,
     subject: Option<&ArtifactId>,
     record: &EvidenceRecord,

@@ -69,15 +69,27 @@ fn a_caller_built_ir_with_a_malformed_max_age_does_not_silently_disable_expiry()
 }
 
 /// `--at` with no record carrying `observed_at`: nothing expires, and the decision is the one
-/// given without an instant, byte for byte, although kind `k` declares a maximum age.
+/// given without an instant, byte for byte, although kind `k` declares a maximum age, but for the
+/// explanation's record of the instant it was computed at (story:explanation, design § 37).
 #[test]
 fn an_instant_with_no_stamped_record_changes_nothing() {
     let ir = compiled();
     let evidence = [record("e1", "k", None), record("e2", "l", None)];
     let without = eval::render(&decide(&ir, &evidence, None).expect("decides"));
-    let with = eval::render(
-        &decide(&ir, &evidence, Some("2999-12-31T23:59:59Z")).expect("decides with an instant"),
+    let mut with =
+        decide(&ir, &evidence, Some("2999-12-31T23:59:59Z")).expect("decides with an instant");
+    let from = &mut with
+        .explanation
+        .as_mut()
+        .expect("the decision carries an explanation")["computed_from"];
+    assert_eq!(
+        from["at"], "2999-12-31T23:59:59Z",
+        "the instant is recorded"
     );
+    from.as_object_mut()
+        .expect("computed_from is an object")
+        .remove("at");
+    let with = eval::render(&with);
     assert_eq!(with, without);
     assert!(!with.contains("excluded_evidence"), "{with}");
 }

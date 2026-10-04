@@ -1,0 +1,383 @@
+format: canon-conformance/1
+id: CANON-EXPLAIN-001
+covers: [CANON-EXPLAIN-001, CANON-DETERMINISM-001]
+fixture: fixtures/investigation/explanation.yaml
+# Every non-true claim, open obligation, non-admissible action and blocked outcome carries a
+# structured explanation in the decision's `explanation` section (design § 13, § 37, § 41 item 13).
+# The section holds:
+#
+# - `computed_from`: what the decision was computed from, so it can be reconstructed later: the
+#   protocol id and revision, the Canon semantics that applied (`semantics`: the Canon crate
+#   version and the `canon-decision/1` format; the design names no other semantics identifier),
+#   the case snapshot as given, the ids of the evidence set in code-point order and, when
+#   supplied, the authority decisions, the explicit decisions and the evaluation instant (`at`).
+#   An input not supplied is not written.
+# - `outcomes`, `actions`, `obligations`: each blocked outcome, non-admissible action and open
+#   obligation with its status and `because`, the reasons that decide it (an obligation's walked
+#   as an outcome's requirement is), each evidence-match reason (with its `subject` when the
+#   match names one) followed by every record that match reads, applied or excluded with its
+#   reason. A claim reason `{"claim": <id>, "value": <value>}` continues under `claims`.
+# - `claims`: each claim whose value is not `true`, each claim a reason names and each claim one
+#   of those tests, `true` ones included, with its value and `because`: the claims it tests, as
+#   claim reasons, then each record an evidence match it reaches reads, in evidence-id order,
+#   `{"evidence": <id>, "status": "applied"}`, or `{"evidence": <id>, "reason": <reason>,
+#   "status": "excluded"}` with the reason the claim's `excluded_evidence` list records, then each
+#   evidence match it reaches that reads no record, `{"kind": <kind>, "status": "absent"}`, with
+#   `"subject": <artifact>` added when the match names one.
+#
+# A match reads a record of its kind and, when it names a subject, only one about that artifact
+# (the rule claim values are decided by); a record about another artifact is not listed under it.
+#
+# A section with nothing to explain is not written. Serialization is canonical: equivalent inputs
+# give byte-identical output (CANON-DETERMINISM-001), so each step expects the whole decision, and
+# the three steps expect the same bytes.
+steps:
+  # The investigation's only evidence is bound to revision r1 of the explanation, which the case
+  # has superseded with r2. The blocked `supported` outcome is traced to `explanation.supported`
+  # being UNKNOWN, and from there to each excluded record with reason `revision_mismatch`.
+  - id: superseded-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r2}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "status": "admissible"
+            },
+            "inspect": {
+              "status": "admissible"
+            }
+          },
+          "case": "INV-18",
+          "claims": {
+            "explanation.supported": {
+              "excluded_evidence": [
+                {
+                  "evidence": "falsification-1",
+                  "reason": "revision_mismatch"
+                },
+                {
+                  "evidence": "observation-1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "unknown"
+            }
+          },
+          "explanation": {
+            "claims": {
+              "explanation.supported": {
+                "because": [
+                  {
+                    "evidence": "falsification-1",
+                    "reason": "revision_mismatch",
+                    "status": "excluded"
+                  },
+                  {
+                    "evidence": "observation-1",
+                    "reason": "revision_mismatch",
+                    "status": "excluded"
+                  }
+                ],
+                "value": "unknown"
+              }
+            },
+            "computed_from": {
+              "case": {
+                "artifacts": {
+                  "explanation": {
+                    "revision": "r2"
+                  }
+                },
+                "format": "canon-case/1",
+                "id": "INV-18",
+                "protocol": "investigation"
+              },
+              "evidence": [
+                "falsification-1",
+                "observation-1"
+              ],
+              "protocol": "investigation",
+              "protocol_revision": 1,
+              "semantics": {
+                "canon": "0.0.0",
+                "format": "canon-decision/1"
+              }
+            },
+            "outcomes": {
+              "supported": {
+                "because": [
+                  {
+                    "claim": "explanation.supported",
+                    "value": "unknown"
+                  }
+                ],
+                "status": "blocked"
+              }
+            }
+          },
+          "format": "canon-decision/1",
+          "outcomes": {
+            "supported": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "protocol": "investigation",
+          "protocol_revision": 1
+        }
+
+  # The same inputs again: byte-identical output.
+  - id: second-run
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r2}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "status": "admissible"
+            },
+            "inspect": {
+              "status": "admissible"
+            }
+          },
+          "case": "INV-18",
+          "claims": {
+            "explanation.supported": {
+              "excluded_evidence": [
+                {
+                  "evidence": "falsification-1",
+                  "reason": "revision_mismatch"
+                },
+                {
+                  "evidence": "observation-1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "unknown"
+            }
+          },
+          "explanation": {
+            "claims": {
+              "explanation.supported": {
+                "because": [
+                  {
+                    "evidence": "falsification-1",
+                    "reason": "revision_mismatch",
+                    "status": "excluded"
+                  },
+                  {
+                    "evidence": "observation-1",
+                    "reason": "revision_mismatch",
+                    "status": "excluded"
+                  }
+                ],
+                "value": "unknown"
+              }
+            },
+            "computed_from": {
+              "case": {
+                "artifacts": {
+                  "explanation": {
+                    "revision": "r2"
+                  }
+                },
+                "format": "canon-case/1",
+                "id": "INV-18",
+                "protocol": "investigation"
+              },
+              "evidence": [
+                "falsification-1",
+                "observation-1"
+              ],
+              "protocol": "investigation",
+              "protocol_revision": 1,
+              "semantics": {
+                "canon": "0.0.0",
+                "format": "canon-decision/1"
+              }
+            },
+            "outcomes": {
+              "supported": {
+                "because": [
+                  {
+                    "claim": "explanation.supported",
+                    "value": "unknown"
+                  }
+                ],
+                "status": "blocked"
+              }
+            }
+          },
+          "format": "canon-decision/1",
+          "outcomes": {
+            "supported": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "protocol": "investigation",
+          "protocol_revision": 1
+        }
+
+  # The same evidence set in reverse order: byte-identical output.
+  - id: reversed-evidence
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r2}
+      evidence:
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "status": "admissible"
+            },
+            "inspect": {
+              "status": "admissible"
+            }
+          },
+          "case": "INV-18",
+          "claims": {
+            "explanation.supported": {
+              "excluded_evidence": [
+                {
+                  "evidence": "falsification-1",
+                  "reason": "revision_mismatch"
+                },
+                {
+                  "evidence": "observation-1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "unknown"
+            }
+          },
+          "explanation": {
+            "claims": {
+              "explanation.supported": {
+                "because": [
+                  {
+                    "evidence": "falsification-1",
+                    "reason": "revision_mismatch",
+                    "status": "excluded"
+                  },
+                  {
+                    "evidence": "observation-1",
+                    "reason": "revision_mismatch",
+                    "status": "excluded"
+                  }
+                ],
+                "value": "unknown"
+              }
+            },
+            "computed_from": {
+              "case": {
+                "artifacts": {
+                  "explanation": {
+                    "revision": "r2"
+                  }
+                },
+                "format": "canon-case/1",
+                "id": "INV-18",
+                "protocol": "investigation"
+              },
+              "evidence": [
+                "falsification-1",
+                "observation-1"
+              ],
+              "protocol": "investigation",
+              "protocol_revision": 1,
+              "semantics": {
+                "canon": "0.0.0",
+                "format": "canon-decision/1"
+              }
+            },
+            "outcomes": {
+              "supported": {
+                "because": [
+                  {
+                    "claim": "explanation.supported",
+                    "value": "unknown"
+                  }
+                ],
+                "status": "blocked"
+              }
+            }
+          },
+          "format": "canon-decision/1",
+          "outcomes": {
+            "supported": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "protocol": "investigation",
+          "protocol_revision": 1
+        }

@@ -67,6 +67,24 @@ fn text(bytes: &[u8]) -> &str {
     std::str::from_utf8(bytes).expect("utf-8 output")
 }
 
+/// A printed decision without its `explanation` section (story:explanation), which every decision
+/// carries and the scenario's expectations, listing the sections they compare, leave out. The
+/// section is a top-level member of the canonical JSON and is followed by `format`.
+fn without_explanation(decision: &str) -> String {
+    let start = decision
+        .find("\n  \"explanation\": {\n")
+        .unwrap_or_else(|| panic!("every decision carries an explanation: {decision}"));
+    let end = start
+        + decision[start..]
+            .find("\n  },\n")
+            .expect("the explanation section closes");
+    format!(
+        "{}{}",
+        &decision[..start],
+        &decision[end + "\n  },".len()..]
+    )
+}
+
 fn read(path: &str) -> String {
     std::fs::read_to_string(repository_root().join(path))
         .unwrap_or_else(|error| panic!("{path}: {error}"))
@@ -367,7 +385,11 @@ fn canon_evaluate_prints_the_decision_each_step_expects() {
             &records(inputs),
         );
         assert_eq!(
-            (text(&run.stdout), text(&run.stderr), run.status.code()),
+            (
+                without_explanation(text(&run.stdout)).as_str(),
+                text(&run.stderr),
+                run.status.code()
+            ),
             (decision.as_str(), "", Some(0)),
             "step `{id}`: canon evaluate"
         );
@@ -413,7 +435,7 @@ fn an_excluded_record_about_another_artifact_is_not_listed_under_a_subject_bound
     let listed = excluded("falsification-1");
     assert_eq!(
         (
-            text(&about_other.stdout),
+            without_explanation(text(&about_other.stdout)).as_str(),
             text(&about_other.stderr),
             about_other.status.code()
         ),
@@ -429,7 +451,7 @@ fn an_excluded_record_about_another_artifact_is_not_listed_under_a_subject_bound
     );
     assert_eq!(
         (
-            text(&about_subject.stdout),
+            without_explanation(text(&about_subject.stdout)).as_str(),
             text(&about_subject.stderr),
             about_subject.status.code()
         ),

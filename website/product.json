@@ -55,7 +55,7 @@
         {"label": "Deterministic validation", "status": "shipped", "detail": "References, duplicates and claim cycles, in a stable order.", "href": "/docs/reference/validation"},
         {"label": "canon-ir/1 compilation", "status": "shipped", "detail": "Canonical ordering and explicit defaults.", "href": "/docs/reference/canon-ir"},
         {"label": "Three-valued claim evaluation", "status": "shipped", "detail": "canon evaluate over a case snapshot and an evidence directory.", "href": "/docs/reference/evaluation"},
-        {"label": "canon conform run", "status": "shipped", "detail": "Runs canon-conformance/1 scenarios; eight ship today: CANON-CLAIM-001 (also covering -002), CANON-EVIDENCE-001, -002 and -003, CANON-OBLIGATION-001, CANON-AUTHORITY-001, CANON-OUTCOME-001 and -002.", "href": "/docs/reference/conformance"},
+        {"label": "canon conform run", "status": "shipped", "detail": "Runs canon-conformance/1 scenarios; nine ship today: CANON-CLAIM-001 (also covering -002), CANON-EVIDENCE-001, -002 and -003, CANON-OBLIGATION-001, CANON-AUTHORITY-001, CANON-OUTCOME-001 and -002, and CANON-EXPLAIN-001 (also covering CANON-DETERMINISM-001).", "href": "/docs/reference/conformance"},
         {"label": "Cases compose at run time", "status": "decided", "detail": "Child cases and their outcomes as evidence; Atlas ADR 0081."},
         {"label": "Protocols express step order", "status": "decided", "detail": "Atlas ADR 0084."},
         {"label": "Evidence bound to revisions", "status": "shipped", "detail": "Evidence applies only to the current revision of the artifact it names; scenario CANON-EVIDENCE-001.", "href": "/docs/reference/evaluation#refusals"},
@@ -65,6 +65,7 @@
         {"label": "Action admissibility", "status": "shipped", "detail": "Admissible, approval-required or blocked, from preconditions and authority decisions; scenario CANON-AUTHORITY-001.", "href": "/docs/reference/evaluation#sections"},
         {"label": "Outcomes", "status": "shipped", "detail": "Legitimate or blocked; no completion through an undeclared or blocked outcome; scenario CANON-OUTCOME-001.", "href": "/docs/reference/evaluation#sections"},
         {"label": "Decision-based outcomes", "status": "shipped", "detail": "An outcome may require an explicit decision taken at the current case revision; scenario CANON-OUTCOME-002.", "href": "/docs/reference/evaluation#explicit-decisions"},
+        {"label": "Structured explanation", "status": "shipped", "detail": "Every decision says what it was computed from and why each value is what it is, down to the evidence records that applied or were excluded; scenario CANON-EXPLAIN-001.", "href": "/docs/reference/evaluation#sections"},
         {"label": "Semantic diff", "status": "planned", "detail": "Classify a protocol change as tightening, relaxation or breaking."}
       ]
     },

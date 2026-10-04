@@ -401,7 +401,8 @@ fn evaluate_authority_parses_and_is_read() {
 }
 
 /// `canon evaluate --at <instant>` is read since story:evidence-freshness: over a protocol that
-/// declares no maximum age it changes no decision, and text that is not an instant is refused.
+/// declares no maximum age it changes no decision but for the explanation's record of the
+/// instant (story:explanation, design § 37), and text that is not an instant is refused.
 #[test]
 fn evaluate_at_is_read_as_the_evaluation_instant() {
     let (args, _dir) = evaluate_inputs("at-flag");
@@ -414,7 +415,16 @@ fn evaluate_at_is_read_as_the_evaluation_instant() {
     };
     let run = with_at("2026-10-04T00:00:00Z");
     assert_eq!(run.status.code(), Some(0), "{}", text(&run.stderr));
-    assert_eq!(text(&run.stdout), text(&control.stdout));
+    let recorded = "\n      \"at\": \"2026-10-04T00:00:00Z\",";
+    assert!(
+        text(&run.stdout).contains(recorded),
+        "the explanation records the instant: {}",
+        text(&run.stdout)
+    );
+    assert_eq!(
+        text(&run.stdout).replacen(recorded, "", 1),
+        text(&control.stdout)
+    );
     let run = with_at("2026-10-04");
     assert_eq!(run.status.code(), Some(1), "malformed instant: exit");
     assert!(

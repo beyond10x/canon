@@ -91,7 +91,18 @@ fn exclusion_listing_names_every_record_bound_to_another_revision() {
     // Coordinator decision on adversary pass 2, finding F1: the behaviour is right and the
     // unqualified docs were wrong. A record bound to another revision is listed as excluded under
     // each claim that reaches its kind, so `stale-m`, of a kind no claim reaches, appears under no
-    // claim, and both pages state the qualified rule.
+    // claim, and both pages state the qualified rule. The explanation records the whole evidence
+    // set it was computed from (story:explanation, design § 37), `stale-m` included; that record
+    // aside, it appears nowhere.
+    let mut decision = decision;
+    let from = &mut decision
+        .explanation
+        .as_mut()
+        .expect("the decision carries an explanation")["computed_from"];
+    assert_eq!(from["evidence"], serde_json::json!(["stale-k", "stale-m"]));
+    from.as_object_mut()
+        .expect("computed_from is an object")
+        .remove("evidence");
     let rendered = eval::render(&decision);
     assert!(
         !rendered.contains("stale-m"),

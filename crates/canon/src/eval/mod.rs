@@ -117,8 +117,8 @@
 //! freshness a record older than its kind's `max_age` at the evaluation instant as `expired`,
 //! each listed as excluded under each claim that reaches its kind through a match that reads it, as
 //! step 4 says. The `obligations`, `actions` and `outcomes` sections are written as the next section
-//! says. Two parts are not built yet: the invalidation stage excludes nothing
-//! (story:invalidation-rules), and no decision carries an `explanation` (story:explanation).
+//! says, and every decision carries an `explanation` (`crate::explain`). One part is not built yet:
+//! the invalidation stage excludes nothing (story:invalidation-rules).
 //!
 //! # Sections
 //!
@@ -151,6 +151,10 @@
 //!   principal whose decision applied, sorted by Unicode code point; otherwise it is blocked with
 //!   the one reason `{"decision": <name>, "present": false}` (CANON-OUTCOME-002). The case snapshot's
 //!   `termination` is checked against it, as the refusals above say (CANON-OUTCOME-001).
+//! - `explanation` is written for every decision: what the decision was computed from (design
+//!   § 37), and why each claim that is not `true`, each open obligation, each action that is not
+//!   admissible and each blocked outcome has its status, down to the evidence records that applied
+//!   or were excluded. Its shape is given by `crate::explain` (CANON-EXPLAIN-001).
 //!
 //! # Authority decisions
 //!
@@ -206,6 +210,10 @@ pub use case::{case_from_value, read_case};
 pub use decision::{render, render_sections};
 pub use evidence::{evidence_from_value, read_evidence};
 pub use read::{MAX_IR_DEPTH, read_ir};
+
+pub(crate) use authority::Authority;
+pub(crate) use claims::reads;
+pub(crate) use decisions::Decisions;
 
 /// Why an evaluation was refused: a stable machine-readable code and a one-line message.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -301,9 +309,26 @@ pub fn evaluate_with(
             outcomes,
             explanation: None,
         };
-        decision.explanation = crate::explain::explain(ir, evidence, &decision);
+        let inputs = crate::explain::Inputs {
+            authority: authority.as_ref(),
+            decisions: decisions.as_ref(),
+            at: supplied.at,
+        };
+        decision.explanation =
+            crate::explain::explain(ir, case, evidence, &excluded, inputs, &decision);
         Ok(decision)
     })
+}
+
+/// The reasons `predicate` is not `true` over the claim `values` and the `evidence` left, as a
+/// blocked outcome states them (`outcomes.rs`): the explanation gives an open obligation the same
+/// reasons.
+pub(crate) fn unmet_reasons(
+    predicate: &Predicate,
+    values: &BTreeMap<ClaimId, crate::model::Truth>,
+    evidence: &[EvidenceRecord],
+) -> Vec<crate::model::Json> {
+    outcomes::reasons(predicate, values, evidence)
 }
 
 /// Moves the records one exclusion stage excluded out of `applicable` and into `excluded`. A stage
@@ -499,8 +524,12 @@ mod tests {
     #[test]
     fn the_decision_renders_every_declared_claim_in_identifier_order() {
         let decision = decide(CASE, &[record("e1", "pass")]).expect("decides");
+        // Every section but the explanation, whose shape `crate::explain` tests.
+        let listed = ["case", "claims", "format", "protocol", "protocol_revision"]
+            .map(str::to_owned)
+            .into();
         assert_eq!(
-            render(&decision),
+            render_sections(&decision, &listed),
             "{\n  \"case\": \"C-1\",\n  \"claims\": {\n    \"base\": {\n      \"value\": \"true\"\n    },\n    \"is_false\": {\n      \"value\": \"false\"\n    },\n    \"is_true\": {\n      \"value\": \"true\"\n    },\n    \"is_unknown\": {\n      \"value\": \"false\"\n    },\n    \"negated\": {\n      \"value\": \"true\"\n    }\n  },\n  \"format\": \"canon-decision/1\",\n  \"protocol\": \"p\",\n  \"protocol_revision\": 3\n}\n"
         );
     }

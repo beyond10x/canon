@@ -20,8 +20,8 @@ Canon is early. Today it parses, validates and compiles protocols, and runs conf
 scenarios. `canon evaluate` gives every claim of a case a three-valued value, applying evidence
 only to the revision it is bound to and only while it is fresh, and says which obligations are
 open, which actions are admissible under the authority decisions given, and which outcomes are
-legitimate, including outcomes that require an explicit decision. Invalidation and the explanation
-are not built yet. Every page says which parts are shipped and which are planned;
+legitimate, including outcomes that require an explicit decision, with a structured explanation of
+each. Invalidation is not built yet. Every page says which parts are shipped and which are planned;
 [where this stands](./status/where-this-stands.md) has the full list.
 
 :::

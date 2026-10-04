@@ -14,7 +14,7 @@
     },
     {
       "command": "canon conform run",
-      "output": "passed: scenario `CANON-AUTHORITY-001`\npassed: scenario `CANON-OUTCOME-002`\npassed: scenario `CANON-EVIDENCE-002`\npassed: scenario `CANON-EVIDENCE-001`\npassed: scenario `CANON-OBLIGATION-001`\npassed: scenario `CANON-OUTCOME-001`\npassed: scenario `CANON-EVIDENCE-003`\npassed: scenario `CANON-CLAIM-001`\nconform: 8 passed, 0 failed, 0 unreadable",
+      "output": "passed: scenario `CANON-AUTHORITY-001`\npassed: scenario `CANON-OUTCOME-002`\npassed: scenario `CANON-EVIDENCE-002`\npassed: scenario `CANON-EVIDENCE-001`\npassed: scenario `CANON-EXPLAIN-001`\npassed: scenario `CANON-OBLIGATION-001`\npassed: scenario `CANON-OUTCOME-001`\npassed: scenario `CANON-EVIDENCE-003`\npassed: scenario `CANON-CLAIM-001`\nconform: 9 passed, 0 failed, 0 unreadable",
       "exitCode": 0
     }
   ],

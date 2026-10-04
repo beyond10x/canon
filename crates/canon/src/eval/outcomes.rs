@@ -208,7 +208,7 @@ impl<'a> Unmet<'a> {
 /// matches, in kind and then subject order, with whether a record the match reads is present,
 /// each once;
 /// `{"requirement": "unsatisfiable"}` when no test is named.
-fn reasons(
+pub(super) fn reasons(
     requires: &Predicate,
     claims: &BTreeMap<ClaimId, Truth>,
     evidence: &[EvidenceRecord],

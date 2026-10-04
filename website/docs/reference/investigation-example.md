@@ -249,6 +249,30 @@ and `canon evaluate --ir investigation.ir.json --case case.yaml --evidence evide
       "value": "true"
     }
   },
+  "explanation": {
+    "computed_from": {
+      "case": {
+        "artifacts": {
+          "explanation": {
+            "revision": "r1"
+          }
+        },
+        "format": "canon-case/1",
+        "id": "INV-18",
+        "protocol": "investigation"
+      },
+      "evidence": [
+        "fal-1",
+        "obs-1"
+      ],
+      "protocol": "investigation",
+      "protocol_revision": 1,
+      "semantics": {
+        "canon": "0.0.0",
+        "format": "canon-decision/1"
+      }
+    }
+  },
   "format": "canon-decision/1",
   "outcomes": {
     "supported": {
