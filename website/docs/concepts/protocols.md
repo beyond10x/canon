@@ -51,7 +51,7 @@ claims:
       evidence: {kind: falsification_attempt, result: survived, subject: explanation}
 ```
 
-:::note[Shipped: subject-bound evidence matches]
+:::shipped[Subject-bound evidence matches]
 
 Conformance scenario `CANON-EVIDENCE-003` holds this; see
 [evidence bound to revisions](./evidence-and-revisions.md#evidence-about-one-artifact).
@@ -77,7 +77,7 @@ obligations:
       claim: explanation.supported
 ```
 
-:::note[Shipped: open or discharged]
+:::shipped[Open or discharged]
 
 `canon evaluate` reports every declared obligation as `open` or `discharged`. It is discharged
 only when the predicate is `TRUE`; `UNKNOWN` and `FALSE` both leave it open. Whether deciding a
@@ -112,7 +112,7 @@ who holds a capability: whoever runs the evaluation passes the authority decisio
 `canon-authority/1` list of capabilities granted or denied (`canon evaluate --authority`). It gives
 effect classes no built-in meaning today.
 
-:::note[Shipped: action admissibility]
+:::shipped[Action admissibility]
 
 `canon evaluate` reports every declared action as `blocked` when its precondition is not `TRUE`
 or a capability it requires is denied, `approval-required` when the precondition is `TRUE`,
@@ -129,7 +129,7 @@ An outcome is a declared terminal interpretation of a case, such as `supported`,
 `abandoned`, together with what it requires: a predicate, or an explicit decision. A case ends only
 through an outcome its protocol declares.
 
-:::note[Shipped: legitimate or blocked]
+:::shipped[Legitimate or blocked]
 
 `canon evaluate` reports every declared outcome as `legitimate` when its requirement is `TRUE`
 and `blocked`, with the reasons, otherwise. A case snapshot that records termination through an
@@ -138,7 +138,7 @@ blocked outcome (`illegitimate-termination`). Conformance scenario `CANON-OUTCOM
 
 :::
 
-:::note[Shipped: outcomes that require an explicit decision]
+:::shipped[Outcomes that require an explicit decision]
 
 An outcome may require an explicit decision instead of a predicate:
 
@@ -178,7 +178,7 @@ true_when:
             is: unknown
 ```
 
-:::note[Shipped: how three values combine]
+:::shipped[How three values combine]
 
 `all` is `false` when a member is `false`, `true` when every member is `true`, and `unknown`
 otherwise; `any` is the mirror image; `not` swaps `true` and `false` and keeps `unknown`. The

@@ -69,7 +69,7 @@ not name, and that is not built on one it names, still reads the record, even wh
 same kind of evidence. A record that records no revision of the upstream artifact is never
 invalidated.
 
-:::note[Shipped: revision binding]
+:::shipped[Revision binding]
 
 Artifacts are declared in `protocol/1`, a `canon-case/1` snapshot records each artifact's current
 revision, and every `canon-evidence/1` record names its subject artifact and revision
@@ -81,7 +81,7 @@ each claim with a match that would read it, in `excluded_evidence`, with the rea
 
 :::
 
-:::note[Shipped: subject-bound evidence matches]
+:::shipped[Subject-bound evidence matches]
 
 An evidence match in `protocol/1` may name a `subject`, which must be a declared artifact
 (`canon validate` refuses another as `undeclared-artifact`). Conformance scenario
@@ -90,7 +90,7 @@ An evidence match in `protocol/1` may name a `subject`, which must be a declared
 
 :::
 
-:::note[Shipped: freshness]
+:::shipped[Freshness]
 
 An evidence kind may declare a `max_age`, and a `canon-evidence/1` record may give its
 `observed_at`. Given an evaluation instant (`canon evaluate --at`), a record older than its kind's
@@ -101,7 +101,7 @@ holds this.
 
 :::
 
-:::note[Shipped: invalidation]
+:::shipped[Invalidation]
 
 A `protocol/1` document may declare `invalidation:` rules, and a `canon-evidence/1` record may give
 its `upstream_revisions` ([evaluation documents](../reference/documents.md)). `canon validate`
