@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-05T21:39:49Z",
+  "actor": "human:timo",
+  "artifact": "release-plan:canon-0-1-0",
+  "kind": "release-plan",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "Canon 0.1.0 task check: 601 workspace cases plus 42 repeated ESS-first cases; 18 generated files current; site build passed"
+  }
+}

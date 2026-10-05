@@ -2,7 +2,7 @@ items:
   - label: Typed catalog assertions
     area: Language
     story: story:assertion-expressions
-    detail: canon-expr/1 parsing, type checking, recipes, exact numbers, acquisition planning and pure replay over typed observations; implemented in source and unreleased.
+    detail: canon-expr/1 parsing, type checking, recipes, exact numbers, acquisition planning and pure replay over typed observations; available in source release 0.1.0.
     href: /docs/concepts/assertions
   - label: protocol/1 source model and parser
     area: Language

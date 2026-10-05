@@ -8,8 +8,8 @@ source: crates/canon-expr/src; crates/canon-expr/tests/conformance.rs; crates/ca
 
 # Assertions with collected evidence
 
-The source tree includes `b10x-canon-expr`, a Rust library implementing `canon-expr/1`. It is a
-new source capability, with no release claimed here. Its language, catalog and evidence contracts
+Source release 0.1.0 includes `b10x-canon-expr`, a Rust library implementing `canon-expr/1`.
+Its language, catalog and evidence contracts
 are generic. [Engineering Protocols](https://beyond10x.github.io/engineering-protocols/)
 ([GitHub](https://github.com/beyond10x/engineering-protocols)) supplies engineering vocabulary,
 provider registration and the gate command line.

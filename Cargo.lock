@@ -63,7 +63,7 @@ dependencies = [
 
 [[package]]
 name = "b10x-canon"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -74,7 +74,7 @@ dependencies = [
 
 [[package]]
 name = "b10x-canon-expr"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "logos",
  "serde",
@@ -95,7 +95,7 @@ dependencies = [
 
 [[package]]
 name = "canon-cli"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "b10x-canon",
  "clap",
@@ -103,7 +103,7 @@ dependencies = [
 
 [[package]]
 name = "canon-docs"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "b10x-canon",
  "b10x-canon-expr",

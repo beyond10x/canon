@@ -5,7 +5,7 @@
     {
       "label": "Typed catalog assertions",
       "status": "shipped",
-      "detail": "canon-expr/1 parsing, type checking, recipes, exact numbers, acquisition planning and pure replay over typed observations; implemented in source and unreleased.",
+      "detail": "canon-expr/1 parsing, type checking, recipes, exact numbers, acquisition planning and pure replay over typed observations; available in source release 0.1.0.",
       "href": "/docs/concepts/assertions",
       "area": "Language"
     },
