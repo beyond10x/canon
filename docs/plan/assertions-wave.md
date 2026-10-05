@@ -7,11 +7,13 @@ and the CLI; Canon remains free of engineering vocabulary and I/O.
 Managed tree: `$HOME/.local/state/worktree/trees/b10x/canon/canon-assertions`.
 Branch: `feat/canon-assertions`, initial head `66c8d4b`.
 Target: `$HOME/.cache/b10x-target/canon-assertions`.
-Scratch: `$HOME/.cache/b10x-assertions/core`. Stage: verified, source publication pending.
+Scratch: `$HOME/.cache/b10x-assertions/core`. Stage: verified, source publication blocked.
 Spec commit `876e01e`; implementation `cf2ae40c2284c86d05b33c3003c45c7351f1150b`.
 Final `task check` and site build pass; 21 expression tests and 598 workspace cases.
 Two bounded adversary passes reproduced four defects, all corrected with retained cases.
 See `verification-report:assertion-expressions` for exact counts and model policy.
+`b10x-gates check` passed. Publication refused because Canon has no required App-only
+branch-authority ruleset; see `blocker:assertion-publication`. No bypass was attempted.
 
 Roles use `aep:implementing` 0.19.2 references (implementor, adversary), run through
 Codex's generic agents because plugin agent types are not exposed. Coordinator owns
