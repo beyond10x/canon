@@ -63,6 +63,25 @@ that changes the model updates `ess/` in the same change. Each declaration in `e
 
 ## Work
 
+The `b10x-canon-expr` crate owns generic catalog expressions. `ess/domains/expr.yaml` specifies
+its wire types; `crates/canon-expr/tests/model_matches.rs::every_wire_declaration_matches_ess`
+checks every field, field type and variant against the Rust model, with mutation controls.
+Native checked types deliberately continue Canon's parity-backed model convention; ESS structural
+Rust generation is available, and is not represented as a missing capability.
+`task ess-gate` runs both model parity guards. CI and the manifest select ESS 0.53.0.
+
+Keep the Logos lexer and Pratt parser, checker/planner, exact-number implementation and pure
+evaluator separate. Catalog recipes and observation providers extend names, never parser
+operators. `crates/canon-expr/tests/conformance.rs::complete_three_valued_tables` holds Boolean
+semantics; `generated_parse_format_parse_and_malformed_corpus` holds parser/formatter behavior.
+`crates/canon-expr/tests/adversary.rs::checked_optional_absence_plan_roundtrips` holds retained
+context schemas; `acquired_argument_cannot_exceed_value_payload_budget` holds composed argument
+bounds. Every intermediate value is validated. Do not add IO or implicit time to this crate.
+
+Expression contracts and resource limits in `website/docs/reference/assertions.md` are generated
+by `canon-docs` from the embedded ESS model and library constants. Update the concept guide with
+compatibility decisions and keep unreleased capability claims explicit.
+
 - Planned in the AEP store under `.engineering/`, written only through `aep plan artifact`. Body
   drafts go in `.engineering/drafts/` (ignored).
 - Build with `CARGO_TARGET_DIR=$HOME/.cache/b10x-target/canon` (the Taskfile sets it).

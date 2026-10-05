@@ -38,6 +38,7 @@ pub fn all(root: &Path) -> Result<BTreeMap<String, String>, String> {
     files.insert(format!("{REFERENCE}/cli.md"), cli());
     files.insert(format!("{REFERENCE}/protocol.md"), protocol(&model)?);
     files.insert(format!("{REFERENCE}/documents.md"), documents(&model)?);
+    files.insert(format!("{REFERENCE}/assertions.md"), assertions());
     for (file, schema) in schemas(&model)? {
         files.insert(format!("{SCHEMA_DIR}/{file}"), schema);
     }
@@ -81,6 +82,38 @@ pub fn all(root: &Path) -> Result<BTreeMap<String, String>, String> {
 
 fn source_link(path: &str) -> String {
     format!("[`{path}`]({SOURCE}/{path})")
+}
+
+fn assertions() -> String {
+    let mut out = front_matter(
+        "Assertion contracts and limits",
+        "Assertions",
+        "Typed expression wire contracts and resource limits, generated from the expression library.",
+    );
+    out.push_str("\n# Assertion contracts and limits\n\n");
+    out.push_str(&format!(
+        "Language: `{}`. Source implementation; no release is claimed.\n\n",
+        canon_expr::LANGUAGE
+    ));
+    out.push_str("The [concept guide](../concepts/assertions.md) explains compilation, acquisition and offline evaluation. These limits are read from the library constants; changing one requires compatibility review.\n\n| Budget | Maximum |\n|---|---:|\n");
+    for (label, value) in [
+        ("Combined source bytes", canon_expr::MAX_SOURCE),
+        ("Tokens per expression", canon_expr::MAX_TOKENS),
+        ("Nesting", canon_expr::MAX_DEPTH),
+        ("Expanded nodes", canon_expr::MAX_NODES),
+        ("Assertions", canon_expr::MAX_ASSERTIONS),
+        ("Unique requests", canon_expr::MAX_REQUESTS),
+        (
+            "Bound values or evidence payload bytes",
+            canon_expr::MAX_BOUND_BYTES,
+        ),
+    ] {
+        out.push_str(&format!("| {label} | {value} |\n"));
+    }
+    out.push_str("\n## Typed documents\n\nThis is the exact ESS model embedded by the expression library. Semantic constraints are exercised by its conformance suite. Integer wire strings preserve i128 values through JSON; decimal coefficients use the same canonical strings.\n\n```yaml\n");
+    out.push_str(canon_expr::MODEL_SPEC);
+    out.push_str("```\n");
+    out
 }
 
 // ---------------------------------------------------------------------------------------------

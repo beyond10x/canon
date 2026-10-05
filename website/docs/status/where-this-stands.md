@@ -5,11 +5,12 @@ description: What Canon can do today, what is planned, and the normative require
 
 # Where this stands
 
-Canon is in bootstrap. One library crate, `b10x-canon`, and one command-line crate, `canon-cli`,
-hold everything marked shipped below. Nothing has been released; build from source.
+Canon is in bootstrap. Libraries `b10x-canon` and `b10x-canon-expr`, and command-line crate
+`canon-cli`, hold the implemented capabilities below. Nothing has been released; build from source.
 
 | Capability | Status | What it means |
 |---|---|---|
+| [Typed catalog assertions](../concepts/assertions.md) | Implemented in source; unreleased | `canon-expr/1` parsing, checking, recipes, exact numbers, acquisition planning and pure replay over typed observations. |
 | [`protocol/1` source model and parser](../reference/protocol.md) | Shipped | Artifacts, evidence kinds, claims, obligations, actions, outcomes and invalidation rules, read strictly. |
 | [Validation](../reference/validation.md) | Shipped | Format, identifiers, duplicates, unresolved references and claim cycles, in a stable order. |
 | [`canon-ir/1` compilation](../reference/canon-ir.md) | Shipped | Canonical ordering, explicit defaults, one serialization suitable for hashing. |

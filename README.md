@@ -7,16 +7,22 @@ remain open, which actions are admissible, which need authority, and whether an 
 earned. Claims are three-valued (`TRUE`, `FALSE`, `UNKNOWN`); evidence is bound to the revision it
 was observed on, so evidence for a superseded revision leaves a claim `UNKNOWN` rather than `TRUE`.
 
-Canon knows nothing about engineering, agents or model providers. Domains are written on top of it;
-the first is [ELS](https://github.com/beyond10x/els), the engineering domain.
+The `b10x-canon-expr` library adds typed catalog assertions: exact comparisons, recipes,
+deduplicated acquisition plans and pure evaluation over retained observations. Read the
+[assertion guide](https://beyond10x.github.io/canon/docs/concepts/assertions) or its
+[source](website/docs/concepts/assertions.md).
+
+[Documentation](https://beyond10x.github.io/canon/) covers the protocol model, CLI and evidence
+semantics. [Engineering Protocols](https://beyond10x.github.io/engineering-protocols/)
+([GitHub](https://github.com/beyond10x/engineering-protocols)) supplies engineering vocabulary and
+acquisition; Canon remains independent of that domain.
 
 ## Status
 
-Bootstrap. The crate `b10x-canon` holds the first scaffold types; the kernel is being built against
-the plan in [`docs/design/canon-protocol-calculus-design.md`](docs/design/canon-protocol-calculus-design.md)
-and the contract sketch in [`docs/contracts/protocol-core.md`](docs/contracts/protocol-core.md).
-
-Planned crates: model, parse, validate, compile, IR, eval, explain, diff, conformance, CLI.
+Build from source; no release is claimed. `b10x-canon` implements protocol parsing, validation,
+compilation and evaluation; `canon-cli` exposes those operations. `b10x-canon-expr` is the
+generic assertion library. See the [current status](https://beyond10x.github.io/canon/docs/status/where-this-stands)
+and [unreleased changes](CHANGELOG.md).
 
 ## Build
 

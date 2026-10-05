@@ -167,7 +167,7 @@ fn compiled_ir(root: &Path) -> Value {
     let output = match Command::new("ess").args(args).current_dir(root).output() {
         Ok(output) => output,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => panic!(
-            "`ess` is not on PATH: comparing the specification with the model needs ess 0.52.0, \
+            "`ess` is not on PATH: comparing the specification with the model needs ess 0.53.0, \
              the release ess/ess-inputs.yaml pins"
         ),
         Err(error) => panic!("cannot run `ess {}`: {error}", args.join(" ")),
@@ -1550,14 +1550,7 @@ fn an_unlisted_file_under_ess_does_not_supply_map_keys() {
     let domains = root.join("ess/domains");
     fs::create_dir_all(&domains).expect("create the copy");
     let spec = repo_root().join("ess");
-    for file in [
-        "system.yaml",
-        "ess-inputs.yaml",
-        "domains/protocol.yaml",
-        "domains/check.yaml",
-    ] {
-        fs::copy(spec.join(file), root.join("ess").join(file)).expect("copy spec file");
-    }
+    copy_listed_specification(&spec, &root.join("ess"));
     let domain = domains.join("protocol.yaml");
     let original = fs::read_to_string(&domain).expect("domain reads");
     let from = "type: Map<canon.protocol.ClaimId, canon.protocol.Claim>";
@@ -1601,14 +1594,7 @@ fn a_local_name_declared_in_two_domains_fails_loudly() {
     }
     fs::create_dir_all(root.join("ess/domains")).expect("create the copy");
     let spec = repo_root().join("ess");
-    for file in [
-        "system.yaml",
-        "ess-inputs.yaml",
-        "domains/protocol.yaml",
-        "domains/check.yaml",
-    ] {
-        fs::copy(spec.join(file), root.join("ess").join(file)).expect("copy spec file");
-    }
+    copy_listed_specification(&spec, &root.join("ess"));
     let domain = root.join("ess/domains/check.yaml");
     let original = fs::read_to_string(&domain).expect("domain reads");
     assert!(
@@ -1632,6 +1618,25 @@ fn a_local_name_declared_in_two_domains_fails_loudly() {
         message.contains("two domains declare a type `ClaimId`"),
         "{message}"
     );
+}
+
+// Negative controls copy the manifest-selected specification, including new domains.
+// Maintaining a second file inventory would make these controls fail before their mutation.
+fn copy_listed_specification(from: &Path, to: &Path) {
+    let inputs = fs::read_to_string(from.join("ess-inputs.yaml")).expect("inputs read");
+    let inputs: Value = serde_yaml_ng::from_str(&inputs).expect("valid inputs");
+    let files = std::iter::once("ess-inputs.yaml").chain(
+        inputs["specification"]
+            .as_sequence()
+            .expect("specification list")
+            .iter()
+            .map(|v| v.as_str().expect("file path")),
+    );
+    for file in files {
+        let target = to.join(file);
+        fs::create_dir_all(target.parent().expect("parent")).expect("create spec directory");
+        fs::copy(from.join(file), target).expect("copy spec file");
+    }
 }
 
 /// The second entity is compared like the first: a field added to `Case` is named.

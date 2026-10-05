@@ -52,7 +52,7 @@ fn toolchain_which_from_the_root_names_the_pin() {
         .find_map(|line| line.strip_prefix("reason: "))
         .unwrap_or_default();
     assert!(
-        reason.starts_with("pin: `requires: ess 0.52.0` in")
+        reason.starts_with("pin: `requires: ess 0.53.0` in")
             && reason.ends_with("ess/ess-inputs.yaml"),
         "`ess specify toolchain which` from the repository root does not take its release from \
          ess/ess-inputs.yaml:\n{printed}"
