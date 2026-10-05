@@ -24,3 +24,10 @@ First record the typed ESS home, then the story; first commit specification and 
 semantic tests. Check full workspace and ESS gate, docs drift, exact numeric boundaries,
 bounded parser/recipe behavior, stale/unknown evidence and offline deterministic replay.
 Catalog additions must not modify lexer, parser or operator semantics.
+
+## Pull request submission resumed
+
+On 2026-10-05 the operator requested submitted green pull requests. Canon's missing exact App-only
+branch-authority rule was restored through the bot API (rule 24531196), and the publication blocker
+was cleared in AEP. Current main is integrated for PR checks. Submission continues in managed tree
+`canon-assertions-pr`, branch `feat/canon-assertions-pr`; earlier archives remain recovery snapshots.

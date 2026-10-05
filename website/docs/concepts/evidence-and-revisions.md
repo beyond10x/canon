@@ -1,13 +1,15 @@
 ---
 title: Evidence bound to revisions
 description: Evidence is about one revision of one artifact; when the artifact moves on, a claim that evidence decided goes back to UNKNOWN.
+status: shipped
+lede: A protocol declares artifacts, the things evidence is about. Evidence is bound to the artifact revision it was observed on. When the artifact moves on, that evidence no longer applies to the current revision.
+source: crates/canon/src/eval/, binding, freshness and invalidation
+source_url: https://github.com/beyond10x/canon/tree/main/crates/canon/src/eval
 ---
 
 # Evidence bound to revisions
 
-A protocol declares *artifacts*: the things evidence is about. Evidence is bound to the artifact
-revision it was observed on. When the artifact moves on, that evidence no longer applies to the
-current revision: claims are evaluated as if it had not been given. A claim decided by an evidence
+Claims are evaluated as if evidence bound to an earlier revision had not been given. A claim decided by an evidence
 match on it goes back to `UNKNOWN`, not to `FALSE`. A claim that tests whether another claim is
 `UNKNOWN` is decided by that `UNKNOWN`, so it can become `TRUE` or `FALSE`.
 

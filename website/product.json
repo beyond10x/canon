@@ -11,8 +11,12 @@
       {"label": "See a protocol", "href": "#protocol"}
     ],
     "meta": "Rust · protocol/1 source · canon-ir/1 compiled form · Apache-2.0",
-    "terminal": "data/canon.terminal.json",
-    "terminalCaption": "Real canon output, recorded by canon-docs and checked for drift on every change."
+    "art": {
+      "kind": "terminal",
+      "session": "data/canon.terminal.json",
+      "caption": "Real canon output, recorded by canon-docs and checked for drift on every change."
+    },
+    "kpis": ["actions", "evidence", "claims", "shipped", "decided", "planned"]
   },
   "sections": [
     {
@@ -23,7 +27,7 @@
       "items": [
         {"title": "Declared as data", "description": "A protocol is a YAML document in the protocol/1 format. Canon parses it, checks every reference and compiles it into canon-ir/1, a normalized form stable enough to hash.", "status": "shipped", "href": "/docs/concepts/protocols"},
         {"title": "Pure and deterministic", "description": "The library reads no clock, environment, network or filesystem. Callers pass documents in; the same normalized input gives the same normalized output.", "status": "shipped", "href": "/docs/concepts/evaluation"},
-        {"title": "Three-valued claims", "description": "Every claim is TRUE, FALSE or UNKNOWN. Missing evidence leaves a claim UNKNOWN; it never makes it FALSE.", "status": "shipped", "href": "/docs/concepts/three-valued-truth"}
+        {"title": "Three-valued claims", "description": "Every claim is TRUE, FALSE or UNKNOWN. Missing evidence leaves a claim UNKNOWN; it never makes it FALSE.", "status": "shipped", "href": "/docs/concepts/three-valued-truth", "icon": "claim"}
       ]
     },
     {
@@ -50,36 +54,16 @@
       "eyebrow": "Status",
       "title": "Bootstrap. Here is exactly what exists.",
       "lede": "Shipped means a command or library call that runs today. Decided means recorded in an accepted architecture decision, not built. Planned means on the roadmap only.",
-      "items": [
-        {"label": "protocol/1 source model and parser", "status": "shipped", "detail": "Unknown keys and explicit nulls are refused.", "href": "/docs/reference/protocol"},
-        {"label": "Deterministic validation", "status": "shipped", "detail": "References, duplicates and claim cycles, in a stable order.", "href": "/docs/reference/validation"},
-        {"label": "canon-ir/1 compilation", "status": "shipped", "detail": "Canonical ordering and explicit defaults.", "href": "/docs/reference/canon-ir"},
-        {"label": "Three-valued claim evaluation", "status": "shipped", "detail": "canon evaluate over a case snapshot and an evidence directory.", "href": "/docs/reference/evaluation"},
-        {"label": "canon conform run", "status": "shipped", "detail": "Runs canon-conformance/1 scenarios; eleven ship today: CANON-CLAIM-001 (also covering -002), CANON-EVIDENCE-001, -002 and -003, CANON-OBLIGATION-001, CANON-AUTHORITY-001, CANON-OUTCOME-001 and -002, CANON-INVALIDATION-001, CANON-EXPLAIN-001 (also covering CANON-DETERMINISM-001), and CANON-REASONS-001 (the subject-bound reason shape in actions and outcomes).", "href": "/docs/reference/conformance"},
-        {"label": "Cases compose at run time", "status": "decided", "detail": "Child cases and their outcomes as evidence; Atlas ADR 0081."},
-        {"label": "Protocols express step order", "status": "decided", "detail": "Atlas ADR 0084."},
-        {"label": "Evidence bound to revisions", "status": "shipped", "detail": "Evidence applies only to the current revision of the artifact it names; scenario CANON-EVIDENCE-001.", "href": "/docs/reference/evaluation#refusals"},
-        {"label": "Subject-bound evidence matches", "status": "shipped", "detail": "An evidence match may name the artifact its record must be about; a record about another artifact does not match it; scenario CANON-EVIDENCE-003.", "href": "/docs/concepts/evidence-and-revisions#evidence-about-one-artifact"},
-        {"label": "Evidence freshness", "status": "shipped", "detail": "Evidence older than its kind's max_age at the --at instant is excluded: a match it alone decided is UNKNOWN rather than FALSE; scenario CANON-EVIDENCE-002.", "href": "/docs/reference/evaluation#refusals"},
-        {"label": "Invalidation rules", "status": "shipped", "detail": "A rule names an upstream artifact and the claims its revision change invalidates; evidence observed against an earlier revision no longer supports them, and claims built on them follow their predicates; scenario CANON-INVALIDATION-001.", "href": "/docs/concepts/evidence-and-revisions#invalidation"},
-        {"label": "Obligations", "status": "shipped", "detail": "Each obligation is open or discharged by its discharge predicate; scenario CANON-OBLIGATION-001.", "href": "/docs/reference/evaluation#sections"},
-        {"label": "Action admissibility", "status": "shipped", "detail": "Admissible, approval-required or blocked, from preconditions and authority decisions; scenario CANON-AUTHORITY-001.", "href": "/docs/reference/evaluation#sections"},
-        {"label": "Outcomes", "status": "shipped", "detail": "Legitimate or blocked; no completion through an undeclared or blocked outcome; scenario CANON-OUTCOME-001.", "href": "/docs/reference/evaluation#sections"},
-        {"label": "Decision-based outcomes", "status": "shipped", "detail": "An outcome may require an explicit decision taken at the current case revision; scenario CANON-OUTCOME-002.", "href": "/docs/reference/evaluation#explicit-decisions"},
-        {"label": "Structured explanation", "status": "shipped", "detail": "Every decision says what it was computed from and why each value is what it is, down to the evidence records that applied or were excluded; scenario CANON-EXPLAIN-001.", "href": "/docs/reference/evaluation#sections"},
-        {"label": "canon check", "status": "shipped", "detail": "Every state of a protocol's finite state space: unreachable outcomes, unsatisfiable preconditions, unproduced evidence, authority bypasses with a witness state, and failing properties with a counterexample.", "href": "/docs/reference/cli#canon-check"},
-        {"label": "canon generate", "status": "shipped", "detail": "One minimal witness scenario per outcome and per blocked action, which canon conform run runs unchanged.", "href": "/docs/reference/cli#canon-generate"},
-        {"label": "Semantic diff", "status": "planned", "detail": "Classify a protocol change as tightening, relaxation or breaking."}
-      ]
+      "items": "data/status.json"
     },
     {
       "kind": "related",
       "eyebrow": "Related tools",
       "title": "Built on Canon, and beside it.",
       "tools": [
-        {"name": "ELS", "description": "Engineering protocols written in Canon: which claims must hold, which evidence counts, which actions need authority.", "href": "https://beyond10x.github.io/els/"},
-        {"name": "Loom", "description": "The native agent harness: a model that acts, only inside its frontier.", "href": "https://beyond10x.github.io/loom/"},
-        {"name": "ESS", "description": "Executable system specifications: Canon's data model is held to one.", "href": "https://beyond10x.github.io/ess/"}
+        {"id": "els", "relation": "uses", "via": "protocol/1"},
+        {"id": "loom", "relation": "beside"},
+        {"id": "ess", "relation": "specifies"}
       ]
     }
   ]

@@ -1,0 +1,107 @@
+items:
+  - label: Typed catalog assertions
+    area: Language
+    story: story:assertion-expressions
+    detail: canon-expr/1 parsing, type checking, recipes, exact numbers, acquisition planning and pure replay over typed observations; implemented in source and unreleased.
+    href: /docs/concepts/assertions
+  - label: protocol/1 source model and parser
+    area: Language
+    story: story:protocol-source-model
+    detail: Artifacts, evidence kinds, claims, obligations, actions, outcomes and invalidation rules, read strictly; unknown keys and explicit nulls are refused.
+    href: /docs/reference/protocol
+  - label: Deterministic validation
+    area: Language
+    story: story:protocol-source-model
+    detail: Format, identifiers, duplicates, unresolved references and claim cycles, in a stable order.
+    href: /docs/reference/validation
+  - label: canon-ir/1 compilation
+    area: Language
+    story: story:canon-ir
+    detail: Canonical ordering, explicit defaults, one serialization suitable for hashing.
+    href: /docs/reference/canon-ir
+  - label: ESS specification of the data model
+    area: Language
+    story: story:ess-hard-gate
+    detail: The model is specified under ess/ and held to a hard gate; a test fails when the two differ.
+  - label: Three-valued claim evaluation
+    area: Evaluation
+    story: story:three-valued-claims
+    detail: canon evaluate over a case snapshot and an evidence directory, writing a canon-decision/1 document; scenario CANON-CLAIM-001, also covering CANON-CLAIM-002.
+    href: /docs/reference/evaluation
+  - label: Evaluation documents
+    area: Evaluation
+    story: story:three-valued-claims
+    detail: canon-case/1, canon-evidence/1, canon-authority/1, canon-decisions/1 and canon-decision/1, and the canon-properties/1 document canon check reads.
+    href: /docs/reference/documents
+  - label: canon conform run
+    area: Evaluation
+    story: story:conformance-runner
+    detail: Runs canon-conformance/1 scenarios that compile a fixture and evaluate a case, with authority decisions, explicit decisions and an evaluation instant when a step gives them.
+    href: /docs/reference/conformance
+  - label: Evidence bound to revisions
+    area: Evaluation
+    story: story:evidence-revision-binding
+    detail: Evidence applies only to the current revision of the artifact it names; a record bound to another revision is listed as excluded under each claim that reaches its kind, and one about an undeclared artifact is refused; scenario CANON-EVIDENCE-001.
+    href: /docs/reference/evaluation#refusals
+  - label: Subject-bound evidence matches
+    area: Evaluation
+    story: story:subject-bound-evidence-match
+    detail: An evidence match may name the artifact its record must be about; a record about another artifact does not match it; scenario CANON-EVIDENCE-003.
+    href: /docs/concepts/evidence-and-revisions#evidence-about-one-artifact
+  - label: Evidence freshness
+    area: Evaluation
+    story: story:evidence-freshness
+    detail: Evidence older than its kind's max_age at the --at instant is excluded, so a match it alone decided is UNKNOWN rather than FALSE; scenario CANON-EVIDENCE-002.
+    href: /docs/reference/evaluation#refusals
+  - label: Invalidation rules
+    area: Evaluation
+    story: story:invalidation-rules
+    detail: A rule names an upstream artifact and the claims its revision change invalidates; evidence observed against an earlier revision no longer supports them, and claims built on them follow their predicates; scenario CANON-INVALIDATION-001.
+    href: /docs/concepts/evidence-and-revisions#invalidation
+  - label: Obligations
+    area: Evaluation
+    story: story:obligations
+    detail: Each obligation is open or discharged by its discharge predicate; scenario CANON-OBLIGATION-001.
+    href: /docs/reference/evaluation#sections
+  - label: Action admissibility
+    area: Evaluation
+    story: story:action-admissibility
+    detail: Admissible, approval-required or blocked, from preconditions and authority decisions; scenario CANON-AUTHORITY-001.
+    href: /docs/reference/evaluation#sections
+  - label: Outcomes
+    area: Evaluation
+    story: story:outcomes
+    detail: Legitimate or blocked; no completion through an undeclared or blocked outcome; scenario CANON-OUTCOME-001.
+    href: /docs/reference/evaluation#sections
+  - label: Decision-based outcomes
+    area: Evaluation
+    story: story:decision-outcomes
+    detail: An outcome may require an explicit decision taken at the current case revision; scenario CANON-OUTCOME-002.
+    href: /docs/reference/evaluation#explicit-decisions
+  - label: Structured explanation
+    area: Evaluation
+    story: story:explanation
+    detail: Every decision says what it was computed from and why each value is what it is, down to the evidence records that applied or were excluded; scenario CANON-EXPLAIN-001, also covering CANON-DETERMINISM-001.
+    href: /docs/reference/evaluation#sections
+  - label: canon check
+    area: Analysis
+    story: story:canon-check
+    detail: Every state of a protocol's finite state space; unreachable outcomes, unsatisfiable preconditions, unproduced evidence, authority bypasses with a witness state, and failing properties with a counterexample.
+    href: /docs/reference/cli#canon-check
+  - label: canon generate
+    area: Analysis
+    story: story:scenario-generation
+    detail: One minimal witness scenario per outcome and per blocked action, which canon conform run runs unchanged.
+    href: /docs/reference/cli#canon-generate
+  - label: Semantic diff
+    area: Analysis
+    story: story:semantic-diff
+    detail: Classify a protocol change as tightening, relaxation, breaking, expansion or no semantic change.
+  - label: Cases compose at run time
+    area: Design
+    story: story:case-composition
+    detail: Child cases and their outcomes as evidence; Atlas ADR 0081.
+  - label: Protocols express step order
+    area: Design
+    story: story:evidence-order-predicate
+    detail: A predicate over evidence order, the first record of a kind and one kind before another; Atlas ADR 0084.

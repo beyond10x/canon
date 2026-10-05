@@ -109,6 +109,8 @@ dependencies = [
  "b10x-canon-expr",
  "canon-cli",
  "clap",
+ "serde",
+ "serde_yaml_ng",
  "syn 3.0.6",
 ]
 

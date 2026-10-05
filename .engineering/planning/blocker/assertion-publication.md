@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: blocker:assertion-publication
 kind: blocker
-status: open
+status: cleared
 title: Canon publication requires its App-only branch authority
 relations:
 - blocks: story:assertion-expressions
-revision: 1
+revision: 3
+transitions:
+- {from: "open", to: "cleared", at: "2026-10-05T20:59:48Z", actor: "human:timo", revision: 3}
 ---
 Implementation and repository gates are complete. Source publication is blocked by the repository's
 remote authority configuration, outside the assertion implementation scope.
@@ -23,3 +25,11 @@ it was tested from the local Git object and has not been published with an unrea
 
 The source is committed and retained in its managed tree and archive. No release tag or deployment
 has been created. Source verification is recorded separately in verification-report:assertion-expressions.
+
+## Resolution
+
+The operator requested submitted green pull requests on 2026-10-05. Canon's missing
+`b10x-bot-branch-authority` ruleset was restored through the bot API, using the exact App-only
+configuration required by Gates and already installed on Engineering Protocols. Rule 24531196
+is active; its sole bypass actor is the b10x bot App (4579525). No checks or protections were
+removed. Source submission can proceed through the normal signed Gates publication path.
