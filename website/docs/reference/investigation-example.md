@@ -268,7 +268,7 @@ and `canon evaluate --ir investigation.ir.json --case case.yaml --evidence evide
       "protocol": "investigation",
       "protocol_revision": 1,
       "semantics": {
-        "canon": "0.0.0",
+        "canon": "0.1.0",
         "format": "canon-decision/1"
       }
     }

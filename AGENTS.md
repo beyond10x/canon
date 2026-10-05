@@ -89,6 +89,19 @@ compatibility decisions and keep unreleased capability claims explicit.
   through `b10x-gates api`.
 - Use a managed worktree (`worktree create --repo canon --purpose …`) for changes.
 
+## Releases
+
+Releases are source releases at bare-version tags, starting with `0.1.0`. Update the workspace
+version, Cargo.lock and CHANGELOG.md, refresh installation/status prose and regenerate documentation.
+Update the expected decision provenance version in `conformance/scenarios/explanation.yaml` and
+`crates/canon-cli/tests/adversary_skel_cli.rs`; keep their other exact-output expectations unchanged.
+Land the bot-authored preparation on main with `task check` and CI green, then create an annotated
+bot tag on that exact commit and its GitHub Release through `b10x-gates`. Verify the peeled tag,
+required source checks, Release and downloadable source archives. There is no binary packaging
+workflow or crates.io publication. Documentation delivery runs asynchronously; report it pending
+unless its live publication has been verified. A source release does not include Atlas, Website
+or downstream consumer changes.
+
 ## Public documentation
 
 `website/` is the public documentation site, written for people, not agents, and built with

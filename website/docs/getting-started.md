@@ -5,11 +5,11 @@ description: Build the canon command line from source, then validate, compile an
 
 # Getting started
 
-There is no release yet, so build `canon` from source. You need a current stable Rust toolchain;
+Install source release `0.1.0`. You need a current stable Rust toolchain;
 the code uses the 2024 edition. The `canon-cli` crate installs a binary named `canon`.
 
 ```bash
-git clone https://github.com/beyond10x/canon.git
+git clone --branch 0.1.0 https://github.com/beyond10x/canon.git
 cd canon
 cargo install --locked --path crates/canon-cli
 canon --help
