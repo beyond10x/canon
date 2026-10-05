@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 /// The ESS release `ess/ess-inputs.yaml` pins and CI installs.
-const PINNED: &str = "0.52.0";
+const PINNED: &str = "0.53.0";
 
 /// The marker of an open question, written as two halves so this file does not carry it whole.
 const OPEN_QUESTION: &str = concat!("UNMAPPED", ":");

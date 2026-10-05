@@ -1,4 +1,9 @@
 items:
+  - label: Typed catalog assertions
+    area: Language
+    story: story:assertion-expressions
+    detail: canon-expr/1 parsing, type checking, recipes, exact numbers, acquisition planning and pure replay over typed observations; implemented in source and unreleased.
+    href: /docs/concepts/assertions
   - label: protocol/1 source model and parser
     area: Language
     story: story:protocol-source-model

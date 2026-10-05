@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-05T20:37:50Z",
+  "actor": "human:timo",
+  "artifact": "story:assertion-expressions",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check: 598 workspace tests plus42 ESS-first repeats; exit0",
+    "reference": "verification-report:assertion-expressions"
+  }
+}

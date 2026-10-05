@@ -21,6 +21,7 @@ const sidebars: SidebarsConfig = {
         'concepts/three-valued-truth',
         'concepts/evidence-and-revisions',
         'concepts/evaluation',
+        'concepts/assertions',
       ],
     },
     {
@@ -35,6 +36,7 @@ const sidebars: SidebarsConfig = {
         'reference/validation',
         'reference/canon-ir',
         'reference/conformance',
+        'reference/assertions',
       ],
     },
     {
