@@ -12,3 +12,4 @@ summary: >-
 domains:
   - canon.protocol
   - canon.check
+  - canon.expr
