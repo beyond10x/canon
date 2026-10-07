@@ -84,7 +84,8 @@ compatibility decisions and keep unreleased capability claims explicit.
 
 - Planned in the AEP store under `.engineering/`, written only through `aep plan artifact`. Body
   drafts go in `.engineering/drafts/` (ignored).
-- Build with `CARGO_TARGET_DIR=$HOME/.cache/b10x-target/canon` (the Taskfile sets it).
+- Build into the tree's own `target/`; never set `CARGO_TARGET_DIR`. End every tree with
+  `worktree finish --discard-cache --archive <tree>`, and never delete a `target/` by hand.
 - Every commit and push is `b10x-bot[bot]`'s through `b10x-gates bot`; every GitHub write goes
   through `b10x-gates api`.
 - Use a managed worktree (`worktree create --repo canon --purpose …`) for changes.
