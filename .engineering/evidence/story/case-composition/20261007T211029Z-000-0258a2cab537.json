@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-07T21:10:29Z",
+  "actor": "human:timo",
+  "artifact": "story:case-composition",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "plan revision after round 1",
+    "review": "review-result:issue5-parallel-safety-r1",
+    "outcome": "fixed"
+  }
+}
