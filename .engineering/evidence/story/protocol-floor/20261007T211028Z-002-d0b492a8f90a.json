@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-07T21:10:28Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-floor",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "plan revision after round 1",
+    "review": "review-result:issue5-design-r1",
+    "outcome": "fixed"
+  }
+}
