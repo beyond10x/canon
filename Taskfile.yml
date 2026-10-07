@@ -1,8 +1,5 @@
 version: '3'
 
-env:
-  CARGO_TARGET_DIR: '{{.HOME}}/.cache/b10x-target/canon'
-
 tasks:
   default:
     cmds: [{task: check}]
