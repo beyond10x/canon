@@ -22,7 +22,7 @@ scope:
   path: crates/canon/src/diff/
 - confidence: cited
   path: fixtures/investigation/semantic-diff/
-revision: 7
+revision: 12
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:51Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":1}}}
 ---
@@ -61,7 +61,7 @@ the identifiers it touches.
 
 - Specification change: none in `ess/` (`canon diff` belongs to the command surface
   story:ess-command-surface declares, which depends on this story). The specification this story
-  starts from is the six revision pairs: the first commit adds
+  starts from is the eight revision pairs of § Acceptance: the first commit adds
   `fixtures/investigation/semantic-diff/` and the named test with its expected classifications.
 - Red on that commit: `diff_classifies_investigation_revisions` fails, because the skeleton's
   `canon diff` refuses as not built.
@@ -69,12 +69,26 @@ the identifiers it touches.
 ## Acceptance
 
 The named test `diff_classifies_investigation_revisions` (in `crates/canon-cli/tests/`) passes with
-six expectations, one per revision pair in `fixtures/investigation/semantic-diff/`: an added
-obligation is `TIGHTENING`; a shortened evidence maximum age is `TIGHTENING`; a removed capability
-requirement is `RELAXATION`; an added action is `EXPANSION`; a changed outcome requirement is
-`BREAKING`; a description-only edit is `NO SEMANTIC CHANGE`.
+eight expectations, one per revision pair listed here, each pair a directory under
+`fixtures/investigation/semantic-diff/`: an added obligation is `TIGHTENING`; a shortened evidence
+maximum age is `TIGHTENING`; a removed capability requirement is `RELAXATION`; an added action is
+`EXPANSION`; a changed outcome requirement is `BREAKING`; a description-only edit is
+`NO SEMANTIC CHANGE`; a conjunct added under a claim's `all` is `TIGHTENING`; an alternative added
+under a claim's `any` is `RELAXATION` (design § 31, "new alternate evidence path added"). The last
+two were added on 2026-10-07 for story:protocol-floor, whose refinement check reads them. Stories
+that land later add pairs of their own to the same directory and test (story:case-inputs).
 
 ## Source
 
 TASKBOARD C-011 (build pack, now Atlas `docs/design/governed-autonomy/TASKBOARD.md`);
 `docs/design/canon-protocol-calculus-design.md` § 29, § 31, § 38.
+
+## Order after issue 5 (2026-10-07)
+
+First of the stories https://github.com/beyond10x/canon/issues/5 asks to be ordered (2026-10-07):
+story:semantic-diff → story:case-inputs → story:protocol-imports → story:protocol-floor;
+story:ess-command-surface after story:semantic-diff and before story:protocol-imports;
+story:case-composition after story:protocol-imports. Every story this one depends on is implemented
+and no blocker stops it, so it is the next wave. story:case-inputs extends this story's classifier
+with its own constructs; story:protocol-floor reads this story's classification to decide whether
+a protocol stays above its floor.
