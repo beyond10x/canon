@@ -97,6 +97,12 @@ items:
     area: Analysis
     story: story:semantic-diff
     detail: Classify a protocol change as tightening, relaxation, breaking, expansion or no semantic change.
+    href: /docs/reference/cli#canon-diff
+  - label: Case inputs and applicable obligations
+    area: Language
+    story: story:case-inputs
+    detail: A protocol declares case inputs with closed value lists; the input predicate and applicable_when let one compiled protocol serve several profiles; scenario CANON-INPUT-001.
+    href: /docs/reference/protocol
   - label: Cases compose at run time
     area: Design
     story: story:case-composition
