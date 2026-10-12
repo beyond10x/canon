@@ -130,7 +130,9 @@ pub enum Command {
         #[arg(long)]
         out: PathBuf,
     },
-    /// The semantic difference between two compiled protocol revisions. Not built yet.
+    /// The semantic difference between two compiled revisions of one protocol: every change, each
+    /// classified as `TIGHTENING`, `RELAXATION`, `BREAKING`, `EXPANSION` or `NO SEMANTIC CHANGE`
+    /// and naming the identifiers it touches. Two revisions of different protocols are refused.
     Diff {
         /// The earlier revision, as `canon compile` prints it.
         #[arg(long)]
