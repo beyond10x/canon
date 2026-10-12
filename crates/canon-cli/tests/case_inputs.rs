@@ -11,8 +11,9 @@
 //! for each of expectations 2 to 6; `canon evaluate` refuses a case that leaves out an input, gives
 //! a value the input does not declare or names an input the protocol does not declare, naming
 //! them; and `canon validate` refuses each of the four invalid input fixtures, naming the input or
-//! the value. Expectation 13 (`canon diff` over revision pairs) is held by the semantic-diff
-//! classifier's own tests.
+//! the value. Expectation 13 (`canon diff` over revision pairs) is held by
+//! `diff_classifies_investigation_revisions` in `semantic_diff.rs`, over the pairs
+//! `gained-applicability`, `lost-applicability`, `added-input-value` and `removed-input-value`.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
