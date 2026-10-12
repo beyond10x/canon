@@ -6,7 +6,8 @@
 //! undeclared claim, naming it.
 //!
 //! The CLI inputs later stories own are declared here and inert: `canon evaluate --at` parses and
-//! is refused naming the flag, and `canon diff --from --to` parses and is refused as not built.
+//! is refused naming the flag, and `canon diff --from --to` parsed and was refused as not built until
+//! story:semantic-diff built it; its test below now checks that it runs.
 //! `--authority` was inert here too; story:action-admissibility now reads it, and its test below
 //! checks that it is read (refused naming the flag when malformed, evaluated when well-formed).
 
@@ -434,22 +435,23 @@ fn evaluate_at_is_read_as_the_evaluation_instant() {
     );
 }
 
-/// `canon diff --from --to` is declared and refuses as not built until story:semantic-diff.
+/// `canon diff --from --to` is declared and runs.
+///
+/// Changed by story:semantic-diff, which builds it: the skeleton refused it as not built. A
+/// revision compared with itself has no change; the classifications themselves are
+/// `semantic_diff.rs`'s.
 #[test]
-fn diff_parses_and_refuses_as_not_built() {
+fn diff_parses_and_runs() {
     let (_, dir) = evaluate_inputs("diff-command");
     let ir = dir.join("protocol.ir.json");
     let ir = ir.to_str().expect("utf-8 path");
     let run = canon(&["diff", "--from", ir, "--to", ir]);
-    let stderr = text(&run.stderr);
-    assert_eq!(run.status.code(), Some(1), "diff: exit; stderr: {stderr}");
-    assert_eq!(text(&run.stdout), "", "diff: stdout");
-    assert!(
-        stderr.starts_with("error[")
-            && stderr.ends_with('\n')
-            && stderr.lines().count() == 1
-            && stderr.contains("`canon diff`")
-            && stderr.contains("not built"),
-        "diff: one line refusing `canon diff` as not built: {stderr}"
+    assert_eq!(text(&run.stderr), "", "diff: stderr");
+    assert_eq!(
+        text(&run.stdout),
+        "diff: protocol `investigation` revision 1 to 1\n\
+         NO SEMANTIC CHANGE: no declaration differs\n",
+        "diff: stdout"
     );
+    assert_eq!(run.status.code(), Some(0), "diff: exit");
 }
