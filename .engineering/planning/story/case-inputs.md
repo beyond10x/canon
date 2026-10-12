@@ -49,7 +49,7 @@ scope:
   path: website/static/schemas/
 - confidence: inferred
   path: website/status.yaml
-revision: 6
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-12T15:56:37Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":2}}}
 - {from: "proposed", to: "active", at: "2026-10-12T15:56:37Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":2}}}
@@ -73,21 +73,32 @@ inputs.
    evaluation is refused, naming the input, when the case omits a declared input, names an input
    the protocol does not declare, or gives a value outside the declared list (naming the value as
    well). Inputs are fixed when a case opens; they are configuration, not evidence, so no
-   evaluation has an unknown input.
+   evaluation has an unknown input. A value is read the same way in the protocol and in the case,
+   so a value one accepts the other accepts.
 3. **The `input` predicate.** A new predicate leaf, `input: <id>` with `in: [<value>, …]`: TRUE
    when the case's value is in the list, FALSE otherwise. It is usable wherever a predicate is: in
    a claim's `true_when`, an action's `precondition`, and (4) below. The validator refuses an
-   unknown input id and a value the input does not declare.
+   unknown input id, a value the input does not declare, an empty `in` list and a value listed
+   twice in it.
 4. **Derived obligations.** An obligation gains an optional `applicable_when` predicate (the name
    the design gives the same guard on actions, `docs/design/canon-protocol-calculus-design.md:541`).
-   FALSE: the obligation's status is `not_applicable`, and it holds back no outcome. TRUE: the
-   obligation is `open` or `discharged` as today. UNKNOWN (a claim it reads is UNKNOWN): the
-   obligation is `open`, with a reason naming what is unknown, because UNKNOWN is not FALSE.
+   An obligation is met when it does not apply or is discharged, read three-valued: FALSE: the
+   obligation's status is `not_applicable`, and it holds back no outcome. Otherwise, a TRUE
+   `discharged_when` makes it `discharged`, whatever its applicability. Otherwise it is `open`;
+   when its applicability is UNKNOWN (a claim it reads is UNKNOWN), with a reason naming what is
+   unknown, because UNKNOWN is not FALSE. (Revised on review: an UNKNOWN applicability first kept a
+   discharged obligation `open`, which disagreed with an outcome requiring every applicable
+   obligation discharged and made the classifier's directions in (5) unsound.)
 5. **The classifier knows them.** `canon diff` (story:semantic-diff) classifies every change to
    these constructs, so `canon floor` sees them:
    - an obligation that gains an `applicable_when` is `RELAXATION`; one that loses it is
      `TIGHTENING`;
    - a value added to an input's `values` is `EXPANSION`;
+   - an `input` leaf added or removed under `all` or `any` is ordered by implication, like any
+     other member;
+   - a changed claim is classified by the direction of each place that reads it: a claim read
+     positively by an `applicable_when`, or under a `not`, reads in reverse, and a claim read in
+     both directions is `BREAKING`;
    - any other change to an input declaration, an `input` leaf or an `applicable_when` (a value
      removed, an input added or removed, a changed `in` list, a changed guard) is `BREAKING`: the
      classifier does not order those changes, and `BREAKING` makes `canon floor` refuse them.
@@ -181,3 +192,24 @@ TASKBOARD C-001 and C-005 (Atlas `docs/design/governed-autonomy/TASKBOARD.md`), 
 stories implementing them left; `docs/design/canon-protocol-calculus-design.md` (`applicable_when`
 at line 541, `case: inputs:` at line 632); the engineering-protocols repository's
 `story:software-change-profiles` § Canon capability; Atlas ADR 0080 (spec first, then red).
+
+## Review revision
+
+The adversary review of the first implementation added these expectations to § Acceptance, each
+a named test in `crates/canon/tests/adversary_case_inputs.rs` or the conformance scenario:
+
+14. severity `low` with a falsification attempt on record: `falsification.recorded` is
+    `discharged`, and `finding.published` is `legitimate` (CANON-INPUT-001);
+15. an obligation that loses or gains an `applicable_when` never moves against the classification:
+    losing it never takes an obligation from `open` to `discharged`, gaining it never from
+    `discharged` to `open`;
+16. strengthening a claim read only by an `applicable_when` is not `TIGHTENING`;
+17. an input whose values are written unquoted `true` and `false` in the protocol is given
+    unquoted in a case and evaluated;
+18. `canon validate` refuses an `input` leaf with an empty `in` list or a value listed twice;
+19. `canon check` and `canon generate` on `fixtures/investigation/case-inputs.yaml` enumerate the
+    input dimension, and their output names `severity`.
+
+Not changed, recorded: a value added to an input stays `EXPANSION`, though a new case may choose it
+to fall outside an obligation that applies to the other values; the classifier compares protocols,
+not the cases a floor would admit.
