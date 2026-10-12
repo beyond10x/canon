@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:case-inputs
 kind: story
-status: draft
+status: active
 title: Declare case inputs in protocol/1 and derive obligations from them
 refs:
 - provider: taskboard
@@ -49,7 +49,10 @@ scope:
   path: website/static/schemas/
 - confidence: inferred
   path: website/status.yaml
-revision: 4
+revision: 6
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-12T15:56:37Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "proposed", to: "active", at: "2026-10-12T15:56:37Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":2}}}
 ---
 ## Outcome
 
