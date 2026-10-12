@@ -17,8 +17,9 @@
 //! - `outcomes`: each blocked outcome, `{"because": [...], "status": "blocked"}`.
 //! - `actions`: each action that is not admissible, `{"because": [...], "status": <status>}`.
 //! - `obligations`: each open obligation, `{"because": [...], "status": "open"}`. Its reasons are
-//!   the ones the decision gives it when whether it applies is unknown, then, when its
-//!   `discharged_when` predicate is not `true`, those it is not `true` for, walked exactly as a
+//!   the ones the decision gives it when whether it applies is unknown, then those its
+//!   `discharged_when` predicate (never `true` for an open obligation) is not `true` for, walked
+//!   exactly as a
 //!   blocked outcome's requirement is (`outcomes.rs`), so one predicate gives an obligation and an
 //!   outcome the same reasons; each reason once.
 //! - `claims`: every claim whose value is not `true`, and every claim a reason above names,
@@ -60,9 +61,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
-use crate::eval::{
-    Authority, Decisions, Inputs as CaseInputs, Invalidated, reads, unmet_reasons, value_of,
-};
+use crate::eval::{Authority, Decisions, Inputs as CaseInputs, Invalidated, reads, unmet_reasons};
 use crate::ir::Ir;
 use crate::model::{
     ArtifactId, Case, ClaimId, DECISION_FORMAT, Decision, EvidenceExclusion, EvidenceKindId,
@@ -463,12 +462,11 @@ fn obligations(
             let declared = ir.obligations.iter().find(|(key, _)| key.as_str() == id)?.1;
             let mut reasons = entry["reasons"].as_array().cloned().unwrap_or_default();
             // A discharge predicate tests claims and inputs only; the validator refuses evidence
-            // in one. An obligation whose applicability is unknown is open even when it is true.
-            if value_of(&declared.discharged_when, values, inputs, &[]) != Truth::True {
-                for reason in unmet_reasons(&declared.discharged_when, values, inputs, &[]) {
-                    if !reasons.contains(&reason) {
-                        reasons.push(reason);
-                    }
+            // in one. An open obligation's discharge predicate is not true: one that is true
+            // discharges the obligation, whatever its applicability.
+            for reason in unmet_reasons(&declared.discharged_when, values, inputs, &[]) {
+                if !reasons.contains(&reason) {
+                    reasons.push(reason);
                 }
             }
             Some((

@@ -23,6 +23,7 @@
 //! | maximum age rewritten with the same length (`60m`, `1h`) | `NO SEMANTIC CHANGE` |
 //! | claim added | `EXPANSION` |
 //! | claim removed | `BREAKING` |
+//! | claim's predicate changed | by implication, in the direction the protocol reads the claim (below) |
 //! | obligation added | `TIGHTENING` |
 //! | obligation removed | `RELAXATION` |
 //! | applicability predicate (`applicable_when`) introduced on an obligation | `RELAXATION` |
@@ -46,7 +47,7 @@
 //!
 //! An applicability predicate is not compared by implication: an obligation that applies in fewer
 //! cases requires less of them, but the classifier does not order two guards, so any change to one
-//! present in both revisions is `BREAKING`, and `canon floor` refuses it.
+//! present in both revisions is `BREAKING`.
 //!
 //! A changed predicate — a claim's `true_when`, an obligation's `discharged_when`, an action's
 //! `precondition` — is compared by implication. When the new predicate is true only where the old
@@ -59,6 +60,21 @@
 //! cannot show is classified as changed. The rules hold in three-valued logic: whenever the
 //! stronger predicate is true the weaker is true, and whenever the weaker is false the stronger is
 //! false.
+//!
+//! A claim's predicate is classified so, and then by the direction the protocol reads the claim,
+//! since a claim strengthened is true in fewer cases, which tightens a place that needs it true
+//! and relaxes one that needs it false. Every place a predicate is written reads the claims it
+//! tests: another claim's `true_when`, an obligation's `discharged_when` and `applicable_when`, an
+//! action's precondition and an outcome's requirement. A claim test `{claim: c}` reads `c`
+//! positively, `{claim: c, is: false}` in reverse and `{claim: c, is: unknown}` in both
+//! directions; a `not` reverses what it holds; an `applicable_when` reverses the whole predicate,
+//! since an obligation that applies in fewer cases requires less; and a claim read by another
+//! claim is read in each direction that claim is read in, composed, through any number of claims.
+//! The directions are taken from both revisions together. A claim read only positively, or read
+//! by nothing, is classified as its predicate is; a claim read only in reverse has `TIGHTENING`
+//! and `RELAXATION` exchanged, its line ending `, read in reverse`; a claim read in both directions
+//! is `BREAKING`, its line ending `, read in both directions`. A predicate rewritten or changed is
+//! classified as it is, whatever the direction.
 //!
 //! The protocol's revision is not a change: two revisions are expected to differ in it. Two
 //! documents of different protocols are refused (`different-protocol`).
@@ -75,14 +91,14 @@
 //! Out of scope (story:semantic-diff): live-case impact, which needs case data Canon does not hold
 //! (design § 38), and constructs the kernel does not yet have.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 
 use crate::ir::{
     Action, CaseInput, Claim, Described, EvidenceKind, Header, InvalidationRule, Ir, Obligation,
     Outcome,
 };
-use crate::model::{Age, Predicate, ProtocolId, one_line};
+use crate::model::{Age, ClaimId, Predicate, ProtocolId, Truth, one_line};
 
 /// What a change does to legitimate work (design § 31).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -301,19 +317,9 @@ impl Changes {
         from: &Predicate,
         to: &Predicate,
     ) {
-        if from == to {
-            return;
+        if let Some((category, how)) = compared(from, to) {
+            self.push(category, section, id, format!("{field} {how}"));
         }
-        let mut implication = Implication::default();
-        let stronger = implication.implies(to, from);
-        let weaker = implication.implies(from, to);
-        let (category, how) = match (stronger, weaker) {
-            (true, true) => (Category::NoSemanticChange, "rewritten"),
-            (true, false) => (Category::Tightening, "strengthened"),
-            (false, true) => (Category::Relaxation, "weakened"),
-            (false, false) => (Category::Breaking, "changed"),
-        };
-        self.push(category, section, id, format!("{field} {how}"));
     }
 
     /// A list of identifiers present in both revisions: each removed one, then each added one.
@@ -343,6 +349,181 @@ impl Changes {
             );
         }
     }
+}
+
+/// A predicate present in both revisions, compared by implication: its category and how it
+/// changed, or `None` when it is the same.
+fn compared(from: &Predicate, to: &Predicate) -> Option<(Category, &'static str)> {
+    if from == to {
+        return None;
+    }
+    let mut implication = Implication::default();
+    let stronger = implication.implies(to, from);
+    let weaker = implication.implies(from, to);
+    Some(match (stronger, weaker) {
+        (true, true) => (Category::NoSemanticChange, "rewritten"),
+        (true, false) => (Category::Tightening, "strengthened"),
+        (false, true) => (Category::Relaxation, "weakened"),
+        (false, false) => (Category::Breaking, "changed"),
+    })
+}
+
+/// The directions a claim is read in: positively (it being true helps the place that reads it
+/// hold), in reverse (it being true helps it fail), or both.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Reading {
+    positive: bool,
+    reverse: bool,
+}
+
+impl Reading {
+    const POSITIVE: Reading = Reading {
+        positive: true,
+        reverse: false,
+    };
+
+    fn reversed(self) -> Reading {
+        Reading {
+            positive: self.reverse,
+            reverse: self.positive,
+        }
+    }
+
+    fn or(self, other: Reading) -> Reading {
+        Reading {
+            positive: self.positive || other.positive,
+            reverse: self.reverse || other.reverse,
+        }
+    }
+
+    /// A reading through a reader that is itself read `outer`: each direction composed with each.
+    fn through(self, outer: Reading) -> Reading {
+        let mut composed = Reading::default();
+        if self.positive {
+            composed = composed.or(outer);
+        }
+        if self.reverse {
+            composed = composed.or(outer.reversed());
+        }
+        composed
+    }
+}
+
+/// How the predicates of `ir` read claims: for each claim, the direction each place outside the
+/// claims section reads it in, and each claim that reads it with the direction of that read.
+#[derive(Default)]
+struct Readers {
+    places: BTreeMap<ClaimId, Reading>,
+    claims: BTreeMap<ClaimId, Vec<(ClaimId, Reading)>>,
+}
+
+impl Readers {
+    fn of(ir: &Ir) -> Readers {
+        let mut readers = Readers::default();
+        for (id, claim) in &ir.claims {
+            let mut read = Vec::new();
+            reads(&claim.true_when, Reading::POSITIVE, &mut read);
+            for (claim, reading) in read {
+                readers
+                    .claims
+                    .entry(claim)
+                    .or_default()
+                    .push((id.clone(), reading));
+            }
+        }
+        let mut read = Vec::new();
+        for obligation in ir.obligations.values() {
+            reads(&obligation.discharged_when, Reading::POSITIVE, &mut read);
+            if let Some(applicable_when) = &obligation.applicable_when {
+                reads(applicable_when, Reading::POSITIVE.reversed(), &mut read);
+            }
+        }
+        for action in ir.actions.values() {
+            reads(&action.precondition, Reading::POSITIVE, &mut read);
+        }
+        for outcome in ir.outcomes.values() {
+            if let Some(requires) = outcome.requires.predicate() {
+                reads(requires, Reading::POSITIVE, &mut read);
+            }
+        }
+        for (claim, reading) in read {
+            let entry = readers.places.entry(claim).or_default();
+            *entry = entry.or(reading);
+        }
+        readers
+    }
+
+    /// Every direction `claim` is read in, or `None` when nothing reads it. A claim on `path` is
+    /// being read already: a cycle the validator refuses adds no direction.
+    fn reading(&self, claim: &ClaimId, path: &mut BTreeSet<ClaimId>) -> Option<Reading> {
+        if !path.insert(claim.clone()) {
+            return None;
+        }
+        let mut reading = self.places.get(claim).copied();
+        for (reader, read) in self.claims.get(claim).into_iter().flatten() {
+            let outer = self.reading(reader, path).unwrap_or(Reading::POSITIVE);
+            let through = read.through(outer);
+            reading = Some(reading.map_or(through, |known| known.or(through)));
+        }
+        path.remove(claim);
+        reading
+    }
+}
+
+/// Each claim `predicate` tests, with the direction it reads it in when the predicate itself is
+/// read `reading`: a `not` reverses, `is: false` reverses, `is: unknown` reads both ways.
+fn reads(predicate: &Predicate, reading: Reading, found: &mut Vec<(ClaimId, Reading)>) {
+    match predicate {
+        Predicate::All(members) | Predicate::Any(members) => {
+            for member in members {
+                reads(member, reading, found);
+            }
+        }
+        Predicate::Not(inner) => reads(inner, reading.reversed(), found),
+        Predicate::Claim(test) => {
+            let read = match test.is {
+                Truth::True => reading,
+                Truth::False => reading.reversed(),
+                Truth::Unknown => reading.or(reading.reversed()),
+            };
+            found.push((test.claim.clone(), read));
+        }
+        Predicate::Evidence(_) | Predicate::Input(_) => {}
+    }
+}
+
+/// A claim's changed predicate, classified by implication and then by the direction the two
+/// revisions read the claim in, as the module docs say.
+fn claim_predicate(
+    changes: &mut Changes,
+    id: &str,
+    from: &Predicate,
+    to: &Predicate,
+    readers: (&Readers, &Readers),
+) {
+    let Some((category, how)) = compared(from, to) else {
+        return;
+    };
+    let claim = ClaimId::new(id);
+    let reading = [readers.0, readers.1]
+        .into_iter()
+        .filter_map(|readers| readers.reading(&claim, &mut BTreeSet::new()))
+        .reduce(Reading::or)
+        .unwrap_or(Reading::POSITIVE);
+    let directed = matches!(category, Category::Tightening | Category::Relaxation);
+    let (category, read) = match (directed, reading.positive, reading.reverse) {
+        (true, false, true) => (
+            if category == Category::Tightening {
+                Category::Relaxation
+            } else {
+                Category::Tightening
+            },
+            ", read in reverse",
+        ),
+        (true, true, true) => (Category::Breaking, ", read in both directions"),
+        _ => (category, ""),
+    };
+    changes.push(category, "claim", id, format!("predicate {how}{read}"));
 }
 
 fn changes(from: &Ir, to: &Ir) -> Vec<Change> {
@@ -408,6 +589,7 @@ fn changes(from: &Ir, to: &Ir) -> Vec<Change> {
         Expansion,
         evidence_kind,
     );
+    let readers = (&Readers::of(from), &Readers::of(to));
     changes.section(
         "claim",
         from_claims,
@@ -424,7 +606,7 @@ fn changes(from: &Ir, to: &Ir) -> Vec<Change> {
                 true_when: to_true_when,
             } = to;
             changes.description("claim", id, from_description, to_description);
-            changes.predicate("claim", id, "predicate", from_true_when, to_true_when);
+            claim_predicate(changes, id, from_true_when, to_true_when, readers);
         },
     );
     changes.section(

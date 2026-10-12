@@ -25,10 +25,13 @@ does not depend on the order the sections are written in:
 5. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
    more than once (`duplicate-input-value`, naming the input and the value, once for every
    listing after its first), in the order the inputs are written;
-6. unresolved references (a claim, an evidence kind, the artifact an evidence match names as
-   its subject, which is reported after the kind it is written beside, an input an input test
-   names, `undeclared-input`, or a value it lists that its input does not declare,
-   `undeclared-input-value`, reported in the order listed): those in claims first, then those
+6. unresolved references and malformed input tests (a claim, an evidence kind, the artifact an
+   evidence match names as its subject, which is reported after the kind it is written beside;
+   for an input test, first an empty `in` list, `empty-input-test`, or a value it lists more
+   than once, `duplicate-input-test-value`, once for every listing after its first, then an
+   input it names that is not declared, `undeclared-input`, or a value it lists that its input
+   does not declare, `undeclared-input-value`, each value once, in the order listed, every one
+   naming the declaration the test is written in and the input): those in claims first, then those
    in obligations (each obligation's discharge predicate, followed by every evidence match it
    holds, which a discharge predicate may not: it tests only claim values; then its
    applicability predicate, followed likewise by every evidence match it holds,
@@ -59,6 +62,8 @@ text on one line. The same document always yields the same problems in the same 
 | `evidence-in-applicability` | An applicability predicate tests evidence; it may test only claim values and case inputs. `path` locates the evidence match inside the predicate, as `applicable_when.not.evidence`. |
 | `empty-input-values` | A case input declares no value, so no case could give it one. |
 | `duplicate-input-value` | A case input lists a value more than once. |
+| `empty-input-test` | An input test lists no value, so it is false in every case. |
+| `duplicate-input-test-value` | An input test lists a value more than once. |
 | `undeclared-input` | An input test names an input that is not declared. |
 | `undeclared-input-value` | An input test lists a value its input does not declare. |
 | `inert-invalidation` | An invalidation rule names a claim that reaches no evidence match, in its own predicate or in a claim it tests, so no record could be kept from it. |

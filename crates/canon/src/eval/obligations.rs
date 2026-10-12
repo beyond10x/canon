@@ -3,15 +3,21 @@
 //! applicable by its applicability predicate (story:case-inputs).
 //!
 //! The section is an array with one entry per declared obligation, in identifier order, each
-//! `{"id": <obligation id>, "status": "open" | "discharged" | "not_applicable"}`. An obligation
-//! with an `applicable_when` predicate is `not_applicable` when that predicate is `false` over the
-//! claim values and the case's inputs: it holds back nothing. When it is `unknown` (a claim it
-//! tests is `unknown`), the obligation is `open`, because `unknown` is not `false`, and its entry
-//! carries `reasons` naming what is unknown: the reasons an action precondition that is not `true`
-//! gives (`actions.rs`), `{"claim": <id>, "value": <value>}` and `{"input": <id>, "value":
-//! <value>}`. Otherwise, and for an obligation without one, which always applies, it is
-//! `discharged` only when its `discharged_when` predicate evaluates `true`; `unknown` and `false`
-//! both leave it `open`, since only `true` satisfies a positive requirement (design § 8). Whether
+//! `{"id": <obligation id>, "status": "open" | "discharged" | "not_applicable"}`, decided in this
+//! order:
+//!
+//! 1. `not_applicable` when the obligation's `applicable_when` predicate is `false` over the claim
+//!    values and the case's inputs: it holds back nothing;
+//! 2. otherwise `discharged` when its `discharged_when` predicate evaluates `true`, whatever its
+//!    applicability: an obligation that is met where it applies is met;
+//! 3. otherwise `open`: `unknown` and `false` both leave it open, since only `true` satisfies a
+//!    positive requirement (design § 8). When its applicability is `unknown` (a claim it tests is
+//!    `unknown`), it is open because `unknown` is not `false`, and its entry carries `reasons`
+//!    naming what is unknown: the reasons an action precondition that is not `true` gives
+//!    (`actions.rs`), `{"claim": <id>, "value": <value>}` and `{"input": <id>, "value":
+//!    <value>}`.
+//!
+//! An obligation without an `applicable_when` always applies. Whether
 //! deciding a claim or establishing it discharges an obligation is the protocol author's choice,
 //! written with the claim tests of the predicate (`{claim: c, is: unknown}` is itself decided). A
 //! protocol that declares no obligation has no section, so its decision is written as before, and
@@ -48,27 +54,32 @@ pub(super) fn section(ir: &Ir, claims: &BTreeMap<ClaimId, Truth>, inputs: &Input
     Some(Json::Array(entries))
 }
 
-/// One obligation's status, with the reasons whether it applies is unknown when it is; no reasons
-/// otherwise.
+/// One obligation's status, by the order the module docs give, with the reasons whether it applies
+/// is unknown when it is open for that; no reasons otherwise.
 fn obligation_status(
     obligation: &Obligation,
     claims: &BTreeMap<ClaimId, Truth>,
     inputs: &Inputs,
 ) -> (ObligationStatus, Vec<Json>) {
-    if let Some(applicable_when) = &obligation.applicable_when {
-        match predicate(applicable_when, claims, inputs, &[]) {
-            Truth::False => return (ObligationStatus::NotApplicable, Vec::new()),
-            Truth::Unknown => {
-                let reasons = super::actions::unmet(applicable_when, claims, inputs, &[]);
-                return (ObligationStatus::Open, reasons);
-            }
-            Truth::True => {}
+    let applies = obligation.applicable_when.as_ref().map(|applicable_when| {
+        (
+            applicable_when,
+            predicate(applicable_when, claims, inputs, &[]),
+        )
+    });
+    if let Some((_, Truth::False)) = applies {
+        return (ObligationStatus::NotApplicable, Vec::new());
+    }
+    if predicate(&obligation.discharged_when, claims, inputs, &[]) == Truth::True {
+        return (ObligationStatus::Discharged, Vec::new());
+    }
+    let reasons = match applies {
+        Some((applicable_when, Truth::Unknown)) => {
+            super::actions::unmet(applicable_when, claims, inputs, &[])
         }
-    }
-    match predicate(&obligation.discharged_when, claims, inputs, &[]) {
-        Truth::True => (ObligationStatus::Discharged, Vec::new()),
-        Truth::False | Truth::Unknown => (ObligationStatus::Open, Vec::new()),
-    }
+        _ => Vec::new(),
+    };
+    (ObligationStatus::Open, reasons)
 }
 
 #[cfg(test)]
@@ -142,8 +153,9 @@ mod tests {
     }
 
     /// An applicability predicate that is `false` makes the obligation not_applicable whatever its
-    /// discharge predicate says; `unknown` leaves it open, with the reasons naming what is unknown;
-    /// `true` leaves the discharge predicate to decide. An input test decides on the case's value.
+    /// discharge predicate says; otherwise the discharge predicate decides, and an obligation it
+    /// leaves open whose applicability is `unknown` has the reasons naming what is unknown. An
+    /// input test decides on the case's value.
     #[test]
     fn an_obligation_applies_by_its_applicability_predicate() {
         let ir = ir("format: protocol/1\nprotocol: {id: p, revision: 1}\n\
@@ -176,6 +188,11 @@ mod tests {
         assert_eq!(
             decide(None, Truth::Unknown, "high"),
             r#"[{"id":"by_claim","reasons":[{"claim":"c","value":"unknown"}],"status":"open"},{"id":"by_input","status":"open"}]"#
+        );
+        // Discharged whatever its applicability, unknown included.
+        assert_eq!(
+            decide(None, Truth::True, "high"),
+            r#"[{"id":"by_claim","status":"discharged"},{"id":"by_input","status":"discharged"}]"#
         );
     }
 

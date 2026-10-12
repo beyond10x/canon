@@ -143,6 +143,58 @@ steps:
           }
         }
 
+  # Severity low and a falsification attempt on record, no observation. Whether
+  # `falsification.recorded` applies is UNKNOWN, since `explanation.supported` is, and its
+  # discharge predicate is TRUE: it is discharged whatever its applicability, so it agrees with
+  # `finding.published`, which requires every obligation that applies discharged and is
+  # legitimate here.
+  - id: low-attempted
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+        inputs:
+          severity: low
+      evidence:
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "claims": {
+            "explanation.supported": {
+              "value": "unknown"
+            },
+            "falsification.attempted": {
+              "value": "true"
+            },
+            "peer.approved": {
+              "value": "unknown"
+            }
+          },
+          "obligations": [
+            {
+              "id": "falsification.recorded",
+              "status": "discharged"
+            },
+            {
+              "id": "peer.review",
+              "status": "not_applicable"
+            }
+          ],
+          "outcomes": {
+            "finding.published": {
+              "status": "legitimate"
+            }
+          }
+        }
+
   # Severity high, no evidence: `peer.review` applies and is open. `publish_finding` is
   # blocked, naming `explanation.supported` and the severity that does not admit it.
   # `finding.published` is blocked by both obligations.
