@@ -7,11 +7,13 @@
 //! action `publish_finding`, admissible when severity is `low` or `explanation.supported` is TRUE.
 //!
 //! One test, `case_inputs_derive_obligations`, holds expectations 1 to 12 of the story's
-//! acceptance: conformance scenario `CANON-INPUT-001` passes under `canon conform run`, with a step
-//! for each of expectations 2 to 6; `canon evaluate` refuses a case that leaves out an input, gives
-//! a value the input does not declare or names an input the protocol does not declare, naming
-//! them; and `canon validate` refuses each of the four invalid input fixtures, naming the input or
-//! the value. Expectation 13 (`canon diff` over revision pairs) is held by
+//! acceptance and 14 and 18 of its review revision: conformance scenario `CANON-INPUT-001` passes
+//! under `canon conform run`, with a step for each of expectations 2 to 6 and 14; `canon evaluate`
+//! refuses a case that leaves out an input, gives a value the input does not declare or names an
+//! input the protocol does not declare, naming them; and `canon validate` refuses each of the six
+//! invalid input fixtures, naming the input or the value. `check_and_generate_enumerate_inputs`
+//! holds expectation 19: `canon check` and `canon generate` enumerate the input `severity`.
+//! Expectation 13 (`canon diff` over revision pairs) is held by
 //! `diff_classifies_investigation_revisions` in `semantic_diff.rs`, over the pairs
 //! `gained-applicability`, `lost-applicability`, `added-input-value` and `removed-input-value`.
 
@@ -29,13 +31,14 @@ const FIXTURE: &str = "fixtures/investigation/case-inputs.yaml";
 
 /// The scenario's steps, in order: id, the severity its case gives (`None`: none) and what it
 /// expects, a decision or a refusal's code.
-const STEPS: [(&str, Option<&str>, Expected); 7] = [
+const STEPS: [(&str, Option<&str>, Expected); 8] = [
     ("low-no-evidence", Some("low"), Expected::Decision),
     (
         "low-supported-and-attempted",
         Some("low"),
         Expected::Decision,
     ),
+    ("low-attempted", Some("low"), Expected::Decision),
     ("high-no-evidence", Some("high"), Expected::Decision),
     ("high-reviewed", Some("high"), Expected::Decision),
     ("severity-missing", None, Expected::Refused("missing-input")),
@@ -74,6 +77,9 @@ const PUBLISH_ADMISSIBLE: &str = "\"publish_finding\": {\n      \"status\": \"ad
 const PUBLISH_BLOCKED: &str = "\"publish_finding\": {\n      \"reasons\": [\n        {\n          \
                                \"claim\": \"explanation.supported\",\n          \
                                \"value\": \"unknown\"\n        },";
+/// `falsification.recorded` discharged, inside `obligations`.
+const FALSIFICATION_DISCHARGED: &str =
+    "\"id\": \"falsification.recorded\",\n      \"status\": \"discharged\"\n    }";
 /// `finding.published` legitimate, inside `outcomes`.
 const PUBLISHED: &str = "\"finding.published\": {\n      \"status\": \"legitimate\"\n    }";
 
@@ -120,9 +126,9 @@ fn outcomes_of(decision: &str) -> &str {
     &decision[at..]
 }
 
-/// Expectation 1, and 2 to 6 as the scenario's steps hold them: `canon conform run` reports the
+/// Expectation 1, and 2 to 6 and 14 as the scenario's steps hold them: `canon conform run` reports the
 /// scenario passed, so each step's expectation is what the evaluator decides.
-fn scenario_holds_expectations_2_to_6() {
+fn scenario_holds_expectations_2_to_6_and_14() {
     let run = canon(&["conform", "run"]);
     let report = text(&run.stdout);
     let needle = format!("scenario `{SCENARIO_ID}`");
@@ -167,8 +173,8 @@ fn scenario_holds_expectations_2_to_6() {
             (_, written) => panic!("step `{id}`: the scenario expects {written:?}"),
         }
     }
-    let &[low, low_settled, high, high_reviewed] = decisions.as_slice() else {
-        panic!("four decision steps");
+    let &[low, low_settled, low_attempted, high, high_reviewed] = decisions.as_slice() else {
+        panic!("five decision steps");
     };
 
     // 2. Severity low: `peer.review` is not_applicable, and `finding.published` is not held back
@@ -222,6 +228,23 @@ fn scenario_holds_expectations_2_to_6() {
     // severity high, both without evidence.
     assert!(low.2.contains(PUBLISH_ADMISSIBLE), "{}", low.2);
     assert!(high.2.contains(PUBLISH_BLOCKED), "{}", high.2);
+
+    // 14. Severity low with a falsification attempt on record and no observation: whether
+    // `falsification.recorded` applies is UNKNOWN, its discharge predicate is TRUE, so it is
+    // discharged, and `finding.published` is legitimate.
+    let (_, inputs, decision) = low_attempted;
+    let kinds: Vec<Option<&str>> = inputs
+        .evidence
+        .iter()
+        .map(|record| record["kind"].as_str())
+        .collect();
+    assert_eq!(kinds, [Some("falsification_attempt")]);
+    assert!(decision.contains(FALSIFICATION_DISCHARGED), "{decision}");
+    assert!(
+        decision.contains(&peer_review("not_applicable")),
+        "{decision}"
+    );
+    assert!(decision.contains(PUBLISHED), "{decision}");
 
     // 6. No evidence: `falsification.recorded` is open, its reason naming `explanation.supported`.
     for (id, _, decision) in [low, high, high_reviewed] {
@@ -324,8 +347,8 @@ fn evaluate_refuses_inputs_that_do_not_fit() {
     }
 }
 
-/// Expectations 10 to 12: `canon validate` refuses each invalid input fixture, exiting 1 and
-/// naming the input or the value; the fixture itself validates.
+/// Expectations 10 to 12 and 18: `canon validate` refuses each invalid input fixture, exiting 1
+/// and naming the input or the value; the fixture itself validates.
 fn validate_refuses_each_invalid_input_declaration() {
     let run = canon(&["validate", "--path", FIXTURE]);
     assert_eq!(
@@ -352,6 +375,16 @@ fn validate_refuses_each_invalid_input_declaration() {
             "error[undeclared-input-value]: obligation `peer.review` tests input `severity` for \
              value `critical`, which the input does not declare\n",
         ),
+        (
+            "input-test-empty.yaml",
+            "error[empty-input-test]: obligation `peer.review` tests input `severity` for no \
+             value\n",
+        ),
+        (
+            "input-test-duplicate-value.yaml",
+            "error[duplicate-input-test-value]: obligation `peer.review` tests input `severity` \
+             for value `high` more than once\n",
+        ),
     ] {
         let path = format!("fixtures/investigation/invalid/{file}");
         let run = canon(&["validate", "--path", &path]);
@@ -363,7 +396,52 @@ fn validate_refuses_each_invalid_input_declaration() {
 
 #[test]
 fn case_inputs_derive_obligations() {
-    scenario_holds_expectations_2_to_6();
+    scenario_holds_expectations_2_to_6_and_14();
     evaluate_refuses_inputs_that_do_not_fit();
     validate_refuses_each_invalid_input_declaration();
+}
+
+/// Expectation 19: `canon check` enumerates the input `severity` as a dimension of the state space,
+/// both its values, and says so in its summary; `canon generate` writes witnesses whose cases give
+/// `severity` each of its values.
+#[test]
+fn check_and_generate_enumerate_inputs() {
+    let run = canon(&["check", "--path", FIXTURE]);
+    assert_eq!(
+        (text(&run.stdout), text(&run.stderr), run.status.code()),
+        (
+            "checked: protocol `investigation` revision 1: 64 states (input `severity` 2 \
+             values), 0 properties, 0 findings\n",
+            "",
+            Some(0)
+        ),
+        "canon check --path {FIXTURE}"
+    );
+
+    let out = scratch("generate");
+    std::fs::remove_dir(&out).expect("an absent --out is created");
+    let out_path = out.to_str().expect("utf-8 path");
+    let run = canon(&["generate", "--path", FIXTURE, "--out", out_path]);
+    assert_eq!(run.status.code(), Some(0), "{}", text(&run.stderr));
+    let mut given = Vec::new();
+    let mut files: Vec<PathBuf> = std::fs::read_dir(&out)
+        .expect("generated directory")
+        .map(|entry| entry.expect("entry").path())
+        .collect();
+    files.sort();
+    for file in &files {
+        let scenario = std::fs::read_to_string(file).expect("scenario");
+        for value in ["low", "high"] {
+            if scenario.contains(&format!("\"severity\": \"{value}\"")) {
+                given.push(value);
+            }
+        }
+    }
+    given.sort_unstable();
+    given.dedup();
+    assert_eq!(
+        given,
+        ["high", "low"],
+        "the generated cases give `severity` each value: {files:?}"
+    );
 }
