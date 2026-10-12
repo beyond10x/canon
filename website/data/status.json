@@ -136,14 +136,14 @@
     },
     {
       "label": "Semantic diff",
-      "status": "planned",
+      "status": "shipped",
       "detail": "Classify a protocol change as tightening, relaxation, breaking, expansion or no semantic change.",
       "href": "/docs/reference/cli#canon-diff",
       "area": "Analysis"
     },
     {
       "label": "Case inputs and applicable obligations",
-      "status": "planned",
+      "status": "shipped",
       "detail": "A protocol declares case inputs with closed value lists; the input predicate and applicable_when let one compiled protocol serve several profiles; scenario CANON-INPUT-001.",
       "href": "/docs/reference/protocol",
       "area": "Language"

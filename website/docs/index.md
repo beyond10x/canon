@@ -14,7 +14,7 @@ case under one protocol it is meant to answer: what is known, what is unknown, w
 remain open, which actions are admissible, which need authority, and whether an outcome has been
 earned.
 
-:::note[Source release 0.1.0]
+:::note[Source release 0.2.0]
 
 Canon is early. Today it parses, validates and compiles protocols, and runs conformance
 scenarios. `canon evaluate` gives every claim of a case a three-valued value, applying evidence
@@ -22,7 +22,9 @@ only to the revision it is bound to and only while it is fresh, and says which o
 open, which actions are admissible under the authority decisions given, and which outcomes are
 legitimate, including outcomes that require an explicit decision, with a structured explanation of
 each. Invalidation rules keep evidence observed against an earlier revision of an upstream artifact
-from the claims that depend on it. Every page says which parts are shipped and which are planned;
+from the claims that depend on it. Case inputs let one protocol serve several profiles: obligations
+apply by the inputs a case gives, and `canon diff` classifies a change between two revisions of a
+protocol. Every page says which parts are shipped and which are planned;
 [where this stands](./status/where-this-stands.md) has the full list.
 
 :::

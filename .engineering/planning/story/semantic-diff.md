@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:semantic-diff
 kind: story
-status: active
+status: implemented
 title: Classify protocol changes with a semantic diff
 refs:
 - provider: taskboard
@@ -22,10 +22,11 @@ scope:
   path: crates/canon/src/diff/
 - confidence: cited
   path: fixtures/investigation/semantic-diff/
-revision: 13
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:51Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":1}}}
 - {from: "proposed", to: "active", at: "2026-10-12T15:56:36Z", actor: "human:timo", revision: 13, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "active", to: "implemented", at: "2026-10-12T20:59:19Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 ## Outcome
 
