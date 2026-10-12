@@ -4,17 +4,19 @@
 # The evaluation documents (canon-case/1, canon-evidence/1, canon-decision/1) are specified first
 # here (story:three-valued-claims), and the explicit decisions an evaluation reads
 # (canon-decisions/1) too (story:decision-outcomes), and the authority decisions it reads
-# (canon-authority/1, story:review-hardening-w7).
+# (canon-authority/1, story:review-hardening-w7). story:case-inputs adds the case inputs a protocol
+# declares and a case gives values for, the input predicate and an obligation's applicability.
 # crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
 domain: canon.protocol
 
 summary: >-
-  A protocol document: its identity and revision, and the artifacts, evidence kinds, claims,
-  obligations, actions, outcomes and invalidation rules it declares. A predicate over evidence and claim values
-  decides each claim and guards each action, and states what each outcome requires unless the
-  outcome requires an explicit decision instead. A case governed by a protocol is evaluated from a
-  case snapshot, evidence records and explicit decisions into a decision that gives each claim a
-  three-valued truth value.
+  A protocol document: its identity and revision, the case inputs it declares, and the artifacts,
+  evidence kinds, claims, obligations, actions, outcomes and invalidation rules it declares. A
+  predicate over evidence, claim values and case inputs decides each claim and guards each action,
+  decides when an obligation applies, and states what each outcome requires unless the outcome
+  requires an explicit decision instead. A case governed by a protocol is evaluated from a case
+  snapshot, which gives a value for each case input, evidence records and explicit decisions into a
+  decision that gives each claim a three-valued truth value.
 
 naming:
   wire: protocol
@@ -117,6 +119,17 @@ types:
       # read from: .engineering/planning/story/obligations.md:30-37
       - name: discharged_when
         type: canon.protocol.Predicate
+      # When the obligation applies (story:case-inputs; the name the design gives the same guard on
+      # actions). Optional: an obligation without one always applies, so no earlier expectation
+      # changes. A predicate over claim values and case inputs, like discharged_when: canon validate
+      # refuses an evidence match in it (evidence-in-applicability). FALSE: the obligation is
+      # not_applicable and holds back nothing. TRUE: open or discharged as discharged_when decides.
+      # UNKNOWN (a claim it tests is unknown): open, with reasons naming what is unknown, because
+      # unknown is not false.
+      # read from: .engineering/planning/story/case-inputs.md:81-85
+      # read from: docs/design/canon-protocol-calculus-design.md:541
+      - name: applicable_when
+        type: Optional<canon.protocol.Predicate>
 
   # read from: crates/canon/src/model/mod.rs:94-107
   - name: canon.protocol.Action
@@ -246,14 +259,76 @@ types:
       - name: invalidates
         type: List<canon.protocol.ClaimId>
 
+  # The identifier of a case input a protocol declares (story:case-inputs): not empty, no
+  # whitespace, control or Unicode format characters, declared once.
+  # read from: .engineering/planning/story/case-inputs.md:67-69
+  - name: canon.protocol.InputId
+    kind: newtype
+    of: String
+
+  # One value a case input may take, an identifier its input declares. A case gives one per input;
+  # an input predicate lists the ones it is true for.
+  # read from: .engineering/planning/story/case-inputs.md:67-80
+  - name: canon.protocol.InputValue
+    kind: newtype
+    of: String
+
+  # The protocol's `case:` section (design sketch, `case: inputs:`): what a case governed by the
+  # protocol gives when it opens. A protocol without the section declares no input, and its
+  # canon-ir/1 has no `case` key, so the IR of every earlier protocol is unchanged.
+  # read from: .engineering/planning/story/case-inputs.md:67-71
+  # read from: docs/design/canon-protocol-calculus-design.md:631-634
+  - name: canon.protocol.CaseSection
+    kind: struct
+    fields:
+      # The case inputs, keyed by input id.
+      # read from: .engineering/planning/story/case-inputs.md:67-69
+      - name: inputs
+        type: Map<canon.protocol.InputId, canon.protocol.CaseInput>
+
+  # One case input: configuration a case fixes when it opens, not evidence, so no evaluation has an
+  # unknown input. A closed set of identifiers: the design sketch's `type: string` is not taken,
+  # since a free-text input could select no rule. canon validate refuses an input that declares no
+  # value (empty-input-values) and one that lists a value twice (duplicate-input-value), each naming
+  # the input, and the second the value. A set: canon-ir/1 lists each value once, in identifier
+  # order.
+  # read from: .engineering/planning/story/case-inputs.md:67-71
+  - name: canon.protocol.CaseInput
+    kind: struct
+    fields:
+      # read from: .engineering/planning/story/case-inputs.md:69
+      - name: description
+        type: Optional<String>
+      # The values the input may take: closed and not empty.
+      # read from: .engineering/planning/story/case-inputs.md:68-70
+      - name: values
+        type: List<canon.protocol.InputValue>
+
+  # An input predicate leaf, written `{input: <id>, in: [<value>, ...]}`: true when the case's value
+  # of the input is one of the values listed, false otherwise; never unknown, since a case gives
+  # every declared input. canon validate refuses an input the protocol does not declare
+  # (undeclared-input) and a listed value the input does not declare (undeclared-input-value), each
+  # naming the declaration it is written in and what it names. canon-ir/1 writes it
+  # `{"input": {"id": <id>, "in": [...]}}`, its values each once, in identifier order.
+  # read from: .engineering/planning/story/case-inputs.md:77-80
+  - name: canon.protocol.InputTest
+    kind: struct
+    fields:
+      # read from: .engineering/planning/story/case-inputs.md:77
+      - name: input
+        type: canon.protocol.InputId
+      # read from: .engineering/planning/story/case-inputs.md:77-78
+      - name: in
+        type: List<canon.protocol.InputValue>
+
   # A three-valued truth value; unknown is not false.
   # read from: crates/canon/src/model/predicate.rs:14-20
   - name: canon.protocol.Truth
     kind: enum
     variants: ["true", "false", "unknown"]
 
-  # Source text writes a predicate as a map with exactly one of the keys all, any, not, evidence or
-  # claim (crates/canon/src/model/predicate.rs:114-177); the typed model is this union.
+  # Source text writes a predicate as a map with exactly one of the keys all, any, not, evidence,
+  # claim or input (crates/canon/src/model/predicate.rs:114-177); the typed model is this union.
   # read from: crates/canon/src/model/predicate.rs:55-66
   - name: canon.protocol.Predicate
     kind: union
@@ -269,6 +344,8 @@ types:
       evidence: canon.protocol.EvidenceMatch
       # read from: crates/canon/src/model/predicate.rs:65
       claim: canon.protocol.ClaimTest
+      # read from: .engineering/planning/story/case-inputs.md:77-80
+      input: canon.protocol.InputTest
 
   # read from: crates/canon/src/model/predicate.rs:68-78
   - name: canon.protocol.EvidenceMatch
@@ -497,6 +574,16 @@ types:
     kind: enum
     variants: ["revision_mismatch", "expired", "invalidated"]
 
+  # The status of one obligation in canon-decision/1's obligations section: discharged when its
+  # discharged_when predicate is true; not_applicable when its applicable_when predicate is false
+  # (story:case-inputs), so it holds back nothing; open otherwise, including when its applicability
+  # is unknown, because unknown is not false.
+  # read from: .engineering/planning/story/obligations.md:30-37
+  # read from: .engineering/planning/story/case-inputs.md:81-85
+  - name: canon.protocol.ObligationStatus
+    kind: enum
+    variants: ["open", "discharged", "not_applicable"]
+
   # The canon-decision/1 document: which protocol revision applied to which case, and each declared
   # claim's value. Serialized as canonical JSON, the serialization canon-ir/1 uses.
   # read from: .engineering/planning/story/three-valued-claims.md:62-63
@@ -528,7 +615,9 @@ types:
       # story:obligations, story:action-admissibility or story:outcomes. A slot is absent until its
       # story fills it, and not serialized when absent.
       # read from: .engineering/planning/story/evaluator-skeleton.md:72-75
-      # Filled by story:obligations; its shape is fixed by that story's conformance scenarios.
+      # Filled by story:obligations; its shape is fixed by that story's conformance scenarios. Each
+      # entry's status is an ObligationStatus; story:case-inputs adds not_applicable, and an entry
+      # whose applicability is unknown carries reasons naming what is unknown (CANON-INPUT-001).
       - name: obligations
         type: Optional<Json>
       # Filled by story:action-admissibility; its shape is fixed by that story's conformance
@@ -594,6 +683,12 @@ entities:
       # read from: docs/design/canon-protocol-calculus-design.md:239
       - name: invalidation
         type: Map<canon.protocol.InvalidationRuleId, canon.protocol.InvalidationRule>
+      # The case inputs a case governed by the protocol gives (story:case-inputs), under `case:`,
+      # where the design's sketch puts them. Optional: a protocol without it declares no input.
+      # read from: .engineering/planning/story/case-inputs.md:67-71
+      # read from: docs/design/canon-protocol-calculus-design.md:631-634
+      - name: case
+        type: Optional<canon.protocol.CaseSection>
     # revision is a u64 (crates/canon/src/model/mod.rs:54); ESS Integer is signed.
     invariants:
       - revision >= 0
@@ -641,6 +736,14 @@ entities:
       # read from: docs/design/canon-protocol-calculus-design.md:1604
       - name: revision
         type: Optional<canon.protocol.Revision>
+      # The value of each case input, keyed by input id (story:case-inputs): fixed when the case
+      # opens. Optional for a protocol that declares no input. An evaluation is refused, naming the
+      # input, when the case gives an input the protocol does not declare (undeclared-input), a
+      # value the input does not declare (undeclared-input-value, naming the value too), or no value
+      # for a declared input (missing-input).
+      # read from: .engineering/planning/story/case-inputs.md:72-76
+      - name: inputs
+        type: Map<canon.protocol.InputId, canon.protocol.InputValue>
     relations:
       # Every case is governed by exactly one protocol (design § 4.2).
       # read from: docs/design/canon-protocol-calculus-design.md:247
