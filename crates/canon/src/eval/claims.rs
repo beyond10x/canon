@@ -7,9 +7,24 @@ use super::Refusal;
 use super::invalidation::Invalidated;
 use crate::ir::Ir;
 use crate::model::{
-    ArtifactId, ClaimId, EvidenceId, EvidenceKindId, EvidenceMatch, EvidenceRecord, Predicate,
-    Truth, one_line,
+    ArtifactId, ClaimId, EvidenceId, EvidenceKindId, EvidenceMatch, EvidenceRecord, InputId,
+    InputTest, InputValue, Predicate, Truth, one_line,
 };
+
+/// The value of each case input, as the case snapshot gives it, keyed by input id: what input
+/// tests read. The case check (`case.rs`) has refused a case that leaves a declared input out.
+pub(crate) type Inputs = BTreeMap<InputId, InputValue>;
+
+/// An input test's value: `true` when the case's value of its input is one the test lists, `false`
+/// when it is another. An input the case gives no value for, which only an IR a caller builds can
+/// name, is established by nothing and is `unknown`, as an undeclared claim is.
+fn input_test(test: &InputTest, inputs: &Inputs) -> Truth {
+    match inputs.get(&test.input) {
+        Some(value) if test.holds_for(value) => Truth::True,
+        Some(_) => Truth::False,
+        None => Truth::Unknown,
+    }
+}
 
 /// The value of every claim `ir` declares, keyed by claim id. The walk recurses through claim
 /// tests, so it runs only after `depth.rs` has bounded every claim's effective depth and refused a
@@ -23,11 +38,13 @@ pub(super) fn values(
     ir: &Ir,
     evidence: &[EvidenceRecord],
     invalidated: &Invalidated,
+    inputs: &Inputs,
 ) -> Result<BTreeMap<ClaimId, Truth>, Refusal> {
     let mut walk = Walk {
         ir,
         evidence,
         invalidated,
+        inputs,
         values: BTreeMap::new(),
         in_progress: Vec::new(),
     };
@@ -49,6 +66,8 @@ struct Walk<'a> {
     evidence: &'a [EvidenceRecord],
     /// What the invalidation stage kept from each claim.
     invalidated: &'a Invalidated,
+    /// The case's input values, which input tests read.
+    inputs: &'a Inputs,
     values: BTreeMap<(ClaimId, Context), Truth>,
     in_progress: Vec<ClaimId>,
 }
@@ -110,6 +129,7 @@ impl Walk<'_> {
                 tested_in.extend(context.iter().cloned());
                 tested(self.value_in(&test.claim, &tested_in)?, test.is)
             }
+            Predicate::Input(test) => input_test(test, self.inputs),
         })
     }
 
@@ -121,29 +141,32 @@ impl Walk<'_> {
     }
 }
 
-/// A predicate's value over claim values already decided and the evidence a section may read: the
-/// one evaluator the `obligations`, `actions` and `outcomes` sections use, with the rules claims
-/// are evaluated by (the module docs of [`super`]). A claim `claims` does not hold is `unknown`.
+/// A predicate's value over claim values already decided, the case's input values and the
+/// evidence a section may read: the one evaluator the `obligations`, `actions` and `outcomes`
+/// sections use, with the rules claims are evaluated by (the module docs of [`super`]). A claim
+/// `claims` does not hold is `unknown`.
 pub(super) fn predicate(
     predicate: &Predicate,
     claims: &BTreeMap<ClaimId, Truth>,
+    inputs: &Inputs,
     evidence: &[EvidenceRecord],
 ) -> Truth {
     let members = |members: &[Predicate]| -> Vec<Truth> {
         members
             .iter()
-            .map(|member| self::predicate(member, claims, evidence))
+            .map(|member| self::predicate(member, claims, inputs, evidence))
             .collect()
     };
     match predicate {
         Predicate::All(members_of) => all(&members(members_of)),
         Predicate::Any(members_of) => any(&members(members_of)),
-        Predicate::Not(inner) => not(self::predicate(inner, claims, evidence)),
+        Predicate::Not(inner) => not(self::predicate(inner, claims, inputs, evidence)),
         Predicate::Evidence(matching) => evidence_match(matching, evidence),
         Predicate::Claim(test) => tested(
             claims.get(&test.claim).copied().unwrap_or(Truth::Unknown),
             test.is,
         ),
+        Predicate::Input(test) => input_test(test, inputs),
     }
 }
 
@@ -408,10 +431,11 @@ mod tests {
             vec![record("k", Some("pass")), record("k", Some("fail"))],
             vec![record("l", None)],
         ] {
-            let claims = values(&ir, &evidence, &Invalidated::default()).expect("acyclic");
+            let none = Inputs::new();
+            let claims = values(&ir, &evidence, &Invalidated::default(), &none).expect("acyclic");
             for (id, claim) in &ir.claims {
                 assert_eq!(
-                    predicate(&claim.true_when, &claims, &evidence),
+                    predicate(&claim.true_when, &claims, &none, &evidence),
                     claims[id],
                     "{id:?} over {evidence:?}"
                 );
@@ -428,9 +452,58 @@ mod tests {
             })
         };
         let none = BTreeMap::new();
-        assert_eq!(predicate(&test(Truth::True), &none, &[]), Truth::Unknown);
-        assert_eq!(predicate(&test(Truth::Unknown), &none, &[]), Truth::True);
+        let inputs = Inputs::new();
+        assert_eq!(
+            predicate(&test(Truth::True), &none, &inputs, &[]),
+            Truth::Unknown
+        );
+        assert_eq!(
+            predicate(&test(Truth::Unknown), &none, &inputs, &[]),
+            Truth::True
+        );
         let given = BTreeMap::from([(ClaimId::new("missing"), Truth::False)]);
-        assert_eq!(predicate(&test(Truth::False), &given, &[]), Truth::True);
+        assert_eq!(
+            predicate(&test(Truth::False), &given, &inputs, &[]),
+            Truth::True
+        );
+    }
+
+    /// An input test is `true` for a value it lists and `false` for another, never `unknown` for
+    /// an input the case gives; one the case does not give (only a built IR names one) is
+    /// `unknown`. Claim evaluation and the section evaluator agree on it.
+    #[test]
+    fn an_input_test_is_true_exactly_for_the_values_it_lists() {
+        let test = Predicate::Input(InputTest {
+            input: InputId::new("severity"),
+            r#in: vec![InputValue::new("high"), InputValue::new("critical")],
+        });
+        let given =
+            |value: &str| Inputs::from([(InputId::new("severity"), InputValue::new(value))]);
+        let claims = BTreeMap::new();
+        assert_eq!(predicate(&test, &claims, &given("high"), &[]), Truth::True);
+        assert_eq!(predicate(&test, &claims, &given("low"), &[]), Truth::False);
+        assert_eq!(
+            predicate(&test, &claims, &Inputs::new(), &[]),
+            Truth::Unknown
+        );
+        let ir = crate::ir::compile(
+            &crate::model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 case: {inputs: {severity: {values: [low, high]}}}\n\
+                 claims: {severe: {true_when: {input: severity, in: [high]}}, \
+                 mild: {true_when: {not: {claim: severe}}}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        for (value, severe, mild) in [
+            ("high", Truth::True, Truth::False),
+            ("low", Truth::False, Truth::True),
+        ] {
+            let decided =
+                values(&ir, &[], &Invalidated::default(), &given(value)).expect("acyclic");
+            assert_eq!(decided[&ClaimId::new("severe")], severe, "{value}");
+            assert_eq!(decided[&ClaimId::new("mild")], mild, "{value}");
+        }
     }
 }

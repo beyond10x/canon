@@ -1,0 +1,97 @@
+format: protocol/1
+
+protocol:
+  id: investigation
+  revision: 2
+  description: Decide whether an explanation is supported, and publish the finding once every obligation that applies to the case is discharged.
+
+case:
+  inputs:
+    severity:
+      description: How severe the case is; the finding of a severe case is reviewed by a peer before it is published.
+      values: [low, medium, high]
+
+artifacts:
+  explanation:
+    description: The explanation under investigation.
+
+evidence_kinds:
+  observation:
+    description: An observation bearing on the explanation; its result is consistent or inconsistent.
+  falsification_attempt:
+    description: An attempt to refute the explanation.
+  peer_review:
+    description: A peer's review of the finding; its result is approved or rejected.
+
+claims:
+  explanation.supported:
+    description: Observation is consistent with the explanation.
+    true_when:
+      evidence:
+        kind: observation
+        result: consistent
+  falsification.attempted:
+    description: An attempt to refute the explanation is on record.
+    true_when:
+      evidence:
+        kind: falsification_attempt
+  peer.approved:
+    description: A peer approved the finding.
+    true_when:
+      evidence:
+        kind: peer_review
+        result: approved
+
+obligations:
+  peer.review:
+    description: Have a peer review the finding of a severe case.
+    applicable_when:
+      input: severity
+      in: [high]
+    discharged_when:
+      claim: peer.approved
+  falsification.recorded:
+    description: Record an attempt to refute an explanation observation supports.
+    applicable_when:
+      claim: explanation.supported
+    discharged_when:
+      claim: falsification.attempted
+
+actions:
+  inspect:
+    description: Look for observations bearing on the explanation.
+    may_produce:
+      - evidence: observation
+
+  attempt_falsification:
+    description: Try to refute the explanation.
+    may_produce:
+      - evidence: falsification_attempt
+
+  request_review:
+    description: Ask a peer to review the finding.
+    may_produce:
+      - evidence: peer_review
+
+  publish_finding:
+    description: Publish the finding, at once in a case of low severity, otherwise once observation supports the explanation.
+    precondition:
+      any:
+        - input: severity
+          in: [low]
+        - claim: explanation.supported
+
+outcomes:
+  finding.published:
+    description: The finding is published, with every obligation that applies to the case discharged.
+    requires:
+      all:
+        - any:
+            - not:
+                input: severity
+                in: [high]
+            - claim: peer.approved
+        - any:
+            - not:
+                claim: explanation.supported
+            - claim: falsification.attempted

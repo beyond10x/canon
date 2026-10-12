@@ -48,7 +48,7 @@
 use std::collections::BTreeMap;
 
 use super::Refusal;
-use super::claims::predicate;
+use super::claims::{Inputs, predicate};
 use super::decisions::Decisions;
 use crate::ir::Ir;
 use crate::model::{
@@ -62,6 +62,7 @@ pub(super) fn section(
     ir: &Ir,
     case: &Case,
     claims: &BTreeMap<ClaimId, Truth>,
+    inputs: &Inputs,
     evidence: &[EvidenceRecord],
     decisions: Option<&Decisions>,
 ) -> Result<Option<Json>, Refusal> {
@@ -114,7 +115,7 @@ pub(super) fn section(
         };
         let legitimate = match &outcome.requires {
             OutcomeRequirement::Predicate(requires) => {
-                predicate(requires, claims, evidence) == Truth::True
+                predicate(requires, claims, inputs, evidence) == Truth::True
             }
             OutcomeRequirement::Decision(_) => decided_by.is_some(),
         };
@@ -140,7 +141,7 @@ pub(super) fn section(
             serde_json::json!({
                 "status": "blocked",
                 "reasons": match &outcome.requires {
-                    OutcomeRequirement::Predicate(requires) => reasons(requires, claims, evidence),
+                    OutcomeRequirement::Predicate(requires) => reasons(requires, claims, inputs, evidence),
                     OutcomeRequirement::Decision(name) => {
                         vec![serde_json::json!({"decision": name.as_str(), "present": false})]
                     }
@@ -159,9 +160,10 @@ pub(super) fn section(
 pub(super) fn reasons(
     requires: &Predicate,
     claims: &BTreeMap<ClaimId, Truth>,
+    inputs: &Inputs,
     evidence: &[EvidenceRecord],
 ) -> Vec<Json> {
-    super::actions::unmet(requires, claims, evidence)
+    super::actions::unmet(requires, claims, inputs, evidence)
 }
 
 #[cfg(test)]

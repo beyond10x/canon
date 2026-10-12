@@ -1,0 +1,383 @@
+format: canon-conformance/1
+id: CANON-INPUT-001
+covers: [CANON-INPUT-001]
+fixture: fixtures/investigation/case-inputs.yaml
+# Case inputs and derived obligations (story:case-inputs). The fixture declares the input
+# `severity` (low, high); the obligation `peer.review`, which applies when severity is high;
+# the obligation `falsification.recorded`, which applies when observation supports the
+# explanation; the outcome `finding.published`, which requires every obligation that applies
+# discharged; and the action `publish_finding`, admissible when severity is low or the
+# explanation is supported. An `input` reason is `{"input": <id>, "value": <the case's value>}`.
+steps:
+  # Severity low, no evidence. `peer.review` applies only to a severe case, so it is
+  # not_applicable. `falsification.recorded` applies when observation supports the
+  # explanation, which is UNKNOWN: it is open, its reason naming the claim, because UNKNOWN
+  # is not FALSE. `publish_finding` is admissible on the severity alone. `finding.published`
+  # is blocked by `falsification.recorded` only: neither `peer.approved` nor `severity` is
+  # among its reasons.
+  - id: low-no-evidence
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+        inputs:
+          severity: low
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "status": "admissible"
+            },
+            "inspect": {
+              "status": "admissible"
+            },
+            "publish_finding": {
+              "status": "admissible"
+            },
+            "request_review": {
+              "status": "admissible"
+            }
+          },
+          "claims": {
+            "explanation.supported": {
+              "value": "unknown"
+            },
+            "falsification.attempted": {
+              "value": "unknown"
+            },
+            "peer.approved": {
+              "value": "unknown"
+            }
+          },
+          "obligations": [
+            {
+              "id": "falsification.recorded",
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "open"
+            },
+            {
+              "id": "peer.review",
+              "status": "not_applicable"
+            }
+          ],
+          "outcomes": {
+            "finding.published": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                },
+                {
+                  "claim": "falsification.attempted",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Severity low, a consistent observation and a falsification attempt: `falsification.recorded`
+  # applies and is discharged, and `peer.review` is not_applicable, so it holds
+  # `finding.published` back from nothing: the outcome is legitimate without a peer review.
+  - id: low-supported-and-attempted
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+        inputs:
+          severity: low
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: observation
+          result: consistent
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "claims": {
+            "explanation.supported": {
+              "value": "true"
+            },
+            "falsification.attempted": {
+              "value": "true"
+            },
+            "peer.approved": {
+              "value": "unknown"
+            }
+          },
+          "obligations": [
+            {
+              "id": "falsification.recorded",
+              "status": "discharged"
+            },
+            {
+              "id": "peer.review",
+              "status": "not_applicable"
+            }
+          ],
+          "outcomes": {
+            "finding.published": {
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # Severity low and a falsification attempt on record, no observation. Whether
+  # `falsification.recorded` applies is UNKNOWN, since `explanation.supported` is, and its
+  # discharge predicate is TRUE: it is discharged whatever its applicability, so it agrees with
+  # `finding.published`, which requires every obligation that applies discharged and is
+  # legitimate here.
+  - id: low-attempted
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+        inputs:
+          severity: low
+      evidence:
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "claims": {
+            "explanation.supported": {
+              "value": "unknown"
+            },
+            "falsification.attempted": {
+              "value": "true"
+            },
+            "peer.approved": {
+              "value": "unknown"
+            }
+          },
+          "obligations": [
+            {
+              "id": "falsification.recorded",
+              "status": "discharged"
+            },
+            {
+              "id": "peer.review",
+              "status": "not_applicable"
+            }
+          ],
+          "outcomes": {
+            "finding.published": {
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # Severity high, no evidence: `peer.review` applies and is open. `publish_finding` is
+  # blocked, naming `explanation.supported` and the severity that does not admit it.
+  # `finding.published` is blocked by both obligations.
+  - id: high-no-evidence
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+        inputs:
+          severity: high
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "status": "admissible"
+            },
+            "inspect": {
+              "status": "admissible"
+            },
+            "publish_finding": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                },
+                {
+                  "input": "severity",
+                  "value": "high"
+                }
+              ],
+              "status": "blocked"
+            },
+            "request_review": {
+              "status": "admissible"
+            }
+          },
+          "claims": {
+            "explanation.supported": {
+              "value": "unknown"
+            },
+            "falsification.attempted": {
+              "value": "unknown"
+            },
+            "peer.approved": {
+              "value": "unknown"
+            }
+          },
+          "obligations": [
+            {
+              "id": "falsification.recorded",
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "open"
+            },
+            {
+              "id": "peer.review",
+              "status": "open"
+            }
+          ],
+          "outcomes": {
+            "finding.published": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                },
+                {
+                  "claim": "falsification.attempted",
+                  "value": "unknown"
+                },
+                {
+                  "claim": "peer.approved",
+                  "value": "unknown"
+                },
+                {
+                  "input": "severity",
+                  "value": "high"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Severity high, with the peer's approval: `peer.review` is discharged.
+  - id: high-reviewed
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+        inputs:
+          severity: high
+      evidence:
+        - format: canon-evidence/1
+          id: review-1
+          kind: peer_review
+          result: approved
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "claims": {
+            "explanation.supported": {
+              "value": "unknown"
+            },
+            "falsification.attempted": {
+              "value": "unknown"
+            },
+            "peer.approved": {
+              "value": "true"
+            }
+          },
+          "obligations": [
+            {
+              "id": "falsification.recorded",
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "open"
+            },
+            {
+              "id": "peer.review",
+              "status": "discharged"
+            }
+          ]
+        }
+
+  # A case that gives no value for a declared input is refused, naming it.
+  - id: severity-missing
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+      evidence: []
+    expect:
+      refusal: missing-input
+
+  # A value the input does not declare is refused, naming the input and the value.
+  - id: severity-undeclared-value
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+        inputs:
+          severity: medium
+      evidence: []
+    expect:
+      refusal: undeclared-input-value
+
+  # An input the protocol does not declare is refused, naming it.
+  - id: input-undeclared
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+        inputs:
+          severity: high
+          urgency: soon
+      evidence: []
+    expect:
+      refusal: undeclared-input

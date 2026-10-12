@@ -14,24 +14,35 @@ does not depend on the order the sections are written in:
 
 1. the format;
 2. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
-   claims, obligations, actions, outcomes and invalidation rules, in that section order, then
-   the capabilities and effect classes actions name, in action order, then the decisions
-   outcomes require, in outcome order;
+   claims, obligations, actions, outcomes, invalidation rules and case inputs, in that section
+   order, then the capabilities and effect classes actions name, in action order, then the
+   decisions outcomes require, in outcome order, then the values case inputs declare, in input
+   order;
 3. duplicate identifiers, in the same section order;
 4. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
    or `d`, or that are but are too long to count in seconds (each with its own message), in the
    order the evidence kinds are written;
-5. unresolved references (a claim, an evidence kind, or the artifact an evidence match names as
-   its subject, which is reported after the kind it is written beside): those in claims first,
-   then those in obligations (their discharge predicates, each followed by every evidence match
-   it holds, which a discharge predicate may not: it tests only claim values), then those in
+5. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
+   more than once (`duplicate-input-value`, naming the input and the value, once for every
+   listing after its first), in the order the inputs are written;
+6. unresolved references and malformed input tests (a claim, an evidence kind, the artifact an
+   evidence match names as its subject, which is reported after the kind it is written beside;
+   for an input test, first an empty `in` list, `empty-input-test`, or a value it lists more
+   than once, `duplicate-input-test-value`, once for every listing after its first, then an
+   input it names that is not declared, `undeclared-input`, or a value it lists that its input
+   does not declare, `undeclared-input-value`, each value once, in the order listed, every one
+   naming the declaration the test is written in and the input): those in claims first, then those
+   in obligations (each obligation's discharge predicate, followed by every evidence match it
+   holds, which a discharge predicate may not: it tests only claim values; then its
+   applicability predicate, followed likewise by every evidence match it holds,
+   `evidence-in-applicability`: it tests only claim values and case inputs), then those in
    actions, then those in outcomes, then those in invalidation rules (the upstream artifact,
    then each claim the rule invalidates); within a section, in the order its declarations are
    written, and within a declaration, in the order its references are written;
-6. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
+7. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
    claim it tests through any number of claim references (`inert-invalidation`), in the order
    the rules and their claims are written;
-7. cycles between claims.
+8. cycles between claims.
 
 Within a section, entries come in the order they are written. Every message renders document
 text on one line. The same document always yields the same problems in the same order.
@@ -48,6 +59,13 @@ text on one line. The same document always yields the same problems in the same 
 | `undeclared-artifact` | An evidence match names as its subject, or an invalidation rule as its upstream artifact, an artifact that is not declared. |
 | `invalid-max-age` | An evidence kind's `max_age` is not a whole number without leading zeros, followed by `s`, `m`, `h` or `d`, or is too long to count in seconds. |
 | `evidence-in-discharge` | A discharge predicate tests evidence; it may test only claim values. `path` locates the evidence match inside the predicate, as `discharged_when.all[1].evidence`. |
+| `evidence-in-applicability` | An applicability predicate tests evidence; it may test only claim values and case inputs. `path` locates the evidence match inside the predicate, as `applicable_when.not.evidence`. |
+| `empty-input-values` | A case input declares no value, so no case could give it one. |
+| `duplicate-input-value` | A case input lists a value more than once. |
+| `empty-input-test` | An input test lists no value, so it is false in every case. |
+| `duplicate-input-test-value` | An input test lists a value more than once. |
+| `undeclared-input` | An input test names an input that is not declared. |
+| `undeclared-input-value` | An input test lists a value its input does not declare. |
 | `inert-invalidation` | An invalidation rule names a claim that reaches no evidence match, in its own predicate or in a claim it tests, so no record could be kept from it. |
 | `claim-cycle` | Claims whose predicates test each other in a cycle; the first claim is repeated at the end. |
 

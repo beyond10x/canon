@@ -8,7 +8,8 @@
 //! - `computed_from`: the protocol id and revision (`protocol`, `protocol_revision`), the Canon
 //!   semantics that applied (`semantics`: `{"canon": <the Canon crate version>, "format":
 //!   "canon-decision/1"}`), the case snapshot as given (`case`: its `format`, `id`, `protocol`,
-//!   `artifacts` with each artifact's `revision`, and `revision` and `termination` when given),
+//!   `artifacts` with each artifact's `revision`, `revision` and `termination` when given, and
+//!   `inputs`, each case input's value, when the case gives any),
 //!   the ids of the evidence set (`evidence`), and, each only when supplied, the authority
 //!   decisions (`authority`, `{"capability", "decision"}` entries), the explicit decisions
 //!   (`decisions`, `{"case_revision", "decision", "outcome", "principal"}` entries) and the
@@ -16,14 +17,17 @@
 //! - `outcomes`: each blocked outcome, `{"because": [...], "status": "blocked"}`.
 //! - `actions`: each action that is not admissible, `{"because": [...], "status": <status>}`.
 //! - `obligations`: each open obligation, `{"because": [...], "status": "open"}`. Its reasons are
-//!   those its `discharged_when` predicate is not `true` for, walked exactly as a blocked outcome's
-//!   requirement is (`outcomes.rs`), so one predicate gives an obligation and an outcome the same
-//!   reasons.
+//!   the ones the decision gives it when whether it applies is unknown, then those its
+//!   `discharged_when` predicate (never `true` for an open obligation) is not `true` for, walked
+//!   exactly as a
+//!   blocked outcome's requirement is (`outcomes.rs`), so one predicate gives an obligation and an
+//!   outcome the same reasons; each reason once.
 //! - `claims`: every claim whose value is not `true`, and every claim a reason above names,
 //!   together with every claim one of them tests, through any number of claim references, `true`
 //!   ones included, so every chain of reasons ends at evidence records. Each is `{"because": [...],
 //!   "value": <value>}`: each claim its `true_when` predicate tests, `{"claim": <id>, "value":
-//!   <value>}`, then each record an evidence match the claim reaches reads (as its
+//!   <value>}`, then each case input it tests, `{"input": <id>, "value": <the case's value>}`, in
+//!   input-id order, then each record an evidence match the claim reaches reads (as its
 //!   `excluded_evidence` list counts them), written as below, then each evidence match it reaches
 //!   that reads no record of the evidence set, `{"kind": <kind>, "status": "absent"}`, with
 //!   `"subject": <artifact>` added when the match names one, in kind and then subject order (no
@@ -57,11 +61,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
-use crate::eval::{Authority, Decisions, Invalidated, reads, unmet_reasons};
+use crate::eval::{Authority, Decisions, Inputs as CaseInputs, Invalidated, reads, unmet_reasons};
 use crate::ir::Ir;
 use crate::model::{
     ArtifactId, Case, ClaimId, DECISION_FORMAT, Decision, EvidenceExclusion, EvidenceKindId,
-    EvidenceRecord, ExclusionReason, Json, Predicate, Truth,
+    EvidenceRecord, ExclusionReason, InputId, Json, Predicate, Truth,
 };
 
 /// An explanation, the payload of the decision's `explanation` slot, as the module docs give it.
@@ -103,7 +107,12 @@ pub(crate) fn explain(
         .iter()
         .map(|(id, entry)| (id.clone(), entry.value))
         .collect();
-    let obligations = obligations(ir, decision, &values, &records);
+    let case_inputs: CaseInputs = case
+        .inputs
+        .iter()
+        .map(|(input, value)| (input.clone(), value.clone()))
+        .collect();
+    let obligations = obligations(ir, decision, &values, &case_inputs, &records);
     let actions = not_with_status(decision.actions.as_ref(), "admissible", &records);
     let outcomes = not_with_status(decision.outcomes.as_ref(), "legitimate", &records);
     // Every claim that is not `true`, and every claim a reason above names.
@@ -118,7 +127,7 @@ pub(crate) fn explain(
         .map(|(id, _)| id)
         .chain(named.filter_map(|name| values.keys().find(|id| id.as_str() == name)))
         .collect();
-    let claims = claims(ir, seeds, &values, &records);
+    let claims = claims(ir, seeds, &values, &case_inputs, &records);
 
     let mut sections = Map::new();
     sections.insert(
@@ -278,6 +287,14 @@ fn case_snapshot(case: &Case) -> Value {
     if let Some(termination) = &case.termination {
         snapshot.insert("termination".to_owned(), json!(termination.as_str()));
     }
+    if !case.inputs.is_empty() {
+        let inputs: Map<String, Value> = case
+            .inputs
+            .iter()
+            .map(|(input, value)| (input.as_str().to_owned(), json!(value.as_str())))
+            .collect();
+        snapshot.insert("inputs".to_owned(), Value::Object(inputs));
+    }
     Value::Object(snapshot)
 }
 
@@ -335,6 +352,23 @@ fn claim_reasons(predicate: &Predicate, values: &BTreeMap<ClaimId, Truth>) -> Ve
         .collect()
 }
 
+/// `{"input": <id>, "value": <the case's value>}` for each case input `predicate` tests, in
+/// input-id order; `null` for an input the case does not give, which only a built IR can name.
+fn input_reasons(predicate: &Predicate, inputs: &CaseInputs) -> Vec<Value> {
+    let tested: BTreeSet<&InputId> = predicate
+        .input_tests()
+        .into_iter()
+        .map(|test| &test.input)
+        .collect();
+    tested
+        .into_iter()
+        .map(|input| {
+            let value = inputs.get(input).map(|value| value.as_str());
+            json!({"input": input.as_str(), "value": value})
+        })
+        .collect()
+}
+
 /// The evidence matches `claim` reaches, by kind and subject: those of its own predicate, and those
 /// every claim it tests reaches, through any number of claim references. Each claim is visited
 /// once.
@@ -366,6 +400,7 @@ fn claims(
     ir: &Ir,
     seeds: Vec<&ClaimId>,
     values: &BTreeMap<ClaimId, Truth>,
+    inputs: &CaseInputs,
     records: &Records<'_>,
 ) -> Map<String, Value> {
     let mut entries = Map::new();
@@ -377,7 +412,9 @@ fn claims(
         let mut because = match ir.claims.get(id) {
             Some(declared) => {
                 pending.extend(declared.true_when.claim_references());
-                claim_reasons(&declared.true_when, values)
+                let mut because = claim_reasons(&declared.true_when, values);
+                because.extend(input_reasons(&declared.true_when, inputs));
+                because
             }
             None => Vec::new(),
         };
@@ -404,12 +441,14 @@ fn claims(
     entries
 }
 
-/// Each open obligation, with the reasons its `discharged_when` predicate is not `true`, walked
-/// as a blocked outcome's requirement is (`crate::eval::unmet_reasons`).
+/// Each open obligation, with the reasons the decision gives it (whether it applies is unknown),
+/// then the reasons its `discharged_when` predicate is not `true`, walked as a blocked outcome's
+/// requirement is (`crate::eval::unmet_reasons`), each reason once.
 fn obligations(
     ir: &Ir,
     decision: &Decision,
     values: &BTreeMap<ClaimId, Truth>,
+    inputs: &CaseInputs,
     records: &Records<'_>,
 ) -> Map<String, Value> {
     let Some(Value::Array(entries)) = &decision.obligations else {
@@ -421,8 +460,15 @@ fn obligations(
         .filter_map(|entry| {
             let id = entry["id"].as_str()?;
             let declared = ir.obligations.iter().find(|(key, _)| key.as_str() == id)?.1;
-            // A discharge predicate tests claims only; the validator refuses evidence in one.
-            let reasons = unmet_reasons(&declared.discharged_when, values, &[]);
+            let mut reasons = entry["reasons"].as_array().cloned().unwrap_or_default();
+            // A discharge predicate tests claims and inputs only; the validator refuses evidence
+            // in one. An open obligation's discharge predicate is not true: one that is true
+            // discharges the obligation, whatever its applicability.
+            for reason in unmet_reasons(&declared.discharged_when, values, inputs, &[]) {
+                if !reasons.contains(&reason) {
+                    reasons.push(reason);
+                }
+            }
             Some((
                 id.to_owned(),
                 json!({"because": because(&reasons, records), "status": "open"}),

@@ -9,7 +9,8 @@
 //!
 //! The dimensions, in this order: the evidence dimensions of each declared evidence kind, in
 //! identifier order; each capability some action requires, in identifier order; each decision name
-//! some outcome requires, in identifier order.
+//! some outcome requires, in identifier order; each case input the protocol declares, in
+//! identifier order.
 //!
 //! - An evidence dimension is the records of one kind about one artifact. A kind has one bound
 //!   dimension per artifact some evidence match of the kind names as its `subject`, in identifier
@@ -29,6 +30,12 @@
 //! - A capability is undecided, granted or denied (3 values).
 //! - A decision is not taken or taken (2 values); taken, it is taken for every outcome that
 //!   requires it.
+//! - A case input takes each value it declares, in identifier order (one value per declared
+//!   value): a protocol of several profiles is checked in every profile at once. An input weighs
+//!   nothing in a witness, and a state writes it `` input `s` `v` ``, after the taken decisions.
+//!   The report's summary names each input after the state count, with how many values it takes:
+//!   `` checked: protocol `p` revision 1: 64 states (input `s` 2 values), 0 properties, 0
+//!   findings ``.
 //! - An evidence dimension has upstream artifacts when an invalidation rule can keep its records
 //!   from a claim: the upstream artifact of each rule that invalidates a claim (one it names, or
 //!   one built on those, by the evaluator's own rule, `crate::eval::invalidated_claims`) that
@@ -51,7 +58,8 @@
 //! dimension: it is computed from the claims in each state, and no `protocol/1` predicate reads it.
 //!
 //! A state is evaluated as a case snapshot that lists each declared artifact, and the case itself,
-//! at one revision, with one evidence record per present class and variant about its dimension's
+//! at one revision, and gives each case input its value in the state, with one evidence record per
+//! present class and variant about its dimension's
 //! artifact, the decided capabilities as `canon-authority/1` and the taken decisions as
 //! `canon-decisions/1`.
 //!
@@ -132,7 +140,7 @@ use crate::eval::{self, Supplied};
 use crate::ir::Ir;
 use crate::model::{
     ActionId, CASE_FORMAT, Case, CaseArtifact, CaseId, ClaimId, Declarations, EvidenceKindId,
-    ObligationId, OutcomeId, Properties, PropertyDependency, PropertyId, PropertySubject,
+    InputId, ObligationId, OutcomeId, Properties, PropertyDependency, PropertyId, PropertySubject,
     ProtocolId, Revision, one_line,
 };
 
@@ -281,6 +289,9 @@ pub struct Report {
     pub revision: u64,
     /// How many states were evaluated.
     pub states: u128,
+    /// Each case input the state space takes every value of, in identifier order, with how many
+    /// values it declares; empty for a protocol that declares no input.
+    pub inputs: Vec<(InputId, usize)>,
     /// How many properties were checked.
     pub properties: usize,
     pub findings: Vec<Finding>,
@@ -294,18 +305,33 @@ impl Report {
 }
 
 /// One line per finding, then the summary: `` checked: protocol `p` revision 1: 48 states, 1
-/// property, 0 findings ``.
+/// property, 0 findings ``. A protocol that declares case inputs has each named after the state
+/// count, with how many values it takes: `` 64 states (input `s` 2 values, input `t` 3 values) ``.
 impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for finding in &self.findings {
             writeln!(f, "{finding}")?;
         }
+        let mut states = counted(self.states, "state", "states");
+        if !self.inputs.is_empty() {
+            let inputs: Vec<String> = self
+                .inputs
+                .iter()
+                .map(|(id, values)| {
+                    format!(
+                        "input `{}` {}",
+                        one_line(id.as_str()),
+                        counted(*values as u128, "value", "values")
+                    )
+                })
+                .collect();
+            states.push_str(&format!(" ({})", inputs.join(", ")));
+        }
         writeln!(
             f,
-            "checked: protocol `{}` revision {}: {}, {}, {}",
+            "checked: protocol `{}` revision {}: {states}, {}, {}",
             one_line(self.protocol.as_str()),
             self.revision,
-            counted(self.states, "state", "states"),
             counted(self.properties as u128, "property", "properties"),
             counted(self.findings.len() as u128, "finding", "findings"),
         )
@@ -394,6 +420,11 @@ pub fn check(ir: &Ir, properties: Option<&Properties>) -> Result<Report, Refusal
         protocol: ir.protocol.id.clone(),
         revision: ir.protocol.revision,
         states: size,
+        inputs: ir
+            .inputs
+            .iter()
+            .map(|(id, input)| (id.clone(), input.values.len()))
+            .collect(),
         properties: properties.map_or(0, |p| p.properties.len()),
         findings,
     })
@@ -419,6 +450,7 @@ pub(crate) fn evaluate(ir: &Ir, space: &Space<'_>, state: &State) -> Result<Eval
         ),
         termination: None,
         revision: Some(revision),
+        inputs: space.inputs(state),
     };
     let evidence = space.evidence(state);
     let authority = space.authority(state);

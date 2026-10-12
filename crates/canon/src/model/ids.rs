@@ -22,6 +22,35 @@ macro_rules! identifier {
             }
         }
 
+        identifier_impls!($name);
+    };
+}
+
+/// An identifier read from any scalar: a string as written, and a scalar YAML reads as a boolean or
+/// a number (`true`, `2`) as its text. One reader serves every document it appears in, so the
+/// protocol, which `serde_yaml_ng` reads from text, and the case, which it reads from an already
+/// parsed YAML value, read the same scalar to the same text.
+macro_rules! scalar_identifier {
+    ($(#[$doc:meta])* $name:ident) => {
+        $(#[$doc])*
+        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+        #[serde(transparent)]
+        pub struct $name(String);
+
+        /// Reads any scalar as its text, refusing an explicit null as every identifier does.
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                super::present::identifier::<D, Scalar>(deserializer).map(|scalar| Self(scalar.0))
+            }
+        }
+
+        identifier_impls!($name);
+    };
+}
+
+/// What every identifier type has besides its reader.
+macro_rules! identifier_impls {
+    ($name:ident) => {
         impl $name {
             pub fn new(id: impl Into<String>) -> Self {
                 Self(id.into())
@@ -50,6 +79,50 @@ macro_rules! identifier {
             }
         }
     };
+}
+
+/// A scalar read as its text: a string as written, a boolean as `true` or `false`, a number as
+/// Rust writes it (`2`, `-1`, `0.5`). A sequence or a map is refused, naming what was expected.
+struct Scalar(String);
+
+impl<'de> Deserialize<'de> for Scalar {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Text;
+
+        impl serde::de::Visitor<'_> for Text {
+            type Value = Scalar;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a string, a boolean or a number")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Scalar, E> {
+                Ok(Scalar(value.to_owned()))
+            }
+
+            fn visit_string<E: serde::de::Error>(self, value: String) -> Result<Scalar, E> {
+                Ok(Scalar(value))
+            }
+
+            fn visit_bool<E: serde::de::Error>(self, value: bool) -> Result<Scalar, E> {
+                Ok(Scalar(value.to_string()))
+            }
+
+            fn visit_i64<E: serde::de::Error>(self, value: i64) -> Result<Scalar, E> {
+                Ok(Scalar(value.to_string()))
+            }
+
+            fn visit_u64<E: serde::de::Error>(self, value: u64) -> Result<Scalar, E> {
+                Ok(Scalar(value.to_string()))
+            }
+
+            fn visit_f64<E: serde::de::Error>(self, value: f64) -> Result<Scalar, E> {
+                Ok(Scalar(value.to_string()))
+            }
+        }
+
+        deserializer.deserialize_any(Text)
+    }
 }
 
 identifier!(
@@ -123,4 +196,14 @@ identifier!(
 identifier!(
     /// Identifies an invalidation rule a protocol declares.
     InvalidationRuleId
+);
+identifier!(
+    /// Identifies a case input a protocol declares.
+    InputId
+);
+scalar_identifier!(
+    /// One value a case input may take: an identifier its input declares. Read from any scalar,
+    /// alike in the protocol and in the case: `values: [true, false]` declares the values `true`
+    /// and `false`, and a case gives one as `flag: true`.
+    InputValue
 );

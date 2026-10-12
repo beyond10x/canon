@@ -217,6 +217,7 @@ fn obligation_ids_that_need_escaping_render_as_json_and_read_back() {
                     claim: ClaimId::new("c"),
                     is: Truth::Unknown,
                 }),
+                applicable_when: None,
             },
         );
     }

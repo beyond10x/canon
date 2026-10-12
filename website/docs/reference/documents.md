@@ -23,6 +23,7 @@ A `canon-case/1` case snapshot as written.
 | `artifacts` | map from [identifier](#identifiers) (`ArtifactId`) to [`CaseArtifact`](#caseartifact) | required | The current revision of each declared artifact, keyed by artifact id. |
 | `termination` | [identifier](#identifiers) (`OutcomeId`) | optional | The outcome the case terminated through; absent while the case is open. Whether the protocol declares it is checked by the outcomes section (story:outcomes). |
 | `revision` | [identifier](#identifiers) (`Revision`) | optional | The case's own current revision. An explicit decision applies only while its `case_revision` is this one; a snapshot without one has no explicit decision applying. |
+| `inputs` | map from [identifier](#identifiers) (`InputId`) to [identifier](#identifiers) (`InputValue`) | optional | The value of each case input, keyed by input id, fixed when the case opens. Left out by a case of a protocol that declares no input. |
 
 ### `CaseArtifact`
 
@@ -68,7 +69,7 @@ A `canon-decision/1` document. A section slot that is `None` is not serialized.
 | `protocol` | [identifier](#identifiers) (`ProtocolId`) | always | — |
 | `protocol_revision` | integer, 0 or more | always | The revision of the compiled protocol that applied. |
 | `claims` | map from [identifier](#identifiers) (`ClaimId`) to [`ClaimDecision`](#claimdecision) | always | Every declared claim, in identifier order. |
-| `obligations` | any JSON value | when present | Each declared obligation, `open` or `discharged`, in identifier order; written when the protocol declares an obligation. Its shape is fixed by CANON-OBLIGATION-001. |
+| `obligations` | any JSON value | when present | Each declared obligation, in identifier order, with its `ObligationStatus`; written when the protocol declares an obligation. Its shape is fixed by CANON-OBLIGATION-001 and, for an obligation with an applicability predicate, CANON-INPUT-001. |
 | `actions` | any JSON value | when present | Each declared action, `admissible`, `approval-required` or `blocked`, with the reasons for a status other than `admissible`; written when the protocol declares an action. Its shape is fixed by CANON-AUTHORITY-001. |
 | `outcomes` | any JSON value | when present | Each declared outcome, `legitimate` or `blocked`, with the reasons it is blocked; written when the protocol declares an outcome. Its shape is fixed by CANON-OUTCOME-001 and, for an outcome that requires an explicit decision, by CANON-OUTCOME-002: a legitimate one records `decided_by` (`{"decision": <name>, "principals": [...]}`), and a blocked one gives the reason `{"decision": <name>, "present": false}`. |
 | `explanation` | any JSON value | when present | Why each claim that is not `true`, each open obligation, each action that is not admissible and each blocked outcome has its status, traced to the evidence records that applied or were excluded, and what the decision was computed from (`computed_from`); the evaluator writes it on every decision. Its shape is fixed by CANON-EXPLAIN-001. |
@@ -201,6 +202,8 @@ An identifier is text. A well-formed identifier is not empty, and without whites
 | `CapabilityId` | Names a capability an action requires authority for. |
 | `DecisionName` | Names an explicit decision an outcome may require (`explicitly_inconclusive`). |
 | `Principal` | Who took an explicit decision, recorded as given: Canon resolves no identity. |
+| `InputId` | Identifies a case input a protocol declares. |
+| `InputValue` | One value a case input may take: an identifier its input declares. Read from any scalar, alike in the protocol and in the case: `values: [true, false]` declares the values `true` and `false`, and a case gives one as `flag: true`. |
 | `PropertyId` | Identifies one property of a `canon-properties/1` document. |
 
 ## Text formats

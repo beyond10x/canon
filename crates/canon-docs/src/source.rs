@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
+use syn::ext::IdentExt;
 use syn::parse::{ParseStream, Parser};
 use syn::{
     AttrStyle, Attribute, Expr, Fields, GenericArgument, Ident, ImplItem, Item, Lit, Meta, Pat,
@@ -91,6 +92,9 @@ pub struct Model {
     pub types: BTreeMap<String, TypeDef>,
     /// The identifier newtypes and their doc comments, in declaration order.
     pub identifiers: Vec<(String, String)>,
+    /// The identifiers declared with `scalar_identifier!`: read from any scalar, a boolean or a
+    /// number written unquoted read as its text.
+    pub scalar_identifiers: BTreeSet<String>,
     /// Every `*FORMAT` constant of the model and its value: `FORMAT` is `protocol/1`.
     pub formats: BTreeMap<String, String>,
     /// The doc comment of `is_identifier`: what makes an identifier well-formed.
@@ -306,13 +310,17 @@ fn ty(ty: &Type, identifiers: &BTreeSet<String>, owner: &str) -> Result<Ty, Stri
     }
 }
 
-/// The identifier newtypes declared with `identifier!( /// doc Name );` in `ids.rs`.
-fn identifier_macros(file: &syn::File) -> Result<Vec<(String, String)>, String> {
+/// The identifier newtypes declared with `identifier!( /// doc Name );` or
+/// `scalar_identifier!( /// doc Name );` in `ids.rs`, each with whether it is read from any
+/// scalar.
+fn identifier_macros(file: &syn::File) -> Result<Vec<(String, String, bool)>, String> {
     let mut found = Vec::new();
     for item in &file.items {
         if let Item::Macro(invocation) = item
-            && invocation.mac.path.is_ident("identifier")
+            && (invocation.mac.path.is_ident("identifier")
+                || invocation.mac.path.is_ident("scalar_identifier"))
         {
+            let scalar = invocation.mac.path.is_ident("scalar_identifier");
             let parser = |input: ParseStream| {
                 let attrs = input.call(Attribute::parse_outer)?;
                 let name: Ident = input.parse()?;
@@ -321,7 +329,7 @@ fn identifier_macros(file: &syn::File) -> Result<Vec<(String, String)>, String> 
             let (attrs, name) = parser
                 .parse2(invocation.mac.tokens.clone())
                 .map_err(|error| format!("ids.rs: identifier!: {error}"))?;
-            found.push((name.to_string(), docs(&attrs)));
+            found.push((name.to_string(), docs(&attrs), scalar));
         }
     }
     Ok(found)
@@ -348,8 +356,14 @@ pub fn model(root: &Path) -> Result<Model, String> {
         .collect::<Result<_, String>>()?;
 
     let mut identifiers = Vec::new();
+    let mut scalar_identifiers = BTreeSet::new();
     for (_, file) in &files {
-        identifiers.extend(identifier_macros(file)?);
+        for (name, doc, scalar) in identifier_macros(file)? {
+            if scalar {
+                scalar_identifiers.insert(name.clone());
+            }
+            identifiers.push((name, doc));
+        }
     }
     let identifier_names: BTreeSet<String> =
         identifiers.iter().map(|(name, _)| name.clone()).collect();
@@ -402,10 +416,11 @@ pub fn model(root: &Path) -> Result<Model, String> {
                             .named
                             .iter()
                             .map(|field| {
+                                // A raw identifier (`r#in`) is the key serde reads (`in`).
                                 let field_name = field
                                     .ident
                                     .as_ref()
-                                    .map(ToString::to_string)
+                                    .map(|ident| ident.unraw().to_string())
                                     .unwrap_or_default();
                                 let owner = format!("{name}.{field_name}");
                                 Ok(Field {
@@ -486,6 +501,7 @@ pub fn model(root: &Path) -> Result<Model, String> {
     Ok(Model {
         types,
         identifiers,
+        scalar_identifiers,
         formats,
         identifier_rule: identifier_rule.ok_or("the model declares no `is_identifier`")?,
         module_docs,

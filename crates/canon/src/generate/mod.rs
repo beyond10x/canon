@@ -26,7 +26,9 @@
 //! protocol id, a dot and the file name without `.yaml`. A scenario covers no requirement, names
 //! the protocol document as its fixture, exactly as given, and has one evaluate step, `witness`:
 //!
-//! - the case `witness` of the protocol at revision `r`, listing every declared artifact at `r`;
+//! - the case `witness` of the protocol at revision `r`, listing every declared artifact at `r` and,
+//!   under `inputs`, the value of each case input in the witness state, when the protocol declares
+//!   one;
 //! - one `canon-evidence/1` record per present class and upstream vector, ids `e0`, `e1`, … in
 //!   dimension order, about its dimension's artifact at `r`, with its class's result when it has
 //!   one and no observation instant, and, for a kind an invalidation rule can keep from a claim,
@@ -324,6 +326,7 @@ fn scenario(
         ),
         termination: None,
         revision: Some(revision),
+        inputs: space.inputs(state),
     };
     let decision = eval::evaluate_with(
         ir,
@@ -361,6 +364,15 @@ fn scenario(
         for artifact in ir.artifacts.keys() {
             line(10, &format!("{}:", quote(artifact.as_str())));
             line(12, &format!("revision: {}", quote(REVISION)));
+        }
+    }
+    if !case.inputs.is_empty() {
+        line(8, "inputs:");
+        for (input, value) in case.inputs.iter() {
+            line(
+                10,
+                &format!("{}: {}", quote(input.as_str()), quote(value.as_str())),
+            );
         }
     }
     if evidence.is_empty() {

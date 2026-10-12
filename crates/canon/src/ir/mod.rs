@@ -5,23 +5,29 @@
 //!
 //! - **Canonical ordering.** Declarations are keyed and ordered by identifier, not by the order they
 //!   are written in. The members of an `all` or `any` predicate are sorted by [`canonical_order`],
-//!   and an action's capability requirements, the evidence kinds it may produce and the claims an
-//!   invalidation rule invalidates by identifier.
-//! - **No repetition.** Each of those five lists holds every member once: in three-valued logic
-//!   `all` and `any` are idempotent, and the two action lists and the invalidated claims are sets.
+//!   and an action's capability requirements, the evidence kinds it may produce, the claims an
+//!   invalidation rule invalidates, the values a case input declares and the values an input test
+//!   lists by identifier.
+//! - **No repetition.** Each of those seven lists holds every member once: in three-valued logic
+//!   `all` and `any` are idempotent, and the two action lists, the invalidated claims and the two
+//!   lists of input values are sets.
 //! - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
 //!   evidence match without a result has `"result": null`; a claim test without `is` has
 //!   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-//!   true; absent lists and sections are empty. The three exceptions are an evidence kind's
-//!   `max_age`, an evidence match's `subject` and the `invalidation` section: each written, as
-//!   authored, only when it is declared (the section only when it holds a rule), so the IR of a
-//!   protocol that declares none of them is the IR it was before they existed.
+//!   true; absent lists and sections are empty. The five exceptions are an evidence kind's
+//!   `max_age`, an evidence match's `subject`, an obligation's `applicable_when`, the
+//!   `invalidation` section and the `case` section: each written only when it is declared (a
+//!   section only when it holds a rule or an input), so the IR of a protocol that declares none of
+//!   them is the IR it was before they existed. The `case` section is `{"inputs": {<id>:
+//!   {"description": …, "values": [...]}}}`.
 //! - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
-//!   it was written. An outcome that requires an explicit decision has the requirement
-//!   `{"decision": <name>}`, as written; any other requirement is its predicate.
+//!   it was written, and an input test `{"input": {"id": …, "in": [...]}}`. An outcome that
+//!   requires an explicit decision has the requirement `{"decision": <name>}`, as written; any
+//!   other requirement is its predicate.
 //! - **Resolved references.** Only a document the validator accepts compiles, so every claim and
 //!   evidence kind the IR references is declared in it, and so is every artifact an evidence match
-//!   names as its subject or an invalidation rule names as its upstream artifact.
+//!   names as its subject or an invalidation rule names as its upstream artifact, and every input
+//!   an input test names, with every value it lists.
 //!
 //! The IR carries the protocol id and revision (design § 37) and nothing about where the document
 //! came from: no path, no working directory, no time. [`Ir::canonical_json`] is its one
@@ -38,8 +44,8 @@ use std::collections::BTreeMap;
 
 use crate::model::{
     self, ActionId, Age, ArtifactId, CapabilityId, ClaimId, ClaimTest, EffectClass, EvidenceKindId,
-    EvidenceMatch, InvalidationRuleId, ObligationId, OutcomeId, OutcomeRequirement, Predicate,
-    Protocol, ProtocolId, Truth,
+    EvidenceMatch, InputId, InputTest, InputValue, InvalidationRuleId, ObligationId, OutcomeId,
+    OutcomeRequirement, Predicate, Protocol, ProtocolId, Truth,
 };
 use crate::validate::{self, Problem};
 
@@ -61,6 +67,15 @@ pub struct Ir {
     pub outcomes: BTreeMap<OutcomeId, Outcome>,
     /// Empty when the protocol declares no rule; `canon-ir/1` then has no `invalidation` key.
     pub invalidation: BTreeMap<InvalidationRuleId, InvalidationRule>,
+    /// The case inputs. Empty when the protocol declares none; `canon-ir/1` then has no `case` key.
+    pub inputs: BTreeMap<InputId, CaseInput>,
+}
+
+/// A case input: its description and the values it may take, sorted by identifier, each once.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaseInput {
+    pub description: Option<String>,
+    pub values: Vec<InputValue>,
 }
 
 /// The protocol's identity, which an evaluation records to say which protocol applied.
@@ -97,6 +112,9 @@ pub struct Obligation {
     pub description: Option<String>,
     /// Discharges the obligation when it evaluates true.
     pub discharged_when: Predicate,
+    /// When the obligation applies; always, when `None`, and `canon-ir/1` then writes no
+    /// `applicable_when` key.
+    pub applicable_when: Option<Predicate>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -155,6 +173,7 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
         obligations: keyed(&protocol.obligations, |obligation| Obligation {
             description: obligation.description.clone(),
             discharged_when: normalize(&obligation.discharged_when),
+            applicable_when: obligation.applicable_when.as_ref().map(normalize),
         }),
         actions: keyed(&protocol.actions, |action| Action {
             description: action.description.clone(),
@@ -192,6 +211,16 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
             upstream: rule.upstream.clone(),
             invalidates: unique(rule.invalidates.clone()),
         }),
+        inputs: protocol
+            .inputs()
+            .map(|(id, input)| {
+                let input = CaseInput {
+                    description: input.description.clone(),
+                    values: unique(input.values.clone()),
+                };
+                (id.clone(), input)
+            })
+            .collect(),
     })
 }
 
@@ -213,6 +242,10 @@ fn normalize(predicate: &Predicate) -> Predicate {
         Predicate::All(members) => Predicate::All(sorted(members)),
         Predicate::Any(members) => Predicate::Any(sorted(members)),
         Predicate::Not(inner) => Predicate::Not(Box::new(normalize(inner))),
+        Predicate::Input(test) => Predicate::Input(InputTest {
+            input: test.input.clone(),
+            r#in: unique(test.r#in.clone()),
+        }),
         Predicate::Evidence(_) | Predicate::Claim(_) => predicate.clone(),
     }
 }
@@ -235,7 +268,8 @@ fn unique<T: Ord>(mut ids: Vec<T>) -> Vec<T> {
 /// The canonical order of predicates, which is the order of the members of every `all` and `any`
 /// in `canon-ir/1`. Text (identifiers and results) compares by Unicode code point.
 ///
-/// 1. Different forms compare by form, in the order `all`, `any`, `claim`, `evidence`, `not`.
+/// 1. Different forms compare by form, in the order `all`, `any`, `claim`, `evidence`, `input`,
+///    `not`.
 /// 2. Two `all`s, or two `any`s, compare their members pairwise in order; the first pair that
 ///    differs decides, and when one list runs out first, the shorter list comes first.
 /// 3. Two `not`s compare what they negate.
@@ -243,6 +277,8 @@ fn unique<T: Ord>(mut ids: Vec<T>) -> Vec<T> {
 ///    any result and no subject before any subject, and results and subjects compare as text. Two
 ///    matches that differ only in their subject are two members.
 /// 5. Two claim tests compare by claim, then by the value tested: `false`, `true`, `unknown`.
+/// 6. Two input tests compare by input, then by the values they list, in their own (identifier)
+///    order, pairwise as text; when one list runs out first, the shorter list comes first.
 fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
     fn form(predicate: &Predicate) -> u8 {
         match predicate {
@@ -250,7 +286,8 @@ fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
             Predicate::Any(_) => 1,
             Predicate::Claim(_) => 2,
             Predicate::Evidence(_) => 3,
-            Predicate::Not(_) => 4,
+            Predicate::Input(_) => 4,
+            Predicate::Not(_) => 5,
         }
     }
     fn tested(value: Truth) -> u8 {
@@ -299,6 +336,17 @@ fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
         (Predicate::Claim(left), Predicate::Claim(right)) => {
             text(left.claim.as_str(), right.claim.as_str())
                 .then_with(|| tested(left.is).cmp(&tested(right.is)))
+        }
+        (Predicate::Input(left), Predicate::Input(right)) => {
+            text(left.input.as_str(), right.input.as_str()).then_with(|| {
+                for (left, right) in left.r#in.iter().zip(&right.r#in) {
+                    let order = text(left.as_str(), right.as_str());
+                    if order != Ordering::Equal {
+                        return order;
+                    }
+                }
+                left.r#in.len().cmp(&right.r#in.len())
+            })
         }
         _ => form(left).cmp(&form(right)),
     }
@@ -354,13 +402,17 @@ impl Ir {
             (
                 "obligations",
                 section(&self.obligations, |obligation| {
-                    Value::object([
+                    let mut fields = vec![
                         ("description", description(&obligation.description)),
                         (
                             "discharged_when",
                             predicate_value(&obligation.discharged_when),
                         ),
-                    ])
+                    ];
+                    if let Some(applicable_when) = &obligation.applicable_when {
+                        fields.push(("applicable_when", predicate_value(applicable_when)));
+                    }
+                    Value::object(fields)
                 }),
             ),
             (
@@ -433,6 +485,29 @@ impl Ir {
                 }),
             ));
         }
+        if !self.inputs.is_empty() {
+            fields.push((
+                "case",
+                Value::object([(
+                    "inputs",
+                    section(&self.inputs, |input| {
+                        Value::object([
+                            ("description", description(&input.description)),
+                            (
+                                "values",
+                                Value::Array(
+                                    input
+                                        .values
+                                        .iter()
+                                        .map(|value| Value::string(value.as_str()))
+                                        .collect(),
+                                ),
+                            ),
+                        ])
+                    }),
+                )]),
+            ));
+        }
         Value::object(fields)
     }
 }
@@ -481,6 +556,20 @@ fn predicate_value(predicate: &Predicate) -> Value {
             Value::object([
                 ("id", Value::string(claim.as_str())),
                 ("is", Value::string(truth(*is))),
+            ]),
+        )]),
+        Predicate::Input(InputTest { input, r#in }) => Value::object([(
+            "input",
+            Value::object([
+                ("id", Value::string(input.as_str())),
+                (
+                    "in",
+                    Value::Array(
+                        r#in.iter()
+                            .map(|value| Value::string(value.as_str()))
+                            .collect(),
+                    ),
+                ),
             ]),
         )]),
     }
@@ -680,6 +769,45 @@ mod tests {
             ),
             "{compiled}"
         );
+    }
+
+    /// Case inputs compile under `case`, each input's values sorted and kept once; an input test
+    /// compiles to `{"input": {"id": …, "in": [...]}}` with its values sorted (the validator
+    /// refuses one listed twice, `duplicate-input-test-value`), after
+    /// evidence and before `not` among the members of an `all` or `any`; `applicable_when` is
+    /// written only on the obligation that declares it. A protocol without inputs has no `case`.
+    #[test]
+    fn case_inputs_and_input_tests_compile_in_canonical_form() {
+        let compiled = ir(&format!(
+            "{HEADER}case: {{inputs: {{s: {{values: [high, low]}}}}}}\nevidence_kinds: {{k: {{}}}}\n\
+             claims: {{c: {{true_when: {{any: [{{not: {{claim: c2}}}}, {{input: s, in: [low, high]}}, {{evidence: {{kind: k}}}}]}}}}, c2: {{true_when: {{all: []}}}}}}\n\
+             obligations: {{o: {{discharged_when: {{claim: c}}, applicable_when: {{input: s, in: [high]}}}}, \
+             p: {{discharged_when: {{claim: c}}}}}}\n"
+        ));
+        assert!(
+            compiled.contains(
+                "  \"case\": {\n    \"inputs\": {\n      \"s\": {\n        \"description\": null,\n        \"values\": [\n          \"high\",\n          \"low\"\n        ]\n      }\n    }\n  },\n"
+            ),
+            "{compiled}"
+        );
+        assert!(
+            compiled.contains(
+                "          {\n            \"evidence\": {\n              \"kind\": \"k\",\n              \"result\": null\n            }\n          },\n          {\n            \"input\": {\n              \"id\": \"s\",\n              \"in\": [\n                \"high\",\n                \"low\"\n              ]\n            }\n          },\n          {\n            \"not\": {"
+            ),
+            "{compiled}"
+        );
+        assert!(
+            compiled.contains(
+                "    \"o\": {\n      \"applicable_when\": {\n        \"input\": {\n          \"id\": \"s\",\n          \"in\": [\n            \"high\"\n          ]\n        }\n      },\n"
+            ),
+            "{compiled}"
+        );
+        assert!(
+            compiled
+                .contains("    \"p\": {\n      \"description\": null,\n      \"discharged_when\""),
+            "{compiled}"
+        );
+        assert!(!ir(HEADER).contains("\"case\""));
     }
 
     /// A maximum age is written as authored, and only on the kind that declares one.

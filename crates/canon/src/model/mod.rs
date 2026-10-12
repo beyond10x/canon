@@ -4,8 +4,9 @@
 //! `canon-decisions/1` explicit decisions (`explicit.rs`) an evaluation may read, and the
 //! `canon-properties/1` properties `canon check` reads (`properties.rs`).
 //!
-//! A protocol document declares a protocol id and revision, artifacts, evidence kinds, claims with
-//! their predicates, obligations, actions, outcomes and invalidation rules. Every declaration
+//! A protocol document declares a protocol id and revision, the case inputs a case gives values for
+//! (`case: inputs:`), artifacts, evidence kinds, claims with their predicates, obligations with
+//! when they apply, actions, outcomes and invalidation rules. Every declaration
 //! section is a map keyed by identifier; [`Declarations`] keeps the entries in source order and
 //! keeps repeated keys, so the validator can report a duplicate identifier instead of the parser
 //! silently dropping one.
@@ -35,16 +36,17 @@ pub use authority::{AUTHORITY_FORMAT, AuthorityDecision, Grant};
 pub use case::{CASE_FORMAT, Case, CaseArtifact};
 pub use decision::{
     ClaimDecision, DECISION_FORMAT, Decision, EvidenceExclusion, ExclusionReason, Json,
+    ObligationStatus,
 };
 pub use evidence::{EVIDENCE_FORMAT, EvidenceRecord};
 pub use explicit::{DECISIONS_FORMAT, ExplicitDecision};
 pub use ids::{
     ActionId, Age, ArtifactId, CapabilityId, CaseId, ClaimId, DecisionName, EffectClass,
-    EvidenceId, EvidenceKindId, Instant, InvalidationRuleId, ObligationId, OutcomeId, Principal,
-    ProtocolId, Revision,
+    EvidenceId, EvidenceKindId, InputId, InputValue, Instant, InvalidationRuleId, ObligationId,
+    OutcomeId, Principal, ProtocolId, Revision,
 };
 pub use parse::{FORMAT, ParseError, parse};
-pub use predicate::{ClaimTest, EvidenceMatch, Predicate, Truth};
+pub use predicate::{ClaimTest, EvidenceMatch, InputTest, Predicate, Truth};
 pub use properties::{
     PROPERTIES_FORMAT, Properties, Property, PropertyDependency, PropertyId, PropertySubject,
 };
@@ -73,6 +75,38 @@ pub struct Protocol {
     /// The invalidation rules, keyed by rule id; a protocol without the section declares none.
     #[serde(default, deserialize_with = "present::defaulted")]
     pub invalidation: Declarations<InvalidationRuleId, InvalidationRule>,
+    /// What a case governed by the protocol gives when it opens: its case inputs. A protocol
+    /// without the section declares no input.
+    #[serde(default, deserialize_with = "present::optional")]
+    pub case: Option<CaseSection>,
+}
+
+impl Protocol {
+    /// The case inputs the protocol declares, in source order; none without a `case` section.
+    pub fn inputs(&self) -> impl Iterator<Item = (&InputId, &CaseInput)> {
+        self.case.iter().flat_map(|case| case.inputs.iter())
+    }
+}
+
+/// The protocol's `case:` section.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CaseSection {
+    /// The case inputs, keyed by input id.
+    #[serde(default, deserialize_with = "present::defaulted")]
+    pub inputs: Declarations<InputId, CaseInput>,
+}
+
+/// A case input: configuration a case fixes when it opens, one of a closed, non-empty list of
+/// values. Not evidence, so no evaluation has an unknown input.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CaseInput {
+    #[serde(default, deserialize_with = "present::optional")]
+    pub description: Option<String>,
+    /// The values the input may take.
+    #[serde(deserialize_with = "present::required")]
+    pub values: Vec<InputValue>,
 }
 
 /// The protocol's identity: id and revision.
@@ -116,13 +150,17 @@ pub struct Claim {
 }
 
 /// Something that must be done before the case can be complete. It is discharged only when its
-/// discharge predicate, over claim values, evaluates true (design § 8).
+/// discharge predicate, over claim values, evaluates true (design § 8). One with an applicability
+/// predicate applies only when that predicate is not false: false, it is not applicable.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Obligation {
     #[serde(default, deserialize_with = "present::optional")]
     pub description: Option<String>,
     pub discharged_when: Predicate,
+    /// When the obligation applies, over claim values and case inputs; always, when absent.
+    #[serde(default, deserialize_with = "present::optional")]
+    pub applicable_when: Option<Predicate>,
 }
 
 /// A semantically named possibility: what it needs, what authority it requires, what effect it

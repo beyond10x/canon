@@ -928,7 +928,8 @@ fn documents(model: &Model) -> Result<String, String> {
     Ok(out)
 }
 
-fn ty_schema(ty: &Ty) -> Json {
+/// The schema of a value of type `ty`; `scalars` names the identifiers read from any scalar.
+fn ty_schema(ty: &Ty, scalars: &BTreeSet<String>) -> Json {
     match ty {
         Ty::Text => obj([("type", json::str("string"))]),
         Ty::Count => obj([("type", json::str("integer")), ("minimum", Json::Int(0))]),
@@ -936,14 +937,20 @@ fn ty_schema(ty: &Ty) -> Json {
         Ty::Identifier(name) if text_format(name).is_some() => {
             obj([("$ref", json::str(format!("#/$defs/{name}")))])
         }
+        Ty::Identifier(name) if scalars.contains(name) => {
+            obj([("$ref", json::str("#/$defs/ScalarIdentifier"))])
+        }
         Ty::Identifier(_) => obj([("$ref", json::str("#/$defs/Identifier"))]),
         Ty::Named(name) => obj([("$ref", json::str(format!("#/$defs/{name}")))]),
-        Ty::Option(inner) | Ty::Boxed(inner) => ty_schema(inner),
-        Ty::List(inner) => obj([("type", json::str("array")), ("items", ty_schema(inner))]),
+        Ty::Option(inner) | Ty::Boxed(inner) => ty_schema(inner, scalars),
+        Ty::List(inner) => obj([
+            ("type", json::str("array")),
+            ("items", ty_schema(inner, scalars)),
+        ]),
         Ty::Map(key, value) => obj([
             ("type", json::str("object")),
-            ("propertyNames", ty_schema(key)),
-            ("additionalProperties", ty_schema(value)),
+            ("propertyNames", ty_schema(key, scalars)),
+            ("additionalProperties", ty_schema(value, scalars)),
         ]),
     }
 }
@@ -1022,13 +1029,31 @@ fn schema(model: &Model, document: &Document) -> Result<Json, String> {
             ));
         }
     }
+    let scalars = &model.scalar_identifiers;
+    if used.iter().any(|name| scalars.contains(name)) {
+        defs.push((
+            "ScalarIdentifier".to_owned(),
+            with_description(
+                obj([(
+                    "anyOf",
+                    Json::Arr(vec![
+                        obj([("$ref", json::str("#/$defs/Identifier"))]),
+                        obj([("type", json::str("boolean"))]),
+                        obj([("type", json::str("number"))]),
+                    ]),
+                )]),
+                "An identifier, or a boolean or a number written unquoted, which Canon reads as \
+                 its text (`true`, `2`).",
+            ),
+        ));
+    }
     for def in document_defs {
         let schema = match (&def.reading, &def.shape) {
             (Reading::Derived, Shape::Struct(fields)) => {
                 let properties = fields
                     .iter()
                     .map(|field| {
-                        let mut schema = ty_schema(&field.ty);
+                        let mut schema = ty_schema(&field.ty, scalars);
                         if let Some(format) = required_format(&field.doc, model)
                             && let Json::Obj(members) = &mut schema
                         {
@@ -1054,11 +1079,11 @@ fn schema(model: &Model, document: &Document) -> Result<Json, String> {
                     .filter(|key| key.beside.is_none())
                     .map(|key| {
                         if key.inline {
-                            return with_description(ty_schema(&key.ty), &key.doc);
+                            return with_description(ty_schema(&key.ty, scalars), &key.doc);
                         }
                         let mut properties = vec![(
                             key.key.clone(),
-                            with_description(ty_schema(&key.ty), &key.doc),
+                            with_description(ty_schema(&key.ty, scalars), &key.doc),
                         )];
                         for modifier in keys
                             .iter()
@@ -1066,7 +1091,7 @@ fn schema(model: &Model, document: &Document) -> Result<Json, String> {
                         {
                             properties.push((
                                 modifier.key.clone(),
-                                with_description(ty_schema(&modifier.ty), &modifier.doc),
+                                with_description(ty_schema(&modifier.ty, scalars), &modifier.doc),
                             ));
                         }
                         object_schema(properties, vec![key.key.clone()])
@@ -1246,6 +1271,15 @@ fn words(predicate: &Predicate) -> String {
             "claim {} is {}",
             code(test.claim.as_str()),
             code(&test.is.to_string())
+        ),
+        Predicate::Input(test) => format!(
+            "input {} is one of {}",
+            code(test.input.as_str()),
+            test.r#in
+                .iter()
+                .map(|value| code(value.as_str()))
+                .collect::<Vec<_>>()
+                .join(", ")
         ),
     }
 }

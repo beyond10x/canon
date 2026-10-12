@@ -44,8 +44,7 @@ steps:
   absolute path (a leading `/` or `\`, or a drive prefix such as `C:`) or a path with a `..`
   component, split on `/` or `\`, is refused: the scenario does not parse. A path that passes
   that check but resolves outside the working directory through a symbolic link is refused
-  too, unread: the scenario is reported `unreadable` with `fixture `&lt;path&gt;` resolves outside
-  the working directory`.
+  too, unread: the scenario is reported `unreadable` with `fixture `&lt;path&gt;` resolves outside the working directory`.
 - `covers` entries are `CANON-` followed by an identifier, each listed once.
 - `steps` is an ordered, non-empty list. Each step is exactly one of `compile` or `evaluate`,
   with exactly one expectation of the matching kind: a compile step expects `canon-ir`, an
@@ -73,16 +72,12 @@ unreadable: <path>: <why>
 conform: <n> passed, <n> failed, <n> unreadable
 ```
 
-For a compile step whose output differs, `<what differed>` is `canon-ir/1 differs from the
-expectation at line <n>`, `<n>` being the first differing line, counted from 1. A fixture that
-does not parse is reported by kind and position only (`fixture does not parse: not well-formed
-YAML at line <l> column <c>`, or `not a protocol/1 document at …`), never by its content. So is
-a registry file that does not deserialize as a scenario (`unreadable: <path>: not well-formed
-YAML at …`, or `not a canon-conformance/1 scenario at …`). `<path>` is the scenario directory
+For a compile step whose output differs, `<what differed>` is `canon-ir/1 differs from the expectation at line <n>`, `<n>` being the first differing line, counted from 1. A fixture that
+does not parse is reported by kind and position only (`fixture does not parse: not well-formed YAML at line <l> column <c>`, or `not a protocol/1 document at …`), never by its content. So is
+a registry file that does not deserialize as a scenario (`unreadable: <path>: not well-formed YAML at …`, or `not a canon-conformance/1 scenario at …`). `<path>` is the scenario directory
 as given, joined with the file name.
 
-A registry with no `*.yaml` file runs no scenario and is refused: the line `no scenario ran:
-the registry holds no scenario file` comes before the summary.
+A registry with no `*.yaml` file runs no scenario and is refused: the line `no scenario ran: the registry holds no scenario file` comes before the summary.
 
 Exit status: 0 when at least one scenario ran and every scenario passed; 1 when any scenario
 failed, any file was unreadable, or no scenario ran; 2 when the registry directory itself

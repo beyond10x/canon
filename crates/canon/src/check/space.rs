@@ -10,8 +10,8 @@ use crate::eval::{invalidated_claims, reads};
 use crate::ir::Ir;
 use crate::model::{
     ArtifactId, CapabilityId, ClaimId, DecisionName, Declarations, EVIDENCE_FORMAT, EvidenceId,
-    EvidenceKindId, EvidenceMatch, EvidenceRecord, OutcomeId, OutcomeRequirement, Predicate,
-    Revision, Truth, one_line,
+    EvidenceKindId, EvidenceMatch, EvidenceRecord, InputId, InputValue, OutcomeId,
+    OutcomeRequirement, Predicate, Revision, Truth, one_line,
 };
 
 /// The revision every artifact and the case itself have in a checked state, and the case revision
@@ -99,12 +99,16 @@ impl Kind<'_> {
     }
 }
 
-/// The dimensions, in order: the evidence dimensions, each capability, each decision name.
+/// The dimensions, in order: the evidence dimensions, each capability, each decision name, each
+/// case input.
 pub(crate) struct Space<'a> {
     kinds: Vec<Kind<'a>>,
     capabilities: Vec<&'a CapabilityId>,
     /// Each decision name and every outcome that requires it.
     decisions: Vec<(&'a DecisionName, Vec<&'a OutcomeId>)>,
+    /// Each case input and the values it may take, in identifier order: its value in a state is
+    /// the index of one of them.
+    inputs: Vec<(&'a InputId, &'a [InputValue])>,
 }
 
 /// One state: a value for each dimension, in dimension order.
@@ -203,6 +207,11 @@ impl<'a> Space<'a> {
             kinds,
             capabilities: capabilities.into_iter().collect(),
             decisions: decisions.into_iter().collect(),
+            inputs: ir
+                .inputs
+                .iter()
+                .map(|(id, input)| (id, input.values.as_slice()))
+                .collect(),
         }
     }
 
@@ -215,7 +224,31 @@ impl<'a> Space<'a> {
             .map(|kind| 1u128.checked_shl(kind.bits()?));
         let capabilities = self.capabilities.iter().map(|_| Some(3));
         let decisions = self.decisions.iter().map(|_| Some(2));
-        kinds.chain(capabilities).chain(decisions).collect()
+        let inputs = self
+            .inputs
+            .iter()
+            .map(|(_, values)| u128::try_from(values.len()).ok());
+        kinds
+            .chain(capabilities)
+            .chain(decisions)
+            .chain(inputs)
+            .collect()
+    }
+
+    /// The position of the first case input dimension.
+    fn first_input(&self) -> usize {
+        self.kinds.len() + self.capabilities.len() + self.decisions.len()
+    }
+
+    /// The value of each case input `state` stands for, as a case snapshot gives it.
+    pub(crate) fn inputs(&self, state: &State) -> Declarations<InputId, InputValue> {
+        Declarations::new(
+            self.inputs
+                .iter()
+                .zip(&state[self.first_input()..])
+                .map(|((id, values), value)| ((*id).clone(), values[*value as usize].clone()))
+                .collect(),
+        )
     }
 
     /// The number of states, or `None` when it does not fit a `u128`.
@@ -245,9 +278,14 @@ impl<'a> Space<'a> {
             .decisions
             .iter()
             .map(|(name, _)| format!("decision `{}` 2", one_line(name.as_str())));
+        let inputs = self
+            .inputs
+            .iter()
+            .map(|(id, values)| format!("input `{}` {}", one_line(id.as_str()), values.len()));
         kinds
             .chain(capabilities)
             .chain(decisions)
+            .chain(inputs)
             .collect::<Vec<_>>()
             .join(", ")
     }
@@ -326,11 +364,13 @@ impl<'a> Space<'a> {
 
     /// How far `state` is from the empty state: present records, decided capabilities and taken
     /// decisions. A record weighs one, and one more for each upstream artifact it was observed
-    /// before the move of, so a witness prefers current records. A witness is the state of least
-    /// weight, ties broken by its rendering.
+    /// before the move of, so a witness prefers current records. A case input weighs nothing:
+    /// every state gives each input a value. A witness is the state of least weight, ties broken
+    /// by its rendering.
     pub(super) fn weight(&self, state: &State) -> u32 {
         let kinds = self.kinds.len();
         let capabilities = self.capabilities.len();
+        let first_input = self.first_input();
         state
             .iter()
             .enumerate()
@@ -343,8 +383,10 @@ impl<'a> Space<'a> {
                         .sum()
                 } else if at < kinds + capabilities {
                     u32::from(*value != UNDECIDED)
-                } else {
+                } else if at < first_input {
                     *value
+                } else {
+                    0
                 }
             })
             .sum()
@@ -398,6 +440,13 @@ impl<'a> Space<'a> {
             if *value != 0 {
                 items.push(format!("decision `{}` taken", one_line(name.as_str())));
             }
+        }
+        for (id, value) in self.inputs(state).iter() {
+            items.push(format!(
+                "input `{}` `{}`",
+                one_line(id.as_str()),
+                one_line(value.as_str())
+            ));
         }
         format!("{{{}}}", items.join(", "))
     }
@@ -502,6 +551,8 @@ pub(super) fn readers(ir: &Ir) -> impl Iterator<Item = (Reader, &Predicate)> {
         .claims
         .iter()
         .map(|(id, claim)| (Reader::Claim(id.clone()), &claim.true_when));
+    // An applicability predicate is not a reader: it tests only claims, which are readers
+    // themselves, and case inputs, so it reads no evidence a claim does not.
     let obligations = ir
         .obligations
         .iter()
@@ -578,6 +629,7 @@ pub(super) fn positive_matches<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<
                     matches.push(matching);
                 }
             }
+            Predicate::Input(_) => {}
             Predicate::Claim(test) => {
                 let position = match test.is {
                     Truth::True => positive,

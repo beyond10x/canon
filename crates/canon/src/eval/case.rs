@@ -1,6 +1,7 @@
 //! The `canon-case/1` case snapshot as the evaluator reads and checks it. The type is
 //! [`crate::model::Case`]; this file reads it from text or a YAML value and checks it against the
-//! compiled protocol. Whether a termination names a declared outcome is checked by `outcomes.rs`.
+//! compiled protocol, its case inputs included. Whether a termination names a declared outcome is
+//! checked by `outcomes.rs`.
 
 use std::collections::BTreeSet;
 
@@ -9,7 +10,7 @@ use serde_yaml_ng::Value;
 use super::read::{malformed, yaml};
 use super::{Refusal, identifier, unsupported_format};
 use crate::ir::Ir;
-use crate::model::{CASE_FORMAT, Case, one_line};
+use crate::model::{CASE_FORMAT, Case, InputId, one_line};
 
 /// Reads one `canon-case/1` document: parsed as YAML, then read as [`case_from_value`] reads it.
 pub fn read_case(text: &str) -> Result<Case, Refusal> {
@@ -78,6 +79,52 @@ pub(super) fn check(ir: &Ir, case: &Case) -> Result<(), Refusal> {
                 one_line(case.id.as_str()),
                 one_line(missing.as_str())
             ),
+        ));
+    }
+    inputs(ir, case)
+}
+
+/// Checks the case's inputs against those the protocol declares: each input the case gives, in the
+/// order written, is an identifier with an identifier for its value, is declared by the protocol
+/// (`undeclared-input`), is given once (`duplicate-identifier`) and has a value its input declares
+/// (`undeclared-input-value`, naming the value too); then each input the protocol declares, in
+/// identifier order, is given by the case (`missing-input`). Each refusal names the input.
+fn inputs(ir: &Ir, case: &Case) -> Result<(), Refusal> {
+    let named = |input: &InputId| (one_line(case.id.as_str()), one_line(input.as_str()));
+    let mut seen = BTreeSet::new();
+    for (input, value) in case.inputs.iter() {
+        identifier("case input identifier", input.as_str())?;
+        identifier("input value", value.as_str())?;
+        let (case_id, shown) = named(input);
+        let Some(declared) = ir.inputs.get(input) else {
+            return Err(Refusal::new(
+                "undeclared-input",
+                format!(
+                    "case `{case_id}` gives input `{shown}`, which the protocol does not declare"
+                ),
+            ));
+        };
+        if !seen.insert(input) {
+            return Err(Refusal::new(
+                "duplicate-identifier",
+                format!("case `{case_id}` gives input `{shown}` more than once"),
+            ));
+        }
+        if !declared.values.contains(value) {
+            return Err(Refusal::new(
+                "undeclared-input-value",
+                format!(
+                    "case `{case_id}` gives input `{shown}` the value `{}`, which the input does not declare",
+                    one_line(value.as_str())
+                ),
+            ));
+        }
+    }
+    if let Some(missing) = ir.inputs.keys().find(|id| !seen.contains(id)) {
+        let (case_id, shown) = named(missing);
+        return Err(Refusal::new(
+            "missing-input",
+            format!("case `{case_id}` does not give a value for input `{shown}`"),
         ));
     }
     Ok(())

@@ -26,6 +26,7 @@ A `protocol/1` source document as written.
 | `actions` | map from [identifier](#identifiers) (`ActionId`) to [`Action`](#action) | optional | — |
 | `outcomes` | map from [identifier](#identifiers) (`OutcomeId`) to [`Outcome`](#outcome) | optional | — |
 | `invalidation` | map from [identifier](#identifiers) (`InvalidationRuleId`) to [`InvalidationRule`](#invalidationrule) | optional | The invalidation rules, keyed by rule id; a protocol without the section declares none. |
+| `case` | [`CaseSection`](#casesection) | optional | What a case governed by the protocol gives when it opens: its case inputs. A protocol without the section declares no input. |
 
 ## `ProtocolHeader`
 
@@ -66,12 +67,14 @@ A proposition whose value is established from evidence by its predicate.
 ## `Obligation`
 
 Something that must be done before the case can be complete. It is discharged only when its
-discharge predicate, over claim values, evaluates true (design § 8).
+discharge predicate, over claim values, evaluates true (design § 8). One with an applicability
+predicate applies only when that predicate is not false: false, it is not applicable.
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `description` | text | optional | — |
 | `discharged_when` | [`Predicate`](#predicate) | required | — |
+| `applicable_when` | [`Predicate`](#predicate) | optional | When the obligation applies, over claim values and case inputs; always, when absent. |
 
 ## `Action`
 
@@ -108,6 +111,14 @@ that artifact (design § 4.1, CANON-INVALIDATION-001).
 | `upstream` | [identifier](#identifiers) (`ArtifactId`) | required | The artifact whose revision the rule watches. |
 | `invalidates` | list of [identifier](#identifiers) (`ClaimId`) | required | The claims whose support a change of that revision invalidates. |
 
+## `CaseSection`
+
+The protocol's `case:` section.
+
+| Key | Value | Required | Meaning |
+|---|---|---|---|
+| `inputs` | map from [identifier](#identifiers) (`InputId`) to [`CaseInput`](#caseinput) | optional | The case inputs, keyed by input id. |
+
 ## `Predicate`
 
 A predicate over evidence and claim values.
@@ -115,9 +126,10 @@ A predicate over evidence and claim values.
 The predicate language: a small, total, deterministic expression language (design § 39.2).
 
 A predicate is one of `all`, `any`, `not`, an evidence match by kind, optional result and
-optional subject, or a test on a claim value. Written in source as a map with exactly one of the
-keys `all`, `any`, `not`, `evidence` or `claim`; a claim test may add `is`, which defaults to
-`true`.
+optional subject, a test on a claim value, or a test on a case input's value. Written in source
+as a map with exactly one of the keys `all`, `any`, `not`, `evidence`, `claim` or `input`; a
+claim test may add `is`, which defaults to `true`, and an input test adds `in`, the values it is
+true for (`{input: severity, in: [high]}`).
 
 | Key | Value | Meaning |
 |---|---|---|
@@ -127,6 +139,8 @@ keys `all`, `any`, `not`, `evidence` or `claim`; a claim test may add `is`, whic
 | `evidence` | [`EvidenceMatch`](#evidencematch) | — |
 | `claim` | [identifier](#identifiers) (`ClaimId`) | — |
 | `is` | [`Truth`](#truth) | Allowed only beside `claim`. |
+| `input` | [identifier](#identifiers) (`InputId`) | True when the case's value of the input is one of the values listed, false otherwise. |
+| `in` | list of [identifier](#identifiers) (`InputValue`) | Allowed only beside `input`. The values the test is true for, written `in`. |
 
 ## `CapabilityRequirement`
 
@@ -152,6 +166,16 @@ What an outcome requires.
 |---|---|---|
 | `decision` | [identifier](#identifiers) (`DecisionName`) | The outcome is legitimate only with an explicit decision of this name, for the outcome, taken at the case snapshot's current revision. |
 | — | [`Predicate`](#predicate) | Written as the [`Predicate`](#predicate) itself, with its keys and no key of its own. The outcome is legitimate when the predicate is `true`. |
+
+## `CaseInput`
+
+A case input: configuration a case fixes when it opens, one of a closed, non-empty list of
+values. Not evidence, so no evaluation has an unknown input.
+
+| Key | Value | Required | Meaning |
+|---|---|---|---|
+| `description` | text | optional | — |
+| `values` | list of [identifier](#identifiers) (`InputValue`) | required | The values the input may take. |
 
 ## `EvidenceMatch`
 
@@ -193,6 +217,8 @@ An identifier is text. A well-formed identifier is not empty, and without whites
 | `EffectClass` | Names the class of effect an action has. |
 | `DecisionName` | Names an explicit decision an outcome may require (`explicitly_inconclusive`). |
 | `InvalidationRuleId` | Identifies an invalidation rule a protocol declares. |
+| `InputId` | Identifies a case input a protocol declares. |
+| `InputValue` | One value a case input may take: an identifier its input declares. Read from any scalar, alike in the protocol and in the case: `values: [true, false]` declares the values `true` and `false`, and a case gives one as `flag: true`. |
 
 ## Text formats
 
