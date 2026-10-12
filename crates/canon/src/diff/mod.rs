@@ -25,6 +25,9 @@
 //! | claim removed | `BREAKING` |
 //! | obligation added | `TIGHTENING` |
 //! | obligation removed | `RELAXATION` |
+//! | applicability predicate (`applicable_when`) introduced on an obligation | `RELAXATION` |
+//! | applicability predicate removed from an obligation | `TIGHTENING` |
+//! | applicability predicate changed | `BREAKING` |
 //! | action added | `EXPANSION` |
 //! | action removed | `BREAKING` |
 //! | capability requirement added to an action | `TIGHTENING` |
@@ -37,6 +40,13 @@
 //! | invalidation rule added, or a claim added to what it invalidates | `TIGHTENING` |
 //! | invalidation rule removed, or a claim removed from what it invalidates | `RELAXATION` |
 //! | invalidation rule's upstream artifact changed | `BREAKING` |
+//! | case input added or removed (a case gives a value to exactly the declared inputs) | `BREAKING` |
+//! | value added to a case input | `EXPANSION` |
+//! | value removed from a case input | `BREAKING` |
+//!
+//! An applicability predicate is not compared by implication: an obligation that applies in fewer
+//! cases requires less of them, but the classifier does not order two guards, so any change to one
+//! present in both revisions is `BREAKING`, and `canon floor` refuses it.
 //!
 //! A changed predicate — a claim's `true_when`, an obligation's `discharged_when`, an action's
 //! `precondition` — is compared by implication. When the new predicate is true only where the old
@@ -44,8 +54,9 @@
 //! weakened (`RELAXATION`); when both hold, rewritten (`NO SEMANTIC CHANGE`); otherwise changed
 //! (`BREAKING`). Implication is decided structurally and soundly, never guessed: a member added
 //! under an `all` strengthens it, a member added under an `any` weakens it, `not` reverses the
-//! direction, and two evidence matches or claim tests imply each other only when they are equal.
-//! What it cannot show is classified as changed. The rules hold in three-valued logic: whenever the
+//! direction, and two evidence matches, claim tests or input tests imply each other only when they
+//! are equal, so an input test whose `in` list changed implies nothing it did not before. What it
+//! cannot show is classified as changed. The rules hold in three-valued logic: whenever the
 //! stronger predicate is true the weaker is true, and whenever the weaker is false the stronger is
 //! false.
 //!
@@ -53,10 +64,13 @@
 //! documents of different protocols are refused (`different-protocol`).
 //!
 //! Changes come in a fixed order, so the same two inputs always give the same report: the protocol
-//! header, then artifacts, evidence kinds, claims, obligations, actions, outcomes and invalidation
-//! rules; within a section, by identifier; within a declaration, its description, then its fields
-//! in the order the IR declares them (an action's precondition, capability requirements, effect and
-//! evidence it may produce), each list in identifier order, removals before additions.
+//! header, then artifacts, evidence kinds, claims, obligations, actions, outcomes, invalidation
+//! rules and case inputs; within a section, by identifier; within a declaration, its description,
+//! then its fields in the order the IR declares them (an obligation's discharge predicate and
+//! applicability predicate; an action's precondition, capability requirements, effect and evidence
+//! it may produce; a case input's values), each list in identifier order, removals before
+//! additions. Every IR declaration is destructured whole, so a field added to one does not compile
+//! here until the classifier says what a change to it is.
 //!
 //! Out of scope (story:semantic-diff): live-case impact, which needs case data Canon does not hold
 //! (design § 38), and constructs the kernel does not yet have.
@@ -65,7 +79,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 
 use crate::ir::{
-    Action, Claim, Described, EvidenceKind, InvalidationRule, Ir, Obligation, Outcome,
+    Action, CaseInput, Claim, Described, EvidenceKind, Header, InvalidationRule, Ir, Obligation,
+    Outcome,
 };
 use crate::model::{Age, Predicate, ProtocolId, one_line};
 
@@ -333,98 +348,156 @@ impl Changes {
 fn changes(from: &Ir, to: &Ir) -> Vec<Change> {
     use Category::{Breaking, Expansion, Relaxation, Tightening};
 
+    // Whole, without `..`: a section added to the IR does not compile here until it is compared.
+    let Ir {
+        protocol: from_header,
+        artifacts: from_artifacts,
+        evidence_kinds: from_evidence_kinds,
+        claims: from_claims,
+        obligations: from_obligations,
+        actions: from_actions,
+        outcomes: from_outcomes,
+        invalidation: from_invalidation,
+        inputs: from_inputs,
+    } = from;
+    let Ir {
+        protocol: to_header,
+        artifacts: to_artifacts,
+        evidence_kinds: to_evidence_kinds,
+        claims: to_claims,
+        obligations: to_obligations,
+        actions: to_actions,
+        outcomes: to_outcomes,
+        invalidation: to_invalidation,
+        inputs: to_inputs,
+    } = to;
+
     let mut changes = Changes {
         changes: Vec::new(),
     };
-    changes.description(
-        "protocol",
-        to.protocol.id.as_str(),
-        &from.protocol.description,
-        &to.protocol.description,
-    );
+    // The identifier is the same in both, or `diff` refused them; the revision is expected to
+    // differ and is not a change.
+    let Header {
+        id: _,
+        revision: _,
+        description: from_description,
+    } = from_header;
+    let Header {
+        id,
+        revision: _,
+        description: to_description,
+    } = to_header;
+    changes.description("protocol", id.as_str(), from_description, to_description);
     changes.section(
         "artifact",
-        &from.artifacts,
-        &to.artifacts,
+        from_artifacts,
+        to_artifacts,
         Breaking,
         Breaking,
         |changes, id, from: &Described, to: &Described| {
-            changes.description("artifact", id, &from.description, &to.description);
+            let Described { description: from } = from;
+            let Described { description: to } = to;
+            changes.description("artifact", id, from, to);
         },
     );
     changes.section(
         "evidence kind",
-        &from.evidence_kinds,
-        &to.evidence_kinds,
+        from_evidence_kinds,
+        to_evidence_kinds,
         Breaking,
         Expansion,
         evidence_kind,
     );
     changes.section(
         "claim",
-        &from.claims,
-        &to.claims,
+        from_claims,
+        to_claims,
         Breaking,
         Expansion,
         |changes, id, from: &Claim, to: &Claim| {
-            changes.description("claim", id, &from.description, &to.description);
-            changes.predicate("claim", id, "predicate", &from.true_when, &to.true_when);
+            let Claim {
+                description: from_description,
+                true_when: from_true_when,
+            } = from;
+            let Claim {
+                description: to_description,
+                true_when: to_true_when,
+            } = to;
+            changes.description("claim", id, from_description, to_description);
+            changes.predicate("claim", id, "predicate", from_true_when, to_true_when);
         },
     );
     changes.section(
         "obligation",
-        &from.obligations,
-        &to.obligations,
+        from_obligations,
+        to_obligations,
         Relaxation,
         Tightening,
-        |changes, id, from: &Obligation, to: &Obligation| {
-            changes.description("obligation", id, &from.description, &to.description);
-            changes.predicate(
-                "obligation",
-                id,
-                "discharge predicate",
-                &from.discharged_when,
-                &to.discharged_when,
-            );
-        },
+        obligation,
     );
     changes.section(
         "action",
-        &from.actions,
-        &to.actions,
+        from_actions,
+        to_actions,
         Breaking,
         Expansion,
         action,
     );
     changes.section(
         "outcome",
-        &from.outcomes,
-        &to.outcomes,
+        from_outcomes,
+        to_outcomes,
         Breaking,
         Expansion,
         |changes, id, from: &Outcome, to: &Outcome| {
-            changes.description("outcome", id, &from.description, &to.description);
-            if from.requires != to.requires {
+            let Outcome {
+                description: from_description,
+                requires: from_requires,
+            } = from;
+            let Outcome {
+                description: to_description,
+                requires: to_requires,
+            } = to;
+            changes.description("outcome", id, from_description, to_description);
+            if from_requires != to_requires {
                 changes.push(Breaking, "outcome", id, "requirement changed".to_owned());
             }
         },
     );
     changes.section(
         "invalidation rule",
-        &from.invalidation,
-        &to.invalidation,
+        from_invalidation,
+        to_invalidation,
         Relaxation,
         Tightening,
         invalidation_rule,
+    );
+    // A case gives a value to exactly the declared inputs: one added or removed breaks every case
+    // written against the other revision.
+    changes.section(
+        "case input",
+        from_inputs,
+        to_inputs,
+        Breaking,
+        Breaking,
+        case_input,
     );
     changes.changes
 }
 
 fn evidence_kind(changes: &mut Changes, id: &str, from: &EvidenceKind, to: &EvidenceKind) {
     const SECTION: &str = "evidence kind";
-    changes.description(SECTION, id, &from.description, &to.description);
+    let EvidenceKind {
+        description: from_description,
+        max_age: from_max_age,
+    } = from;
+    let EvidenceKind {
+        description: to_description,
+        max_age: to_max_age,
+    } = to;
+    changes.description(SECTION, id, from_description, to_description);
     let shown = |age: &Age| one_line(age.as_str());
-    let (category, what) = match (&from.max_age, &to.max_age) {
+    let (category, what) = match (from_max_age, to_max_age) {
         (None, None) => return,
         (None, Some(to)) => (
             Category::Tightening,
@@ -453,25 +526,79 @@ fn evidence_kind(changes: &mut Changes, id: &str, from: &EvidenceKind, to: &Evid
     changes.push(category, SECTION, id, what);
 }
 
+/// An obligation's discharge predicate is compared by implication. Its applicability predicate is
+/// not: introducing one relaxes (the obligation now applies in fewer cases), removing one tightens
+/// (it applies in every case), and any change to one present in both is `BREAKING`.
+fn obligation(changes: &mut Changes, id: &str, from: &Obligation, to: &Obligation) {
+    const SECTION: &str = "obligation";
+    let Obligation {
+        description: from_description,
+        discharged_when: from_discharged_when,
+        applicable_when: from_applicable_when,
+    } = from;
+    let Obligation {
+        description: to_description,
+        discharged_when: to_discharged_when,
+        applicable_when: to_applicable_when,
+    } = to;
+    changes.description(SECTION, id, from_description, to_description);
+    changes.predicate(
+        SECTION,
+        id,
+        "discharge predicate",
+        from_discharged_when,
+        to_discharged_when,
+    );
+    let applicability = match (from_applicable_when, to_applicable_when) {
+        (None, None) => None,
+        (None, Some(_)) => Some((Category::Relaxation, "introduced")),
+        (Some(_), None) => Some((Category::Tightening, "removed")),
+        (Some(from), Some(to)) if from == to => None,
+        (Some(_), Some(_)) => Some((Category::Breaking, "changed")),
+    };
+    if let Some((category, how)) = applicability {
+        changes.push(
+            category,
+            SECTION,
+            id,
+            format!("applicability predicate {how}"),
+        );
+    }
+}
+
 fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
     const SECTION: &str = "action";
-    changes.description(SECTION, id, &from.description, &to.description);
+    let Action {
+        description: from_description,
+        precondition: from_precondition,
+        requires: from_requires,
+        effect: from_effect,
+        may_produce: from_may_produce,
+    } = from;
+    let Action {
+        description: to_description,
+        precondition: to_precondition,
+        requires: to_requires,
+        effect: to_effect,
+        may_produce: to_may_produce,
+    } = to;
+    changes.description(SECTION, id, from_description, to_description);
     changes.predicate(
         SECTION,
         id,
         "precondition",
-        &from.precondition,
-        &to.precondition,
+        from_precondition,
+        to_precondition,
     );
     changes.members(
         SECTION,
         id,
-        &from.requires,
-        &to.requires,
+        from_requires,
+        to_requires,
         (Category::Relaxation, "no longer requires capability"),
         (Category::Tightening, "now requires capability"),
     );
-    if from.effect != to.effect {
+    if from_effect != to_effect {
         let shown = |effect: &Option<crate::model::EffectClass>| match effect {
             Some(effect) => format!("`{}`", one_line(effect.as_str())),
             None => "none".to_owned(),
@@ -482,16 +609,16 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
             id,
             format!(
                 "effect changed from {} to {}",
-                shown(&from.effect),
-                shown(&to.effect)
+                shown(from_effect),
+                shown(to_effect)
             ),
         );
     }
     changes.members(
         SECTION,
         id,
-        &from.may_produce,
-        &to.may_produce,
+        from_may_produce,
+        to_may_produce,
         (Category::Breaking, "may no longer produce evidence"),
         (Category::Expansion, "may now produce evidence"),
     );
@@ -504,26 +631,59 @@ fn invalidation_rule(
     to: &InvalidationRule,
 ) {
     const SECTION: &str = "invalidation rule";
-    changes.description(SECTION, id, &from.description, &to.description);
-    if from.upstream != to.upstream {
+    let InvalidationRule {
+        description: from_description,
+        upstream: from_upstream,
+        invalidates: from_invalidates,
+    } = from;
+    let InvalidationRule {
+        description: to_description,
+        upstream: to_upstream,
+        invalidates: to_invalidates,
+    } = to;
+    changes.description(SECTION, id, from_description, to_description);
+    if from_upstream != to_upstream {
         changes.push(
             Category::Breaking,
             SECTION,
             id,
             format!(
                 "upstream artifact changed from `{}` to `{}`",
-                one_line(from.upstream.as_str()),
-                one_line(to.upstream.as_str())
+                one_line(from_upstream.as_str()),
+                one_line(to_upstream.as_str())
             ),
         );
     }
     changes.members(
         SECTION,
         id,
-        &from.invalidates,
-        &to.invalidates,
+        from_invalidates,
+        to_invalidates,
         (Category::Relaxation, "no longer invalidates claim"),
         (Category::Tightening, "now invalidates claim"),
+    );
+}
+
+/// A value added to a case input is `EXPANSION`: every case of the earlier revision still gives
+/// a declared value. A value removed is `BREAKING`: a case that gave it no longer evaluates.
+fn case_input(changes: &mut Changes, id: &str, from: &CaseInput, to: &CaseInput) {
+    const SECTION: &str = "case input";
+    let CaseInput {
+        description: from_description,
+        values: from_values,
+    } = from;
+    let CaseInput {
+        description: to_description,
+        values: to_values,
+    } = to;
+    changes.description(SECTION, id, from_description, to_description);
+    changes.members(
+        SECTION,
+        id,
+        from_values,
+        to_values,
+        (Category::Breaking, "no longer takes value"),
+        (Category::Expansion, "now takes value"),
     );
 }
 
@@ -543,7 +703,7 @@ impl Implication {
     /// 3. an `all` on the left: some member implies `right`;
     /// 4. an `any` on the right: `left` implies some member;
     /// 5. two `not`s: what the right negates implies what the left negates;
-    /// 6. two evidence matches, or two claim tests: they are equal.
+    /// 6. two evidence matches, two claim tests or two input tests: they are equal.
     fn implies(&mut self, left: &Predicate, right: &Predicate) -> bool {
         let key = (
             std::ptr::from_ref(left) as usize,
@@ -578,6 +738,11 @@ impl Implication {
             (Predicate::Not(left), Predicate::Not(right)) => self.implies(right, left),
             (Predicate::Evidence(left), Predicate::Evidence(right)) => left == right,
             (Predicate::Claim(left), Predicate::Claim(right)) => left == right,
+            // Their `in` lists are sorted and kept once in the IR, so equal sets are equal tests.
+            // A test with more values is weaker, but a changed `in` list is not ordered.
+            (Predicate::Input(left), Predicate::Input(right)) => left == right,
+            // Two different kinds of leaf, or an `all`, `any` or `not` the rules above leave
+            // undecided: not shown, so not implied.
             _ => false,
         }
     }
@@ -587,7 +752,10 @@ impl Implication {
 mod tests {
     use super::{Category, Implication, diff};
     use crate::ir::{Ir, compile};
-    use crate::model::{self, ClaimId, ClaimTest, EvidenceKindId, EvidenceMatch, Predicate, Truth};
+    use crate::model::{
+        self, ClaimId, ClaimTest, EvidenceKindId, EvidenceMatch, InputId, InputTest, InputValue,
+        Predicate, Truth,
+    };
 
     fn evidence(kind: &str) -> Predicate {
         Predicate::Evidence(EvidenceMatch {
@@ -691,5 +859,124 @@ mod tests {
                 "BREAKING: action `z` removed",
             ]
         );
+    }
+
+    /// The report's lines, without the header line.
+    fn lines(from: &Ir, to: &Ir) -> Vec<String> {
+        diff(from, to)
+            .expect("one protocol")
+            .changes
+            .iter()
+            .map(ToString::to_string)
+            .collect()
+    }
+
+    /// An input `s` and a claim `c` for the protocols of the tests below.
+    const INPUTS: &str = "case: {inputs: {s: {values: [high, low]}}}\nevidence_kinds: {k: {}}\n\
+                          claims: {c: {true_when: {evidence: {kind: k}}}}\n";
+
+    #[test]
+    fn an_applicability_predicate_introduced_relaxes_removed_tightens_and_changed_breaks() {
+        let obligation = |guard: &str| {
+            ir(&format!(
+                "{INPUTS}obligations: {{o: {{discharged_when: {{claim: c}}{guard}}}}}\n"
+            ))
+        };
+        let always = obligation("");
+        let high = obligation(", applicable_when: {input: s, in: [high]}");
+        let either = obligation(", applicable_when: {input: s, in: [high, low]}");
+        let high_and_c =
+            obligation(", applicable_when: {all: [{input: s, in: [high]}, {claim: c}]}");
+        assert_eq!(
+            lines(&always, &high),
+            ["RELAXATION: obligation `o` applicability predicate introduced"]
+        );
+        assert_eq!(
+            lines(&high, &always),
+            ["TIGHTENING: obligation `o` applicability predicate removed"]
+        );
+        // A changed guard is not ordered, not even one narrowed by a conjunct.
+        for (from, to) in [(&high, &either), (&either, &high), (&high, &high_and_c)] {
+            assert_eq!(
+                lines(from, to),
+                ["BREAKING: obligation `o` applicability predicate changed"]
+            );
+        }
+        assert!(lines(&high, &high).is_empty());
+        // An obligation added with a guard is still an obligation added.
+        assert_eq!(
+            lines(&ir(INPUTS), &high),
+            ["TIGHTENING: obligation `o` added"]
+        );
+    }
+
+    #[test]
+    fn a_value_added_to_an_input_expands_and_every_other_input_change_breaks() {
+        let inputs = |inputs: &str| ir(&format!("case: {{inputs: {{{inputs}}}}}\n"));
+        let two = inputs("s: {values: [high, low]}");
+        let three = inputs("s: {values: [high, low, medium]}");
+        let reordered = inputs("s: {values: [low, high]}");
+        let described = inputs("s: {description: d, values: [high, low]}");
+        let another = inputs("s: {values: [high, low]}, t: {values: [a]}");
+        assert_eq!(
+            lines(&two, &three),
+            ["EXPANSION: case input `s` now takes value `medium`"]
+        );
+        assert_eq!(
+            lines(&three, &two),
+            ["BREAKING: case input `s` no longer takes value `medium`"]
+        );
+        assert_eq!(lines(&two, &another), ["BREAKING: case input `t` added"]);
+        assert_eq!(lines(&another, &two), ["BREAKING: case input `t` removed"]);
+        assert_eq!(
+            lines(&two, &described),
+            ["NO SEMANTIC CHANGE: case input `s` description changed"]
+        );
+        assert!(lines(&two, &reordered).is_empty());
+        // Inputs come last, after invalidation rules.
+        assert_eq!(
+            lines(
+                &ir("actions: {a: {}}\ncase: {inputs: {s: {values: [high]}}}\n"),
+                &two
+            ),
+            [
+                "BREAKING: action `a` removed",
+                "EXPANSION: case input `s` now takes value `low`",
+            ]
+        );
+    }
+
+    #[test]
+    fn an_input_test_implies_only_an_equal_one() {
+        let test = |values: &[&str]| {
+            Predicate::Input(InputTest {
+                input: InputId::new("s"),
+                r#in: values.iter().map(|value| InputValue::new(*value)).collect(),
+            })
+        };
+        let (high, either) = (test(&["high"]), test(&["high", "low"]));
+        assert!(implies(&high, &high));
+        assert!(!implies(&high, &either));
+        assert!(!implies(&either, &high));
+        assert!(!implies(&high, &claim("s")));
+        assert!(implies(
+            &Predicate::All(vec![high.clone(), claim("c")]),
+            &high
+        ));
+        // A changed `in` list in a precondition or a claim's predicate is BREAKING.
+        let action = |values: &str| {
+            ir(&format!(
+                "{INPUTS}actions: {{a: {{precondition: {{input: s, in: [{values}]}}}}}}\n"
+            ))
+        };
+        assert_eq!(
+            lines(&action("high"), &action("high, low")),
+            ["BREAKING: action `a` precondition changed"]
+        );
+        assert_eq!(
+            lines(&action("high, low"), &action("high")),
+            ["BREAKING: action `a` precondition changed"]
+        );
+        assert!(lines(&action("high, low"), &action("low, high")).is_empty());
     }
 }

@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
+use syn::ext::IdentExt;
 use syn::parse::{ParseStream, Parser};
 use syn::{
     AttrStyle, Attribute, Expr, Fields, GenericArgument, Ident, ImplItem, Item, Lit, Meta, Pat,
@@ -402,10 +403,11 @@ pub fn model(root: &Path) -> Result<Model, String> {
                             .named
                             .iter()
                             .map(|field| {
+                                // A raw identifier (`r#in`) is the key serde reads (`in`).
                                 let field_name = field
                                     .ident
                                     .as_ref()
-                                    .map(ToString::to_string)
+                                    .map(|ident| ident.unraw().to_string())
                                     .unwrap_or_default();
                                 let owner = format!("{name}.{field_name}");
                                 Ok(Field {

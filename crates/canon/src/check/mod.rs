@@ -9,7 +9,8 @@
 //!
 //! The dimensions, in this order: the evidence dimensions of each declared evidence kind, in
 //! identifier order; each capability some action requires, in identifier order; each decision name
-//! some outcome requires, in identifier order.
+//! some outcome requires, in identifier order; each case input the protocol declares, in
+//! identifier order.
 //!
 //! - An evidence dimension is the records of one kind about one artifact. A kind has one bound
 //!   dimension per artifact some evidence match of the kind names as its `subject`, in identifier
@@ -29,6 +30,9 @@
 //! - A capability is undecided, granted or denied (3 values).
 //! - A decision is not taken or taken (2 values); taken, it is taken for every outcome that
 //!   requires it.
+//! - A case input takes each value it declares, in identifier order (one value per declared
+//!   value): a protocol of several profiles is checked in every profile at once. An input weighs
+//!   nothing in a witness, and a state writes it `` input `s` `v` ``, after the taken decisions.
 //! - An evidence dimension has upstream artifacts when an invalidation rule can keep its records
 //!   from a claim: the upstream artifact of each rule that invalidates a claim (one it names, or
 //!   one built on those, by the evaluator's own rule, `crate::eval::invalidated_claims`) that
@@ -51,7 +55,8 @@
 //! dimension: it is computed from the claims in each state, and no `protocol/1` predicate reads it.
 //!
 //! A state is evaluated as a case snapshot that lists each declared artifact, and the case itself,
-//! at one revision, with one evidence record per present class and variant about its dimension's
+//! at one revision, and gives each case input its value in the state, with one evidence record per
+//! present class and variant about its dimension's
 //! artifact, the decided capabilities as `canon-authority/1` and the taken decisions as
 //! `canon-decisions/1`.
 //!
@@ -419,6 +424,7 @@ pub(crate) fn evaluate(ir: &Ir, space: &Space<'_>, state: &State) -> Result<Eval
         ),
         termination: None,
         revision: Some(revision),
+        inputs: space.inputs(state),
     };
     let evidence = space.evidence(state);
     let authority = space.authority(state);

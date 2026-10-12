@@ -26,8 +26,9 @@
 //!   is the Rust struct `Case`: its `id` field is the identity `id`, its other fields are entity
 //!   fields. An entity the specification declares and [`ENTITIES`] does not map fails the test.
 //! * The value types compared are those the entities reach, and those [`DOCUMENTS`] reach: the
-//!   evidence record, the authority decision, the explicit decision, the decision and the
-//!   properties, which no entity holds.
+//!   evidence record, the authority decision, the explicit decision, the decision, the obligation
+//!   status and the properties, which no entity holds.
+//! * A field written as a raw identifier (`r#in`) is named without `r#` (`in`).
 //! * Only module-level items count. Items inside functions, inline modules (`mod tests { … }`) and
 //!   anything under `#[cfg(test)]` are not the model. Two module-level types with one name, in any
 //!   model files, fail the test rather than one shadowing the other.
@@ -74,13 +75,16 @@ const ENTITIES: &[EntityMapping] = &[
 
 /// Value types no entity holds that are still part of the model: the evidence record, the
 /// authority decision (`canon-authority/1`) and the explicit decision (`canon-decisions/1`) an
-/// evaluation reads, the decision it writes, and the properties (`canon-properties/1`) `canon
-/// check` reads. They, and what they reach, are compared too.
+/// evaluation reads, the decision it writes and the status of an obligation in it (its
+/// `obligations` section is untyped `Json`, so the decision does not reach the status), and the
+/// properties (`canon-properties/1`) `canon check` reads. They, and what they reach, are compared
+/// too.
 const DOCUMENTS: &[&str] = &[
     "EvidenceRecord",
     "AuthorityDecision",
     "ExplicitDecision",
     "Decision",
+    "ObligationStatus",
     "Properties",
 ];
 
@@ -982,7 +986,10 @@ fn rust_model(sources: &[(String, String)]) -> Model {
                     let (name, ty) = field
                         .split_once(':')
                         .unwrap_or_else(|| panic!("field `{field}` has a type"));
-                    (name.trim().to_owned(), rust_ty(ty, &scope))
+                    // A raw identifier (`r#in`) is the field its name without `r#` names.
+                    let name = name.trim();
+                    let name = name.strip_prefix("r#").unwrap_or(name);
+                    (name.to_owned(), rust_ty(ty, &scope))
                 })
                 .collect();
             all.insert(name, Shape::Struct(fields), file);

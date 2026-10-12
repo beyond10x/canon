@@ -7,6 +7,10 @@
 //! The specification is the revision pairs under `fixtures/investigation/semantic-diff/`: one
 //! directory per pair, holding the earlier revision `from.yaml` and the later one `to.yaml`, each a
 //! `protocol/1` document derived from the investigation fixture with one change between them.
+//!
+//! Also acceptance 13 of story:case-inputs: the last four pairs derive from
+//! `fixtures/investigation/case-inputs.yaml` and change an obligation's `applicable_when` or a case
+//! input's `values` (§ Outcome 5 of that story).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -15,7 +19,7 @@ use std::process::{Command, Output};
 const PAIRS: &str = "fixtures/investigation/semantic-diff";
 
 /// Every pair and the report `canon diff` prints for it, byte for byte.
-const EXPECTATIONS: [(&str, &str); 8] = [
+const EXPECTATIONS: [(&str, &str); 12] = [
     (
         "added-obligation",
         "diff: protocol `investigation` revision 1 to 2\n\
@@ -57,6 +61,26 @@ const EXPECTATIONS: [(&str, &str); 8] = [
         "claim-any-alternative",
         "diff: protocol `investigation` revision 1 to 2\n\
          RELAXATION: claim `explanation.supported` predicate weakened\n",
+    ),
+    (
+        "gained-applicability",
+        "diff: protocol `investigation` revision 1 to 2\n\
+         RELAXATION: obligation `peer.review` applicability predicate introduced\n",
+    ),
+    (
+        "lost-applicability",
+        "diff: protocol `investigation` revision 1 to 2\n\
+         TIGHTENING: obligation `falsification.recorded` applicability predicate removed\n",
+    ),
+    (
+        "added-input-value",
+        "diff: protocol `investigation` revision 1 to 2\n\
+         EXPANSION: case input `severity` now takes value `medium`\n",
+    ),
+    (
+        "removed-input-value",
+        "diff: protocol `investigation` revision 1 to 2\n\
+         BREAKING: case input `severity` no longer takes value `medium`\n",
     ),
 ];
 
