@@ -15,7 +15,7 @@
 
 use serde::Deserialize;
 
-use super::ids::{ClaimId, DecisionName};
+use super::ids::{ClaimId, DecisionName, InputId, InputValue};
 use super::predicate::{EvidenceMatch, Predicate, Truth, WrittenPredicate};
 
 /// What an outcome requires.
@@ -77,6 +77,11 @@ struct WrittenRequirement {
     claim: Option<ClaimId>,
     #[serde(default, deserialize_with = "super::present::optional")]
     is: Option<Truth>,
+    #[serde(default, deserialize_with = "super::present::form")]
+    input: Option<InputId>,
+    // Not optional when its `input` is written: a null on it says it needs a value.
+    #[serde(default, deserialize_with = "super::present::form")]
+    r#in: Option<Vec<InputValue>>,
 }
 
 impl TryFrom<WrittenRequirement> for OutcomeRequirement {
@@ -91,6 +96,8 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             evidence,
             claim,
             is,
+            input,
+            r#in: values,
         } = written;
         let predicate = WrittenPredicate {
             all,
@@ -99,6 +106,8 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             evidence,
             claim,
             is,
+            input,
+            r#in: values,
         };
         let Some(decision) = decision else {
             // With no key at all, name `decision` among what a requirement may be written as.
@@ -109,11 +118,13 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
                 evidence: None,
                 claim: None,
                 is: None,
+                input: None,
+                r#in: None,
             } = predicate
             {
                 return Err(
                     "a requirement has exactly one of `all`, `any`, `not`, `evidence`, \
-                     `claim` or `decision`, found 0"
+                     `claim`, `input` or `decision`, found 0"
                         .to_owned(),
                 );
             }
@@ -126,6 +137,8 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             evidence: None,
             claim: None,
             is: None,
+            input: None,
+            r#in: None,
         } = predicate
         else {
             return Err(

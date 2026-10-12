@@ -24,8 +24,9 @@ pub struct Decision {
     pub protocol_revision: u64,
     /// Every declared claim, in identifier order.
     pub claims: Declarations<ClaimId, ClaimDecision>,
-    /// Each declared obligation, `open` or `discharged`, in identifier order; written when the
-    /// protocol declares an obligation. Its shape is fixed by CANON-OBLIGATION-001.
+    /// Each declared obligation, in identifier order, with its [`ObligationStatus`]; written when
+    /// the protocol declares an obligation. Its shape is fixed by CANON-OBLIGATION-001 and, for an
+    /// obligation with an applicability predicate, CANON-INPUT-001.
     pub obligations: Option<Json>,
     /// Each declared action, `admissible`, `approval-required` or `blocked`, with the reasons for
     /// a status other than `admissible`; written when the protocol declares an action. Its shape is
@@ -51,6 +52,28 @@ pub struct ClaimDecision {
     /// The evidence an exclusion stage kept from this claim, in evidence-id order. Empty unless a
     /// stage excluded something; an empty list is not serialized.
     pub excluded_evidence: Vec<EvidenceExclusion>,
+}
+
+/// The status of one obligation in the decision's `obligations` section.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ObligationStatus {
+    /// It applies, or whether it applies is unknown, and its discharge predicate is not `true`.
+    Open,
+    /// It applies and its discharge predicate is `true`.
+    Discharged,
+    /// Its applicability predicate is `false`: it holds back nothing.
+    NotApplicable,
+}
+
+impl ObligationStatus {
+    /// The status as `canon-decision/1` writes it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ObligationStatus::Open => "open",
+            ObligationStatus::Discharged => "discharged",
+            ObligationStatus::NotApplicable => "not_applicable",
+        }
+    }
 }
 
 /// One evidence record an exclusion stage kept from a claim, and why.

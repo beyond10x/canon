@@ -1247,6 +1247,15 @@ fn words(predicate: &Predicate) -> String {
             code(test.claim.as_str()),
             code(&test.is.to_string())
         ),
+        Predicate::Input(test) => format!(
+            "input {} is one of {}",
+            code(test.input.as_str()),
+            test.r#in
+                .iter()
+                .map(|value| code(value.as_str()))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
     }
 }
 

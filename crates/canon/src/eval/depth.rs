@@ -49,6 +49,15 @@ pub(crate) fn check(ir: &Ir) -> Result<(), Refusal> {
                 &obligation.discharged_when,
             )
         })
+        .chain(ir.obligations.iter().filter_map(|(id, obligation)| {
+            let applicable_when = obligation.applicable_when.as_ref()?;
+            Some((
+                "obligation",
+                id.as_str(),
+                "applicable_when",
+                applicable_when,
+            ))
+        }))
         .chain(
             ir.actions
                 .iter()
@@ -96,7 +105,7 @@ fn own(predicate: &Predicate) -> Option<Own<'_>> {
             }
             Predicate::Not(inner) => pending.push((inner, level + 1)),
             Predicate::Claim(test) => own.tests.push((level, &test.claim)),
-            Predicate::Evidence(_) => {}
+            Predicate::Evidence(_) | Predicate::Input(_) => {}
         }
     }
     Some(own)

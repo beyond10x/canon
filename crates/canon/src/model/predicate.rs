@@ -1,15 +1,16 @@
 //! The predicate language: a small, total, deterministic expression language (design § 39.2).
 //!
 //! A predicate is one of `all`, `any`, `not`, an evidence match by kind, optional result and
-//! optional subject, or a test on a claim value. Written in source as a map with exactly one of the
-//! keys `all`, `any`, `not`, `evidence` or `claim`; a claim test may add `is`, which defaults to
-//! `true`.
+//! optional subject, a test on a claim value, or a test on a case input's value. Written in source
+//! as a map with exactly one of the keys `all`, `any`, `not`, `evidence`, `claim` or `input`; a
+//! claim test may add `is`, which defaults to `true`, and an input test adds `in`, the values it is
+//! true for (`{input: severity, in: [high]}`).
 
 use std::fmt;
 
 use serde::Deserialize;
 
-use super::ids::{ArtifactId, ClaimId, EvidenceKindId};
+use super::ids::{ArtifactId, ClaimId, EvidenceKindId, InputId, InputValue};
 
 /// A three-valued truth value. `Unknown` is not `False`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -62,6 +63,8 @@ pub enum Predicate {
     Any(Vec<Predicate>),
     Not(Box<Predicate>),
     Evidence(EvidenceMatch),
+    /// True when the case's value of the input is one of the values listed, false otherwise.
+    Input(InputTest),
     Claim(ClaimTest),
 }
 
@@ -83,6 +86,22 @@ pub struct EvidenceMatch {
 pub struct ClaimTest {
     pub claim: ClaimId,
     pub is: Truth,
+}
+
+/// Tests whether a case input has one of the values listed. A case gives every declared input a
+/// value, so the test is never unknown.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InputTest {
+    pub input: InputId,
+    /// The values the test is true for, written `in`.
+    pub r#in: Vec<InputValue>,
+}
+
+impl InputTest {
+    /// The test's value for the case's value of its input: whether it is one of those listed.
+    pub fn holds_for(&self, value: &InputValue) -> bool {
+        self.r#in.contains(value)
+    }
 }
 
 impl Predicate {
@@ -107,8 +126,19 @@ impl Predicate {
                 }
             }
             Predicate::Not(inner) => inner.visit(f),
-            Predicate::Evidence(_) | Predicate::Claim(_) => {}
+            Predicate::Evidence(_) | Predicate::Claim(_) | Predicate::Input(_) => {}
         }
+    }
+
+    /// Every input test inside this predicate, in source order.
+    pub fn input_tests(&self) -> Vec<&InputTest> {
+        let mut found = Vec::new();
+        self.visit(&mut |predicate| {
+            if let Predicate::Input(test) = predicate {
+                found.push(test);
+            }
+        });
+        found
     }
 }
 
@@ -129,6 +159,11 @@ pub(crate) struct WrittenPredicate {
     pub(crate) claim: Option<ClaimId>,
     #[serde(default, deserialize_with = "super::present::optional")]
     pub(crate) is: Option<Truth>,
+    #[serde(default, deserialize_with = "super::present::form")]
+    pub(crate) input: Option<InputId>,
+    // Not optional when its `input` is written: a null on it says it needs a value.
+    #[serde(default, deserialize_with = "super::present::form")]
+    pub(crate) r#in: Option<Vec<InputValue>>,
 }
 
 impl TryFrom<WrittenPredicate> for Predicate {
@@ -142,6 +177,8 @@ impl TryFrom<WrittenPredicate> for Predicate {
             evidence,
             claim,
             is,
+            input,
+            r#in: values,
         } = written;
         let forms = [
             all.is_some(),
@@ -149,17 +186,30 @@ impl TryFrom<WrittenPredicate> for Predicate {
             not.is_some(),
             evidence.is_some(),
             claim.is_some(),
+            input.is_some(),
         ]
         .into_iter()
         .filter(|present| *present)
         .count();
         if forms != 1 {
             return Err(format!(
-                "a predicate has exactly one of `all`, `any`, `not`, `evidence` or `claim`, found {forms}"
+                "a predicate has exactly one of `all`, `any`, `not`, `evidence`, `claim` or `input`, found {forms}"
             ));
         }
         if is.is_some() && claim.is_none() {
             return Err("`is` is allowed only beside `claim`".to_owned());
+        }
+        if values.is_some() && input.is_none() {
+            return Err("`in` is allowed only beside `input`".to_owned());
+        }
+        if let Some(input) = input {
+            let Some(values) = values else {
+                return Err("an `input` test lists the values it holds for in `in`".to_owned());
+            };
+            return Ok(Predicate::Input(InputTest {
+                input,
+                r#in: values,
+            }));
         }
         Ok(if let Some(members) = all {
             Predicate::All(members)

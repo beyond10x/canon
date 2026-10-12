@@ -57,6 +57,21 @@ fn predicate(predicate: &Predicate) -> Json {
             }
             obj([("claim", Json::Obj(members))])
         }
+        Predicate::Input(test) => obj([(
+            "input",
+            Json::Obj(vec![
+                ("id".to_owned(), json::str(test.input.as_str())),
+                (
+                    "in".to_owned(),
+                    Json::Arr(
+                        test.r#in
+                            .iter()
+                            .map(|value| json::str(value.as_str()))
+                            .collect(),
+                    ),
+                ),
+            ]),
+        )]),
     }
 }
 

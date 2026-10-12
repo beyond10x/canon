@@ -19,7 +19,9 @@
 //!   result). A record about another artifact than the subject does not make it `true`. A
 //!   precondition that no claim test and no evidence
 //!   match decides, such as `{any: []}` or `{not: {all: []}}`, can never be `true`, and gives the
-//!   one reason `{"requirement": "unsatisfiable"}`. Authority is not consulted.
+//!   one reason `{"requirement": "unsatisfiable"}`. Each case input whose test decides it, by the
+//!   same rule, is a reason too, `{"input": <id>, "value": <the case's value>}`, once per input in
+//!   input-id order, after the evidence reasons (story:case-inputs). Authority is not consulted.
 //! - `blocked`, when the precondition is `true` and the authority denies a capability the action
 //!   requires: each denied capability is a reason, `{"capability": <id>, "decision": "denied"}`.
 //!   Asking again would not change a denial.
@@ -38,11 +40,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Map, Value};
 
 use super::authority::Authority;
-use super::claims::{predicate, reads};
+use super::claims::{Inputs, predicate, reads};
 use crate::ir::{Action, Ir};
 use crate::model::{
-    ArtifactId, CapabilityId, ClaimId, EvidenceKindId, EvidenceRecord, Grant, Json, Predicate,
-    Truth,
+    ArtifactId, CapabilityId, ClaimId, EvidenceKindId, EvidenceRecord, Grant, InputId, Json,
+    Predicate, Truth,
 };
 
 /// The section, or `None` to leave the slot empty. `evidence` is what the claims were evaluated
@@ -51,6 +53,7 @@ use crate::model::{
 pub(super) fn section(
     ir: &Ir,
     claims: &BTreeMap<ClaimId, Truth>,
+    inputs: &Inputs,
     evidence: &[EvidenceRecord],
     authority: Option<&Authority>,
 ) -> Option<Json> {
@@ -61,7 +64,7 @@ pub(super) fn section(
         .actions
         .iter()
         .map(|(id, action)| {
-            let (status, reasons) = admissibility(action, claims, evidence, authority);
+            let (status, reasons) = admissibility(action, claims, inputs, evidence, authority);
             let mut entry = Map::new();
             entry.insert("status".to_owned(), Value::from(status));
             if !reasons.is_empty() {
@@ -77,12 +80,16 @@ pub(super) fn section(
 fn admissibility(
     action: &Action,
     claims: &BTreeMap<ClaimId, Truth>,
+    inputs: &Inputs,
     evidence: &[EvidenceRecord],
     authority: Option<&Authority>,
 ) -> (&'static str, Vec<Value>) {
-    let precondition = predicate(&action.precondition, claims, evidence);
+    let precondition = predicate(&action.precondition, claims, inputs, evidence);
     if precondition != Truth::True {
-        return ("blocked", unmet(&action.precondition, claims, evidence));
+        return (
+            "blocked",
+            unmet(&action.precondition, claims, inputs, evidence),
+        );
     }
     let decision = |capability| authority.and_then(|authority| authority.decision(capability));
     // Each capability once, in capability order, whatever order the IR holds them in.
@@ -117,20 +124,23 @@ struct Named<'a> {
     /// Each evidence match by kind and subject: two matches that differ only in their subject are
     /// two reasons.
     matches: BTreeSet<(&'a EvidenceKindId, Option<&'a ArtifactId>)>,
+    /// Each input whose test decides it.
+    inputs: BTreeSet<&'a InputId>,
 }
 
 /// The reasons a precondition (not `true`) is unmet: each claim whose test decides it, with the
 /// claim's value, then each evidence match (kind and subject) that decides it, with whether a
-/// record it reads applies; or, when no test and no match decides it,
-/// `{"requirement": "unsatisfiable"}`.
+/// record it reads applies, then each input whose test decides it, with the case's value of it;
+/// or, when no test and no match decides it, `{"requirement": "unsatisfiable"}`.
 pub(super) fn unmet(
     precondition: &Predicate,
     claims: &BTreeMap<ClaimId, Truth>,
+    inputs: &Inputs,
     evidence: &[EvidenceRecord],
 ) -> Vec<Value> {
     let mut named = Named::default();
-    deciding(precondition, true, claims, evidence, &mut named);
-    if named.claims.is_empty() && named.matches.is_empty() {
+    deciding(precondition, true, claims, inputs, evidence, &mut named);
+    if named.claims.is_empty() && named.matches.is_empty() && named.inputs.is_empty() {
         return vec![reason([("requirement", "unsatisfiable")])];
     }
     let claim_reasons = named.claims.into_iter().map(|claim| {
@@ -148,7 +158,21 @@ pub(super) fn unmet(
         }
         Value::Object(entry)
     });
-    claim_reasons.chain(evidence_reasons).collect()
+    // A case gives every input it is checked for; one it does not give, which only an IR a
+    // caller builds can name, has the value `null`.
+    let input_reasons = named.inputs.into_iter().map(|input| {
+        let value = inputs
+            .get(input)
+            .map_or(Value::Null, |value| Value::from(value.as_str()));
+        Value::Object(Map::from_iter([
+            ("input".to_owned(), Value::from(input.as_str())),
+            ("value".to_owned(), value),
+        ]))
+    });
+    claim_reasons
+        .chain(evidence_reasons)
+        .chain(input_reasons)
+        .collect()
 }
 
 /// Adds to `named` each claim test and evidence match that decides why `node`, read with `wanted`
@@ -166,6 +190,7 @@ fn deciding<'a>(
     node: &'a Predicate,
     wanted: bool,
     claims: &BTreeMap<ClaimId, Truth>,
+    inputs: &Inputs,
     evidence: &[EvidenceRecord],
     named: &mut Named<'a>,
 ) {
@@ -175,7 +200,7 @@ fn deciding<'a>(
     } else {
         (Truth::False, Truth::True)
     };
-    let value = |member: &Predicate| predicate(member, claims, evidence);
+    let value = |member: &Predicate| predicate(member, claims, inputs, evidence);
     match node {
         Predicate::Claim(test) => {
             if value(node) != goal {
@@ -189,7 +214,12 @@ fn deciding<'a>(
                     .insert((&matching.kind, matching.subject.as_ref()));
             }
         }
-        Predicate::Not(inner) => deciding(inner, !wanted, claims, evidence, named),
+        Predicate::Input(test) => {
+            if value(node) != goal {
+                named.inputs.insert(&test.input);
+            }
+        }
+        Predicate::Not(inner) => deciding(inner, !wanted, claims, inputs, evidence, named),
         Predicate::All(members) | Predicate::Any(members) => {
             let conjunction = matches!(node, Predicate::All(_)) == wanted;
             let unmet: Vec<&Predicate> = members
@@ -207,7 +237,7 @@ fn deciding<'a>(
                 unmet
             };
             for member in decide {
-                deciding(member, wanted, claims, evidence, named);
+                deciding(member, wanted, claims, inputs, evidence, named);
             }
         }
     }
@@ -252,7 +282,8 @@ mod tests {
     /// The section as canonical-order JSON text, for `a` and `b` given and no evidence.
     fn section_of(a: Truth, b: Truth, authority: Option<&Authority>) -> String {
         let claims = BTreeMap::from([(ClaimId::new("a"), a), (ClaimId::new("b"), b)]);
-        let section = section(&ir(PROTOCOL), &claims, &[], authority).expect("a section");
+        let section =
+            section(&ir(PROTOCOL), &claims, &Inputs::new(), &[], authority).expect("a section");
         serde_json::to_string(&section).expect("serializes")
     }
 
@@ -276,7 +307,8 @@ mod tests {
             observed_at: None,
             upstream_revisions: crate::model::Declarations::default(),
         };
-        let section = section(&ir, &BTreeMap::new(), &[record], None).expect("a section");
+        let section =
+            section(&ir, &BTreeMap::new(), &Inputs::new(), &[record], None).expect("a section");
         assert_eq!(
             section,
             serde_json::json!({"act": {"status": "blocked", "reasons": [
@@ -383,7 +415,7 @@ mod tests {
         let ir = ir(EVIDENCE_PROTOCOL);
         let found = |a: Truth, evidence: &[EvidenceRecord]| {
             let claims = BTreeMap::from([(ClaimId::new("a"), a)]);
-            let section = section(&ir, &claims, evidence, None).expect("a section");
+            let section = section(&ir, &claims, &Inputs::new(), evidence, None).expect("a section");
             serde_json::to_string(&section).expect("serializes")
         };
         let none = found(Truth::Unknown, &[]);
@@ -415,6 +447,9 @@ mod tests {
     #[test]
     fn a_protocol_without_actions_has_no_section() {
         let bare = ir("format: protocol/1\nprotocol: {id: p, revision: 1}\n");
-        assert_eq!(section(&bare, &BTreeMap::new(), &[], None), None);
+        assert_eq!(
+            section(&bare, &BTreeMap::new(), &Inputs::new(), &[], None),
+            None
+        );
     }
 }

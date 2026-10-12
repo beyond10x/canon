@@ -124,3 +124,11 @@ identifier!(
     /// Identifies an invalidation rule a protocol declares.
     InvalidationRuleId
 );
+identifier!(
+    /// Identifies a case input a protocol declares.
+    InputId
+);
+identifier!(
+    /// One value a case input may take: an identifier its input declares.
+    InputValue
+);

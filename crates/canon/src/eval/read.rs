@@ -21,10 +21,10 @@ use serde_yaml_ng::Value;
 use super::Refusal;
 use crate::ir::{self, Ir};
 use crate::model::{
-    self, Action, Age, Artifact, ArtifactId, CapabilityId, CapabilityRequirement, Claim, ClaimId,
-    ClaimTest, Declarations, EffectClass, EvidenceKind, EvidenceKindId, EvidenceMatch,
-    EvidenceProduction, Obligation, Outcome, OutcomeRequirement, Predicate, Protocol,
-    ProtocolHeader, ProtocolId, Truth, one_line,
+    self, Action, Age, Artifact, ArtifactId, CapabilityId, CapabilityRequirement, CaseInput,
+    CaseSection, Claim, ClaimId, ClaimTest, Declarations, EffectClass, EvidenceKind,
+    EvidenceKindId, EvidenceMatch, EvidenceProduction, InputId, InputTest, InputValue, Obligation,
+    Outcome, OutcomeRequirement, Predicate, Protocol, ProtocolHeader, ProtocolId, Truth, one_line,
 };
 
 /// A `malformed-input` refusal: `what` is not a document of its format, and why.
@@ -234,6 +234,7 @@ fn protocol(value: &Json) -> Shape<Protocol> {
             Ok(Obligation {
                 description: optional_text(entry, "description")?,
                 discharged_when: predicate(required(entry, "discharged_when")?)?,
+                applicable_when: field(entry, "applicable_when").map(predicate).transpose()?,
             })
         })?,
         actions: declarations(value, "actions", model::ActionId::new, action)?,
@@ -253,7 +254,30 @@ fn protocol(value: &Json) -> Shape<Protocol> {
         } else {
             Declarations::default()
         },
+        case: match field(value, "case") {
+            None => None,
+            Some(case) => Some(CaseSection {
+                inputs: declarations(case, "inputs", InputId::new, |entry| {
+                    Ok(CaseInput {
+                        description: optional_text(entry, "description")?,
+                        values: values(entry, "values")?,
+                    })
+                })?,
+            }),
+        },
     })
+}
+
+/// A list of input values: the values an input declares, or those an input test lists.
+fn values(value: &Json, key: &str) -> Shape<Vec<InputValue>> {
+    list(value, key)?
+        .iter()
+        .map(|item| {
+            item.as_str()
+                .map(InputValue::new)
+                .ok_or_else(|| format!("a value in `{key}` is not a string"))
+        })
+        .collect()
 }
 
 /// An invalidation rule; the IR writes the section only when the protocol declares one.
@@ -348,7 +372,11 @@ fn predicate(value: &Json) -> Shape<Predicate> {
                 is,
             }))
         }
-        _ => Err("a predicate is not one of all, any, not, evidence or claim".to_owned()),
+        "input" => Ok(Predicate::Input(InputTest {
+            input: InputId::new(text(inner, "id")?),
+            r#in: values(inner, "in")?,
+        })),
+        _ => Err("a predicate is not one of all, any, not, evidence, claim or input".to_owned()),
     }
 }
 

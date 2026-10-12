@@ -5,24 +5,32 @@
 //!
 //! 1. the format;
 //! 2. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
-//!    claims, obligations, actions, outcomes and invalidation rules, in that section order, then
-//!    the capabilities and effect classes actions name, in action order, then the decisions
-//!    outcomes require, in outcome order;
+//!    claims, obligations, actions, outcomes, invalidation rules and case inputs, in that section
+//!    order, then the capabilities and effect classes actions name, in action order, then the
+//!    decisions outcomes require, in outcome order, then the values case inputs declare, in input
+//!    order;
 //! 3. duplicate identifiers, in the same section order;
 //! 4. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
 //!    or `d`, or that are but are too long to count in seconds (each with its own message), in the
 //!    order the evidence kinds are written;
-//! 5. unresolved references (a claim, an evidence kind, or the artifact an evidence match names as
-//!    its subject, which is reported after the kind it is written beside): those in claims first,
-//!    then those in obligations (their discharge predicates, each followed by every evidence match
-//!    it holds, which a discharge predicate may not: it tests only claim values), then those in
+//! 5. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
+//!    more than once (`duplicate-input-value`, naming the input and the value, once for every
+//!    listing after its first), in the order the inputs are written;
+//! 6. unresolved references (a claim, an evidence kind, the artifact an evidence match names as
+//!    its subject, which is reported after the kind it is written beside, an input an input test
+//!    names, `undeclared-input`, or a value it lists that its input does not declare,
+//!    `undeclared-input-value`, reported in the order listed): those in claims first, then those
+//!    in obligations (each obligation's discharge predicate, followed by every evidence match it
+//!    holds, which a discharge predicate may not: it tests only claim values; then its
+//!    applicability predicate, followed likewise by every evidence match it holds,
+//!    `evidence-in-applicability`: it tests only claim values and case inputs), then those in
 //!    actions, then those in outcomes, then those in invalidation rules (the upstream artifact,
 //!    then each claim the rule invalidates); within a section, in the order its declarations are
 //!    written, and within a declaration, in the order its references are written;
-//! 6. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
+//! 7. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
 //!    claim it tests through any number of claim references (`inert-invalidation`), in the order
 //!    the rules and their claims are written;
-//! 7. cycles between claims.
+//! 8. cycles between claims.
 //!
 //! Within a section, entries come in the order they are written. Every message renders document
 //! text on one line. The same document always yields the same problems in the same order.
@@ -31,13 +39,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use crate::model::{
-    ActionId, ArtifactId, ClaimId, EvidenceKindId, FORMAT, InvalidationRuleId, ObligationId,
-    OutcomeId, Predicate, Protocol, is_identifier, one_line,
+    ActionId, ArtifactId, ClaimId, EvidenceKindId, FORMAT, InputId, InputValue, InvalidationRuleId,
+    ObligationId, OutcomeId, Predicate, Protocol, is_identifier, one_line,
 };
 
 /// What an identifier names: the protocol itself, a declaration section (named by the singular noun
-/// of what it declares), a capability or effect class an action names, or a decision an outcome
-/// requires.
+/// of what it declares), a capability or effect class an action names, a decision an outcome
+/// requires, or a value a case input declares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Section {
     Protocol,
@@ -51,6 +59,8 @@ pub enum Section {
     EffectClass,
     Decision,
     InvalidationRule,
+    Input,
+    InputValue,
 }
 
 impl fmt::Display for Section {
@@ -67,6 +77,8 @@ impl fmt::Display for Section {
             Section::Capability => "capability",
             Section::EffectClass => "effect class",
             Section::Decision => "decision",
+            Section::Input => "input",
+            Section::InputValue => "input value",
         })
     }
 }
@@ -132,6 +144,25 @@ pub enum Problem {
         kind: EvidenceKindId,
         path: String,
     },
+    /// An applicability predicate tests evidence; it may test only claim values and case inputs.
+    /// `path` locates the evidence match inside the predicate, as `applicable_when.not.evidence`.
+    EvidenceInApplicability {
+        obligation: ObligationId,
+        kind: EvidenceKindId,
+        path: String,
+    },
+    /// A case input declares no value, so no case could give it one.
+    EmptyInputValues { input: InputId },
+    /// A case input lists a value more than once.
+    DuplicateInputValue { input: InputId, value: InputValue },
+    /// An input test names an input that is not declared.
+    UndeclaredInput { referrer: Referrer, input: InputId },
+    /// An input test lists a value its input does not declare.
+    UndeclaredInputValue {
+        referrer: Referrer,
+        input: InputId,
+        value: InputValue,
+    },
     /// An invalidation rule names a claim that reaches no evidence match, in its own predicate or
     /// in a claim it tests, so no record could be kept from it.
     InertInvalidation {
@@ -154,6 +185,11 @@ impl Problem {
             Problem::UndeclaredArtifact { .. } => "undeclared-artifact",
             Problem::InvalidMaxAge { .. } => "invalid-max-age",
             Problem::EvidenceInDischarge { .. } => "evidence-in-discharge",
+            Problem::EvidenceInApplicability { .. } => "evidence-in-applicability",
+            Problem::EmptyInputValues { .. } => "empty-input-values",
+            Problem::DuplicateInputValue { .. } => "duplicate-input-value",
+            Problem::UndeclaredInput { .. } => "undeclared-input",
+            Problem::UndeclaredInputValue { .. } => "undeclared-input-value",
             Problem::InertInvalidation { .. } => "inert-invalidation",
             Problem::ClaimCycle { .. } => "claim-cycle",
         }
@@ -214,6 +250,40 @@ impl fmt::Display for Problem {
                 one_line(obligation.as_str()),
                 one_line(kind.as_str())
             ),
+            Problem::EvidenceInApplicability {
+                obligation,
+                kind,
+                path,
+            } => write!(
+                f,
+                "obligation `{}` tests evidence kind `{}` at `{path}`; an applicability predicate tests only claim values and case inputs",
+                one_line(obligation.as_str()),
+                one_line(kind.as_str())
+            ),
+            Problem::EmptyInputValues { input } => {
+                write!(f, "input `{}` declares no value", one_line(input.as_str()))
+            }
+            Problem::DuplicateInputValue { input, value } => write!(
+                f,
+                "input `{}` lists value `{}` more than once",
+                one_line(input.as_str()),
+                one_line(value.as_str())
+            ),
+            Problem::UndeclaredInput { referrer, input } => write!(
+                f,
+                "{referrer} references input `{}`, which is not declared",
+                one_line(input.as_str())
+            ),
+            Problem::UndeclaredInputValue {
+                referrer,
+                input,
+                value,
+            } => write!(
+                f,
+                "{referrer} tests input `{}` for value `{}`, which the input does not declare",
+                one_line(input.as_str()),
+                one_line(value.as_str())
+            ),
             Problem::InertInvalidation { rule, claim } => write!(
                 f,
                 "invalidation rule `{}` invalidates claim `{}`, which reaches no evidence match",
@@ -242,7 +312,7 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         });
     }
 
-    let declared: [(Section, Vec<&str>); 8] = [
+    let declared: [(Section, Vec<&str>); 9] = [
         (Section::Protocol, vec![protocol.protocol.id.as_str()]),
         (Section::Artifact, strs(protocol.artifacts.ids())),
         (Section::EvidenceKind, strs(protocol.evidence_kinds.ids())),
@@ -251,6 +321,10 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         (Section::Action, strs(protocol.actions.ids())),
         (Section::Outcome, strs(protocol.outcomes.ids())),
         (Section::InvalidationRule, strs(protocol.invalidation.ids())),
+        (
+            Section::Input,
+            protocol.inputs().map(|(id, _)| id.as_str()).collect(),
+        ),
     ];
     let mut named = Vec::new();
     for (_, action) in protocol.actions.iter() {
@@ -264,6 +338,11 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
     for (_, outcome) in protocol.outcomes.iter() {
         if let Some(decision) = outcome.requires.decision() {
             named.push((Section::Decision, decision.as_str()));
+        }
+    }
+    for (_, input) in protocol.inputs() {
+        for value in &input.values {
+            named.push((Section::InputValue, value.as_str()));
         }
     }
     let every_identifier = declared
@@ -295,6 +374,21 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         }
     }
 
+    for (id, input) in protocol.inputs() {
+        if input.values.is_empty() {
+            problems.push(Problem::EmptyInputValues { input: id.clone() });
+        }
+        let mut seen = BTreeSet::new();
+        for value in &input.values {
+            if !seen.insert(value) {
+                problems.push(Problem::DuplicateInputValue {
+                    input: id.clone(),
+                    value: value.clone(),
+                });
+            }
+        }
+    }
+
     for (id, claim) in protocol.claims.iter() {
         references(
             protocol,
@@ -310,7 +404,28 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
             &obligation.discharged_when,
             &mut problems,
         );
-        evidence_in_discharge(id, &obligation.discharged_when, &mut problems);
+        for (kind, path) in evidence_at("discharged_when", &obligation.discharged_when) {
+            problems.push(Problem::EvidenceInDischarge {
+                obligation: id.clone(),
+                kind,
+                path,
+            });
+        }
+        if let Some(applicable_when) = &obligation.applicable_when {
+            references(
+                protocol,
+                &Referrer::Obligation(id.clone()),
+                applicable_when,
+                &mut problems,
+            );
+            for (kind, path) in evidence_at("applicable_when", applicable_when) {
+                problems.push(Problem::EvidenceInApplicability {
+                    obligation: id.clone(),
+                    kind,
+                    path,
+                });
+            }
+        }
     }
     for (id, action) in protocol.actions.iter() {
         let referrer = Referrer::Action(id.clone());
@@ -399,14 +514,11 @@ fn reaches_evidence(protocol: &Protocol, claim: &ClaimId) -> bool {
     false
 }
 
-/// Reports every evidence match in an obligation's discharge predicate, in the order written,
-/// with its path from `discharged_when`.
-fn evidence_in_discharge(
-    obligation: &ObligationId,
-    discharged_when: &Predicate,
-    problems: &mut Vec<Problem>,
-) {
-    let mut pending = vec![(discharged_when, "discharged_when".to_owned())];
+/// Every evidence match in an obligation's discharge or applicability predicate, in the order
+/// written, each with its kind and its path from `root` (`discharged_when`, `applicable_when`).
+fn evidence_at(root: &str, predicate: &Predicate) -> Vec<(EvidenceKindId, String)> {
+    let mut found = Vec::new();
+    let mut pending = vec![(predicate, root.to_owned())];
     while let Some((predicate, path)) = pending.pop() {
         match predicate {
             Predicate::All(members) | Predicate::Any(members) => {
@@ -420,14 +532,13 @@ fn evidence_in_discharge(
                 }
             }
             Predicate::Not(inner) => pending.push((inner, format!("{path}.not"))),
-            Predicate::Evidence(matching) => problems.push(Problem::EvidenceInDischarge {
-                obligation: obligation.clone(),
-                kind: matching.kind.clone(),
-                path: format!("{path}.evidence"),
-            }),
-            Predicate::Claim(_) => {}
+            Predicate::Evidence(matching) => {
+                found.push((matching.kind.clone(), format!("{path}.evidence")));
+            }
+            Predicate::Claim(_) | Predicate::Input(_) => {}
         }
     }
+    found
 }
 
 fn strs<'a, T: AsRef<str> + 'a>(ids: impl Iterator<Item = &'a T>) -> Vec<&'a str> {
@@ -477,6 +588,28 @@ fn references(
                     referrer: referrer.clone(),
                     artifact: subject.clone(),
                 });
+            }
+        }
+        Predicate::Input(test) => {
+            let declared = protocol
+                .inputs()
+                .find(|(id, _)| **id == test.input)
+                .map(|(_, input)| input);
+            let Some(declared) = declared else {
+                unresolved.push(Problem::UndeclaredInput {
+                    referrer: referrer.clone(),
+                    input: test.input.clone(),
+                });
+                return;
+            };
+            for value in &test.r#in {
+                if !declared.values.contains(value) {
+                    unresolved.push(Problem::UndeclaredInputValue {
+                        referrer: referrer.clone(),
+                        input: test.input.clone(),
+                        value: value.clone(),
+                    });
+                }
             }
         }
         _ => {}
@@ -591,6 +724,56 @@ mod tests {
             ),
             Vec::<String>::new()
         );
+    }
+
+    /// Case inputs: an input id is an identifier declared once; an input declares a value, each
+    /// once, reported after the maximum ages and before the references; an input test names a
+    /// declared input and only values it declares, wherever a predicate is written; an
+    /// applicability predicate tests no evidence. A protocol that fits is valid.
+    #[test]
+    fn case_inputs_and_input_tests_are_checked_in_order() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            case: {inputs: {s: {values: [a, b, a]}, e: {values: []}, 'bad id': {values: [ok]}}}\n\
+            evidence_kinds: {k: {}}\n\
+            claims: {c: {true_when: {input: s, in: [a, z]}}}\n\
+            obligations: {o: {discharged_when: {claim: c}, \
+            applicable_when: {all: [{input: x, in: [a]}, {evidence: {kind: k}}]}}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "invalid-identifier: input identifier `bad id` is empty or contains whitespace or a control character",
+                "duplicate-input-value: input `s` lists value `a` more than once",
+                "empty-input-values: input `e` declares no value",
+                "undeclared-input-value: claim `c` tests input `s` for value `z`, which the input does not declare",
+                "undeclared-input: obligation `o` references input `x`, which is not declared",
+                "evidence-in-applicability: obligation `o` tests evidence kind `k` at `applicable_when.all[1].evidence`; an applicability predicate tests only claim values and case inputs",
+            ]
+        );
+        assert_eq!(
+            problems(
+                &source
+                    .replace("[a, b, a]", "[a, b]")
+                    .replace(
+                        "e: {values: []}, 'bad id': {values: [ok]}",
+                        "e: {values: [ok]}"
+                    )
+                    .replace("[a, z]", "[a]")
+                    .replace("input: x", "input: s")
+                    .replace("{evidence: {kind: k}}", "{claim: c}")
+            ),
+            Vec::<String>::new()
+        );
+        for written in [
+            "{input: s}",
+            "{in: [a]}",
+            "{input: s, in: [a], claim: c}",
+            "{claim: c, in: [a]}",
+        ] {
+            let source = format!(
+                "format: protocol/1\nprotocol: {{id: p, revision: 1}}\ncase: {{inputs: {{s: {{values: [a]}}}}}}\nclaims: {{c: {{true_when: {written}}}}}\n"
+            );
+            assert!(crate::model::parse(&source).is_err(), "{written} parses");
+        }
     }
 
     /// An evidence match's subject resolves to a declared artifact in every section a predicate

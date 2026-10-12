@@ -128,7 +128,8 @@ fn documented_order(left: &Predicate, right: &Predicate) -> Ordering {
             Predicate::Any(_) => 1,
             Predicate::Claim(_) => 2,
             Predicate::Evidence(_) => 3,
-            Predicate::Not(_) => 4,
+            Predicate::Input(_) => 4,
+            Predicate::Not(_) => 5,
         }
     }
     fn tested(is: Truth) -> u8 {
@@ -160,6 +161,14 @@ fn documented_order(left: &Predicate, right: &Predicate) -> Ordering {
         (Predicate::Claim(l), Predicate::Claim(r)) => code_points(l.claim.as_str())
             .cmp(&code_points(r.claim.as_str()))
             .then_with(|| tested(l.is).cmp(&tested(r.is))),
+        (Predicate::Input(l), Predicate::Input(r)) => code_points(l.input.as_str())
+            .cmp(&code_points(r.input.as_str()))
+            .then_with(|| {
+                let values = |test: &b10x_canon::model::InputTest| -> Vec<Vec<u32>> {
+                    test.r#in.iter().map(|v| code_points(v.as_str())).collect()
+                };
+                values(l).cmp(&values(r))
+            }),
         _ => form(left).cmp(&form(right)),
     }
 }
@@ -220,6 +229,7 @@ fn protocol(requires: Predicate) -> Protocol {
             },
         )]),
         invalidation: Declarations::default(),
+        case: None,
     }
 }
 
