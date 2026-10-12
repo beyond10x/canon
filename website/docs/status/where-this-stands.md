@@ -29,7 +29,7 @@ Two lines of work fit none of those three states:
 
 ## Commands that are not built
 
-The design proposes `canon frontier`, `canon diff`, `canon inspect` and `canon conform synthesize`. None exists in the current binary, and their shape may change. The
+The design proposes `canon frontier`, `canon inspect` and `canon conform synthesize`. None exists in the current binary, and their shape may change. The
 [CLI reference](../reference/cli.md) lists only the commands that exist.
 
 ## Normative requirements
