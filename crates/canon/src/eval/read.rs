@@ -13,7 +13,9 @@
 //!   value exactly as the value readers do, so one document gets one answer on both paths. JSON is
 //!   YAML, so either document may be written as JSON. Every identifier, revision and result is a
 //!   string: one written as a number or a boolean (`id: 18`, `revision: 1`) is refused as
-//!   `malformed-input`.
+//!   `malformed-input`. A case input's value is the exception: it is read from any scalar as its
+//!   text (`flag: true` gives the value `true`), as the protocol reads the values it declares, so
+//!   a value one accepts the other accepts ([`crate::model::InputValue`]).
 
 use serde_json::{Map, Value as Json};
 use serde_yaml_ng::Value;

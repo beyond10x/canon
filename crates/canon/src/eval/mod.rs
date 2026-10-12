@@ -181,12 +181,12 @@
 //! declares no obligation has no `obligations` key, and likewise for actions and outcomes.
 //!
 //! - `obligations` is an array with one `{"id": <obligation>, "status": <status>}` entry per
-//!   declared obligation, in identifier order. The status is `discharged` only when the
-//!   obligation's `discharged_when` predicate is `true` over the claim values; `unknown` and
-//!   `false` both leave it `open` (CANON-OBLIGATION-001). An obligation with an `applicable_when`
-//!   predicate is `not_applicable` when it is `false` over the claim values and the case's inputs,
-//!   and `open` when it is `unknown`, with `"reasons"` naming what is unknown, written as an
-//!   action's reasons are (CANON-INPUT-001).
+//!   declared obligation, in identifier order. An obligation with an `applicable_when` predicate is
+//!   `not_applicable` when it is `false` over the claim values and the case's inputs. Otherwise the
+//!   status is `discharged` when the obligation's `discharged_when` predicate is `true` over the
+//!   claim values, whatever its applicability; `unknown` and `false` both leave it `open`
+//!   (CANON-OBLIGATION-001). An open obligation whose applicability is `unknown` has
+//!   `"reasons"` naming what is unknown, written as an action's reasons are (CANON-INPUT-001).
 //! - `actions` maps each declared action to its `status` and, unless it is admissible, the
 //!   `reasons` that decide it. `blocked` when the precondition is not `true`: each claim test and
 //!   evidence match that decides it is a reason, `{"claim": <id>, "value": <the claim's value>}`
@@ -422,17 +422,6 @@ pub fn evaluate_with(
         );
         Ok(decision)
     })
-}
-
-/// The value of `predicate` over the claim `values`, the case's `inputs` and the `evidence` left,
-/// by the one evaluator every section uses (`claims::predicate`).
-pub(crate) fn value_of(
-    predicate: &Predicate,
-    values: &BTreeMap<ClaimId, crate::model::Truth>,
-    inputs: &Inputs,
-    evidence: &[EvidenceRecord],
-) -> crate::model::Truth {
-    claims::predicate(predicate, values, inputs, evidence)
 }
 
 /// The reasons `predicate` is not `true` over the claim `values`, the case's `inputs` and the

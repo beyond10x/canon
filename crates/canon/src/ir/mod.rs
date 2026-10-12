@@ -772,14 +772,15 @@ mod tests {
     }
 
     /// Case inputs compile under `case`, each input's values sorted and kept once; an input test
-    /// compiles to `{"input": {"id": …, "in": [...]}}` with its values sorted and kept once, after
+    /// compiles to `{"input": {"id": …, "in": [...]}}` with its values sorted (the validator
+    /// refuses one listed twice, `duplicate-input-test-value`), after
     /// evidence and before `not` among the members of an `all` or `any`; `applicable_when` is
     /// written only on the obligation that declares it. A protocol without inputs has no `case`.
     #[test]
     fn case_inputs_and_input_tests_compile_in_canonical_form() {
         let compiled = ir(&format!(
             "{HEADER}case: {{inputs: {{s: {{values: [high, low]}}}}}}\nevidence_kinds: {{k: {{}}}}\n\
-             claims: {{c: {{true_when: {{any: [{{not: {{claim: c2}}}}, {{input: s, in: [low, high, low]}}, {{evidence: {{kind: k}}}}]}}}}, c2: {{true_when: {{all: []}}}}}}\n\
+             claims: {{c: {{true_when: {{any: [{{not: {{claim: c2}}}}, {{input: s, in: [low, high]}}, {{evidence: {{kind: k}}}}]}}}}, c2: {{true_when: {{all: []}}}}}}\n\
              obligations: {{o: {{discharged_when: {{claim: c}}, applicable_when: {{input: s, in: [high]}}}}, \
              p: {{discharged_when: {{claim: c}}}}}}\n"
         ));

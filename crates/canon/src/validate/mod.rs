@@ -16,10 +16,13 @@
 //! 5. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
 //!    more than once (`duplicate-input-value`, naming the input and the value, once for every
 //!    listing after its first), in the order the inputs are written;
-//! 6. unresolved references (a claim, an evidence kind, the artifact an evidence match names as
-//!    its subject, which is reported after the kind it is written beside, an input an input test
-//!    names, `undeclared-input`, or a value it lists that its input does not declare,
-//!    `undeclared-input-value`, reported in the order listed): those in claims first, then those
+//! 6. unresolved references and malformed input tests (a claim, an evidence kind, the artifact an
+//!    evidence match names as its subject, which is reported after the kind it is written beside;
+//!    for an input test, first an empty `in` list, `empty-input-test`, or a value it lists more
+//!    than once, `duplicate-input-test-value`, once for every listing after its first, then an
+//!    input it names that is not declared, `undeclared-input`, or a value it lists that its input
+//!    does not declare, `undeclared-input-value`, each value once, in the order listed, every one
+//!    naming the declaration the test is written in and the input): those in claims first, then those
 //!    in obligations (each obligation's discharge predicate, followed by every evidence match it
 //!    holds, which a discharge predicate may not: it tests only claim values; then its
 //!    applicability predicate, followed likewise by every evidence match it holds,
@@ -155,6 +158,14 @@ pub enum Problem {
     EmptyInputValues { input: InputId },
     /// A case input lists a value more than once.
     DuplicateInputValue { input: InputId, value: InputValue },
+    /// An input test lists no value, so it is false in every case.
+    EmptyInputTest { referrer: Referrer, input: InputId },
+    /// An input test lists a value more than once.
+    DuplicateInputTestValue {
+        referrer: Referrer,
+        input: InputId,
+        value: InputValue,
+    },
     /// An input test names an input that is not declared.
     UndeclaredInput { referrer: Referrer, input: InputId },
     /// An input test lists a value its input does not declare.
@@ -188,6 +199,8 @@ impl Problem {
             Problem::EvidenceInApplicability { .. } => "evidence-in-applicability",
             Problem::EmptyInputValues { .. } => "empty-input-values",
             Problem::DuplicateInputValue { .. } => "duplicate-input-value",
+            Problem::EmptyInputTest { .. } => "empty-input-test",
+            Problem::DuplicateInputTestValue { .. } => "duplicate-input-test-value",
             Problem::UndeclaredInput { .. } => "undeclared-input",
             Problem::UndeclaredInputValue { .. } => "undeclared-input-value",
             Problem::InertInvalidation { .. } => "inert-invalidation",
@@ -266,6 +279,21 @@ impl fmt::Display for Problem {
             Problem::DuplicateInputValue { input, value } => write!(
                 f,
                 "input `{}` lists value `{}` more than once",
+                one_line(input.as_str()),
+                one_line(value.as_str())
+            ),
+            Problem::EmptyInputTest { referrer, input } => write!(
+                f,
+                "{referrer} tests input `{}` for no value",
+                one_line(input.as_str())
+            ),
+            Problem::DuplicateInputTestValue {
+                referrer,
+                input,
+                value,
+            } => write!(
+                f,
+                "{referrer} tests input `{}` for value `{}` more than once",
                 one_line(input.as_str()),
                 one_line(value.as_str())
             ),
@@ -559,7 +587,8 @@ fn duplicates(section: Section, ids: &[&str], problems: &mut Vec<Problem>) {
 }
 
 /// Reports every claim, evidence kind and evidence subject the predicate references that is not
-/// declared, in the order the predicate is written.
+/// declared, and every input test that lists no value, a value twice, an undeclared input or a
+/// value its input does not declare, in the order the predicate is written.
 fn references(
     protocol: &Protocol,
     referrer: &Referrer,
@@ -591,6 +620,25 @@ fn references(
             }
         }
         Predicate::Input(test) => {
+            if test.r#in.is_empty() {
+                unresolved.push(Problem::EmptyInputTest {
+                    referrer: referrer.clone(),
+                    input: test.input.clone(),
+                });
+            }
+            // Each value at its first listing, in the order written.
+            let mut listed = Vec::new();
+            for value in &test.r#in {
+                if listed.contains(&value) {
+                    unresolved.push(Problem::DuplicateInputTestValue {
+                        referrer: referrer.clone(),
+                        input: test.input.clone(),
+                        value: value.clone(),
+                    });
+                } else {
+                    listed.push(value);
+                }
+            }
             let declared = protocol
                 .inputs()
                 .find(|(id, _)| **id == test.input)
@@ -602,7 +650,7 @@ fn references(
                 });
                 return;
             };
-            for value in &test.r#in {
+            for value in listed {
                 if !declared.values.contains(value) {
                     unresolved.push(Problem::UndeclaredInputValue {
                         referrer: referrer.clone(),
@@ -774,6 +822,31 @@ mod tests {
             );
             assert!(crate::model::parse(&source).is_err(), "{written} parses");
         }
+    }
+
+    /// An input test lists at least one value, each once: an empty list and every repeated listing
+    /// are refused before the input and its values are resolved, a value not declared and listed
+    /// twice is refused as undeclared once, and an undeclared input with an empty list is refused
+    /// for both.
+    #[test]
+    fn an_input_test_lists_values_each_once() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            case: {inputs: {s: {values: [a, b]}}}\n\
+            claims: {c: {true_when: {input: s, in: []}}, \
+            d: {true_when: {input: s, in: [b, z, b, z, b]}}, \
+            e: {true_when: {input: x, in: []}}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "empty-input-test: claim `c` tests input `s` for no value",
+                "duplicate-input-test-value: claim `d` tests input `s` for value `b` more than once",
+                "duplicate-input-test-value: claim `d` tests input `s` for value `z` more than once",
+                "duplicate-input-test-value: claim `d` tests input `s` for value `b` more than once",
+                "undeclared-input-value: claim `d` tests input `s` for value `z`, which the input does not declare",
+                "empty-input-test: claim `e` tests input `x` for no value",
+                "undeclared-input: claim `e` references input `x`, which is not declared",
+            ]
+        );
     }
 
     /// An evidence match's subject resolves to a declared artifact in every section a predicate
