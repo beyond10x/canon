@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-12T20:59:19Z",
+  "actor": "human:timo",
+  "artifact": "story:case-inputs",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "https://github.com/beyond10x/canon/actions/runs/38307038661 (task check, pull 12 head 429ee9c)"
+  }
+}
