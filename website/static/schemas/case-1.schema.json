@@ -12,6 +12,20 @@
       "minLength": 1,
       "pattern": "^\\S+$"
     },
+    "ScalarIdentifier": {
+      "description": "An identifier, or a boolean or a number written unquoted, which Canon reads as its text (`true`, `2`).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Identifier"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        }
+      ]
+    },
     "Case": {
       "description": "A `canon-case/1` case snapshot as written.",
       "type": "object",
@@ -54,7 +68,7 @@
             "$ref": "#/$defs/Identifier"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/Identifier"
+            "$ref": "#/$defs/ScalarIdentifier"
           }
         }
       },

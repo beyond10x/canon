@@ -17,6 +17,20 @@
       "type": "string",
       "pattern": "^(0|[1-9][0-9]*)[smhd]$"
     },
+    "ScalarIdentifier": {
+      "description": "An identifier, or a boolean or a number written unquoted, which Canon reads as its text (`true`, `2`).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Identifier"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        }
+      ]
+    },
     "Protocol": {
       "description": "A `protocol/1` source document as written.",
       "type": "object",
@@ -357,7 +371,7 @@
               "description": "The values the test is true for, written `in`.",
               "type": "array",
               "items": {
-                "$ref": "#/$defs/Identifier"
+                "$ref": "#/$defs/ScalarIdentifier"
               }
             }
           },
@@ -427,7 +441,7 @@
           "description": "The values the input may take.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/Identifier"
+            "$ref": "#/$defs/ScalarIdentifier"
           }
         }
       },

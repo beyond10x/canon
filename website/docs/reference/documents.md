@@ -203,7 +203,7 @@ An identifier is text. A well-formed identifier is not empty, and without whites
 | `DecisionName` | Names an explicit decision an outcome may require (`explicitly_inconclusive`). |
 | `Principal` | Who took an explicit decision, recorded as given: Canon resolves no identity. |
 | `InputId` | Identifies a case input a protocol declares. |
-| `InputValue` | One value a case input may take: an identifier its input declares. |
+| `InputValue` | One value a case input may take: an identifier its input declares. Read from any scalar, alike in the protocol and in the case: `values: [true, false]` declares the values `true` and `false`, and a case gives one as `flag: true`. |
 | `PropertyId` | Identifies one property of a `canon-properties/1` document. |
 
 ## Text formats
