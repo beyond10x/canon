@@ -104,13 +104,21 @@ pub fn cell(doc: &str) -> String {
 }
 
 /// A multi-line doc comment as MDX: fenced code is kept as written, prose is escaped, and every
-/// heading moves `shift` levels down so it nests under the page's own headings.
+/// heading moves `shift` levels down so it nests under the page's own headings. An inline code
+/// span that continues onto the next line is joined onto one line with a space, which is how
+/// Markdown reads its line ending anyway: MDX would read a continuation line starting with `{` or
+/// `<` as an expression or JSX before it saw the span.
 pub fn block(doc: &str, shift: usize) -> String {
     let mut out = String::new();
     let mut in_fence = false;
     let mut span = None;
     for line in doc.lines() {
         let trimmed = line.trim_start();
+        let joined = span.is_some();
+        if joined && (trimmed.is_empty() || trimmed.starts_with("```")) {
+            out.pop();
+            out.push('\n');
+        }
         if trimmed.starts_with("```") {
             in_fence = !in_fence;
             span = None;
@@ -119,12 +127,22 @@ pub fn block(doc: &str, shift: usize) -> String {
             out.push_str(line);
         } else if trimmed.is_empty() {
             span = None;
+        } else if joined {
+            out.push_str(&convert(trimmed, &mut span, true));
         } else if trimmed.starts_with('#') {
             out.push_str(&"#".repeat(shift));
             out.push_str(&convert(line, &mut span, true));
         } else {
             out.push_str(&convert(line, &mut span, true));
         }
+        if span.is_some() && !in_fence {
+            out.push(' ');
+        } else {
+            out.push('\n');
+        }
+    }
+    if span.is_some() {
+        out.pop();
         out.push('\n');
     }
     out
@@ -172,8 +190,20 @@ mod tests {
     fn code_spans_continue_across_lines_and_double_backticks_hold_single_ones() {
         assert_eq!(
             block("a `<what\ndiffered>` b <c>\n\n`` `x` `` {y}", 0),
-            "a `<what\ndiffered>` b &lt;c&gt;\n\n`` `x` `` \\{y\\}\n"
+            "a `<what differed>` b &lt;c&gt;\n\n`` `x` `` \\{y\\}\n"
         );
+    }
+
+    #[test]
+    fn a_code_span_never_leaves_a_line_starting_with_a_brace() {
+        assert_eq!(
+            block(
+                "- the section is `{\"inputs\": {<id>:\n  {\"values\": [...]}}}`.\n- next {x}",
+                0
+            ),
+            "- the section is `{\"inputs\": {<id>: {\"values\": [...]}}}`.\n- next \\{x\\}\n"
+        );
+        assert_eq!(block("an `open\n\nspan", 0), "an `open\n\nspan\n");
     }
 
     #[test]

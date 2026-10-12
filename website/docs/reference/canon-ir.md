@@ -27,8 +27,7 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   `max_age`, an evidence match's `subject`, an obligation's `applicable_when`, the
   `invalidation` section and the `case` section: each written only when it is declared (a
   section only when it holds a rule or an input), so the IR of a protocol that declares none of
-  them is the IR it was before they existed. The `case` section is `{"inputs": {<id>:
-  {"description": …, "values": [...]}}}`.
+  them is the IR it was before they existed. The `case` section is `{"inputs": {<id>: {"description": …, "values": [...]}}}`.
 - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
   it was written, and an input test `{"input": {"id": …, "in": [...]}}`. An outcome that
   requires an explicit decision has the requirement `{"decision": <name>}`, as written; any
