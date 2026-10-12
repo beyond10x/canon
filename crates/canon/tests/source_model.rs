@@ -167,7 +167,7 @@ fn malformed_predicates_are_parse_errors() {
 #[test]
 fn undeclared_fields_are_parse_errors() {
     for source in [
-        "format: protocol/1\nprotocol: {id: p, revision: 1}\ncase: {inputs: {}}\n",
+        "format: protocol/1\nprotocol: {id: p, revision: 1}\ncase: {inputs: {}, outputs: {}}\n",
         "format: protocol/1\nprotocol: {id: p, revision: 1}\nobligations:\n  o: {discharged_when: {all: []}, due: soon}\n",
         "format: protocol/1\nprotocol: {id: p, revision: 1, owner: x}\n",
     ] {
