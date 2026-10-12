@@ -46,6 +46,16 @@
         "revision": {
           "description": "The case's own current revision. An explicit decision applies only while its `case_revision` is this one; a snapshot without one has no explicit decision applying.",
           "$ref": "#/$defs/Identifier"
+        },
+        "inputs": {
+          "description": "The value of each case input, keyed by input id, fixed when the case opens. Left out by a case of a protocol that declares no input.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Identifier"
+          }
         }
       },
       "required": [

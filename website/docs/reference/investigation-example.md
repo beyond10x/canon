@@ -293,6 +293,10 @@ The repository keeps broken copies of this protocol in [`fixtures/investigation/
 | Variant | Code | Problem |
 |---|---|---|
 | [`duplicate-identifier.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/duplicate-identifier.yaml) | `duplicate-identifier` | action `inspect` is declared more than once |
+| [`input-duplicate-value.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/input-duplicate-value.yaml) | `duplicate-input-value` | input `severity` lists value `low` more than once |
+| [`input-empty-values.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/input-empty-values.yaml) | `empty-input-values` | input `urgency` declares no value |
+| [`input-undeclared-value.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/input-undeclared-value.yaml) | `undeclared-input-value` | obligation `peer.review` tests input `severity` for value `critical`, which the input does not declare |
+| [`input-undeclared.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/input-undeclared.yaml) | `undeclared-input` | action `publish_finding` references input `urgency`, which is not declared |
 | [`undeclared-claim.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/undeclared-claim.yaml) | `undeclared-claim` | outcome `supported` references claim `explanation.refuted`, which is not declared |
 | [`undeclared-discharge-claim.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/undeclared-discharge-claim.yaml) | `undeclared-claim` | obligation `establish.explanation` references claim `explanation.refuted`, which is not declared |
 | [`undeclared-evidence-kind.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/undeclared-evidence-kind.yaml) | `undeclared-evidence-kind` | action `attempt_falsification` references evidence kind `expert_opinion`, which is not declared |

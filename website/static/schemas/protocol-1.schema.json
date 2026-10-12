@@ -93,6 +93,10 @@
           "additionalProperties": {
             "$ref": "#/$defs/InvalidationRule"
           }
+        },
+        "case": {
+          "description": "What a case governed by the protocol gives when it opens: its case inputs. A protocol without the section declares no input.",
+          "$ref": "#/$defs/CaseSection"
         }
       },
       "required": [
@@ -162,7 +166,7 @@
       ]
     },
     "Obligation": {
-      "description": "Something that must be done before the case can be complete. It is discharged only when its discharge predicate, over claim values, evaluates true (design § 8).",
+      "description": "Something that must be done before the case can be complete. It is discharged only when its discharge predicate, over claim values, evaluates true (design § 8). One with an applicability predicate applies only when that predicate is not false: false, it is not applicable.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -170,6 +174,10 @@
           "type": "string"
         },
         "discharged_when": {
+          "$ref": "#/$defs/Predicate"
+        },
+        "applicable_when": {
+          "description": "When the obligation applies, over claim values and case inputs; always, when absent.",
           "$ref": "#/$defs/Predicate"
         }
       },
@@ -246,6 +254,23 @@
         "invalidates"
       ]
     },
+    "CaseSection": {
+      "description": "The protocol's `case:` section.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inputs": {
+          "description": "The case inputs, keyed by input id.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/CaseInput"
+          }
+        }
+      }
+    },
     "Predicate": {
       "description": "A predicate over evidence and claim values.",
       "oneOf": [
@@ -319,6 +344,26 @@
           "required": [
             "claim"
           ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "input": {
+              "description": "True when the case's value of the input is one of the values listed, false otherwise.",
+              "$ref": "#/$defs/Identifier"
+            },
+            "in": {
+              "description": "The values the test is true for, written `in`.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Identifier"
+              }
+            }
+          },
+          "required": [
+            "input"
+          ]
         }
       ]
     },
@@ -368,6 +413,26 @@
           "description": "The outcome is legitimate when the predicate is `true`.",
           "$ref": "#/$defs/Predicate"
         }
+      ]
+    },
+    "CaseInput": {
+      "description": "A case input: configuration a case fixes when it opens, one of a closed, non-empty list of values. Not evidence, so no evaluation has an unknown input.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "values": {
+          "description": "The values the input may take.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
+        }
+      },
+      "required": [
+        "values"
       ]
     },
     "EvidenceMatch": {

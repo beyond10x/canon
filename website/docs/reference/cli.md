@@ -18,7 +18,7 @@ Generated from the clap definition of the `canon` command line in [`crates/canon
 | [`canon evaluate`](#canon-evaluate) | Evaluate a case under a compiled protocol from an evidence set: every claim, and each declared obligation, action and outcome. Print the `canon-decision/1` document |
 | [`canon check`](#canon-check) | Check a `protocol/1` document over its whole finite state space: report outcomes no state reaches, actions whose precondition holds in no state, claims, obligations, preconditions and outcome requirements that read evidence no action produces, outcomes that rest on evidence an authority-requiring action may produce yet hold without any authority decision, and each declared property that fails, with a counterexample. A state is a set of evidence records, authority decisions and explicit decisions; a record an invalidation rule can keep from a claim is there in any combination of observed before and after each upstream artifact moved, one record each. A state space of more than 65536 states is refused |
 | [`canon generate`](#canon-generate) | Generate `canon-conformance/1` scenarios into an empty directory: one minimal witness per declared outcome and per action blocked in some state, over the state space `canon check` enumerates. Each names the protocol path, as given, as its fixture, so `canon conform run` runs them from the working directory `canon generate` ran in. Refused, writing nothing: a protocol path that resolves outside the working directory, an outcome no state reaches, a protocol that yields no scenario, an outcome or action identifier holding a character a file name cannot hold (`/ \ : * ? " < > \|` or a control character), two scenario file names equal up to letter case or Unicode normalisation, and a non-empty `--out`. On failure, nothing this run created is left |
-| [`canon diff`](#canon-diff) | The semantic difference between two compiled protocol revisions. Not built yet |
+| [`canon diff`](#canon-diff) | The semantic difference between two compiled revisions of one protocol: every change, each classified as `TIGHTENING`, `RELAXATION`, `BREAKING`, `EXPANSION` or `NO SEMANTIC CHANGE` and naming the identifiers it touches. Two revisions of different protocols are refused |
 | [`canon conform`](#canon-conform) | Conformance scenarios |
 | [`canon conform run`](#canon-conform-run) | Run every `canon-conformance/1` scenario of a registry directory and report each |
 
@@ -157,7 +157,7 @@ Options:
 
 ## `canon diff`
 
-The semantic difference between two compiled protocol revisions. Not built yet
+The semantic difference between two compiled revisions of one protocol: every change, each classified as `TIGHTENING`, `RELAXATION`, `BREAKING`, `EXPANSION` or `NO SEMANTIC CHANGE` and naming the identifiers it touches. Two revisions of different protocols are refused
 
 | Option | Required | Default | Meaning |
 |---|---|---|---|
@@ -165,7 +165,7 @@ The semantic difference between two compiled protocol revisions. Not built yet
 | `--to <TO>` | yes | none | The later revision, as `canon compile` prints it |
 
 ```text
-The semantic difference between two compiled protocol revisions. Not built yet
+The semantic difference between two compiled revisions of one protocol: every change, each classified as `TIGHTENING`, `RELAXATION`, `BREAKING`, `EXPANSION` or `NO SEMANTIC CHANGE` and naming the identifiers it touches. Two revisions of different protocols are refused
 
 Usage: canon diff --from <FROM> --to <TO>
 

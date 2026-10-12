@@ -46,6 +46,10 @@ A claim's value is its `true_when` predicate's value over the evidence set:
   the evidence leaves `c` `unknown` and is never `false` for want of evidence.
   `{claim: c, is: unknown}` asks whether `c` is undecided, and is itself decided: `true` when
   `c` is `unknown`, `false` otherwise.
+- An input test `{input: s, in: [...]}` is `true` when the case's value of the input `s` is one
+  it lists and `false` otherwise. A case gives every input the protocol declares a value (the
+  case check refuses one that does not), so an input test is never `unknown`: inputs are
+  configuration fixed when the case opens, not evidence.
 
 `unknown` and `false` are never collapsed, and only `true` satisfies a positive requirement.
 
@@ -57,7 +61,11 @@ levels, itself or along the claims it tests, as `predicate-too-deep`, and claims
 other in a cycle as `claim-cycle`; see "Depth" below), the case snapshot's format, its identifiers (case id, protocol id, the case
 revision when given, then each artifact id and revision in the order written), its protocol against the compiled protocol's,
 each artifact it lists (declared by the protocol, listed once), each artifact the protocol
-declares (listed by the case); then each evidence record in the order given: its format, its
+declares (listed by the case), each case input it gives, in the order written (its id and
+value identifiers, then declared by the protocol, else `undeclared-input`, given once, else
+`duplicate-identifier`, and its value declared by the input, else `undeclared-input-value`,
+naming the input and the value), each input the protocol declares (given by the case, else
+`missing-input`, naming it); then each evidence record in the order given: its format, its
 identifiers (id, kind, subject, subject revision, then each upstream artifact and revision in
 `upstream_revisions`), its `observed_at` when given (an instant, else `invalid-instant`), its id
 (used once in the set), its kind (declared by the protocol) and each upstream artifact
@@ -159,9 +167,10 @@ concept; this module holds only the order:
    claim reaches reads it, and under no claim it was not invalidated for;
 5. the `obligations`, `actions` and `outcomes` sections (`obligations.rs`, `actions.rs`,
    `outcomes.rs`), then the explanation (`crate::explain`). Each section evaluates its
-   predicates with the one evaluator claims use (`claims::predicate`): discharge predicates over
-   the claim values, action preconditions and outcome requirements over the claim values and
-   the evidence left after step 3. The invalidation stage keeps a record from claims only, so
+   predicates with the one evaluator claims use (`claims::predicate`): discharge and
+   applicability predicates over the claim values, action preconditions and outcome
+   requirements over the claim values and the evidence left after step 3, each with the case's
+   input values, which every input test reads. The invalidation stage keeps a record from claims only, so
    these predicates' own evidence matches read it. An outcome that requires an explicit
    decision is decided by the explicit decisions instead.
 
@@ -183,13 +192,17 @@ declares no obligation has no `obligations` key, and likewise for actions and ou
 - `obligations` is an array with one `{"id": <obligation>, "status": <status>}` entry per
   declared obligation, in identifier order. The status is `discharged` only when the
   obligation's `discharged_when` predicate is `true` over the claim values; `unknown` and
-  `false` both leave it `open` (CANON-OBLIGATION-001).
+  `false` both leave it `open` (CANON-OBLIGATION-001). An obligation with an `applicable_when`
+  predicate is `not_applicable` when it is `false` over the claim values and the case's inputs,
+  and `open` when it is `unknown`, with `"reasons"` naming what is unknown, written as an
+  action's reasons are (CANON-INPUT-001).
 - `actions` maps each declared action to its `status` and, unless it is admissible, the
   `reasons` that decide it. `blocked` when the precondition is not `true`: each claim test and
   evidence match that decides it is a reason, `{"claim": <id>, "value": <the claim's value>}`
   or `{"evidence": <kind>, "present": <whether a record the match reads applies>}`, with
   `"subject": <artifact>` added when the match names one (a record about another artifact
-  is not read by it), or
+  is not read by it), then each input test that decides it, `{"input": <id>, "value": <the
+  case's value>}`, or
   `{"requirement": "unsatisfiable"}` when none does. `blocked` too when the precondition is
   `true` and the authority decisions deny a capability the action requires, each a reason
   `{"capability": <id>, "decision": "denied"}`. `approval-required` when the precondition is
