@@ -46,7 +46,9 @@ pub use ids::{
     OutcomeId, Principal, ProtocolId, Revision,
 };
 pub use parse::{FORMAT, ParseError, parse};
-pub use predicate::{ClaimTest, EvidenceMatch, InputTest, Predicate, Truth};
+pub use predicate::{
+    ClaimTest, EvidenceMatch, EvidenceOrder, FirstResult, InputTest, Predicate, Truth,
+};
 pub use properties::{
     PROPERTIES_FORMAT, Properties, Property, PropertyDependency, PropertyId, PropertySubject,
 };

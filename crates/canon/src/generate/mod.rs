@@ -33,7 +33,9 @@
 //!   dimension order, about its dimension's artifact at `r`, with its class's result when it has
 //!   one and no observation instant, and, for a kind an invalidation rule can keep from a claim,
 //!   `upstream_revisions`: each upstream artifact at `r0` when the record was observed before it
-//!   moved, at `r` otherwise;
+//!   moved, at `r` otherwise; for a protocol with order forms, each record as the state space
+//!   builds it (`crate::check`): an earlier record about its artifact at `r0`, and a record of a
+//!   kind an order form reads with the `observed_at` its state gives it, when it gives one;
 //! - `authority`, each decided capability, when the witness decides one;
 //! - `decisions`, each taken decision for every outcome that requires it, by the principal
 //!   `canon-generate` at case revision `r`, when the witness takes one;
@@ -394,6 +396,9 @@ fn scenario(
                     quote(record.subject_revision.as_str())
                 ),
             );
+            if let Some(observed_at) = &record.observed_at {
+                line(10, &format!("observed_at: {}", quote(observed_at.as_str())));
+            }
             if !record.upstream_revisions.is_empty() {
                 line(10, "upstream_revisions:");
                 for (artifact, revision) in record.upstream_revisions.iter() {

@@ -24,9 +24,11 @@
 //!   after the exclusion stages>}`, with `"subject": <artifact>` added when the match names one:
 //!   `false` for a required record that is missing, `true` for a record present under `not`. A
 //!   match reads the records of its kind and, when it names a subject, only those about that
-//!   artifact, so a record about another artifact leaves `present` `false`. Claims come first, in
-//!   claim-id order, then evidence matches, in kind order and then subject order (no subject
-//!   first), each kind and subject once. A blocked outcome always states at least one reason: a requirement no test decides
+//!   artifact, so a record about another artifact leaves `present` `false`. An input test gives
+//!   `{"input": <id>, "value": <the case's value>}` and an order form its reason with its value
+//!   (`actions.rs`). Claims come first, in claim-id order, then evidence matches, in kind order and
+//!   then subject order (no subject first), each kind and subject once, then inputs, then order
+//!   forms. A blocked outcome always states at least one reason: a requirement no test decides
 //!   against is one that cannot be met (it is blocked only by an empty `any`, or a `not` over an
 //!   empty `all`), and gives `{"requirement": "unsatisfiable"}`. An outcome that requires an
 //!   explicit decision and has none applying states the one reason
@@ -48,22 +50,21 @@
 use std::collections::BTreeMap;
 
 use super::Refusal;
-use super::claims::{Inputs, predicate};
+use super::claims::{EvidenceSets, Inputs, predicate};
 use super::decisions::Decisions;
 use crate::ir::Ir;
-use crate::model::{
-    Case, ClaimId, EvidenceRecord, Json, OutcomeRequirement, Predicate, Truth, one_line,
-};
+use crate::model::{Case, ClaimId, Json, OutcomeRequirement, Predicate, Truth, one_line};
 
 /// The section, or `None` to leave the slot empty; or a refusal of the case snapshot. `evidence`
-/// is what the claims were evaluated over (after the exclusion stages); a requirement is evaluated
-/// over it and `claims` with `super::claims::predicate`.
+/// is what the claims were evaluated over (what the exclusion stages left, and the history the
+/// order forms read); a requirement is evaluated over it and `claims` with
+/// `super::claims::predicate`.
 pub(super) fn section(
     ir: &Ir,
     case: &Case,
     claims: &BTreeMap<ClaimId, Truth>,
     inputs: &Inputs,
-    evidence: &[EvidenceRecord],
+    evidence: EvidenceSets<'_>,
     decisions: Option<&Decisions>,
 ) -> Result<Option<Json>, Refusal> {
     if let Some(outcome) = &case.termination
@@ -161,7 +162,7 @@ pub(super) fn reasons(
     requires: &Predicate,
     claims: &BTreeMap<ClaimId, Truth>,
     inputs: &Inputs,
-    evidence: &[EvidenceRecord],
+    evidence: EvidenceSets<'_>,
 ) -> Vec<Json> {
     super::actions::unmet(requires, claims, inputs, evidence)
 }

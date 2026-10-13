@@ -16,7 +16,9 @@
 use serde::Deserialize;
 
 use super::ids::{ClaimId, DecisionName, InputId, InputValue};
-use super::predicate::{EvidenceMatch, Predicate, Truth, WrittenPredicate};
+use super::predicate::{
+    EvidenceMatch, EvidenceOrder, FirstResult, Predicate, Truth, WrittenPredicate,
+};
 
 /// What an outcome requires.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -82,6 +84,10 @@ struct WrittenRequirement {
     // Not optional when its `input` is written: a null on it says it needs a value.
     #[serde(default, deserialize_with = "super::present::form")]
     r#in: Option<Vec<InputValue>>,
+    #[serde(default, deserialize_with = "super::present::form")]
+    first: Option<FirstResult>,
+    #[serde(default, deserialize_with = "super::present::form")]
+    before: Option<EvidenceOrder>,
 }
 
 impl TryFrom<WrittenRequirement> for OutcomeRequirement {
@@ -98,6 +104,8 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             is,
             input,
             r#in: values,
+            first,
+            before,
         } = written;
         let predicate = WrittenPredicate {
             all,
@@ -108,6 +116,8 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             is,
             input,
             r#in: values,
+            first,
+            before,
         };
         let Some(decision) = decision else {
             // With no key at all, name `decision` among what a requirement may be written as.
@@ -120,11 +130,13 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
                 is: None,
                 input: None,
                 r#in: None,
+                first: None,
+                before: None,
             } = predicate
             {
                 return Err(
                     "a requirement has exactly one of `all`, `any`, `not`, `evidence`, \
-                     `claim`, `input` or `decision`, found 0"
+                     `claim`, `input`, `first`, `before` or `decision`, found 0"
                         .to_owned(),
                 );
             }
@@ -139,6 +151,8 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             is: None,
             input: None,
             r#in: None,
+            first: None,
+            before: None,
         } = predicate
         else {
             return Err(

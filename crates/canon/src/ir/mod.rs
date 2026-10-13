@@ -15,19 +15,20 @@
 //!   evidence match without a result has `"result": null`; a claim test without `is` has
 //!   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
 //!   true; absent lists and sections are empty. The five exceptions are an evidence kind's
-//!   `max_age`, an evidence match's `subject`, an obligation's `applicable_when`, the
-//!   `invalidation` section and the `case` section: each written only when it is declared (a
-//!   section only when it holds a rule or an input), so the IR of a protocol that declares none of
-//!   them is the IR it was before they existed. The `case` section is `{"inputs": {<id>:
-//!   {"description": …, "values": [...]}}}`.
+//!   `max_age`, the `subject` of an evidence match or an order form, an obligation's
+//!   `applicable_when`, the `invalidation` section and the `case` section: each written only when
+//!   it is declared (a section only when it holds a rule or an input), so the IR of a protocol that
+//!   declares none of them is the IR it was before they existed. The `case` section is
+//!   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
+//!   authored: `{"first": {"kind": …, "result": …}}` and `{"before": {"first": …, "then": …}}`.
 //! - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
 //!   it was written, and an input test `{"input": {"id": …, "in": [...]}}`. An outcome that
 //!   requires an explicit decision has the requirement `{"decision": <name>}`, as written; any
 //!   other requirement is its predicate.
 //! - **Resolved references.** Only a document the validator accepts compiles, so every claim and
 //!   evidence kind the IR references is declared in it, and so is every artifact an evidence match
-//!   names as its subject or an invalidation rule names as its upstream artifact, and every input
-//!   an input test names, with every value it lists.
+//!   or an order form names as its subject or an invalidation rule names as its upstream artifact,
+//!   and every input an input test names, with every value it lists.
 //!
 //! The IR carries the protocol id and revision (design § 37) and nothing about where the document
 //! came from: no path, no working directory, no time. [`Ir::canonical_json`] is its one
@@ -44,8 +45,8 @@ use std::collections::BTreeMap;
 
 use crate::model::{
     self, ActionId, Age, ArtifactId, CapabilityId, ClaimId, ClaimTest, EffectClass, EvidenceKindId,
-    EvidenceMatch, InputId, InputTest, InputValue, InvalidationRuleId, ObligationId, OutcomeId,
-    OutcomeRequirement, Predicate, Protocol, ProtocolId, Truth,
+    EvidenceMatch, EvidenceOrder, FirstResult, InputId, InputTest, InputValue, InvalidationRuleId,
+    ObligationId, OutcomeId, OutcomeRequirement, Predicate, Protocol, ProtocolId, Truth,
 };
 use crate::validate::{self, Problem};
 
@@ -246,7 +247,10 @@ fn normalize(predicate: &Predicate) -> Predicate {
             input: test.input.clone(),
             r#in: unique(test.r#in.clone()),
         }),
-        Predicate::Evidence(_) | Predicate::Claim(_) => predicate.clone(),
+        Predicate::Evidence(_)
+        | Predicate::Claim(_)
+        | Predicate::First(_)
+        | Predicate::Before(_) => predicate.clone(),
     }
 }
 
@@ -268,8 +272,8 @@ fn unique<T: Ord>(mut ids: Vec<T>) -> Vec<T> {
 /// The canonical order of predicates, which is the order of the members of every `all` and `any`
 /// in `canon-ir/1`. Text (identifiers and results) compares by Unicode code point.
 ///
-/// 1. Different forms compare by form, in the order `all`, `any`, `claim`, `evidence`, `input`,
-///    `not`.
+/// 1. Different forms compare by form, in the order `all`, `any`, `before`, `claim`, `evidence`,
+///    `first`, `input`, `not`.
 /// 2. Two `all`s, or two `any`s, compare their members pairwise in order; the first pair that
 ///    differs decides, and when one list runs out first, the shorter list comes first.
 /// 3. Two `not`s compare what they negate.
@@ -279,15 +283,19 @@ fn unique<T: Ord>(mut ids: Vec<T>) -> Vec<T> {
 /// 5. Two claim tests compare by claim, then by the value tested: `false`, `true`, `unknown`.
 /// 6. Two input tests compare by input, then by the values they list, in their own (identifier)
 ///    order, pairwise as text; when one list runs out first, the shorter list comes first.
+/// 7. Two `first` forms compare by kind, then result, then subject; two `before` forms by `first`,
+///    then `then`, then subject; no subject comes before any subject.
 fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
     fn form(predicate: &Predicate) -> u8 {
         match predicate {
             Predicate::All(_) => 0,
             Predicate::Any(_) => 1,
-            Predicate::Claim(_) => 2,
-            Predicate::Evidence(_) => 3,
-            Predicate::Input(_) => 4,
-            Predicate::Not(_) => 5,
+            Predicate::Before(_) => 2,
+            Predicate::Claim(_) => 3,
+            Predicate::Evidence(_) => 4,
+            Predicate::First(_) => 5,
+            Predicate::Input(_) => 6,
+            Predicate::Not(_) => 7,
         }
     }
     fn tested(value: Truth) -> u8 {
@@ -347,6 +355,26 @@ fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
                 }
                 left.r#in.len().cmp(&right.r#in.len())
             })
+        }
+        (Predicate::First(left), Predicate::First(right)) => {
+            text(left.kind.as_str(), right.kind.as_str())
+                .then_with(|| text(&left.result, &right.result))
+                .then_with(|| {
+                    optional(
+                        left.subject.as_ref().map(|subject| subject.as_str()),
+                        right.subject.as_ref().map(|subject| subject.as_str()),
+                    )
+                })
+        }
+        (Predicate::Before(left), Predicate::Before(right)) => {
+            text(left.first.as_str(), right.first.as_str())
+                .then_with(|| text(left.then.as_str(), right.then.as_str()))
+                .then_with(|| {
+                    optional(
+                        left.subject.as_ref().map(|subject| subject.as_str()),
+                        right.subject.as_ref().map(|subject| subject.as_str()),
+                    )
+                })
         }
         _ => form(left).cmp(&form(right)),
     }
@@ -550,6 +578,34 @@ fn predicate_value(predicate: &Predicate) -> Value {
                 fields.push(("subject", Value::string(subject.as_str())));
             }
             Value::object([("evidence", Value::object(fields))])
+        }
+        Predicate::First(FirstResult {
+            kind,
+            result,
+            subject,
+        }) => {
+            let mut fields = vec![
+                ("kind", Value::string(kind.as_str())),
+                ("result", Value::string(result)),
+            ];
+            if let Some(subject) = subject {
+                fields.push(("subject", Value::string(subject.as_str())));
+            }
+            Value::object([("first", Value::object(fields))])
+        }
+        Predicate::Before(EvidenceOrder {
+            first,
+            then,
+            subject,
+        }) => {
+            let mut fields = vec![
+                ("first", Value::string(first.as_str())),
+                ("then", Value::string(then.as_str())),
+            ];
+            if let Some(subject) = subject {
+                fields.push(("subject", Value::string(subject.as_str())));
+            }
+            Value::object([("before", Value::object(fields))])
         }
         Predicate::Claim(ClaimTest { claim, is }) => Value::object([(
             "claim",

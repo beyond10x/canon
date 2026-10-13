@@ -459,7 +459,9 @@ mod tests {
         ] {
             assert!(protocol.contains(&format!("| `{key}` |")), "{key}");
         }
-        for key in ["all", "any", "not", "evidence", "claim", "is"] {
+        for key in [
+            "all", "any", "not", "evidence", "claim", "is", "first", "before",
+        ] {
             assert!(
                 protocol.contains(&format!("| `{key}` |")),
                 "predicate key {key}"
@@ -472,7 +474,7 @@ mod tests {
         let schema = &generated()["website/static/schemas/protocol-1.schema.json"];
         assert!(schema.contains("\"const\": \"protocol/1\""));
         let compact: String = schema.chars().filter(|c| !c.is_whitespace()).collect();
-        for key in ["all", "any", "not", "evidence", "claim"] {
+        for key in ["all", "any", "not", "evidence", "claim", "first", "before"] {
             assert!(
                 compact.contains(&format!("\"required\":[\"{key}\"]")),
                 "{key}"

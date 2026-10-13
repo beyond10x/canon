@@ -41,6 +41,14 @@
 //!   it lists and `false` otherwise. A case gives every input the protocol declares a value (the
 //!   case check refuses one that does not), so an input test is never `unknown`: inputs are
 //!   configuration fixed when the case opens, not evidence.
+//! - An order form, `{first: {kind: K, result: R}}` or `{before: {first: K1, then: K2}}`, reads the
+//!   evidence history instead: every record of its kind (about its `subject` when it names one)
+//!   the evidence check accepted, the records the exclusion stages set aside included, ordered by
+//!   `observed_at`. `first` is whether the first record of `K` has result `R`; `before` whether the
+//!   first record of `K1` was observed strictly before the first of `K2`. Each is `unknown` while
+//!   the order is not established: no record, or a record without `observed_at`; the predicate's
+//!   reference in `protocol/1` gives every rule (CANON-ORDER-001). No record is listed in
+//!   `excluded_evidence` because of an order form.
 //!
 //! `unknown` and `false` are never collapsed, and only `true` satisfies a positive requirement.
 //!
@@ -144,7 +152,8 @@
 //!    before it left. Revision binding and freshness return the records they exclude from every
 //!    claim, with their reason; invalidation returns, for each claim, the records it keeps from
 //!    that claim alone;
-//! 4. evaluate every claim over the evidence left (`claims.rs`), each in its own context: no
+//! 4. evaluate every claim over the evidence left (`claims.rs`), and its order forms over every
+//!    record the evidence check accepted (`order.rs`), each in its own context: no
 //!    evidence match in its evaluation reads a record invalidated for it, including the matches of
 //!    every claim it tests, which are evaluated for that use without the records invalidated for
 //!    either; the value reported for a tested claim is its own. Each claim's
@@ -160,8 +169,9 @@
 //!    `outcomes.rs`), then the explanation (`crate::explain`). Each section evaluates its
 //!    predicates with the one evaluator claims use (`claims::predicate`): discharge and
 //!    applicability predicates over the claim values, action preconditions and outcome
-//!    requirements over the claim values and the evidence left after step 3, each with the case's
-//!    input values, which every input test reads. The invalidation stage keeps a record from claims only, so
+//!    requirements over the claim values and the evidence left after step 3 (their order forms
+//!    over every record accepted), each with the case's input values, which every input test
+//!    reads. The invalidation stage keeps a record from claims only, so
 //!    these predicates' own evidence matches read it. An outcome that requires an explicit
 //!    decision is decided by the explicit decisions instead.
 //!
@@ -193,7 +203,9 @@
 //!   or `{"evidence": <kind>, "present": <whether a record the match reads applies>}`, with
 //!   `"subject": <artifact>` added when the match names one (a record about another artifact
 //!   is not read by it), then each input test that decides it, `{"input": <id>, "value": <the
-//!   case's value>}`, or
+//!   case's value>}`, then each order form that decides it, `{"before": <kind>, "then": <kind>,
+//!   "value": <its value>}` or `{"first": <kind>, "result": <result>, "value": <its value>}`, with
+//!   `"subject"` added when it names one, or
 //!   `{"requirement": "unsatisfiable"}` when none does. `blocked` too when the precondition is
 //!   `true` and the authority decisions deny a capability the action requires, each a reason
 //!   `{"capability": <id>, "decision": "denied"}`. `approval-required` when the precondition is
@@ -258,6 +270,7 @@ mod freshness;
 mod invalidation;
 mod json;
 mod obligations;
+mod order;
 mod outcomes;
 mod read;
 
@@ -276,7 +289,7 @@ pub use evidence::{evidence_from_value, read_evidence};
 pub use read::{MAX_IR_DEPTH, read_ir};
 
 pub(crate) use authority::Authority;
-pub(crate) use claims::{Inputs, reads};
+pub(crate) use claims::{EvidenceSets, Inputs, reads};
 pub(crate) use decisions::Decisions;
 pub(crate) use depth::check as check_depth;
 pub(crate) use invalidation::{Invalidated, invalidated_claims};
@@ -374,17 +387,17 @@ pub fn evaluate_with(
         let invalidated = invalidation::exclude(ir, case, &applicable)?;
 
         let applicable: Vec<EvidenceRecord> = applicable.into_iter().cloned().collect();
-        let values = claims::values(ir, &applicable, &invalidated, &case_inputs)?;
+        // Evidence matches read what the exclusion stages left; the order forms read every record
+        // the evidence check accepted.
+        let sets = EvidenceSets {
+            left: &applicable,
+            history: evidence,
+        };
+        let values = claims::values(ir, sets, &invalidated, &case_inputs)?;
         let obligations = obligations::section(ir, &values, &case_inputs);
-        let actions = actions::section(ir, &values, &case_inputs, &applicable, authority.as_ref());
-        let outcomes = outcomes::section(
-            ir,
-            case,
-            &values,
-            &case_inputs,
-            &applicable,
-            decisions.as_ref(),
-        )?;
+        let actions = actions::section(ir, &values, &case_inputs, sets, authority.as_ref());
+        let outcomes =
+            outcomes::section(ir, case, &values, &case_inputs, sets, decisions.as_ref())?;
         let claims = values
             .iter()
             .map(|(id, value)| {
@@ -425,15 +438,25 @@ pub fn evaluate_with(
 }
 
 /// The reasons `predicate` is not `true` over the claim `values`, the case's `inputs` and the
-/// `evidence` left, as a blocked outcome states them (`outcomes.rs`): the explanation gives an
-/// open obligation the same reasons. Called only for a predicate that is not `true`.
+/// `evidence` (what was left, and the history), as a blocked outcome states them (`outcomes.rs`):
+/// the explanation gives an open obligation the same reasons. Called only for a predicate that is
+/// not `true`.
 pub(crate) fn unmet_reasons(
     predicate: &Predicate,
     values: &BTreeMap<ClaimId, crate::model::Truth>,
     inputs: &Inputs,
-    evidence: &[EvidenceRecord],
+    evidence: EvidenceSets<'_>,
 ) -> Vec<crate::model::Json> {
     outcomes::reasons(predicate, values, inputs, evidence)
+}
+
+/// The reason each order form among `forms` gives, as a blocked action names it, with its value
+/// over the `history` (`order.rs`): `before` forms first, each form once.
+pub(crate) fn order_reasons<'a>(
+    forms: impl IntoIterator<Item = &'a Predicate>,
+    history: &[EvidenceRecord],
+) -> Vec<crate::model::Json> {
+    order::reasons(forms, history)
 }
 
 /// Moves the records one exclusion stage excluded out of `applicable` and into `excluded`. A stage
@@ -1017,6 +1040,109 @@ mod tests {
         assert_eq!(
             explained("helper"),
             [r#"{"evidence":"e1","status":"applied"}"#]
+        );
+    }
+
+    /// The order forms read the history: a record excluded as `revision_mismatch` or `expired`, or
+    /// invalidated for the claim, is still the first record of its kind. It is listed under a claim
+    /// only because an evidence match the claim reaches reads it, never because of an order form.
+    /// The explanation names each order form with its value, as an action's reasons do.
+    #[test]
+    fn an_order_form_reads_every_record_the_exclusion_stages_set_aside() {
+        let ir = crate::ir::compile(
+            &crate::model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 artifacts: {a: {}, up: {}}\nevidence_kinds: {k: {max_age: 1h}, m: {}}\n\
+                 claims: {red_first: {true_when: {first: {kind: k, result: red}}}, \
+                 k_before_m: {true_when: {before: {first: k, then: m, subject: a}}}, \
+                 green: {true_when: {evidence: {kind: k, result: green}}}, \
+                 fixed: {true_when: {all: [{first: {kind: k, result: red}}, \
+                 {evidence: {kind: k, result: green}}]}}, \
+                 both: {true_when: {all: [{claim: red_first}, {not: {claim: k_before_m, is: false}}]}}}\n\
+                 invalidation: {r: {upstream: up, invalidates: [fixed]}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let case = read_case(
+            "format: canon-case/1\nid: C-1\nprotocol: p\nartifacts: {a: {revision: r2}, up: {revision: u2}}\n",
+        )
+        .expect("reads");
+        let record = |id: &str, kind: &str, result: &str, revision: &str, at: &str, up: &str| {
+            let result = if result.is_empty() {
+                String::new()
+            } else {
+                format!("result: {result}\n")
+            };
+            read_evidence(&format!(
+                "format: canon-evidence/1\nid: {id}\nkind: {kind}\n{result}subject: a\n\
+                 subject_revision: {revision}\nobserved_at: {at}\nupstream_revisions: {{up: {up}}}\n"
+            ))
+            .expect("reads")
+        };
+        let decide = |evidence: &[EvidenceRecord]| {
+            evaluate_with(
+                &ir,
+                &case,
+                evidence,
+                Supplied {
+                    at: Some("2026-10-02T12:00:00Z"),
+                    ..Supplied::default()
+                },
+            )
+            .expect("decides")
+        };
+        let green = record("g", "k", "green", "r2", "2026-10-02T11:30:00Z", "u2");
+        let diff = record("m1", "m", "", "r2", "2026-10-02T11:40:00Z", "u2");
+        for (red, reason) in [
+            (
+                record("e", "k", "red", "r1", "2026-10-02T11:00:00Z", "u2"),
+                crate::model::ExclusionReason::RevisionMismatch,
+            ),
+            (
+                record("e", "k", "red", "r2", "2026-10-01T11:00:00Z", "u2"),
+                crate::model::ExclusionReason::Expired,
+            ),
+        ] {
+            let decision = decide(&[red, green.clone(), diff.clone()]);
+            let entry = |claim: &str| decision.claims.get(&ClaimId::new(claim)).expect("declared");
+            for claim in ["red_first", "k_before_m", "both", "green", "fixed"] {
+                assert_eq!(entry(claim).value, Truth::True, "{claim} {reason:?}");
+            }
+            for claim in ["red_first", "k_before_m", "both"] {
+                assert!(entry(claim).excluded_evidence.is_empty(), "{claim}");
+            }
+            for claim in ["green", "fixed"] {
+                assert_eq!(entry(claim).excluded_evidence, [exclusion("e", reason)]);
+            }
+        }
+        // Invalidated for `fixed`: its evidence match does not read the red record, its order form
+        // does. `green` reads both records, which disagree.
+        let moved = record("e", "k", "red", "r2", "2026-10-02T11:00:00Z", "u1");
+        let decision = decide(&[moved, green.clone()]);
+        let entry = |claim: &str| decision.claims.get(&ClaimId::new(claim)).expect("declared");
+        assert_eq!(entry("fixed").value, Truth::True);
+        assert_eq!(
+            entry("fixed").excluded_evidence,
+            [exclusion("e", crate::model::ExclusionReason::Invalidated)]
+        );
+        assert_eq!(entry("red_first").value, Truth::True);
+        assert_eq!(entry("green").value, Truth::Unknown);
+        assert_eq!(entry("k_before_m").value, Truth::Unknown, "no `m` record");
+        assert_eq!(entry("both").value, Truth::Unknown);
+        let explained = &decision.explanation.as_ref().expect("explained")["claims"];
+        assert_eq!(
+            explained["k_before_m"],
+            serde_json::json!({"because": [
+                {"before": "k", "subject": "a", "then": "m", "value": "unknown"},
+            ], "value": "unknown"})
+        );
+        assert_eq!(
+            explained["both"]["because"],
+            serde_json::json!([
+                {"claim": "k_before_m", "value": "unknown"},
+                {"claim": "red_first", "value": "true"},
+            ])
         );
     }
 }

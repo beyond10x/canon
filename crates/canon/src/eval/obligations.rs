@@ -25,14 +25,15 @@
 
 use std::collections::BTreeMap;
 
-use super::claims::{Inputs, predicate};
+use super::claims::{EvidenceSets, Inputs, predicate};
 use crate::ir::{Ir, Obligation};
 use crate::model::{ClaimId, Json, ObligationStatus, Truth};
 
 /// The section, or `None` when the protocol declares no obligation. A discharge or applicability
-/// predicate tests only claim values and case inputs (the validator refuses evidence in one), so
-/// it is evaluated over `claims` and `inputs` with `super::claims::predicate`, given no evidence:
-/// an evidence match in an IR a caller builds is `unknown`.
+/// predicate tests only claim values and case inputs (the validator refuses evidence in one, an
+/// order form included), so it is evaluated over `claims` and `inputs` with
+/// `super::claims::predicate`, given no evidence: an evidence match or an order form in an IR a
+/// caller builds is `unknown`.
 pub(super) fn section(ir: &Ir, claims: &BTreeMap<ClaimId, Truth>, inputs: &Inputs) -> Option<Json> {
     if ir.obligations.is_empty() {
         return None;
@@ -64,18 +65,24 @@ fn obligation_status(
     let applies = obligation.applicable_when.as_ref().map(|applicable_when| {
         (
             applicable_when,
-            predicate(applicable_when, claims, inputs, &[]),
+            predicate(applicable_when, claims, inputs, EvidenceSets::default()),
         )
     });
     if let Some((_, Truth::False)) = applies {
         return (ObligationStatus::NotApplicable, Vec::new());
     }
-    if predicate(&obligation.discharged_when, claims, inputs, &[]) == Truth::True {
+    if predicate(
+        &obligation.discharged_when,
+        claims,
+        inputs,
+        EvidenceSets::default(),
+    ) == Truth::True
+    {
         return (ObligationStatus::Discharged, Vec::new());
     }
     let reasons = match applies {
         Some((applicable_when, Truth::Unknown)) => {
-            super::actions::unmet(applicable_when, claims, inputs, &[])
+            super::actions::unmet(applicable_when, claims, inputs, EvidenceSets::default())
         }
         _ => Vec::new(),
     };
