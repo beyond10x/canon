@@ -1,0 +1,57 @@
+format: protocol/1
+
+protocol:
+  id: regression
+  revision: 1
+  description: Decide whether a fix was shown failing before it was made, from the order its evidence was observed in.
+
+artifacts:
+  change:
+    description: The change under review; making the fix moves it to a later revision.
+
+evidence_kinds:
+  test_result:
+    description: A run of the regression test against the change; its result is failed or passed.
+  diff:
+    description: The change's diff, recorded when the fix is made.
+
+claims:
+  regression.shown:
+    description: The first test result recorded, at any revision of the change, was a failure, and it was recorded before the first diff.
+    true_when:
+      all:
+        - first:
+            kind: test_result
+            result: failed
+        - before:
+            first: test_result
+            then: diff
+
+  regression.passes:
+    description: The regression test passes at the change's current revision.
+    true_when:
+      evidence:
+        kind: test_result
+        result: passed
+
+actions:
+  merge:
+    description: Merge the change once the test about it was red first and ran before its diff.
+    precondition:
+      all:
+        - before:
+            first: test_result
+            then: diff
+            subject: change
+        - first:
+            kind: test_result
+            result: failed
+            subject: change
+
+outcomes:
+  fixed:
+    description: The regression was shown and the fix makes the test pass.
+    requires:
+      all:
+        - claim: regression.shown
+        - claim: regression.passes

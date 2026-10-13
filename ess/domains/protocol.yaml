@@ -6,6 +6,7 @@
 # (canon-decisions/1) too (story:decision-outcomes), and the authority decisions it reads
 # (canon-authority/1, story:review-hardening-w7). story:case-inputs adds the case inputs a protocol
 # declares and a case gives values for, the input predicate and an obligation's applicability.
+# story:evidence-order-predicate adds the order forms `first` and `before` of the predicate.
 # crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
 domain: canon.protocol
 
@@ -333,8 +334,10 @@ types:
     variants: ["true", "false", "unknown"]
 
   # Source text writes a predicate as a map with exactly one of the keys all, any, not, evidence,
-  # claim or input (crates/canon/src/model/predicate.rs:114-177); the typed model is this union.
+  # claim, input, first or before (crates/canon/src/model/predicate.rs); the typed model is this
+  # union.
   # read from: crates/canon/src/model/predicate.rs:55-66
+  # read from: .engineering/planning/story/evidence-order-predicate.md:71-74
   - name: canon.protocol.Predicate
     kind: union
     tag: kind
@@ -351,6 +354,12 @@ types:
       claim: canon.protocol.ClaimTest
       # read from: .engineering/planning/story/case-inputs.md:77-81
       input: canon.protocol.InputTest
+      # Whether the first record of a kind has a result (story:evidence-order-predicate).
+      # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
+      first: canon.protocol.FirstResult
+      # Whether the first record of one kind was observed strictly before the first of another.
+      # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
+      before: canon.protocol.EvidenceOrder
 
   # read from: crates/canon/src/model/predicate.rs:68-78
   - name: canon.protocol.EvidenceMatch
@@ -370,6 +379,51 @@ types:
       # read from: .engineering/planning/story/subject-bound-evidence-match.md:13-16
       # read from: .engineering/planning/story/subject-bound-evidence-match.md:26-28
       # read from: crates/canon/src/model/predicate.rs:77
+      - name: subject
+        type: Optional<canon.protocol.ArtifactId>
+
+  # An order form: whether the first record of `kind` (about `subject` when named) has `result`.
+  # It reads the history: every record of its kind the evidence check accepted, including those
+  # the exclusion stages keep from evidence matches (revision_mismatch, expired, invalidated). The
+  # order key is a record's observed_at; a record without one leaves the order unknown. Of the
+  # records at the earliest instant, every one with the result is true, none is false, some is
+  # unknown; no record is unknown. What it means is CANON-ORDER-001
+  # (conformance/scenarios/evidence-order.yaml), not this file.
+  # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
+  # read from: .engineering/planning/story/evidence-order-predicate.md:76-95
+  - name: canon.protocol.FirstResult
+    kind: struct
+    fields:
+      # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
+      - name: kind
+        type: canon.protocol.EvidenceKindId
+      # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
+      - name: result
+        type: String
+      # A declared artifact: only records about it are read.
+      # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
+      - name: subject
+        type: Optional<canon.protocol.ArtifactId>
+
+  # An order form: whether the first record of kind `first` was observed strictly before the first
+  # record of kind `then` (both about `subject` when named), read from the history as FirstResult
+  # is. No record of either is unknown; one of `then` and none of `first` is false; one of `first`
+  # and none of `then` is unknown; a record of either without observed_at is unknown; otherwise the
+  # earliest instants decide, an equal pair unknown. `first` and `then` are two different declared
+  # kinds.
+  # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
+  # read from: .engineering/planning/story/evidence-order-predicate.md:97-110
+  - name: canon.protocol.EvidenceOrder
+    kind: struct
+    fields:
+      # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
+      - name: first
+        type: canon.protocol.EvidenceKindId
+      # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
+      - name: then
+        type: canon.protocol.EvidenceKindId
+      # A declared artifact: only records about it are read, of either kind.
+      # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
 

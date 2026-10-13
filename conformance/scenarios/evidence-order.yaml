@@ -1,0 +1,633 @@
+format: canon-conformance/1
+id: CANON-ORDER-001
+covers: [CANON-ORDER-001]
+fixture: fixtures/investigation/evidence-order.yaml
+# The fixture declares one artifact, the change, and two evidence kinds, test_result and diff.
+# Claim regression.shown requires both order forms: the first test_result failed (`first`), and the
+# first test_result was observed before the first diff (`before`). Claim regression.passes is an
+# evidence match, which reads only records bound to the change's current revision. Action merge
+# requires the same two forms, each bound to the change as its subject; outcome fixed requires both
+# claims. Every case gives the change at r2, so a record bound to r1 is excluded from evidence
+# matches as revision_mismatch, while the order forms still read it: they read the history.
+steps:
+  # The order forms compile to `{"first": {...}}` and `{"before": {...}}`, written as authored, a
+  # subject only when named; among the members of an `all` or `any`, `before` comes after `any`
+  # and `first` after `evidence`.
+  - id: compile
+    compile: {}
+    expect:
+      canon-ir: |
+        {
+          "actions": {
+            "merge": {
+              "description": "Merge the change once the test about it was red first and ran before its diff.",
+              "effect": null,
+              "may_produce": [],
+              "precondition": {
+                "all": [
+                  {
+                    "before": {
+                      "first": "test_result",
+                      "subject": "change",
+                      "then": "diff"
+                    }
+                  },
+                  {
+                    "first": {
+                      "kind": "test_result",
+                      "result": "failed",
+                      "subject": "change"
+                    }
+                  }
+                ]
+              },
+              "requires": []
+            }
+          },
+          "artifacts": {
+            "change": {
+              "description": "The change under review; making the fix moves it to a later revision."
+            }
+          },
+          "claims": {
+            "regression.passes": {
+              "description": "The regression test passes at the change's current revision.",
+              "true_when": {
+                "evidence": {
+                  "kind": "test_result",
+                  "result": "passed"
+                }
+              }
+            },
+            "regression.shown": {
+              "description": "The first test result recorded, at any revision of the change, was a failure, and it was recorded before the first diff.",
+              "true_when": {
+                "all": [
+                  {
+                    "before": {
+                      "first": "test_result",
+                      "then": "diff"
+                    }
+                  },
+                  {
+                    "first": {
+                      "kind": "test_result",
+                      "result": "failed"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "evidence_kinds": {
+            "diff": {
+              "description": "The change's diff, recorded when the fix is made."
+            },
+            "test_result": {
+              "description": "A run of the regression test against the change; its result is failed or passed."
+            }
+          },
+          "format": "canon-ir/1",
+          "obligations": {},
+          "outcomes": {
+            "fixed": {
+              "description": "The regression was shown and the fix makes the test pass.",
+              "requires": {
+                "all": [
+                  {
+                    "claim": {
+                      "id": "regression.passes",
+                      "is": "true"
+                    }
+                  },
+                  {
+                    "claim": {
+                      "id": "regression.shown",
+                      "is": "true"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "protocol": {
+            "description": "Decide whether a fix was shown failing before it was made, from the order its evidence was observed in.",
+            "id": "regression",
+            "revision": 1
+          }
+        }
+
+  # Expectation 1. The test failed at r1; the fix moved the change to r2, where the test passes and
+  # the diff is recorded. The red record is excluded from the evidence match as revision_mismatch,
+  # and listed under regression.passes, which reads its kind. The order forms read it all the same:
+  # it is the first test_result, it failed, and it came before the diff. TRUE; nothing lists it
+  # under regression.shown, whose predicate holds no evidence match.
+  - id: red-at-r1-then-green-and-diff-at-r2
+    evaluate:
+      case:
+        format: canon-case/1
+        id: FIX-7
+        protocol: regression
+        artifacts:
+          change: {revision: r2}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-02T10:00:00Z
+        - format: canon-evidence/1
+          id: d1
+          kind: diff
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-02T09:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "status": "admissible"
+            }
+          },
+          "claims": {
+            "regression.passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "regression.shown": {
+              "value": "true"
+            }
+          },
+          "outcomes": {
+            "fixed": {
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # Expectation 2. Only a green test: the first test_result did not fail, so `first` is FALSE,
+  # whatever `before` is (UNKNOWN: a test_result and no diff yet). The `all` is FALSE. The blocked
+  # action names the order form that decides it, with its subject and value.
+  - id: green-only
+    evaluate:
+      case:
+        format: canon-case/1
+        id: FIX-7
+        protocol: regression
+        artifacts:
+          change: {revision: r2}
+      evidence:
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-02T10:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "first": "test_result",
+                  "result": "failed",
+                  "subject": "change",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "regression.passes": {
+              "value": "true"
+            },
+            "regression.shown": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "fixed": {
+              "reasons": [
+                {
+                  "claim": "regression.shown",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 3. The diff was observed before any test_result: the first test_result failed, but
+  # it came after the first diff, so `before` is FALSE and so is the claim.
+  - id: diff-before-any-test-result
+    evaluate:
+      case:
+        format: canon-case/1
+        id: FIX-7
+        protocol: regression
+        artifacts:
+          change: {revision: r2}
+      evidence:
+        - format: canon-evidence/1
+          id: d1
+          kind: diff
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-02T09:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "before": "test_result",
+                  "subject": "change",
+                  "then": "diff",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "regression.passes": {
+              "value": "false"
+            },
+            "regression.shown": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "fixed": {
+              "reasons": [
+                {
+                  "claim": "regression.passes",
+                  "value": "false"
+                },
+                {
+                  "claim": "regression.shown",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 3, with no test_result at all: a diff and no test_result is FALSE for `before`,
+  # since any test_result that comes later comes after the diff. `first` is UNKNOWN (no record),
+  # and the `all` is FALSE.
+  - id: diff-and-no-test-result
+    evaluate:
+      case:
+        format: canon-case/1
+        id: FIX-7
+        protocol: regression
+        artifacts:
+          change: {revision: r2}
+      evidence:
+        - format: canon-evidence/1
+          id: d1
+          kind: diff
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T09:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "before": "test_result",
+                  "subject": "change",
+                  "then": "diff",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "regression.passes": {
+              "value": "unknown"
+            },
+            "regression.shown": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "fixed": {
+              "reasons": [
+                {
+                  "claim": "regression.shown",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 4. No records: the order is not established, so both forms are UNKNOWN, never
+  # FALSE. The blocked action names each, `before` first.
+  - id: no-records
+    evaluate:
+      case:
+        format: canon-case/1
+        id: FIX-7
+        protocol: regression
+        artifacts:
+          change: {revision: r2}
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "before": "test_result",
+                  "subject": "change",
+                  "then": "diff",
+                  "value": "unknown"
+                },
+                {
+                  "first": "test_result",
+                  "result": "failed",
+                  "subject": "change",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "regression.passes": {
+              "value": "unknown"
+            },
+            "regression.shown": {
+              "value": "unknown"
+            }
+          },
+          "outcomes": {
+            "fixed": {
+              "reasons": [
+                {
+                  "claim": "regression.passes",
+                  "value": "unknown"
+                },
+                {
+                  "claim": "regression.shown",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 5. Green, then red, both at the current revision: the first test_result passed, so
+  # `first` is FALSE and so is the claim. The evidence match reads two results that disagree:
+  # UNKNOWN.
+  - id: green-then-red-on-one-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: FIX-7
+        protocol: regression
+        artifacts:
+          change: {revision: r2}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T10:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "first": "test_result",
+                  "result": "failed",
+                  "subject": "change",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "regression.passes": {
+              "value": "unknown"
+            },
+            "regression.shown": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "fixed": {
+              "reasons": [
+                {
+                  "claim": "regression.shown",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 6. A red record at r1 and a green one at r2 share the earliest instant: the records
+  # at it disagree, so `first` is UNKNOWN, as conflicting records leave an evidence match. Both
+  # came before the diff, so `before` is TRUE; the `all` is UNKNOWN. The evidence match reads only
+  # the green record and is TRUE.
+  - id: red-and-green-at-one-earliest-instant
+    evaluate:
+      case:
+        format: canon-case/1
+        id: FIX-7
+        protocol: regression
+        artifacts:
+          change: {revision: r2}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: d1
+          kind: diff
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-02T09:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "first": "test_result",
+                  "result": "failed",
+                  "subject": "change",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "regression.passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "regression.shown": {
+              "value": "unknown"
+            }
+          },
+          "outcomes": {
+            "fixed": {
+              "reasons": [
+                {
+                  "claim": "regression.shown",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 7. The red record carries no observed_at: its place in the order is not known, so
+  # both forms are UNKNOWN, though the green record and the diff carry instants.
+  - id: a-test-result-without-observed-at
+    evaluate:
+      case:
+        format: canon-case/1
+        id: FIX-7
+        protocol: regression
+        artifacts:
+          change: {revision: r2}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-02T10:00:00Z
+        - format: canon-evidence/1
+          id: d1
+          kind: diff
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-02T09:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "before": "test_result",
+                  "subject": "change",
+                  "then": "diff",
+                  "value": "unknown"
+                },
+                {
+                  "first": "test_result",
+                  "result": "failed",
+                  "subject": "change",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "regression.passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "regression.shown": {
+              "value": "unknown"
+            }
+          },
+          "outcomes": {
+            "fixed": {
+              "reasons": [
+                {
+                  "claim": "regression.shown",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
