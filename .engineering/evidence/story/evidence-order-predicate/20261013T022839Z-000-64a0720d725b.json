@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-13T02:28:39Z",
+  "actor": "human:timo",
+  "artifact": "story:evidence-order-predicate",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "https://github.com/beyond10x/canon/actions/runs/38336737765 (task check, pull 14 head fd3ff92)",
+    "reference": "https://github.com/beyond10x/canon/actions/runs/38336737765"
+  }
+}
