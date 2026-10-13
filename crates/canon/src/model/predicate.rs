@@ -1,10 +1,27 @@
 //! The predicate language: a small, total, deterministic expression language (design § 39.2).
 //!
 //! A predicate is one of `all`, `any`, `not`, an evidence match by kind, optional result and
-//! optional subject, a test on a claim value, or a test on a case input's value. Written in source
-//! as a map with exactly one of the keys `all`, `any`, `not`, `evidence`, `claim` or `input`; a
-//! claim test may add `is`, which defaults to `true`, and an input test adds `in`, the values it is
-//! true for (`{input: severity, in: [high]}`).
+//! optional subject, a test on a claim value, a test on a case input's value, or one of the two
+//! order forms over the evidence history. Written in source as a map with exactly one of the keys
+//! `all`, `any`, `not`, `evidence`, `claim`, `input`, `first` or `before`; a claim test may add
+//! `is`, which defaults to `true`, and an input test adds `in`, the values it is true for (`{input:
+//! severity, in: [high]}`).
+//!
+//! The order forms read the evidence history: every record of their kind (about their `subject`
+//! when they name one) that the evidence check accepted, including the records the exclusion
+//! stages keep from evidence matches (`revision_mismatch`, `expired`, `invalidated`). A record's
+//! place in the order is its `observed_at`; a record without one has no known place.
+//! `{first: {kind: K, result: R}}` asks whether the first record of `K` has result `R`: `unknown`
+//! with no record or with a record without `observed_at`; otherwise, of the records at the
+//! earliest instant, `true` when every one has `R`, `false` when none has, `unknown` when they
+//! disagree. `{before: {first: K1, then: K2}}` asks whether the first record of `K1` was observed
+//! strictly before the first record of `K2`: `unknown` with no record of either, `false` with a
+//! record of `K2` and none of `K1` (a later `K1` record comes after it), `unknown` with a record of
+//! `K1` and none of `K2`, `unknown` when a record of either has no `observed_at`, and otherwise
+//! `true`, `false` or `unknown` as the earliest instants of `K1` and `K2` are earlier, later or
+//! equal. A known limit: a record bound to any earlier revision counts, whether or not the current
+//! revision descends from it, since Canon does not know how revisions descend
+//! (story:revision-ordering).
 
 use std::fmt;
 
@@ -65,7 +82,46 @@ pub enum Predicate {
     Evidence(EvidenceMatch),
     /// True when the case's value of the input is one of the values listed, false otherwise.
     Input(InputTest),
+    /// Whether the first record of a kind, in the evidence history, has a result.
+    First(FirstResult),
+    /// Whether the first record of one kind, in the evidence history, was observed strictly before
+    /// the first record of another.
+    Before(EvidenceOrder),
     Claim(ClaimTest),
+}
+
+/// An order form: whether the first record of `kind`, about `subject` when it names one, has
+/// `result`. It reads every record of the kind the evidence check accepted, excluded or not.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FirstResult {
+    /// The evidence kind whose first record is read.
+    #[serde(deserialize_with = "super::present::required")]
+    pub kind: EvidenceKindId,
+    /// The result that first record is to have.
+    #[serde(deserialize_with = "super::present::required")]
+    pub result: String,
+    /// The declared artifact the records read are about; without it, records about any artifact.
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub subject: Option<ArtifactId>,
+}
+
+/// An order form: whether the first record of kind `first` was observed strictly before the first
+/// record of kind `then`, both about `subject` when it names one. It reads every record of the two
+/// kinds the evidence check accepted, excluded or not.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EvidenceOrder {
+    /// The evidence kind whose first record is to come first.
+    #[serde(deserialize_with = "super::present::required")]
+    pub first: EvidenceKindId,
+    /// The evidence kind whose first record is to come after it; another kind than `first`.
+    #[serde(deserialize_with = "super::present::required")]
+    pub then: EvidenceKindId,
+    /// The declared artifact the records of both kinds are about; without it, records about any
+    /// artifact.
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub subject: Option<ArtifactId>,
 }
 
 /// Matches evidence of one kind, optionally with one result, and optionally only evidence about one
@@ -126,7 +182,11 @@ impl Predicate {
                 }
             }
             Predicate::Not(inner) => inner.visit(f),
-            Predicate::Evidence(_) | Predicate::Claim(_) | Predicate::Input(_) => {}
+            Predicate::Evidence(_)
+            | Predicate::Claim(_)
+            | Predicate::Input(_)
+            | Predicate::First(_)
+            | Predicate::Before(_) => {}
         }
     }
 
@@ -139,6 +199,30 @@ impl Predicate {
             }
         });
         found
+    }
+
+    /// Every order form (`first` and `before`) inside this predicate, in source order.
+    pub fn order_forms(&self) -> Vec<&Predicate> {
+        let mut found = Vec::new();
+        self.visit(&mut |predicate| {
+            if matches!(predicate, Predicate::First(_) | Predicate::Before(_)) {
+                found.push(predicate);
+            }
+        });
+        found
+    }
+
+    /// The evidence an order form reads, as `(kind, subject)` pairs: `first`'s kind, or `before`'s
+    /// two kinds, `first` then `then`, each with the form's subject. Empty for any other form.
+    pub fn order_reads(&self) -> Vec<(&EvidenceKindId, Option<&ArtifactId>)> {
+        match self {
+            Predicate::First(form) => vec![(&form.kind, form.subject.as_ref())],
+            Predicate::Before(form) => vec![
+                (&form.first, form.subject.as_ref()),
+                (&form.then, form.subject.as_ref()),
+            ],
+            _ => Vec::new(),
+        }
     }
 }
 
@@ -164,6 +248,10 @@ pub(crate) struct WrittenPredicate {
     // Not optional when its `input` is written: a null on it says it needs a value.
     #[serde(default, deserialize_with = "super::present::form")]
     pub(crate) r#in: Option<Vec<InputValue>>,
+    #[serde(default, deserialize_with = "super::present::form")]
+    pub(crate) first: Option<FirstResult>,
+    #[serde(default, deserialize_with = "super::present::form")]
+    pub(crate) before: Option<EvidenceOrder>,
 }
 
 impl TryFrom<WrittenPredicate> for Predicate {
@@ -179,6 +267,8 @@ impl TryFrom<WrittenPredicate> for Predicate {
             is,
             input,
             r#in: values,
+            first,
+            before,
         } = written;
         let forms = [
             all.is_some(),
@@ -187,13 +277,15 @@ impl TryFrom<WrittenPredicate> for Predicate {
             evidence.is_some(),
             claim.is_some(),
             input.is_some(),
+            first.is_some(),
+            before.is_some(),
         ]
         .into_iter()
         .filter(|present| *present)
         .count();
         if forms != 1 {
             return Err(format!(
-                "a predicate has exactly one of `all`, `any`, `not`, `evidence`, `claim` or `input`, found {forms}"
+                "a predicate has exactly one of `all`, `any`, `not`, `evidence`, `claim`, `input`, `first` or `before`, found {forms}"
             ));
         }
         if is.is_some() && claim.is_none() {
@@ -219,6 +311,10 @@ impl TryFrom<WrittenPredicate> for Predicate {
             Predicate::Not(inner)
         } else if let Some(matching) = evidence {
             Predicate::Evidence(matching)
+        } else if let Some(form) = first {
+            Predicate::First(form)
+        } else if let Some(form) = before {
+            Predicate::Before(form)
         } else {
             let claim = claim.expect("exactly one form is present");
             Predicate::Claim(ClaimTest {

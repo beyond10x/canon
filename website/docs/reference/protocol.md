@@ -126,10 +126,26 @@ A predicate over evidence and claim values.
 The predicate language: a small, total, deterministic expression language (design § 39.2).
 
 A predicate is one of `all`, `any`, `not`, an evidence match by kind, optional result and
-optional subject, a test on a claim value, or a test on a case input's value. Written in source
-as a map with exactly one of the keys `all`, `any`, `not`, `evidence`, `claim` or `input`; a
-claim test may add `is`, which defaults to `true`, and an input test adds `in`, the values it is
-true for (`{input: severity, in: [high]}`).
+optional subject, a test on a claim value, a test on a case input's value, or one of the two
+order forms over the evidence history. Written in source as a map with exactly one of the keys
+`all`, `any`, `not`, `evidence`, `claim`, `input`, `first` or `before`; a claim test may add
+`is`, which defaults to `true`, and an input test adds `in`, the values it is true for (`{input: severity, in: [high]}`).
+
+The order forms read the evidence history: every record of their kind (about their `subject`
+when they name one) that the evidence check accepted, including the records the exclusion
+stages keep from evidence matches (`revision_mismatch`, `expired`, `invalidated`). A record's
+place in the order is its `observed_at`; a record without one has no known place.
+`{first: {kind: K, result: R}}` asks whether the first record of `K` has result `R`: `unknown`
+with no record or with a record without `observed_at`; otherwise, of the records at the
+earliest instant, `true` when every one has `R`, `false` when none has, `unknown` when they
+disagree. `{before: {first: K1, then: K2}}` asks whether the first record of `K1` was observed
+strictly before the first record of `K2`: `unknown` with no record of either, `false` with a
+record of `K2` and none of `K1` (a later `K1` record comes after it), `unknown` with a record of
+`K1` and none of `K2`, `unknown` when a record of either has no `observed_at`, and otherwise
+`true`, `false` or `unknown` as the earliest instants of `K1` and `K2` are earlier, later or
+equal. A known limit: a record bound to any earlier revision counts, whether or not the current
+revision descends from it, since Canon does not know how revisions descend
+(story:revision-ordering).
 
 | Key | Value | Meaning |
 |---|---|---|
@@ -141,6 +157,8 @@ true for (`{input: severity, in: [high]}`).
 | `is` | [`Truth`](#truth) | Allowed only beside `claim`. |
 | `input` | [identifier](#identifiers) (`InputId`) | True when the case's value of the input is one of the values listed, false otherwise. |
 | `in` | list of [identifier](#identifiers) (`InputValue`) | Allowed only beside `input`. The values the test is true for, written `in`. |
+| `first` | [`FirstResult`](#firstresult) | Whether the first record of a kind, in the evidence history, has a result. |
+| `before` | [`EvidenceOrder`](#evidenceorder) | Whether the first record of one kind, in the evidence history, was observed strictly before the first record of another. |
 
 ## `CapabilityRequirement`
 
@@ -187,6 +205,29 @@ declared artifact: a match that names a subject reads only the records whose sub
 | `kind` | [identifier](#identifiers) (`EvidenceKindId`) | required | — |
 | `result` | text | optional | — |
 | `subject` | [identifier](#identifiers) (`ArtifactId`) | optional | — |
+
+## `FirstResult`
+
+An order form: whether the first record of `kind`, about `subject` when it names one, has
+`result`. It reads every record of the kind the evidence check accepted, excluded or not.
+
+| Key | Value | Required | Meaning |
+|---|---|---|---|
+| `kind` | [identifier](#identifiers) (`EvidenceKindId`) | required | The evidence kind whose first record is read. |
+| `result` | text | required | The result that first record is to have. |
+| `subject` | [identifier](#identifiers) (`ArtifactId`) | optional | The declared artifact the records read are about; without it, records about any artifact. |
+
+## `EvidenceOrder`
+
+An order form: whether the first record of kind `first` was observed strictly before the first
+record of kind `then`, both about `subject` when it names one. It reads every record of the two
+kinds the evidence check accepted, excluded or not.
+
+| Key | Value | Required | Meaning |
+|---|---|---|---|
+| `first` | [identifier](#identifiers) (`EvidenceKindId`) | required | The evidence kind whose first record is to come first. |
+| `then` | [identifier](#identifiers) (`EvidenceKindId`) | required | The evidence kind whose first record is to come after it; another kind than `first`. |
+| `subject` | [identifier](#identifiers) (`ArtifactId`) | optional | The declared artifact the records of both kinds are about; without it, records about any artifact. |
 
 ## `Truth`
 

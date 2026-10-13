@@ -27,7 +27,11 @@
 //!   ones included, so every chain of reasons ends at evidence records. Each is `{"because": [...],
 //!   "value": <value>}`: each claim its `true_when` predicate tests, `{"claim": <id>, "value":
 //!   <value>}`, then each case input it tests, `{"input": <id>, "value": <the case's value>}`, in
-//!   input-id order, then each record an evidence match the claim reaches reads (as its
+//!   input-id order, then each order form it holds, named as an action's reasons name it, with its
+//!   value over the evidence history (`{"before": <kind>, "then": <kind>, "value": <value>}` or
+//!   `{"first": <kind>, "result": <result>, "value": <value>}`, with `"subject"` when it names
+//!   one; every `before` first, each form once), then each record an evidence match the claim
+//!   reaches reads (as its
 //!   `excluded_evidence` list counts them), written as below, then each evidence match it reaches
 //!   that reads no record of the evidence set, `{"kind": <kind>, "status": "absent"}`, with
 //!   `"subject": <artifact>` added when the match names one, in kind and then subject order (no
@@ -47,8 +51,9 @@
 //! under each of those claims in `claims`, which are evaluated without it throughout, including in
 //! the claims they test. It is `applied` under every claim it was not invalidated for, and in the
 //! `because` of an outcome, action or obligation, whose own evidence matches read it. A
-//! reason `{"claim": <id>, "value": <value>}` anywhere continues under `claims`. A member with
-//! nothing to explain is not written.
+//! reason `{"claim": <id>, "value": <value>}` anywhere continues under `claims`. An order form's
+//! reason is written as the decision states it and lists no record: an order form reads the whole
+//! history, and its value is the reason. A member with nothing to explain is not written.
 //!
 //! Every list is in a fixed order — claim reasons by claim id, evidence records and evidence ids by
 //! evidence id, absent kinds by kind id, authority decisions by capability, explicit decisions by
@@ -61,7 +66,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
-use crate::eval::{Authority, Decisions, Inputs as CaseInputs, Invalidated, reads, unmet_reasons};
+use crate::eval::{
+    Authority, Decisions, EvidenceSets, Inputs as CaseInputs, Invalidated, order_reasons, reads,
+    unmet_reasons,
+};
 use crate::ir::Ir;
 use crate::model::{
     ArtifactId, Case, ClaimId, DECISION_FORMAT, Decision, EvidenceExclusion, EvidenceKindId,
@@ -127,7 +135,7 @@ pub(crate) fn explain(
         .map(|(id, _)| id)
         .chain(named.filter_map(|name| values.keys().find(|id| id.as_str() == name)))
         .collect();
-    let claims = claims(ir, seeds, &values, &case_inputs, &records);
+    let claims = claims(ir, seeds, &values, &case_inputs, &records, evidence);
 
     let mut sections = Map::new();
     sections.insert(
@@ -395,13 +403,15 @@ fn reached_matches<'a>(ir: &'a Ir, claim: &'a ClaimId) -> BTreeSet<Match<'a>> {
 }
 
 /// An entry for each of `seeds` and each claim one of them tests, through any number of claim
-/// references, so every chain of claim reasons ends at evidence records.
+/// references, so every chain of claim reasons ends at evidence records or an order form's value
+/// over the `history`.
 fn claims(
     ir: &Ir,
     seeds: Vec<&ClaimId>,
     values: &BTreeMap<ClaimId, Truth>,
     inputs: &CaseInputs,
     records: &Records<'_>,
+    history: &[EvidenceRecord],
 ) -> Map<String, Value> {
     let mut entries = Map::new();
     let mut pending = seeds;
@@ -414,6 +424,7 @@ fn claims(
                 pending.extend(declared.true_when.claim_references());
                 let mut because = claim_reasons(&declared.true_when, values);
                 because.extend(input_reasons(&declared.true_when, inputs));
+                because.extend(order_reasons(declared.true_when.order_forms(), history));
                 because
             }
             None => Vec::new(),
@@ -464,7 +475,12 @@ fn obligations(
             // A discharge predicate tests claims and inputs only; the validator refuses evidence
             // in one. An open obligation's discharge predicate is not true: one that is true
             // discharges the obligation, whatever its applicability.
-            for reason in unmet_reasons(&declared.discharged_when, values, inputs, &[]) {
+            for reason in unmet_reasons(
+                &declared.discharged_when,
+                values,
+                inputs,
+                EvidenceSets::default(),
+            ) {
                 if !reasons.contains(&reason) {
                     reasons.push(reason);
                 }

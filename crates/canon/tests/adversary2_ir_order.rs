@@ -10,7 +10,8 @@ use std::cmp::Ordering;
 use b10x_canon::ir;
 use b10x_canon::model::{
     Artifact, Claim, ClaimId, ClaimTest, Declarations, EvidenceKind, EvidenceKindId, EvidenceMatch,
-    Outcome, OutcomeId, Predicate, Protocol, ProtocolHeader, ProtocolId, Truth,
+    EvidenceOrder, FirstResult, Outcome, OutcomeId, Predicate, Protocol, ProtocolHeader,
+    ProtocolId, Truth,
 };
 
 /// Identifiers chosen where code-point order is easy to get wrong: case, a Latin-1 letter, a BMP
@@ -98,6 +99,41 @@ fn generate(rng: &mut Rng, depth: u32) -> Predicate {
     }
 }
 
+/// As [`generate`], with the order forms of story:evidence-order-predicate among the leaves: a
+/// `first` of any kind and result, and a `before` of two different kinds.
+fn generate_ordered(rng: &mut Rng, depth: u32) -> Predicate {
+    let kind = |rng: &mut Rng| EvidenceKindId::new(IDS[rng.below(IDS.len())]);
+    match rng.below(if depth == 0 { 4 } else { 7 }) {
+        0 => claim(IDS[rng.below(IDS.len())], TRUTHS[rng.below(3)]),
+        1 => evidence(IDS[rng.below(IDS.len())], RESULTS[rng.below(RESULTS.len())]),
+        2 => Predicate::First(FirstResult {
+            kind: kind(rng),
+            result: RESULTS[rng.below(RESULTS.len())].unwrap_or("z").to_owned(),
+            subject: None,
+        }),
+        3 => {
+            let first = rng.below(IDS.len());
+            let then = (first + 1 + rng.below(IDS.len() - 1)) % IDS.len();
+            Predicate::Before(EvidenceOrder {
+                first: EvidenceKindId::new(IDS[first]),
+                then: EvidenceKindId::new(IDS[then]),
+                subject: None,
+            })
+        }
+        4 => not(generate_ordered(rng, depth - 1)),
+        form => {
+            let members: Vec<Predicate> = (0..rng.below(4))
+                .map(|_| generate_ordered(rng, depth - 1))
+                .collect();
+            if form == 5 {
+                Predicate::All(members)
+            } else {
+                Predicate::Any(members)
+            }
+        }
+    }
+}
+
 /// Reorders every `all` and `any` and repeats some members: by the module doc, a document that
 /// differs only in this way compiles to the same bytes.
 fn scramble(rng: &mut Rng, predicate: &Predicate) -> Predicate {
@@ -126,10 +162,12 @@ fn documented_order(left: &Predicate, right: &Predicate) -> Ordering {
         match predicate {
             Predicate::All(_) => 0,
             Predicate::Any(_) => 1,
-            Predicate::Claim(_) => 2,
-            Predicate::Evidence(_) => 3,
-            Predicate::Input(_) => 4,
-            Predicate::Not(_) => 5,
+            Predicate::Before(_) => 2,
+            Predicate::Claim(_) => 3,
+            Predicate::Evidence(_) => 4,
+            Predicate::First(_) => 5,
+            Predicate::Input(_) => 6,
+            Predicate::Not(_) => 7,
         }
     }
     fn tested(is: Truth) -> u8 {
@@ -168,6 +206,24 @@ fn documented_order(left: &Predicate, right: &Predicate) -> Ordering {
                     test.r#in.iter().map(|v| code_points(v.as_str())).collect()
                 };
                 values(l).cmp(&values(r))
+            }),
+        (Predicate::First(l), Predicate::First(r)) => code_points(l.kind.as_str())
+            .cmp(&code_points(r.kind.as_str()))
+            .then_with(|| code_points(&l.result).cmp(&code_points(&r.result)))
+            .then_with(|| {
+                let subject = |s: &Option<b10x_canon::model::ArtifactId>| {
+                    s.as_ref().map(|s| code_points(s.as_str()))
+                };
+                subject(&l.subject).cmp(&subject(&r.subject))
+            }),
+        (Predicate::Before(l), Predicate::Before(r)) => code_points(l.first.as_str())
+            .cmp(&code_points(r.first.as_str()))
+            .then_with(|| code_points(l.then.as_str()).cmp(&code_points(r.then.as_str())))
+            .then_with(|| {
+                let subject = |s: &Option<b10x_canon::model::ArtifactId>| {
+                    s.as_ref().map(|s| code_points(s.as_str()))
+                };
+                subject(&l.subject).cmp(&subject(&r.subject))
             }),
         _ => form(left).cmp(&form(right)),
     }
@@ -253,6 +309,28 @@ fn compiled_predicates_are_the_documented_normal_form_and_ignore_member_order() 
     let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
     for case in 0..4000 {
         let predicate = generate(&mut rng, 3);
+        let ir = compiled(predicate.clone());
+        assert_eq!(
+            required(&ir),
+            &documented_normal_form(&predicate),
+            "case {case}: {predicate:?}"
+        );
+        let scrambled = scramble(&mut rng, &predicate);
+        assert_eq!(
+            compiled(scrambled.clone()).canonical_json(),
+            ir.canonical_json(),
+            "case {case}: {predicate:?}\nscrambled: {scrambled:?}"
+        );
+    }
+}
+
+/// Property: with the order forms among the leaves (story:evidence-order-predicate), the compiled
+/// predicate is still the documented normal form, and a scrambled copy compiles to the same bytes.
+#[test]
+fn predicates_with_order_forms_are_the_documented_normal_form() {
+    let mut rng = Rng(0x2F0E_1C3D_5B7A_9988);
+    for case in 0..4000 {
+        let predicate = generate_ordered(&mut rng, 3);
         let ir = compiled(predicate.clone());
         assert_eq!(
             required(&ir),

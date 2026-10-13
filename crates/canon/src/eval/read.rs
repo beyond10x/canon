@@ -25,8 +25,9 @@ use crate::ir::{self, Ir};
 use crate::model::{
     self, Action, Age, Artifact, ArtifactId, CapabilityId, CapabilityRequirement, CaseInput,
     CaseSection, Claim, ClaimId, ClaimTest, Declarations, EffectClass, EvidenceKind,
-    EvidenceKindId, EvidenceMatch, EvidenceProduction, InputId, InputTest, InputValue, Obligation,
-    Outcome, OutcomeRequirement, Predicate, Protocol, ProtocolHeader, ProtocolId, Truth, one_line,
+    EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceProduction, FirstResult, InputId,
+    InputTest, InputValue, Obligation, Outcome, OutcomeRequirement, Predicate, Protocol,
+    ProtocolHeader, ProtocolId, Truth, one_line,
 };
 
 /// A `malformed-input` refusal: `what` is not a document of its format, and why.
@@ -378,7 +379,20 @@ fn predicate(value: &Json) -> Shape<Predicate> {
             input: InputId::new(text(inner, "id")?),
             r#in: values(inner, "in")?,
         })),
-        _ => Err("a predicate is not one of all, any, not, evidence, claim or input".to_owned()),
+        "first" => Ok(Predicate::First(FirstResult {
+            kind: EvidenceKindId::new(text(inner, "kind")?),
+            result: text(inner, "result")?,
+            subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
+        })),
+        "before" => Ok(Predicate::Before(EvidenceOrder {
+            first: EvidenceKindId::new(text(inner, "first")?),
+            then: EvidenceKindId::new(text(inner, "then")?),
+            subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
+        })),
+        _ => Err(
+            "a predicate is not one of all, any, not, evidence, claim, input, first or before"
+                .to_owned(),
+        ),
     }
 }
 

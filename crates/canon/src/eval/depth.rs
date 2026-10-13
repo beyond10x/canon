@@ -105,7 +105,10 @@ fn own(predicate: &Predicate) -> Option<Own<'_>> {
             }
             Predicate::Not(inner) => pending.push((inner, level + 1)),
             Predicate::Claim(test) => own.tests.push((level, &test.claim)),
-            Predicate::Evidence(_) | Predicate::Input(_) => {}
+            Predicate::Evidence(_)
+            | Predicate::Input(_)
+            | Predicate::First(_)
+            | Predicate::Before(_) => {}
         }
     }
     Some(own)

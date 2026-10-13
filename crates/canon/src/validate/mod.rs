@@ -16,23 +16,28 @@
 //! 5. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
 //!    more than once (`duplicate-input-value`, naming the input and the value, once for every
 //!    listing after its first), in the order the inputs are written;
-//! 6. unresolved references and malformed input tests (a claim, an evidence kind, the artifact an
-//!    evidence match names as its subject, which is reported after the kind it is written beside;
+//! 6. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
+//!    the artifact an evidence match names as its subject, which is reported after the kind it is
+//!    written beside; for an order form, each kind it names, `first` before `then`, then its
+//!    subject, then a `before` whose `first` and `then` name one kind, `self-ordered-evidence`,
+//!    naming it;
 //!    for an input test, first an empty `in` list, `empty-input-test`, or a value it lists more
 //!    than once, `duplicate-input-test-value`, once for every listing after its first, then an
 //!    input it names that is not declared, `undeclared-input`, or a value it lists that its input
 //!    does not declare, `undeclared-input-value`, each value once, in the order listed, every one
 //!    naming the declaration the test is written in and the input): those in claims first, then those
-//!    in obligations (each obligation's discharge predicate, followed by every evidence match it
-//!    holds, which a discharge predicate may not: it tests only claim values; then its
-//!    applicability predicate, followed likewise by every evidence match it holds,
-//!    `evidence-in-applicability`: it tests only claim values and case inputs), then those in
+//!    in obligations (each obligation's discharge predicate, followed by every evidence match and
+//!    every order form it holds, which a discharge predicate may not: it tests only claim values,
+//!    each kind an order form names once; then its applicability predicate, followed likewise by
+//!    every evidence match and order form it holds, `evidence-in-applicability`: it tests only
+//!    claim values and case inputs), then those in
 //!    actions, then those in outcomes, then those in invalidation rules (the upstream artifact,
 //!    then each claim the rule invalidates); within a section, in the order its declarations are
 //!    written, and within a declaration, in the order its references are written;
 //! 7. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
 //!    claim it tests through any number of claim references (`inert-invalidation`), in the order
-//!    the rules and their claims are written;
+//!    the rules and their claims are written. An order form is not an evidence match here: it reads
+//!    the history, which an invalidation rule does not change;
 //! 8. cycles between claims.
 //!
 //! Within a section, entries come in the order they are written. Every message renders document
@@ -121,13 +126,20 @@ pub enum Problem {
     DuplicateIdentifier { section: Section, id: String },
     /// A predicate tests, or an invalidation rule invalidates, a claim that is not declared.
     UndeclaredClaim { referrer: Referrer, claim: ClaimId },
-    /// A predicate matches, or an action may produce, an evidence kind that is not declared.
+    /// A `before` order form names one evidence kind as both its `first` and its `then`: no
+    /// record is observed strictly before itself.
+    SelfOrderedEvidence {
+        referrer: Referrer,
+        kind: EvidenceKindId,
+    },
+    /// A predicate matches or orders, or an action may produce, an evidence kind that is not
+    /// declared.
     UndeclaredEvidenceKind {
         referrer: Referrer,
         kind: EvidenceKindId,
     },
-    /// An evidence match names as its subject, or an invalidation rule as its upstream artifact, an
-    /// artifact that is not declared.
+    /// An evidence match or an order form names as its subject, or an invalidation rule as its
+    /// upstream artifact, an artifact that is not declared.
     UndeclaredArtifact {
         referrer: Referrer,
         artifact: ArtifactId,
@@ -141,14 +153,16 @@ pub enum Problem {
         too_long: bool,
     },
     /// A discharge predicate tests evidence; it may test only claim values. `path` locates the
-    /// evidence match inside the predicate, as `discharged_when.all[1].evidence`.
+    /// evidence match or order form inside the predicate, as `discharged_when.all[1].evidence` or
+    /// `discharged_when.first`.
     EvidenceInDischarge {
         obligation: ObligationId,
         kind: EvidenceKindId,
         path: String,
     },
     /// An applicability predicate tests evidence; it may test only claim values and case inputs.
-    /// `path` locates the evidence match inside the predicate, as `applicable_when.not.evidence`.
+    /// `path` locates the evidence match or order form inside the predicate, as
+    /// `applicable_when.not.evidence` or `applicable_when.before`.
     EvidenceInApplicability {
         obligation: ObligationId,
         kind: EvidenceKindId,
@@ -192,6 +206,7 @@ impl Problem {
             Problem::InvalidIdentifier { .. } => "invalid-identifier",
             Problem::DuplicateIdentifier { .. } => "duplicate-identifier",
             Problem::UndeclaredClaim { .. } => "undeclared-claim",
+            Problem::SelfOrderedEvidence { .. } => "self-ordered-evidence",
             Problem::UndeclaredEvidenceKind { .. } => "undeclared-evidence-kind",
             Problem::UndeclaredArtifact { .. } => "undeclared-artifact",
             Problem::InvalidMaxAge { .. } => "invalid-max-age",
@@ -227,6 +242,11 @@ impl fmt::Display for Problem {
                 f,
                 "{referrer} references claim `{}`, which is not declared",
                 one_line(claim.as_str())
+            ),
+            Problem::SelfOrderedEvidence { referrer, kind } => write!(
+                f,
+                "{referrer} orders evidence kind `{}` before itself",
+                one_line(kind.as_str())
             ),
             Problem::UndeclaredEvidenceKind { referrer, kind } => write!(
                 f,
@@ -542,8 +562,9 @@ fn reaches_evidence(protocol: &Protocol, claim: &ClaimId) -> bool {
     false
 }
 
-/// Every evidence match in an obligation's discharge or applicability predicate, in the order
-/// written, each with its kind and its path from `root` (`discharged_when`, `applicable_when`).
+/// Every evidence match and order form in an obligation's discharge or applicability predicate, in
+/// the order written, each with its kind and its path from `root` (`discharged_when`,
+/// `applicable_when`); a `before` gives each kind it names once, `first` before `then`.
 fn evidence_at(root: &str, predicate: &Predicate) -> Vec<(EvidenceKindId, String)> {
     let mut found = Vec::new();
     let mut pending = vec![(predicate, root.to_owned())];
@@ -562,6 +583,15 @@ fn evidence_at(root: &str, predicate: &Predicate) -> Vec<(EvidenceKindId, String
             Predicate::Not(inner) => pending.push((inner, format!("{path}.not"))),
             Predicate::Evidence(matching) => {
                 found.push((matching.kind.clone(), format!("{path}.evidence")));
+            }
+            Predicate::First(form) => {
+                found.push((form.kind.clone(), format!("{path}.first")));
+            }
+            Predicate::Before(form) => {
+                found.push((form.first.clone(), format!("{path}.before")));
+                if form.then != form.first {
+                    found.push((form.then.clone(), format!("{path}.before")));
+                }
             }
             Predicate::Claim(_) | Predicate::Input(_) => {}
         }
@@ -587,8 +617,9 @@ fn duplicates(section: Section, ids: &[&str], problems: &mut Vec<Problem>) {
 }
 
 /// Reports every claim, evidence kind and evidence subject the predicate references that is not
-/// declared, and every input test that lists no value, a value twice, an undeclared input or a
-/// value its input does not declare, in the order the predicate is written.
+/// declared, every input test that lists no value, a value twice, an undeclared input or a
+/// value its input does not declare, and every `before` that orders a kind before itself, in the
+/// order the predicate is written.
 fn references(
     protocol: &Protocol,
     referrer: &Referrer,
@@ -616,6 +647,39 @@ fn references(
                 unresolved.push(Problem::UndeclaredArtifact {
                     referrer: referrer.clone(),
                     artifact: subject.clone(),
+                });
+            }
+        }
+        Predicate::First(_) | Predicate::Before(_) => {
+            let reads = node.order_reads();
+            let mut kinds: Vec<&EvidenceKindId> = Vec::new();
+            for (kind, _) in &reads {
+                if !kinds.contains(kind) {
+                    kinds.push(kind);
+                }
+            }
+            for kind in kinds {
+                if !protocol.evidence_kinds.contains(kind) {
+                    unresolved.push(Problem::UndeclaredEvidenceKind {
+                        referrer: referrer.clone(),
+                        kind: kind.clone(),
+                    });
+                }
+            }
+            if let Some((_, Some(subject))) = reads.first()
+                && !protocol.artifacts.contains(subject)
+            {
+                unresolved.push(Problem::UndeclaredArtifact {
+                    referrer: referrer.clone(),
+                    artifact: (*subject).clone(),
+                });
+            }
+            if let Predicate::Before(form) = node
+                && form.first == form.then
+            {
+                unresolved.push(Problem::SelfOrderedEvidence {
+                    referrer: referrer.clone(),
+                    kind: form.first.clone(),
                 });
             }
         }
@@ -1000,6 +1064,102 @@ mod tests {
         assert!(
             crate::model::parse(source).is_err(),
             "a claim names a decision"
+        );
+    }
+
+    /// An order form names declared kinds and a declared subject, refused as an evidence match is,
+    /// each kind once, `first` before `then`, then the subject; a `before` of one kind is refused,
+    /// naming it. In a discharge or applicability predicate, an order form tests evidence and is
+    /// refused there with its path. A protocol that fits is valid, and an order form makes no
+    /// invalidation rule active.
+    #[test]
+    fn an_order_form_resolves_its_kinds_and_subject() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            artifacts: {a: {}}\nevidence_kinds: {k: {}, m: {}}\n\
+            claims: {c: {true_when: {all: [{first: {kind: z, result: r, subject: x}}, \
+            {before: {first: y, then: z, subject: w}}, {before: {first: k, then: k}}]}}, \
+            d: {true_when: {first: {kind: k, result: r}}}}\n\
+            obligations: {o: {discharged_when: {not: {before: {first: k, then: m}}}, \
+            applicable_when: {any: [{claim: c}, {first: {kind: m, result: r}}]}}}\n\
+            invalidation: {i: {upstream: a, invalidates: [d]}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "undeclared-evidence-kind: claim `c` references evidence kind `z`, which is not declared",
+                "undeclared-artifact: claim `c` references artifact `x`, which is not declared",
+                "undeclared-evidence-kind: claim `c` references evidence kind `y`, which is not declared",
+                "undeclared-evidence-kind: claim `c` references evidence kind `z`, which is not declared",
+                "undeclared-artifact: claim `c` references artifact `w`, which is not declared",
+                "self-ordered-evidence: claim `c` orders evidence kind `k` before itself",
+                "evidence-in-discharge: obligation `o` tests evidence kind `k` at `discharged_when.not.before`; a discharge predicate tests only claim values",
+                "evidence-in-discharge: obligation `o` tests evidence kind `m` at `discharged_when.not.before`; a discharge predicate tests only claim values",
+                "evidence-in-applicability: obligation `o` tests evidence kind `m` at `applicable_when.any[1].first`; an applicability predicate tests only claim values and case inputs",
+                "inert-invalidation: invalidation rule `i` invalidates claim `d`, which reaches no evidence match",
+            ]
+        );
+        assert_eq!(
+            problems(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 artifacts: {a: {}}\nevidence_kinds: {k: {}, m: {}}\n\
+                 claims: {c: {true_when: {all: [{first: {kind: k, result: r, subject: a}}, \
+                 {before: {first: m, then: k, subject: a}}, {before: {first: k, then: m}}]}}}\n"
+            ),
+            Vec::<String>::new()
+        );
+    }
+
+    /// The order forms are maps with required keys: `kind` and `result`, or `first` and `then`;
+    /// an unknown key, a null and a second form beside one do not parse.
+    #[test]
+    fn an_order_form_is_written_with_its_required_keys() {
+        for written in [
+            "{first: {kind: k}}",
+            "{first: {result: r}}",
+            "{first: {kind: k, result: r, then: m}}",
+            "{first: {kind: k, result: ~}}",
+            "{first: {kind: k, result: r, subject: ~}}",
+            "{before: {first: k}}",
+            "{before: {then: k}}",
+            "{before: {first: k, then: m, result: r}}",
+            "{before: ~}",
+            "{first: {kind: k, result: r}, claim: c}",
+            "{before: {first: k, then: m}, first: {kind: k, result: r}}",
+        ] {
+            let source = format!(
+                "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nevidence_kinds: {{k: {{}}, m: {{}}}}\nclaims: {{c: {{true_when: {written}}}}}\n"
+            );
+            assert!(crate::model::parse(&source).is_err(), "{written} parses");
+            let source = format!(
+                "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nevidence_kinds: {{k: {{}}, m: {{}}}}\nclaims: {{c: {{true_when: {{all: []}}}}}}\noutcomes: {{o: {{requires: {written}}}}}\n"
+            );
+            assert!(
+                crate::model::parse(&source).is_err(),
+                "{written} parses as a requirement"
+            );
+        }
+        let parsed = crate::model::parse(
+            "format: protocol/1\nprotocol: {id: p, revision: 1}\nevidence_kinds: {k: {}, m: {}}\n\
+             claims: {c: {true_when: {first: {kind: k, result: r}}}}\n\
+             outcomes: {o: {requires: {before: {first: k, then: m}}}}\n",
+        )
+        .expect("parses");
+        let (_, claim) = parsed.claims.iter().next().expect("c");
+        assert_eq!(
+            claim.true_when,
+            Predicate::First(crate::model::FirstResult {
+                kind: EvidenceKindId::new("k"),
+                result: "r".to_owned(),
+                subject: None,
+            })
+        );
+        let (_, outcome) = parsed.outcomes.iter().next().expect("o");
+        assert_eq!(
+            outcome.requires,
+            Predicate::Before(crate::model::EvidenceOrder {
+                first: EvidenceKindId::new("k"),
+                then: EvidenceKindId::new("m"),
+                subject: None,
+            })
         );
     }
 }
