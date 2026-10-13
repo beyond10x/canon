@@ -21,11 +21,15 @@ scope:
 - confidence: cited
   path: crates/canon-docs/
 - confidence: cited
+  path: crates/canon/src/check/
+- confidence: cited
   path: crates/canon/src/diff/
 - confidence: cited
   path: crates/canon/src/eval/
 - confidence: cited
   path: crates/canon/src/explain/
+- confidence: cited
+  path: crates/canon/src/generate/
 - confidence: cited
   path: crates/canon/src/ir/
 - confidence: cited
@@ -38,7 +42,7 @@ scope:
   path: fixtures/investigation/evidence-independence.yaml
 - confidence: cited
   path: website/
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-13T11:05:08Z", actor: "human:timo", revision: 6}
 - {from: "proposed", to: "active", at: "2026-10-13T11:05:08Z", actor: "human:timo", revision: 7}
