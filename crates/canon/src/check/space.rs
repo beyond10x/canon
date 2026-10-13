@@ -10,8 +10,8 @@ use crate::eval::{invalidated_claims, reads};
 use crate::ir::Ir;
 use crate::model::{
     ArtifactId, CapabilityId, ClaimId, DecisionName, Declarations, EVIDENCE_FORMAT, EvidenceId,
-    EvidenceKindId, EvidenceMatch, EvidenceRecord, InputId, InputValue, Instant, OutcomeId,
-    OutcomeRequirement, Predicate, Revision, Truth, one_line,
+    EvidenceKindId, EvidenceMatch, EvidenceRecord, IndependenceDimensionId, InputId, InputValue,
+    Instant, OutcomeId, OutcomeRequirement, Predicate, Principal, Revision, Truth, one_line,
 };
 
 /// The revision every artifact and the case itself have in a checked state, and the case revision
@@ -25,6 +25,15 @@ const PRINCIPAL: &str = "canon-check";
 /// moved: an earlier one than [`REVISION`], the case's current revision of every artifact.
 const EARLIER: &str = "r0";
 
+/// How the producer of a record in a checked state is named: this, a dash and the producer's
+/// position among the space's producers, from 1.
+const PRODUCER: &str = "producer";
+
+/// The dimensions a producer is independent on in a checked state: exactly the dimensions some
+/// evidence match demands. The empty set is a record without a producer, which no demand accepts,
+/// and stands for every producer independent on no demanded dimension.
+type Profile<'a> = BTreeSet<&'a IndependenceDimensionId>;
+
 /// What reads the records of an evidence dimension: an evidence match, or an order form for each kind
 /// it reads. `result` is the result a match or a `first` form compares a record's with.
 #[derive(Clone, Copy)]
@@ -32,6 +41,9 @@ struct Read<'a> {
     kind: &'a EvidenceKindId,
     subject: Option<&'a ArtifactId>,
     result: Option<&'a str>,
+    /// The independence an evidence match demands; `None` for a match that demands none and for an
+    /// order form.
+    independent_on: Option<&'a [IndependenceDimensionId]>,
     /// Whether an order form reads: the dimension then has a history dimension.
     ordered: bool,
 }
@@ -48,9 +60,12 @@ const UNPLACED: u32 = 1;
 /// result a match that reads such a record matches, in code-point order, then `None`, a record
 /// with no result, which stands for every other result. Each class comes in one variant per
 /// upstream vector: for each of the dimension's upstream artifacts, whether the record was observed
-/// before it moved. A value is a set of (class, vector) variants, one bit each, class-major, so a
-/// dimension without upstream artifacts has one bit per class as before, and records of one class
-/// observed before and after a move can be present together.
+/// before it moved, and in one variant per producer profile: for an evidence dimension a match that
+/// demands independence reads, each distinct demand of such matches, and the empty profile, a
+/// record without a producer. A value is a set of (class, vector, profile) variants, one bit
+/// each, class-major, then vector, then profile, so a dimension without upstream artifacts and
+/// without demands has one bit per class as before, and records of one class observed before and
+/// after a move, or by producers independent on different dimensions, can be present together.
 struct Kind<'a> {
     id: &'a EvidenceKindId,
     /// A record of the dimension with no result: every record of it is this one, with its own id
@@ -66,9 +81,13 @@ struct Kind<'a> {
     upstreams: Vec<&'a ArtifactId>,
     /// Whether an order form reads this dimension, which then has a history dimension.
     ordered: bool,
+    /// The producer profiles of its records: the empty profile first, then each distinct demand of
+    /// the evidence matches that read it, in set order. Only the empty profile when no
+    /// match that reads it demands independence.
+    profiles: Vec<Profile<'a>>,
 }
 
-impl Kind<'_> {
+impl<'a> Kind<'a> {
     /// `` `k` ``, or `` `k` about `b` `` for a bound dimension.
     fn name(&self) -> String {
         let id = one_line(self.id.as_str());
@@ -85,31 +104,53 @@ impl Kind<'_> {
         1u32.checked_shl(self.upstreams.len() as u32)
     }
 
-    /// How many bits a value has: one per class and upstream vector. `None` when it does not fit.
+    /// How many bits a value has: one per class, upstream vector and producer profile. `None` when
+    /// it does not fit.
     fn bits(&self) -> Option<u32> {
-        (self.classes.len() as u32).checked_mul(self.vectors()?)
+        (self.classes.len() as u32)
+            .checked_mul(self.vectors()?)?
+            .checked_mul(u32::try_from(self.profiles.len()).ok()?)
     }
 
-    /// The class and upstream vector of bit `bit`.
-    fn variant(&self, bit: u32) -> (Option<&str>, u32) {
+    /// The class, upstream vector and producer profile of bit `bit`.
+    fn variant(&self, bit: u32) -> (Option<&str>, u32, &Profile<'a>) {
         let vectors = self
             .vectors()
             .expect("a state exists only when the bits fit");
-        (self.classes[(bit / vectors) as usize], bit % vectors)
+        let profiles = self.profiles.len() as u32;
+        let (variant, profile) = (bit / profiles, bit % profiles);
+        (
+            self.classes[(variant / vectors) as usize],
+            variant % vectors,
+            &self.profiles[profile as usize],
+        )
     }
 
     /// `` `k` ``, or `` `k` about `b` ``, followed by `` with upstream `a`, `c` `` when the
-    /// dimension has upstream artifacts: how the bound refusal names it.
+    /// dimension has upstream artifacts, and by `` with producers independent on [`d`], [`d`, `e`]
+    /// `` (each profile but the empty one) when a match that reads it demands independence: how the
+    /// bound refusal names it.
     fn dimension_name(&self) -> String {
-        if self.upstreams.is_empty() {
-            return self.name();
+        let mut name = self.name();
+        if !self.upstreams.is_empty() {
+            let upstreams: Vec<String> = self
+                .upstreams
+                .iter()
+                .map(|artifact| format!("`{}`", one_line(artifact.as_str())))
+                .collect();
+            name.push_str(&format!(" with upstream {}", upstreams.join(", ")));
         }
-        let upstreams: Vec<String> = self
-            .upstreams
-            .iter()
-            .map(|artifact| format!("`{}`", one_line(artifact.as_str())))
-            .collect();
-        format!("{} with upstream {}", self.name(), upstreams.join(", "))
+        if self.profiles.len() > 1 {
+            let profiles: Vec<String> = self.profiles[1..]
+                .iter()
+                .map(|profile| format!("[{}]", listed(profile)))
+                .collect();
+            name.push_str(&format!(
+                " with producers independent on {}",
+                profiles.join(", ")
+            ));
+        }
+        name
     }
 
     /// Whether `matching` reads the records of this dimension, by the evaluator's own rule.
@@ -155,6 +196,10 @@ pub(crate) struct Space<'a> {
     /// Each of those weak orders, as the rank of each `ordered` dimension, in lexicographic order;
     /// listed only when the space is within the bound, empty otherwise.
     rankings: Vec<Vec<u32>>,
+    /// Every non-empty producer profile of every evidence dimension, in set order: the producer of
+    /// a record of profile `P` is named [`PRODUCER`]`-n`, `n` the position of `P` here from 1, and
+    /// the case lists it as independent on exactly `P`.
+    producers: Vec<Profile<'a>>,
 }
 
 /// One state: a value for each dimension, in dimension order.
@@ -179,6 +224,7 @@ impl<'a> Space<'a> {
                     classes: Vec::new(),
                     upstreams: Vec::new(),
                     ordered: false,
+                    profiles: vec![Profile::new()],
                 });
                 continue;
             }
@@ -214,6 +260,7 @@ impl<'a> Space<'a> {
                     classes: Vec::new(),
                     upstreams: Vec::new(),
                     ordered: false,
+                    profiles: Vec::new(),
                 };
                 let reading: Vec<&Read<'a>> = of_kind
                     .iter()
@@ -225,6 +272,7 @@ impl<'a> Space<'a> {
                     .collect();
                 kind.classes = results.into_iter().map(Some).chain([None]).collect();
                 kind.ordered = reading.iter().any(|matching| matching.ordered);
+                kind.profiles = profiles(reading.iter().filter_map(|m| m.independent_on));
                 kinds.push(kind);
             }
         }
@@ -263,7 +311,12 @@ impl<'a> Space<'a> {
             .map(|(at, _)| at)
             .collect();
         let orders = (ordered.len() >= 2).then(|| weak_orders(ordered.len()));
+        let producers: BTreeSet<Profile<'a>> = kinds
+            .iter()
+            .flat_map(|kind| kind.profiles.iter().skip(1).cloned())
+            .collect();
         let mut space = Space {
+            producers: producers.into_iter().collect(),
             kinds,
             capabilities: capabilities.into_iter().collect(),
             decisions: decisions.into_iter().collect(),
@@ -384,6 +437,12 @@ impl<'a> Space<'a> {
                 Some(bits) => 1u128
                     .checked_shl(bits)
                     .map_or_else(|| format!("2^{bits}"), |n| n.to_string()),
+                None if kind.profiles.len() > 1 => format!(
+                    "2^({} * 2^{} * {})",
+                    kind.classes.len(),
+                    kind.upstreams.len(),
+                    kind.profiles.len()
+                ),
                 None => format!("2^({} * 2^{})", kind.classes.len(), kind.upstreams.len()),
             };
             format!("evidence kind {} {count}", kind.dimension_name())
@@ -553,12 +612,18 @@ impl<'a> Space<'a> {
                 if value & (1 << bit) == 0 {
                     continue;
                 }
-                let (class, vector) = kind.variant(bit);
+                let (class, vector, profile) = kind.variant(bit);
                 let name = kind.name();
                 let mut item = match class {
                     Some(result) => format!("evidence {name} result `{}`", one_line(result)),
                     None => format!("evidence {name}"),
                 };
+                if !profile.is_empty() {
+                    item.push_str(&format!(
+                        " by a producer independent on {}",
+                        listed(profile)
+                    ));
+                }
                 let moved: Vec<String> = kind
                     .upstreams
                     .iter()
@@ -677,7 +742,7 @@ impl<'a> Space<'a> {
                 if value & (1 << bit) == 0 {
                     continue;
                 }
-                let (class, vector) = kind.variant(bit);
+                let (class, vector, profile) = kind.variant(bit);
                 let upstream_revisions = Declarations::new(
                     kind.upstreams
                         .iter()
@@ -694,6 +759,7 @@ impl<'a> Space<'a> {
                     result: class.map(str::to_owned),
                     observed_at: observed_at.clone(),
                     upstream_revisions,
+                    producer: self.producer(profile),
                     ..record.clone()
                 });
             }
@@ -729,6 +795,45 @@ impl<'a> Space<'a> {
             }
         }
         records
+    }
+
+    /// The producer of a record of `profile`: none for the empty profile, otherwise
+    /// [`PRODUCER`]`-n` for the profile's position `n` among the space's producers, from 1.
+    fn producer(&self, profile: &Profile<'a>) -> Option<Principal> {
+        if profile.is_empty() {
+            return None;
+        }
+        let at = self
+            .producers
+            .binary_search(profile)
+            .expect("every non-empty profile is a producer");
+        Some(Principal::new(format!("{PRODUCER}-{}", at + 1)))
+    }
+
+    /// The case's `independence` map for `records`, as the space builds them: each producer they
+    /// name, in producer order, listed on exactly the dimensions of its profile, in identifier
+    /// order. Empty when no record names a producer.
+    pub(crate) fn independence(
+        &self,
+        records: &[EvidenceRecord],
+    ) -> Declarations<Principal, Vec<IndependenceDimensionId>> {
+        let named: BTreeSet<&Principal> = records
+            .iter()
+            .filter_map(|record| record.producer.as_ref())
+            .collect();
+        Declarations::new(
+            self.producers
+                .iter()
+                .enumerate()
+                .filter_map(|(at, profile)| {
+                    let producer = Principal::new(format!("{PRODUCER}-{}", at + 1));
+                    named.contains(&producer).then(|| {
+                        let dimensions = profile.iter().map(|d| (*d).clone()).collect();
+                        (producer, dimensions)
+                    })
+                })
+                .collect(),
+        )
     }
 
     /// The `canon-authority/1` document `state` stands for, as JSON: each decided capability.
@@ -826,6 +931,32 @@ impl<'a> Space<'a> {
     }
 }
 
+/// The producer profiles of an evidence dimension read by matches demanding `demands`: the empty
+/// profile and each distinct demand, as a set, in set order.
+///
+/// That is enough: a producer's independence decides a record only through which demands it
+/// meets, and a match's value, and whether it reads a record at all, depend only on the classes of
+/// the records it reads. A record of class `c` from a producer independent on `S` is read by the
+/// matches whose demand is within `S`; the records of class `c` from a producer independent on
+/// exactly each such demand are read by the same matches and no other, since a demand within one
+/// within `S` is within `S`. So every evidence set has a state whose records each match reads
+/// the same classes of. And no profile can go: the record of a demand `D`'s profile is read by
+/// `D`'s match and by none whose demand is not within `D`, which no other profile gives.
+fn profiles<'a>(demands: impl Iterator<Item = &'a [IndependenceDimensionId]>) -> Vec<Profile<'a>> {
+    let mut profiles: BTreeSet<Profile<'a>> = BTreeSet::from([Profile::new()]);
+    profiles.extend(demands.map(|demand| demand.iter().collect::<Profile<'a>>()));
+    profiles.into_iter().collect()
+}
+
+/// `` `d`, `e` ``: the dimensions of `profile`, in identifier order.
+fn listed(profile: &Profile<'_>) -> String {
+    profile
+        .iter()
+        .map(|dimension| format!("`{}`", one_line(dimension.as_str())))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 /// The instant of rank `rank` in a checked state: whole minutes from `2000-01-01T00:00:00Z`.
 fn instant(rank: u32) -> Instant {
     Instant::new(format!("2000-01-01T{:02}:{:02}:00Z", rank / 60, rank % 60))
@@ -904,12 +1035,14 @@ fn reads_in(predicate: &Predicate) -> Vec<Read<'_>> {
             kind: &matching.kind,
             subject: matching.subject.as_ref(),
             result: matching.result.as_deref(),
+            independent_on: matching.independent_on.as_deref(),
             ordered: false,
         }),
         Predicate::First(form) => found.push(Read {
             kind: &form.kind,
             subject: form.subject.as_ref(),
             result: Some(form.result.as_str()),
+            independent_on: None,
             ordered: true,
         }),
         Predicate::Before(_) => {
@@ -918,6 +1051,7 @@ fn reads_in(predicate: &Predicate) -> Vec<Read<'_>> {
                     kind,
                     subject,
                     result: None,
+                    independent_on: None,
                     ordered: true,
                 });
             }

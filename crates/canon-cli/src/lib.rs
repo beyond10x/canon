@@ -103,7 +103,9 @@ pub enum Command {
     /// claim is there in any combination of observed before and after each upstream artifact
     /// moved, one record each. Evidence an order form reads (`first`, `before`) is also there with
     /// earlier records at a superseded revision, or with no known instant, in every order of first
-    /// observations. A state space of more than 65536 states is refused.
+    /// observations. Evidence an evidence match demanding independence reads (`independent_on`) is
+    /// there without a producer and from a producer independent on exactly each demand, in any
+    /// combination. A state space of more than 65536 states is refused.
     Check {
         /// The protocol document to check.
         #[arg(long)]

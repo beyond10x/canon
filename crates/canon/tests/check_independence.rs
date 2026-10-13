@@ -88,7 +88,9 @@ fn an_outcome_needing_an_independent_record_is_reached_and_its_witness_passes() 
 
 /// Three demands on one kind, `[d]`, `[e]` and `[d, e]`: a record independent on `d` alone meets
 /// the first and not the others, so every combination of demands met is reached, including one
-/// that needs three producers at once.
+/// that needs two producers each independent on one dimension only. `contradict` needs `on_de`
+/// false beside `on_d` true, which no evidence set gives (every record `on_de` reads, `on_d` reads
+/// too, and a match reading mixed results is unknown): that finding is true and stays.
 const NESTED: &str = "format: protocol/1\n\
     protocol: {id: p, revision: 1}\n\
     artifacts: {a: {}}\n\
@@ -99,7 +101,8 @@ const NESTED: &str = "format: protocol/1\n\
       on_de: {true_when: {evidence: {kind: k, result: ok, independent_on: [d, e]}}}\n  \
       on_e: {true_when: {evidence: {kind: k, result: ok, independent_on: [e]}}}\n\
     actions: {run: {may_produce: [{evidence: k}]}, \
-    ship: {precondition: {all: [{claim: on_d}, {claim: on_e}, {not: {claim: on_de}}]}}}\n\
+    ship: {precondition: {all: [{claim: on_d}, {claim: on_e}, {claim: on_de, is: unknown}]}}, \
+    contradict: {precondition: {all: [{claim: on_d}, {claim: on_de, is: false}]}}}\n\
     outcomes:\n  \
       d_only: {requires: {all: [{claim: on_d}, {claim: on_de, is: unknown}]}}\n  \
       both: {requires: {claim: on_de}}\n  \
@@ -107,14 +110,17 @@ const NESTED: &str = "format: protocol/1\n\
 
 #[test]
 fn every_combination_of_demands_met_is_reached() {
-    // `ship` needs an approval independent on `d` but not `e`, one independent on `e` but not
-    // `d`, and a record of another result independent on both: three producers, none of which
-    // the other two stand for.
     let report = check::check(&compiled(NESTED), None).expect("checked");
-    assert!(report.is_clean(), "{report}");
+    let findings: Vec<String> = report.findings.iter().map(ToString::to_string).collect();
+    assert_eq!(
+        findings,
+        ["unsatisfiable-precondition: action `contradict`: its precondition holds in no state"],
+        "{report}"
+    );
     assert_eq!(
         witnesses_pass(NESTED, "p.yaml"),
         [
+            "p.action.contradict.blocked",
             "p.action.ship.blocked",
             "p.outcome.both.legitimate",
             "p.outcome.d_only.legitimate",
