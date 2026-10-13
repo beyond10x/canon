@@ -8,8 +8,9 @@
 //! - `computed_from`: the protocol id and revision (`protocol`, `protocol_revision`), the Canon
 //!   semantics that applied (`semantics`: `{"canon": <the Canon crate version>, "format":
 //!   "canon-decision/1"}`), the case snapshot as given (`case`: its `format`, `id`, `protocol`,
-//!   `artifacts` with each artifact's `revision`, `revision` and `termination` when given, and
-//!   `inputs`, each case input's value, when the case gives any),
+//!   `artifacts` with each artifact's `revision`, `revision` and `termination` when given,
+//!   `inputs`, each case input's value, when the case gives any, and `independence`, each producer
+//!   with the dimensions it is independent on, in identifier order, when the case lists any),
 //!   the ids of the evidence set (`evidence`), and, each only when supplied, the authority
 //!   decisions (`authority`, `{"capability", "decision"}` entries), the explicit decisions
 //!   (`decisions`, `{"case_revision", "decision", "outcome", "principal"}` entries) and the
@@ -39,14 +40,20 @@
 //!
 //! A match reads a record of its kind and, when it names a subject, only one about that artifact:
 //! the rule claim values are decided by (`crate::eval::reads`). A record about another artifact is
-//! not listed under a match bound to a subject, neither as applied nor as excluded.
+//! not listed under a match bound to a subject, neither as applied nor as excluded. A match that
+//! demands independence (`independent_on`) lists every record of its kind and subject, and one
+//! whose producer the case does not list on every dimension demanded is `excluded` with the reason
+//! `not_independent`: under a claim, when no match the claim reaches that reads it accepts it, as
+//! its `excluded_evidence` counts it.
 //!
 //! The `because` of an outcome, action or obligation is the reasons the decision states for it,
 //! in their order, each evidence-match reason `{"evidence": <kind>, "present": ...}` (with its
 //! `"subject"` when the match names one) followed by every record of the evidence set that match
 //! reads, in evidence-id order: `{"evidence": <id>,
 //! "status": "applied"}`, or `{"evidence": <id>, "reason": <reason>, "status": "excluded"}` with
-//! the reason its exclusion stage gave (`revision_mismatch`, `expired`, `invalidated`). A record
+//! the reason its exclusion stage gave (`revision_mismatch`, `expired`, `invalidated`), or
+//! `not_independent` when the reason's match demands an independence its producer lacks
+//! (`"independent_on"`, written as the decision states it). A record
 //! the invalidation stage kept from some claims only is `excluded` with the reason `invalidated`
 //! under each of those claims in `claims`, which are evaluated without it throughout, including in
 //! the claims they test. It is `applied` under every claim it was not invalidated for, and in the
@@ -67,13 +74,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Map, Value, json};
 
 use crate::eval::{
-    Authority, Decisions, EvidenceSets, Inputs as CaseInputs, Invalidated, order_reasons, reads,
-    unmet_reasons,
+    Authority, Decisions, EvidenceSets, Independence, Inputs as CaseInputs, Invalidated,
+    order_reasons, reads, unmet_reasons,
 };
 use crate::ir::Ir;
 use crate::model::{
     ArtifactId, Case, ClaimId, DECISION_FORMAT, Decision, EvidenceExclusion, EvidenceKindId,
-    EvidenceRecord, ExclusionReason, InputId, Json, Predicate, Truth,
+    EvidenceRecord, ExclusionReason, IndependenceDimensionId, InputId, Json, Predicate, Truth,
 };
 
 /// An explanation, the payload of the decision's `explanation` slot, as the module docs give it.
@@ -109,7 +116,8 @@ pub(crate) fn explain(
     inputs: Inputs<'_>,
     decision: &Decision,
 ) -> Option<Explanation> {
-    let records = Records::new(evidence, excluded, invalidated);
+    let independence = Independence::of(case);
+    let records = Records::new(evidence, excluded, invalidated, &independence);
     let values: BTreeMap<ClaimId, Truth> = decision
         .claims
         .iter()
@@ -155,8 +163,13 @@ pub(crate) fn explain(
     Some(Value::Object(sections))
 }
 
-/// An evidence match as the explanation traces it: its kind, and the artifact it names, if any.
-type Match<'a> = (&'a EvidenceKindId, Option<&'a ArtifactId>);
+/// An evidence match as the explanation traces it: its kind, the artifact it names, if any, and the
+/// dimensions it demands independence on, if any.
+type Match<'a> = (
+    &'a EvidenceKindId,
+    Option<&'a ArtifactId>,
+    Option<&'a [IndependenceDimensionId]>,
+);
 
 /// The evidence set as the explanation lists it: each record, and the reason it was excluded, if
 /// it was.
@@ -166,6 +179,9 @@ struct Records<'a> {
     excluded: BTreeMap<&'a str, &'a str>,
     /// The records the invalidation stage kept from each claim.
     invalidated: &'a Invalidated,
+    /// The case's independence map, which decides which records a match that demands independence
+    /// reads.
+    independence: &'a Independence,
 }
 
 impl<'a> Records<'a> {
@@ -173,6 +189,7 @@ impl<'a> Records<'a> {
         evidence: &'a [EvidenceRecord],
         excluded: &'a [EvidenceExclusion],
         invalidated: &'a Invalidated,
+        independence: &'a Independence,
     ) -> Self {
         let mut records: Vec<&EvidenceRecord> = evidence.iter().collect();
         records.sort_by(|one, other| one.id.as_str().cmp(other.id.as_str()));
@@ -183,15 +200,18 @@ impl<'a> Records<'a> {
                 .map(|exclusion| (exclusion.evidence.as_str(), exclusion.reason.as_str()))
                 .collect(),
             invalidated,
+            independence,
         }
     }
 
-    /// Each record one of `matches` reads (`crate::eval::reads`), in evidence-id order:
-    /// `{"evidence": <id>, "status": "applied"}` or `{"evidence": <id>, "reason": <reason>,
-    /// "status": "excluded"}`. Listed under `claim`, a record the invalidation stage kept from it
-    /// is excluded with the reason `invalidated` (`crate::eval::Invalidated::lists`): the claim is
-    /// evaluated in its own context, where no match it reaches reads the record. Outside `claims`,
-    /// an invalidated record applied.
+    /// Each record one of `matches` reads by kind and subject (`crate::eval::reads`), in
+    /// evidence-id order: `{"evidence": <id>, "status": "applied"}` or `{"evidence": <id>,
+    /// "reason": <reason>, "status": "excluded"}`. Listed under `claim`, a record the invalidation
+    /// stage kept from it is excluded with the reason `invalidated` (`crate::eval::Invalidated::lists`):
+    /// the claim is evaluated in its own context, where no match it reaches reads the record.
+    /// Outside `claims`, an invalidated record applied. Any other record that none of the
+    /// `matches` reading it accepts, for want of the independence it demands, is excluded with the
+    /// reason `not_independent`.
     fn read_by<'m>(
         &self,
         claim: Option<(&Ir, &ClaimId)>,
@@ -203,14 +223,28 @@ impl<'a> Records<'a> {
                 matches
                     .clone()
                     .into_iter()
-                    .any(|(kind, subject)| reads(kind, subject, record))
+                    .any(|(kind, subject, _)| reads(kind, subject, record))
             })
             .map(|record| {
                 let id = record.id.as_str();
                 let invalidated = claim
                     .is_some_and(|(ir, claim)| self.invalidated.lists(ir, claim, record))
                     .then_some(ExclusionReason::Invalidated.as_str());
-                match self.excluded.get(id).copied().or(invalidated) {
+                let accepted = matches
+                    .clone()
+                    .into_iter()
+                    .any(|(kind, subject, demanded)| {
+                        reads(kind, subject, record) && self.independence.accepts(demanded, record)
+                    });
+                let not_independent =
+                    (!accepted).then_some(ExclusionReason::NotIndependent.as_str());
+                match self
+                    .excluded
+                    .get(id)
+                    .copied()
+                    .or(invalidated)
+                    .or(not_independent)
+                {
                     Some(reason) => {
                         json!({"evidence": id, "reason": reason, "status": "excluded"})
                     }
@@ -220,8 +254,9 @@ impl<'a> Records<'a> {
             .collect()
     }
 
-    /// Whether a record of the evidence set is one `matching` reads.
-    fn any_read_by(&self, (kind, subject): Match<'_>) -> bool {
+    /// Whether a record of the evidence set is one a match of `kind` and `subject` reads, whatever
+    /// independence it demands.
+    fn any_read_by(&self, (kind, subject): (&EvidenceKindId, Option<&ArtifactId>)) -> bool {
         self.records
             .iter()
             .any(|record| reads(kind, subject, record))
@@ -229,8 +264,9 @@ impl<'a> Records<'a> {
 }
 
 /// `reasons` as `because`: each reason as given, and after an evidence match's reason
-/// `{"evidence": <kind>, "present": ...}`, with its `"subject"` when it names one, each record that
-/// match reads.
+/// `{"evidence": <kind>, "present": ...}`, with its `"subject"` when it names one and its
+/// `"independent_on"` when it demands independence, each record that match reads by kind and
+/// subject, a record that fails the demand excluded as `not_independent`.
 fn because(reasons: &[Value], records: &Records<'_>) -> Vec<Value> {
     let mut because = Vec::new();
     for reason in reasons {
@@ -238,7 +274,17 @@ fn because(reasons: &[Value], records: &Records<'_>) -> Vec<Value> {
         if let (Some(kind), Some(_)) = (reason["evidence"].as_str(), reason.get("present")) {
             let kind = EvidenceKindId::new(kind);
             let subject = reason["subject"].as_str().map(ArtifactId::new);
-            because.extend(records.read_by(None, [(&kind, subject.as_ref())]));
+            let independent_on: Option<Vec<IndependenceDimensionId>> =
+                reason["independent_on"].as_array().map(|dimensions| {
+                    dimensions
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(IndependenceDimensionId::new)
+                        .collect()
+                });
+            because.extend(
+                records.read_by(None, [(&kind, subject.as_ref(), independent_on.as_deref())]),
+            );
         }
     }
     because
@@ -294,6 +340,17 @@ fn case_snapshot(case: &Case) -> Value {
     }
     if let Some(termination) = &case.termination {
         snapshot.insert("termination".to_owned(), json!(termination.as_str()));
+    }
+    let independence = Independence::of(case);
+    let mut producers = independence.producers().peekable();
+    if producers.peek().is_some() {
+        let listed: Map<String, Value> = producers
+            .map(|(producer, dimensions)| {
+                let dimensions: Vec<&str> = dimensions.iter().map(|id| id.as_str()).collect();
+                (producer.as_str().to_owned(), json!(dimensions))
+            })
+            .collect();
+        snapshot.insert("independence".to_owned(), Value::Object(listed));
     }
     if !case.inputs.is_empty() {
         let inputs: Map<String, Value> = case
@@ -393,7 +450,11 @@ fn reached_matches<'a>(ir: &'a Ir, claim: &'a ClaimId) -> BTreeSet<Match<'a>> {
         };
         declared.true_when.visit(&mut |node| match node {
             Predicate::Evidence(matching) => {
-                matches.insert((&matching.kind, matching.subject.as_ref()));
+                matches.insert((
+                    &matching.kind,
+                    matching.subject.as_ref(),
+                    matching.independent_on.as_deref(),
+                ));
             }
             Predicate::Claim(test) => pending.push(&test.claim),
             _ => {}
@@ -431,10 +492,14 @@ fn claims(
         };
         let matches = reached_matches(ir, id);
         because.extend(records.read_by(Some((ir, id)), matches.iter().copied()));
+        // Each kind and subject once, whatever independence its matches demand.
+        let read: BTreeSet<(&EvidenceKindId, Option<&ArtifactId>)> = matches
+            .iter()
+            .map(|(kind, subject, _)| (*kind, *subject))
+            .collect();
         because.extend(
-            matches
-                .iter()
-                .filter(|matching| !records.any_read_by(**matching))
+            read.into_iter()
+                .filter(|matching| !records.any_read_by(*matching))
                 .map(|(kind, subject)| {
                     let mut absent = json!({"kind": kind.as_str(), "status": "absent"});
                     if let Some(subject) = subject {

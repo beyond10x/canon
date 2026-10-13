@@ -7,6 +7,9 @@
 # (canon-authority/1, story:review-hardening-w7). story:case-inputs adds the case inputs a protocol
 # declares and a case gives values for, the input predicate and an obligation's applicability.
 # story:evidence-order-predicate adds the order forms `first` and `before` of the predicate.
+# story:evidence-independence adds the independence dimensions a protocol declares, the
+# independence an evidence match demands of its records, the producer an evidence record names and
+# the independence a case gives each producer.
 # crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
 domain: canon.protocol
 
@@ -208,9 +211,11 @@ types:
     kind: newtype
     of: String
 
-  # Who took an explicit decision (lead-investigator). Canon resolves no identity: the principal
-  # is recorded as given, an identifier like every other.
+  # Who took an explicit decision (lead-investigator), or who produced an evidence record
+  # (EvidenceRecord.producer, story:evidence-independence). Canon resolves no identity and proves
+  # no production: the principal is recorded as given, an identifier like every other.
   # read from: .engineering/planning/story/decision-outcomes.md:47
+  # read from: .engineering/planning/story/evidence-independence.md:68-69
   # read from: docs/design/canon-protocol-calculus-design.md:501
   - name: canon.protocol.Principal
     kind: newtype
@@ -330,6 +335,26 @@ types:
       - name: in
         type: List<canon.protocol.InputValue>
 
+  # The identifier of an independence dimension a protocol declares (story:evidence-independence):
+  # not empty, no whitespace, control or Unicode format characters, declared once. Canon gives no
+  # dimension a meaning; a domain names them (different_principal, different_agent_run).
+  # read from: .engineering/planning/story/evidence-independence.md:63-65
+  - name: canon.protocol.IndependenceDimensionId
+    kind: newtype
+    of: String
+
+  # One independence dimension, declared in the protocol's `independence_dimensions` section. A
+  # dimension is a relation between who produced a record and the case's work that the trusted
+  # context resolves for each producer (design § 39.4); Canon only reads the result, from the case.
+  # read from: .engineering/planning/story/evidence-independence.md:63-65
+  # read from: docs/design/canon-protocol-calculus-design.md:1665
+  - name: canon.protocol.IndependenceDimension
+    kind: struct
+    fields:
+      # read from: .engineering/planning/story/evidence-independence.md:63-64
+      - name: description
+        type: Optional<String>
+
   # A three-valued truth value; unknown is not false.
   # read from: crates/canon/src/model/predicate.rs:32-38
   - name: canon.protocol.Truth
@@ -387,6 +412,21 @@ types:
       # read from: crates/canon/src/model/predicate.rs:137
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
+      # The independence the match demands of its records (story:evidence-independence): a record
+      # is of the match only when it names a producer and the case lists every dimension named here
+      # for that producer. A record of the match's kind and subject that fails it is excluded from
+      # the match with the reason not_independent, whatever its result, so a match that only such
+      # records would decide is unknown, not false (CANON-INDEPENDENCE-001). A match without it
+      # reads its records as before. canon validate refuses an empty list
+      # (empty-independent-on), a dimension listed twice (duplicate-independent-on) and one the
+      # protocol does not declare (undeclared-dimension), each naming the declaration it is written
+      # in, and the dimension where there is one. A set: canon-ir/1 lists each dimension once, in
+      # identifier order, and writes the key only when the match names it.
+      # read from: .engineering/planning/story/evidence-independence.md:66-67
+      # read from: .engineering/planning/story/evidence-independence.md:74-80
+      # read from: docs/design/canon-protocol-calculus-design.md:1442-1444
+      - name: independent_on
+        type: Optional<List<canon.protocol.IndependenceDimensionId>>
 
   # An order form: whether the first record of `kind` (about `subject` when named) has `result`.
   # It reads the history: every record of its kind the evidence check accepted, including those
@@ -548,6 +588,15 @@ types:
       # read from: .engineering/planning/story/invalidation-rules.md:69-70
       - name: upstream_revisions
         type: Map<canon.protocol.ArtifactId, canon.protocol.Revision>
+      # Who produced the record (story:evidence-independence): an opaque principal id, recorded as
+      # given. Canon does not prove it; signing and attestation are out. Optional: a record without
+      # one is of no evidence match that demands independence, and of every other match as before,
+      # so no earlier expectation changes. The evaluator refuses one that is not an identifier
+      # (invalid-identifier), naming the record.
+      # read from: .engineering/planning/story/evidence-independence.md:68-69
+      # read from: .engineering/planning/story/evidence-independence.md:74-75
+      - name: producer
+        type: Optional<canon.protocol.Principal>
 
   # One explicit decision of a canon-decisions/1 document. `canon evaluate --decisions` names that
   # document: a YAML (or JSON) list of these entries, the way canon-authority/1 is a list of
@@ -641,12 +690,17 @@ types:
         type: canon.protocol.ExclusionReason
 
   # Why evidence was excluded: bound to another revision of its subject
-  # (story:evidence-revision-binding), older than its kind allows (story:evidence-freshness), or
-  # invalidated by a rule (story:invalidation-rules).
+  # (story:evidence-revision-binding), older than its kind allows (story:evidence-freshness),
+  # invalidated by a rule (story:invalidation-rules), or produced by a producer the case does not
+  # list as independent on every dimension an evidence match demands (story:evidence-independence).
+  # A record is not_independent under a claim when an evidence match the claim reaches would read it
+  # by kind and subject, no earlier reason keeps it from the claim, and no match the claim reaches
+  # that reads it accepts its producer.
   # read from: .engineering/planning/story/evaluator-skeleton.md:75-76
+  # read from: .engineering/planning/story/evidence-independence.md:74-78
   - name: canon.protocol.ExclusionReason
     kind: enum
-    variants: ["revision_mismatch", "expired", "invalidated"]
+    variants: ["revision_mismatch", "expired", "invalidated", "not_independent"]
 
   # The status of one obligation in canon-decision/1's obligations section: not_applicable when its
   # applicable_when predicate is false (story:case-inputs), so it holds back nothing; otherwise
@@ -763,6 +817,13 @@ entities:
       # read from: docs/design/canon-protocol-calculus-design.md:631-634
       - name: case
         type: Optional<canon.protocol.CaseSection>
+      # The independence dimensions the protocol's evidence matches may demand, keyed by dimension
+      # id (story:evidence-independence), as the case section declares case inputs. A protocol
+      # without the section declares none, and its canon-ir/1 has no `independence_dimensions` key,
+      # so the IR of every earlier protocol is unchanged.
+      # read from: .engineering/planning/story/evidence-independence.md:63-65
+      - name: independence_dimensions
+        type: Map<canon.protocol.IndependenceDimensionId, canon.protocol.IndependenceDimension>
     # revision is a u64 (crates/canon/src/model/mod.rs:54); ESS Integer is signed.
     invariants:
       - revision >= 0
@@ -818,6 +879,19 @@ entities:
       # read from: .engineering/planning/story/case-inputs.md:71-76
       - name: inputs
         type: Map<canon.protocol.InputId, canon.protocol.InputValue>
+      # The dimensions on which each producer is independent of the case's work, keyed by producer
+      # (story:evidence-independence). The trusted context that writes the case resolves it; Canon
+      # reads it as given. A producer absent from the map, or listed with [], is independent on no
+      # dimension. Optional: a case without it lists no producer. An evaluation is refused when a
+      # producer or a dimension is not an identifier (invalid-identifier), a producer is listed
+      # twice or a dimension twice for one producer (duplicate-identifier), or a dimension is one
+      # the protocol does not declare (undeclared-dimension), each naming the producer, and the
+      # dimension where there is one.
+      # read from: .engineering/planning/story/evidence-independence.md:70-73
+      # read from: .engineering/planning/story/evidence-independence.md:79-80
+      # read from: docs/design/canon-protocol-calculus-design.md:1665
+      - name: independence
+        type: Map<canon.protocol.Principal, List<canon.protocol.IndependenceDimensionId>>
     relations:
       # Every case is governed by exactly one protocol (design § 4.2).
       # read from: docs/design/canon-protocol-calculus-design.md:247

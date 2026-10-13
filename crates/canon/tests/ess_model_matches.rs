@@ -171,7 +171,7 @@ fn compiled_ir(root: &Path) -> Value {
     let output = match Command::new("ess").args(args).current_dir(root).output() {
         Ok(output) => output,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => panic!(
-            "`ess` is not on PATH: comparing the specification with the model needs ess 0.53.0, \
+            "`ess` is not on PATH: comparing the specification with the model needs ess 0.59.0, \
              the release ess/ess-inputs.yaml pins"
         ),
         Err(error) => panic!("cannot run `ess {}`: {error}", args.join(" ")),

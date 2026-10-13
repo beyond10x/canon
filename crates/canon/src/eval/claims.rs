@@ -4,6 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::Refusal;
+use super::independence::Independence;
 use super::invalidation::Invalidated;
 use crate::ir::Ir;
 use crate::model::{
@@ -12,12 +13,39 @@ use crate::model::{
 };
 
 /// The evidence a predicate reads: the records the exclusion stages `left`, which evidence matches
-/// read, and the `history`, every record the evidence check accepted, which the order forms read
-/// (`order.rs`). The default reads no record.
+/// read, the `history`, every record the evidence check accepted, which the order forms read
+/// (`order.rs`), and the case's `independence`, which decides which records an evidence match that
+/// demands independence reads (`independence.rs`). The default reads no record and lists no
+/// producer.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct EvidenceSets<'a> {
     pub(crate) left: &'a [EvidenceRecord],
     pub(crate) history: &'a [EvidenceRecord],
+    /// `None` lists no producer: no record satisfies a demand for independence.
+    pub(crate) independence: Option<&'a Independence>,
+}
+
+impl EvidenceSets<'_> {
+    /// Whether `matching` reads `record`: of its kind and subject ([`reads`]), and produced by a
+    /// producer the case lists on every dimension the match demands independence on.
+    pub(crate) fn of_match(&self, matching: &EvidenceMatch, record: &EvidenceRecord) -> bool {
+        reads(&matching.kind, matching.subject.as_ref(), record)
+            && independent(self.independence, matching, record)
+    }
+}
+
+/// Whether `record` satisfies the independence `matching` demands, under the case's
+/// `independence`; every record does when the match demands none.
+pub(crate) fn independent(
+    independence: Option<&Independence>,
+    matching: &EvidenceMatch,
+    record: &EvidenceRecord,
+) -> bool {
+    let demanded = matching.independent_on.as_deref();
+    match independence {
+        Some(independence) => independence.accepts(demanded, record),
+        None => demanded.is_none(),
+    }
 }
 
 impl<'a> EvidenceSets<'a> {
@@ -28,6 +56,7 @@ impl<'a> EvidenceSets<'a> {
         Self {
             left: records,
             history: records,
+            independence: None,
         }
     }
 }
@@ -139,13 +168,15 @@ impl Walk<'_> {
             Predicate::All(members) => all(&self.members(members, context)?),
             Predicate::Any(members) => any(&self.members(members, context)?),
             Predicate::Not(inner) => not(self.predicate(inner, context)?),
-            Predicate::Evidence(matching) => evidence_match_in(
-                matching,
-                self.evidence
-                    .left
-                    .iter()
-                    .filter(|record| !context.contains(&record.id)),
-            ),
+            Predicate::Evidence(matching) => {
+                let evidence = self.evidence;
+                evidence_match_in(
+                    matching,
+                    evidence.left.iter().filter(|record| {
+                        !context.contains(&record.id) && evidence.of_match(matching, record)
+                    }),
+                )
+            }
             // The history, whatever is invalidated for the claim: order is not invalidated.
             Predicate::First(_) | Predicate::Before(_) => {
                 super::order::value(predicate, self.evidence.history).unwrap_or(Truth::Unknown)
@@ -187,7 +218,13 @@ pub(super) fn predicate(
         Predicate::All(members_of) => all(&members(members_of)),
         Predicate::Any(members_of) => any(&members(members_of)),
         Predicate::Not(inner) => not(self::predicate(inner, claims, inputs, evidence)),
-        Predicate::Evidence(matching) => evidence_match(matching, evidence.left),
+        Predicate::Evidence(matching) => evidence_match_in(
+            matching,
+            evidence
+                .left
+                .iter()
+                .filter(|record| evidence.of_match(matching, record)),
+        ),
         Predicate::First(_) | Predicate::Before(_) => {
             super::order::value(predicate, evidence.history).unwrap_or(Truth::Unknown)
         }
@@ -251,11 +288,13 @@ pub(crate) fn reads(
     record.kind == *kind && subject.is_none_or(|subject| record.subject == *subject)
 }
 
+#[cfg(test)]
 fn evidence_match(matching: &EvidenceMatch, evidence: &[EvidenceRecord]) -> Truth {
     evidence_match_in(matching, evidence.iter())
 }
 
-/// An evidence match's value over the records `evidence` yields.
+/// An evidence match's value over the records `evidence` yields, of those of its kind and subject:
+/// the caller has already kept out every record the match's independence demand does not read.
 fn evidence_match_in<'r>(
     matching: &EvidenceMatch,
     evidence: impl Iterator<Item = &'r EvidenceRecord>,
@@ -291,6 +330,7 @@ mod tests {
     fn record(kind: &str, result: Option<&str>) -> EvidenceRecord {
         EvidenceRecord {
             format: "canon-evidence/1".to_owned(),
+            producer: None,
             id: EvidenceId::new(format!("{kind}-{result:?}")),
             kind: EvidenceKindId::new(kind),
             result: result.map(str::to_owned),
@@ -304,6 +344,7 @@ mod tests {
     fn matching(kind: &str, result: Option<&str>) -> EvidenceMatch {
         EvidenceMatch {
             kind: EvidenceKindId::new(kind),
+            independent_on: None,
             result: result.map(str::to_owned),
             subject: None,
         }

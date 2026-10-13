@@ -190,8 +190,14 @@ identifier!(
     DecisionName
 );
 identifier!(
-    /// Who took an explicit decision, recorded as given: Canon resolves no identity.
+    /// Who took an explicit decision, or who produced an evidence record, recorded as given: Canon
+    /// resolves no identity and proves no production.
     Principal
+);
+identifier!(
+    /// Identifies an independence dimension a protocol declares (`different_principal`). Canon
+    /// gives no dimension a meaning; the trusted context that writes the case resolves it.
+    IndependenceDimensionId
 );
 identifier!(
     /// Identifies an invalidation rule a protocol declares.

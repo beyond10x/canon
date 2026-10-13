@@ -1,0 +1,413 @@
+format: canon-conformance/1
+id: CANON-INDEPENDENCE-001
+covers: [CANON-INDEPENDENCE-001]
+fixture: fixtures/investigation/evidence-independence.yaml
+# The fixture declares one artifact, the change, one evidence kind, review, and one independence
+# dimension, different_principal. Claim change.independently_approved requires an approving review
+# whose producer is independent on different_principal (`independent_on`); claim change.approved is
+# the same match with `independent_on` removed. Action merge requires the independent match itself.
+# Every case gives the change at r1 and every record is bound to r1, so no exclusion stage before
+# independence excludes anything. The case's `independence` map says, for each producer, on which
+# dimensions it is independent of the case's work: author-1 on none, reviewer-2 on
+# different_principal. A record that fails the demand is excluded from the match as
+# not_independent, whatever its result, and is listed under the claim that reaches the match.
+steps:
+  # The section `independence_dimensions` compiles as declared; an evidence match writes
+  # `independent_on` only when it names it, each dimension once, in identifier order.
+  - id: compile
+    compile: {}
+    expect:
+      canon-ir: |
+        {
+          "actions": {
+            "merge": {
+              "description": "Merge the change once a reviewer independent of its author approved it.",
+              "effect": null,
+              "may_produce": [],
+              "precondition": {
+                "evidence": {
+                  "independent_on": [
+                    "different_principal"
+                  ],
+                  "kind": "review",
+                  "result": "approved"
+                }
+              },
+              "requires": []
+            }
+          },
+          "artifacts": {
+            "change": {
+              "description": "The change under review."
+            }
+          },
+          "claims": {
+            "change.approved": {
+              "description": "A review approved the change, whoever produced it.",
+              "true_when": {
+                "evidence": {
+                  "kind": "review",
+                  "result": "approved"
+                }
+              }
+            },
+            "change.independently_approved": {
+              "description": "A reviewer independent of the change's author approved it.",
+              "true_when": {
+                "evidence": {
+                  "independent_on": [
+                    "different_principal"
+                  ],
+                  "kind": "review",
+                  "result": "approved"
+                }
+              }
+            }
+          },
+          "evidence_kinds": {
+            "review": {
+              "description": "A review of the change; its result is approved or rejected."
+            }
+          },
+          "format": "canon-ir/1",
+          "independence_dimensions": {
+            "different_principal": {
+              "description": "The producer is another principal than the one who made the change."
+            }
+          },
+          "obligations": {},
+          "outcomes": {},
+          "protocol": {
+            "description": "Decide whether a change is approved, and whether a reviewer independent of its author approved it.",
+            "id": "change-review",
+            "revision": 1
+          }
+        }
+
+  # Expectation 1. No record: both claims are UNKNOWN. The action is blocked, its evidence reason
+  # naming the independence the match demands.
+  - id: no-record
+    evaluate:
+      case:
+        format: canon-case/1
+        id: CR-1
+        protocol: change-review
+        artifacts:
+          change: {revision: r1}
+        independence:
+          author-1: []
+          reviewer-2: [different_principal]
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "evidence": "review",
+                  "independent_on": [
+                    "different_principal"
+                  ],
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "change.approved": {
+              "value": "unknown"
+            },
+            "change.independently_approved": {
+              "value": "unknown"
+            }
+          }
+        }
+
+  # Expectation 2. An approving record whose producer the case lists with []: it is excluded from
+  # the independent match as not_independent, so change.independently_approved is UNKNOWN, not
+  # FALSE. Expectation 6: change.approved, the same match without `independent_on`, is TRUE on this
+  # record alone.
+  - id: approved-by-a-producer-independent-on-nothing
+    evaluate:
+      case:
+        format: canon-case/1
+        id: CR-1
+        protocol: change-review
+        artifacts:
+          change: {revision: r1}
+        independence:
+          author-1: []
+          reviewer-2: [different_principal]
+      evidence:
+        - format: canon-evidence/1
+          id: v1
+          kind: review
+          result: approved
+          subject: change
+          subject_revision: r1
+          producer: author-1
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "evidence": "review",
+                  "independent_on": [
+                    "different_principal"
+                  ],
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "change.approved": {
+              "value": "true"
+            },
+            "change.independently_approved": {
+              "excluded_evidence": [
+                {
+                  "evidence": "v1",
+                  "reason": "not_independent"
+                }
+              ],
+              "value": "unknown"
+            }
+          }
+        }
+
+  # Expectation 3. An approving record whose producer the case lists on different_principal: both
+  # claims are TRUE and the action is admissible.
+  - id: approved-by-an-independent-producer
+    evaluate:
+      case:
+        format: canon-case/1
+        id: CR-1
+        protocol: change-review
+        artifacts:
+          change: {revision: r1}
+        independence:
+          author-1: []
+          reviewer-2: [different_principal]
+      evidence:
+        - format: canon-evidence/1
+          id: v2
+          kind: review
+          result: approved
+          subject: change
+          subject_revision: r1
+          producer: reviewer-2
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "status": "admissible"
+            }
+          },
+          "claims": {
+            "change.approved": {
+              "value": "true"
+            },
+            "change.independently_approved": {
+              "value": "true"
+            }
+          }
+        }
+
+  # Expectation 4. Both records: the independent one decides the independent match, TRUE; the other
+  # is still excluded from it and listed as not_independent. change.approved reads both, TRUE.
+  - id: both-records
+    evaluate:
+      case:
+        format: canon-case/1
+        id: CR-1
+        protocol: change-review
+        artifacts:
+          change: {revision: r1}
+        independence:
+          author-1: []
+          reviewer-2: [different_principal]
+      evidence:
+        - format: canon-evidence/1
+          id: v1
+          kind: review
+          result: approved
+          subject: change
+          subject_revision: r1
+          producer: author-1
+        - format: canon-evidence/1
+          id: v2
+          kind: review
+          result: approved
+          subject: change
+          subject_revision: r1
+          producer: reviewer-2
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "status": "admissible"
+            }
+          },
+          "claims": {
+            "change.approved": {
+              "value": "true"
+            },
+            "change.independently_approved": {
+              "excluded_evidence": [
+                {
+                  "evidence": "v1",
+                  "reason": "not_independent"
+                }
+              ],
+              "value": "true"
+            }
+          }
+        }
+
+  # Expectation 5. An approving record without a producer: no case can list it as independent, so
+  # it is excluded from the independent match, which is UNKNOWN. change.approved is TRUE on it.
+  - id: approved-without-a-producer
+    evaluate:
+      case:
+        format: canon-case/1
+        id: CR-1
+        protocol: change-review
+        artifacts:
+          change: {revision: r1}
+        independence:
+          author-1: []
+          reviewer-2: [different_principal]
+      evidence:
+        - format: canon-evidence/1
+          id: v3
+          kind: review
+          result: approved
+          subject: change
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "claims": {
+            "change.approved": {
+              "value": "true"
+            },
+            "change.independently_approved": {
+              "excluded_evidence": [
+                {
+                  "evidence": "v3",
+                  "reason": "not_independent"
+                }
+              ],
+              "value": "unknown"
+            }
+          }
+        }
+
+  # A producer the case does not list is independent on no dimension, as one listed with [] is.
+  - id: approved-by-an-unlisted-producer
+    evaluate:
+      case:
+        format: canon-case/1
+        id: CR-1
+        protocol: change-review
+        artifacts:
+          change: {revision: r1}
+        independence:
+          reviewer-2: [different_principal]
+      evidence:
+        - format: canon-evidence/1
+          id: v4
+          kind: review
+          result: approved
+          subject: change
+          subject_revision: r1
+          producer: someone-else
+    expect:
+      decision: |
+        {
+          "claims": {
+            "change.approved": {
+              "value": "true"
+            },
+            "change.independently_approved": {
+              "excluded_evidence": [
+                {
+                  "evidence": "v4",
+                  "reason": "not_independent"
+                }
+              ],
+              "value": "unknown"
+            }
+          }
+        }
+
+  # A rejection by a producer that is not independent does not contradict the independent match:
+  # it is not of that match. The same record makes change.approved's records disagree, UNKNOWN.
+  - id: rejected-by-the-author-approved-by-an-independent-reviewer
+    evaluate:
+      case:
+        format: canon-case/1
+        id: CR-1
+        protocol: change-review
+        artifacts:
+          change: {revision: r1}
+        independence:
+          author-1: []
+          reviewer-2: [different_principal]
+      evidence:
+        - format: canon-evidence/1
+          id: v2
+          kind: review
+          result: approved
+          subject: change
+          subject_revision: r1
+          producer: reviewer-2
+        - format: canon-evidence/1
+          id: v5
+          kind: review
+          result: rejected
+          subject: change
+          subject_revision: r1
+          producer: author-1
+    expect:
+      decision: |
+        {
+          "claims": {
+            "change.approved": {
+              "value": "unknown"
+            },
+            "change.independently_approved": {
+              "excluded_evidence": [
+                {
+                  "evidence": "v5",
+                  "reason": "not_independent"
+                }
+              ],
+              "value": "true"
+            }
+          }
+        }
+
+  # A case that lists a producer as independent on a dimension the protocol does not declare is
+  # refused.
+  - id: undeclared-dimension-in-the-case
+    evaluate:
+      case:
+        format: canon-case/1
+        id: CR-1
+        protocol: change-review
+        artifacts:
+          change: {revision: r1}
+        independence:
+          reviewer-2: [different_agent_run]
+      evidence: []
+    expect:
+      refusal: undeclared-dimension

@@ -15,19 +15,21 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
 - **Canonical ordering.** Declarations are keyed and ordered by identifier, not by the order they
   are written in. The members of an `all` or `any` predicate are sorted by `canonical_order`,
   and an action's capability requirements, the evidence kinds it may produce, the claims an
-  invalidation rule invalidates, the values a case input declares and the values an input test
-  lists by identifier.
-- **No repetition.** Each of those seven lists holds every member once: in three-valued logic
-  `all` and `any` are idempotent, and the two action lists, the invalidated claims and the two
-  lists of input values are sets.
+  invalidation rule invalidates, the values a case input declares, the values an input test
+  lists and the dimensions an evidence match demands independence on by identifier.
+- **No repetition.** Each of those eight lists holds every member once: in three-valued logic
+  `all` and `any` are idempotent, and the two action lists, the invalidated claims, the two
+  lists of input values and the dimensions of `independent_on` are sets.
 - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
   evidence match without a result has `"result": null`; a claim test without `is` has
   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-  true; absent lists and sections are empty. The five exceptions are an evidence kind's
-  `max_age`, the `subject` of an evidence match or an order form, an obligation's
-  `applicable_when`, the `invalidation` section and the `case` section: each written only when
-  it is declared (a section only when it holds a rule or an input), so the IR of a protocol that
-  declares none of them is the IR it was before they existed. The `case` section is
+  true; absent lists and sections are empty. The seven exceptions are an evidence kind's
+  `max_age`, the `subject` of an evidence match or an order form, an evidence match's
+  `independent_on`, an obligation's `applicable_when`, the `invalidation` section, the `case`
+  section and the `independence_dimensions` section: each written only when it is declared (a
+  section only when it holds a rule, an input or a dimension), so the IR of a protocol that
+  declares none of them is the IR it was before they existed. The `independence_dimensions`
+  section is `{<id>: {"description": …}}`. The `case` section is
   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
   authored: `{"first": {"kind": …, "result": …}}` and `{"before": {"first": …, "then": …}}`.
 - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
@@ -37,7 +39,8 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
 - **Resolved references.** Only a document the validator accepts compiles, so every claim and
   evidence kind the IR references is declared in it, and so is every artifact an evidence match
   or an order form names as its subject or an invalidation rule names as its upstream artifact,
-  and every input an input test names, with every value it lists.
+  every input an input test names, with every value it lists, and every dimension an evidence
+  match demands independence on.
 
 The IR carries the protocol id and revision (design § 37) and nothing about where the document
 came from: no path, no working directory, no time. `Ir::canonical_json` is its one

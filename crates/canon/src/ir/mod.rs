@@ -6,19 +6,21 @@
 //! - **Canonical ordering.** Declarations are keyed and ordered by identifier, not by the order they
 //!   are written in. The members of an `all` or `any` predicate are sorted by [`canonical_order`],
 //!   and an action's capability requirements, the evidence kinds it may produce, the claims an
-//!   invalidation rule invalidates, the values a case input declares and the values an input test
-//!   lists by identifier.
-//! - **No repetition.** Each of those seven lists holds every member once: in three-valued logic
-//!   `all` and `any` are idempotent, and the two action lists, the invalidated claims and the two
-//!   lists of input values are sets.
+//!   invalidation rule invalidates, the values a case input declares, the values an input test
+//!   lists and the dimensions an evidence match demands independence on by identifier.
+//! - **No repetition.** Each of those eight lists holds every member once: in three-valued logic
+//!   `all` and `any` are idempotent, and the two action lists, the invalidated claims, the two
+//!   lists of input values and the dimensions of `independent_on` are sets.
 //! - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
 //!   evidence match without a result has `"result": null`; a claim test without `is` has
 //!   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-//!   true; absent lists and sections are empty. The five exceptions are an evidence kind's
-//!   `max_age`, the `subject` of an evidence match or an order form, an obligation's
-//!   `applicable_when`, the `invalidation` section and the `case` section: each written only when
-//!   it is declared (a section only when it holds a rule or an input), so the IR of a protocol that
-//!   declares none of them is the IR it was before they existed. The `case` section is
+//!   true; absent lists and sections are empty. The seven exceptions are an evidence kind's
+//!   `max_age`, the `subject` of an evidence match or an order form, an evidence match's
+//!   `independent_on`, an obligation's `applicable_when`, the `invalidation` section, the `case`
+//!   section and the `independence_dimensions` section: each written only when it is declared (a
+//!   section only when it holds a rule, an input or a dimension), so the IR of a protocol that
+//!   declares none of them is the IR it was before they existed. The `independence_dimensions`
+//!   section is `{<id>: {"description": …}}`. The `case` section is
 //!   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
 //!   authored: `{"first": {"kind": …, "result": …}}` and `{"before": {"first": …, "then": …}}`.
 //! - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
@@ -28,7 +30,8 @@
 //! - **Resolved references.** Only a document the validator accepts compiles, so every claim and
 //!   evidence kind the IR references is declared in it, and so is every artifact an evidence match
 //!   or an order form names as its subject or an invalidation rule names as its upstream artifact,
-//!   and every input an input test names, with every value it lists.
+//!   every input an input test names, with every value it lists, and every dimension an evidence
+//!   match demands independence on.
 //!
 //! The IR carries the protocol id and revision (design § 37) and nothing about where the document
 //! came from: no path, no working directory, no time. [`Ir::canonical_json`] is its one
@@ -45,8 +48,9 @@ use std::collections::BTreeMap;
 
 use crate::model::{
     self, ActionId, Age, ArtifactId, CapabilityId, ClaimId, ClaimTest, EffectClass, EvidenceKindId,
-    EvidenceMatch, EvidenceOrder, FirstResult, InputId, InputTest, InputValue, InvalidationRuleId,
-    ObligationId, OutcomeId, OutcomeRequirement, Predicate, Protocol, ProtocolId, Truth,
+    EvidenceMatch, EvidenceOrder, FirstResult, IndependenceDimensionId, InputId, InputTest,
+    InputValue, InvalidationRuleId, ObligationId, OutcomeId, OutcomeRequirement, Predicate,
+    Protocol, ProtocolId, Truth,
 };
 use crate::validate::{self, Problem};
 
@@ -70,6 +74,9 @@ pub struct Ir {
     pub invalidation: BTreeMap<InvalidationRuleId, InvalidationRule>,
     /// The case inputs. Empty when the protocol declares none; `canon-ir/1` then has no `case` key.
     pub inputs: BTreeMap<InputId, CaseInput>,
+    /// The independence dimensions evidence matches may demand. Empty when the protocol declares
+    /// none; `canon-ir/1` then has no `independence_dimensions` key.
+    pub independence_dimensions: BTreeMap<IndependenceDimensionId, Described>,
 }
 
 /// A case input: its description and the values it may take, sorted by identifier, each once.
@@ -87,7 +94,8 @@ pub struct Header {
     pub description: Option<String>,
 }
 
-/// A declaration that carries nothing but its description: an artifact.
+/// A declaration that carries nothing but its description: an artifact or an independence
+/// dimension.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Described {
     pub description: Option<String>,
@@ -222,6 +230,9 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
                 (id.clone(), input)
             })
             .collect(),
+        independence_dimensions: keyed(&protocol.independence_dimensions, |dimension| {
+            described(&dimension.description)
+        }),
     })
 }
 
@@ -238,7 +249,7 @@ fn keyed<K: Ord + Clone, V, T>(
 }
 
 /// Puts every `all` and `any` inside the predicate into canonical member order.
-fn normalize(predicate: &Predicate) -> Predicate {
+pub(crate) fn normalize(predicate: &Predicate) -> Predicate {
     match predicate {
         Predicate::All(members) => Predicate::All(sorted(members)),
         Predicate::Any(members) => Predicate::Any(sorted(members)),
@@ -247,10 +258,11 @@ fn normalize(predicate: &Predicate) -> Predicate {
             input: test.input.clone(),
             r#in: unique(test.r#in.clone()),
         }),
-        Predicate::Evidence(_)
-        | Predicate::Claim(_)
-        | Predicate::First(_)
-        | Predicate::Before(_) => predicate.clone(),
+        Predicate::Evidence(matching) => Predicate::Evidence(EvidenceMatch {
+            independent_on: matching.independent_on.clone().map(unique),
+            ..matching.clone()
+        }),
+        Predicate::Claim(_) | Predicate::First(_) | Predicate::Before(_) => predicate.clone(),
     }
 }
 
@@ -277,9 +289,12 @@ fn unique<T: Ord>(mut ids: Vec<T>) -> Vec<T> {
 /// 2. Two `all`s, or two `any`s, compare their members pairwise in order; the first pair that
 ///    differs decides, and when one list runs out first, the shorter list comes first.
 /// 3. Two `not`s compare what they negate.
-/// 4. Two evidence matches compare by kind, then by result, then by subject: no result comes before
-///    any result and no subject before any subject, and results and subjects compare as text. Two
-///    matches that differ only in their subject are two members.
+/// 4. Two evidence matches compare by kind, then by result, then by subject, then by the
+///    dimensions they demand independence on: no result comes before any result, no subject before
+///    any subject and no `independent_on` before any, results and subjects compare as text, and two
+///    `independent_on` lists compare pairwise as text, the shorter first when one runs out. Two
+///    matches that differ only in their subject, or only in their `independent_on`, are two
+///    members.
 /// 5. Two claim tests compare by claim, then by the value tested: `false`, `true`, `unknown`.
 /// 6. Two input tests compare by input, then by the values they list, in their own (identifier)
 ///    order, pairwise as text; when one list runs out first, the shorter list comes first.
@@ -339,6 +354,20 @@ fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
                         left.subject.as_ref().map(|subject| subject.as_str()),
                         right.subject.as_ref().map(|subject| subject.as_str()),
                     )
+                })
+                .then_with(|| match (&left.independent_on, &right.independent_on) {
+                    (None, None) => Ordering::Equal,
+                    (None, Some(_)) => Ordering::Less,
+                    (Some(_), None) => Ordering::Greater,
+                    (Some(left), Some(right)) => {
+                        for (left, right) in left.iter().zip(right) {
+                            let order = text(left.as_str(), right.as_str());
+                            if order != Ordering::Equal {
+                                return order;
+                            }
+                        }
+                        left.len().cmp(&right.len())
+                    }
                 })
         }
         (Predicate::Claim(left), Predicate::Claim(right)) => {
@@ -513,6 +542,12 @@ impl Ir {
                 }),
             ));
         }
+        if !self.independence_dimensions.is_empty() {
+            fields.push((
+                "independence_dimensions",
+                section(&self.independence_dimensions, described),
+            ));
+        }
         if !self.inputs.is_empty() {
             fields.push((
                 "case",
@@ -569,6 +604,7 @@ fn predicate_value(predicate: &Predicate) -> Value {
             kind,
             result,
             subject,
+            independent_on,
         }) => {
             let mut fields = vec![
                 ("kind", Value::string(kind.as_str())),
@@ -576,6 +612,17 @@ fn predicate_value(predicate: &Predicate) -> Value {
             ];
             if let Some(subject) = subject {
                 fields.push(("subject", Value::string(subject.as_str())));
+            }
+            if let Some(dimensions) = independent_on {
+                fields.push((
+                    "independent_on",
+                    Value::Array(
+                        dimensions
+                            .iter()
+                            .map(|dimension| Value::string(dimension.as_str()))
+                            .collect(),
+                    ),
+                ));
             }
             Value::object([("evidence", Value::object(fields))])
         }
@@ -660,6 +707,7 @@ mod tests {
     fn about(kind: &str, result: Option<&str>, subject: Option<&str>) -> Predicate {
         Predicate::Evidence(EvidenceMatch {
             kind: EvidenceKindId::new(kind),
+            independent_on: None,
             result: result.map(str::to_owned),
             subject: subject.map(ArtifactId::new),
         })

@@ -14,7 +14,7 @@ case under one protocol it is meant to answer: what is known, what is unknown, w
 remain open, which actions are admissible, which need authority, and whether an outcome has been
 earned.
 
-:::note[Source release 0.3.0]
+:::note[Source release 0.4.0]
 
 Canon is early. Today it parses, validates and compiles protocols, and runs conformance
 scenarios. `canon evaluate` gives every claim of a case a three-valued value, applying evidence
@@ -25,7 +25,9 @@ each. Invalidation rules keep evidence observed against an earlier revision of a
 from the claims that depend on it. Case inputs let one protocol serve several profiles: obligations
 apply by the inputs a case gives, and `canon diff` classifies a change between two revisions of a
 protocol. Predicates over evidence order read a case's evidence history: the first result of a
-kind, and one kind's first record before another's. Every page says which parts are shipped and
+kind, and one kind's first record before another's. An evidence match can demand an independent
+producer: a record counts only when the case lists its producer as independent on the dimensions
+the match names. Every page says which parts are shipped and
 which are planned;
 [where this stands](./status/where-this-stands.md) has the full list.
 

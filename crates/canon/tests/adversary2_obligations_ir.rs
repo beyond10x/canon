@@ -160,6 +160,7 @@ fn read_ir_refuses_a_hand_written_discharge_predicate_the_validator_refuses() {
         .expect("o")
         .discharged_when = Predicate::Not(Box::new(Predicate::Evidence(model::EvidenceMatch {
         kind: EvidenceKindId::new("k"),
+        independent_on: None,
         result: None,
         subject: None,
     })));

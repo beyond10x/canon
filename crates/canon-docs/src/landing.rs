@@ -48,6 +48,17 @@ fn predicate(predicate: &Predicate) -> Json {
             if let Some(subject) = &matching.subject {
                 members.push(("subject".to_owned(), json::str(subject.as_str())));
             }
+            if let Some(dimensions) = &matching.independent_on {
+                members.push((
+                    "independent_on".to_owned(),
+                    Json::Arr(
+                        dimensions
+                            .iter()
+                            .map(|dimension| json::str(dimension.as_str()))
+                            .collect(),
+                    ),
+                ));
+            }
             obj([("evidence", Json::Obj(members))])
         }
         Predicate::Claim(test) => {
@@ -458,6 +469,31 @@ mod tests {
             rendered[0]
         );
         assert!(!rendered[1].contains("subject"), "{}", rendered[1]);
+    }
+
+    /// The graph keeps the independence an evidence match demands, and writes none for a match
+    /// that demands none.
+    #[test]
+    fn an_evidence_match_keeps_its_demand_for_independence_in_the_graph() {
+        let protocol = model::parse(
+            "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+             independence_dimensions: {d: {}}\nevidence_kinds: {k: {}}\nclaims:\n  \
+             demanding: {true_when: {evidence: {kind: k, independent_on: [d]}}}\n  \
+             plain: {true_when: {evidence: {kind: k}}}\n",
+        )
+        .expect("parses");
+        let rendered: Vec<String> = protocol
+            .claims
+            .iter()
+            .map(|(_, claim)| predicate(&claim.true_when).pretty())
+            .collect();
+        assert!(
+            rendered[0].contains("\"independent_on\""),
+            "{}",
+            rendered[0]
+        );
+        assert!(rendered[0].contains("\"d\""), "{}", rendered[0]);
+        assert!(!rendered[1].contains("independent_on"), "{}", rendered[1]);
     }
 
     #[test]

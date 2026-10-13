@@ -235,6 +235,7 @@ mod tests {
             description: None,
             true_when: Predicate::Evidence(EvidenceMatch {
                 kind: EvidenceKindId::new("k"),
+                independent_on: None,
                 result: None,
                 subject: None,
             }),

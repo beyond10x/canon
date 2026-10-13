@@ -75,6 +75,7 @@ mod tests {
     fn record(id: &str, subject: &str, revision: &str) -> EvidenceRecord {
         EvidenceRecord {
             format: EVIDENCE_FORMAT.to_owned(),
+            producer: None,
             id: EvidenceId::new(id),
             kind: EvidenceKindId::new("k"),
             result: None,

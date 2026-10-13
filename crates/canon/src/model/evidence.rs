@@ -4,7 +4,7 @@
 use serde::Deserialize;
 
 use super::Declarations;
-use super::ids::{ArtifactId, EvidenceId, EvidenceKindId, Instant, Revision};
+use super::ids::{ArtifactId, EvidenceId, EvidenceKindId, Instant, Principal, Revision};
 
 /// The evidence record format this model reads.
 pub const EVIDENCE_FORMAT: &str = "canon-evidence/1";
@@ -41,4 +41,8 @@ pub struct EvidenceRecord {
     /// artifact. A record without it is never invalidated.
     #[serde(default, deserialize_with = "super::present::defaulted")]
     pub upstream_revisions: Declarations<ArtifactId, Revision>,
+    /// Who produced the record, recorded as given: Canon does not prove it. A record without one
+    /// is of no evidence match that demands independence.
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub producer: Option<Principal>,
 }

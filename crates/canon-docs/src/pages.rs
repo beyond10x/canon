@@ -1265,6 +1265,16 @@ fn words(predicate: &Predicate) -> String {
             if let Some(result) = &matching.result {
                 words.push_str(&format!(" with result {}", code(result)));
             }
+            if let Some(dimensions) = &matching.independent_on {
+                let dimensions: Vec<String> = dimensions
+                    .iter()
+                    .map(|dimension| code(dimension.as_str()))
+                    .collect();
+                words.push_str(&format!(
+                    " from a producer independent on {}",
+                    dimensions.join(", ")
+                ));
+            }
             words
         }
         Predicate::Claim(test) => format!(
@@ -1710,6 +1720,12 @@ mod tests {
         assert_eq!(
             words(&true_when("{evidence: {kind: k, subject: a}}")),
             "evidence of kind `k` about `a`"
+        );
+        assert_eq!(
+            words(&true_when(
+                "{evidence: {kind: k, result: pass, independent_on: [d, e]}}"
+            )),
+            "evidence of kind `k` with result `pass` from a producer independent on `d`, `e`"
         );
         assert_eq!(
             words(&true_when("{evidence: {kind: k, result: pass}}")),

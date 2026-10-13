@@ -25,9 +25,9 @@ use crate::ir::{self, Ir};
 use crate::model::{
     self, Action, Age, Artifact, ArtifactId, CapabilityId, CapabilityRequirement, CaseInput,
     CaseSection, Claim, ClaimId, ClaimTest, Declarations, EffectClass, EvidenceKind,
-    EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceProduction, FirstResult, InputId,
-    InputTest, InputValue, Obligation, Outcome, OutcomeRequirement, Predicate, Protocol,
-    ProtocolHeader, ProtocolId, Truth, one_line,
+    EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceProduction, FirstResult,
+    IndependenceDimension, IndependenceDimensionId, InputId, InputTest, InputValue, Obligation,
+    Outcome, OutcomeRequirement, Predicate, Protocol, ProtocolHeader, ProtocolId, Truth, one_line,
 };
 
 /// A `malformed-input` refusal: `what` is not a document of its format, and why.
@@ -268,7 +268,38 @@ fn protocol(value: &Json) -> Shape<Protocol> {
                 })?,
             }),
         },
+        independence_dimensions: if field(value, "independence_dimensions").is_some() {
+            declarations(
+                value,
+                "independence_dimensions",
+                IndependenceDimensionId::new,
+                |entry| {
+                    Ok(IndependenceDimension {
+                        description: optional_text(entry, "description")?,
+                    })
+                },
+            )?
+        } else {
+            Declarations::default()
+        },
     })
+}
+
+/// The dimensions an evidence match demands independence on; the IR writes the key only when the
+/// match names it.
+fn independent_on(value: &Json) -> Shape<Option<Vec<IndependenceDimensionId>>> {
+    if field(value, "independent_on").is_none() {
+        return Ok(None);
+    }
+    list(value, "independent_on")?
+        .iter()
+        .map(|item| {
+            item.as_str()
+                .map(IndependenceDimensionId::new)
+                .ok_or_else(|| "a dimension in `independent_on` is not a string".to_owned())
+        })
+        .collect::<Shape<_>>()
+        .map(Some)
 }
 
 /// A list of input values: the values an input declares, or those an input test lists.
@@ -362,6 +393,7 @@ fn predicate(value: &Json) -> Shape<Predicate> {
             kind: EvidenceKindId::new(text(inner, "kind")?),
             result: optional_text(inner, "result")?,
             subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
+            independent_on: independent_on(inner)?,
         })),
         "claim" => {
             let is = match text(inner, "is")?.as_str() {
@@ -659,6 +691,7 @@ mod tests {
     fn nested(levels: usize) -> Predicate {
         let mut predicate = Predicate::Evidence(EvidenceMatch {
             kind: EvidenceKindId::new("k"),
+            independent_on: None,
             result: None,
             subject: None,
         });

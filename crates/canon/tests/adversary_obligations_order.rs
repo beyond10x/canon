@@ -115,6 +115,7 @@ fn an_evidence_match_a_caller_puts_in_a_discharge_predicate_never_discharges() {
         .expect("declared")
         .discharged_when = Predicate::Evidence(EvidenceMatch {
         kind: EvidenceKindId::new("k"),
+        independent_on: None,
         result: None,
         subject: None,
     });

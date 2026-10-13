@@ -11,6 +11,11 @@
 //! Also acceptance 13 of story:case-inputs: the last four pairs derive from
 //! `fixtures/investigation/case-inputs.yaml` and change an obligation's `applicable_when` or a case
 //! input's `values` (§ Outcome 5 of that story).
+//!
+//! Also the `canon diff` acceptance of story:evidence-independence: the last two pairs derive from
+//! `fixtures/investigation/evidence-independence.yaml` and add a dimension to an evidence match's
+//! `independent_on`, which tightens, and remove it, which relaxes (design § 31, "stronger
+//! independence requirement").
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -19,7 +24,7 @@ use std::process::{Command, Output};
 const PAIRS: &str = "fixtures/investigation/semantic-diff";
 
 /// Every pair and the report `canon diff` prints for it, byte for byte.
-const EXPECTATIONS: [(&str, &str); 12] = [
+const EXPECTATIONS: [(&str, &str); 14] = [
     (
         "added-obligation",
         "diff: protocol `investigation` revision 1 to 2\n\
@@ -81,6 +86,16 @@ const EXPECTATIONS: [(&str, &str); 12] = [
         "removed-input-value",
         "diff: protocol `investigation` revision 1 to 2\n\
          BREAKING: case input `severity` no longer takes value `medium`\n",
+    ),
+    (
+        "added-independence",
+        "diff: protocol `change-review` revision 1 to 2\n\
+         TIGHTENING: claim `change.independently_approved` predicate demands more independence\n",
+    ),
+    (
+        "removed-independence",
+        "diff: protocol `change-review` revision 1 to 2\n\
+         RELAXATION: claim `change.independently_approved` predicate demands less independence\n",
     ),
 ];
 

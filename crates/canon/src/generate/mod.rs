@@ -28,14 +28,17 @@
 //!
 //! - the case `witness` of the protocol at revision `r`, listing every declared artifact at `r` and,
 //!   under `inputs`, the value of each case input in the witness state, when the protocol declares
-//!   one;
+//!   one, and, under `independence`, each producer a record names, listed on exactly the dimensions
+//!   of its profile (`crate::check`), when a record names one;
 //! - one `canon-evidence/1` record per present class and upstream vector, ids `e0`, `e1`, … in
 //!   dimension order, about its dimension's artifact at `r`, with its class's result when it has
 //!   one and no observation instant, and, for a kind an invalidation rule can keep from a claim,
 //!   `upstream_revisions`: each upstream artifact at `r0` when the record was observed before it
 //!   moved, at `r` otherwise; for a protocol with order forms, each record as the state space
 //!   builds it (`crate::check`): an earlier record about its artifact at `r0`, and a record of a
-//!   kind an order form reads with the `observed_at` its state gives it, when it gives one;
+//!   kind an order form reads with the `observed_at` its state gives it, when it gives one; and a
+//!   record of a kind an evidence match demanding independence reads with its `producer`,
+//!   `producer-n`, when its profile is not the empty one;
 //! - `authority`, each decided capability, when the witness decides one;
 //! - `decisions`, each taken decision for every outcome that requires it, by the principal
 //!   `canon-generate` at case revision `r`, when the witness takes one;
@@ -313,6 +316,7 @@ fn scenario(
     let revision = Revision::new(REVISION);
     let case = Case {
         format: CASE_FORMAT.to_owned(),
+        independence: space.independence(&evidence),
         id: CaseId::new(WITNESS),
         protocol: ir.protocol.id.clone(),
         artifacts: Declarations::new(
@@ -377,6 +381,19 @@ fn scenario(
             );
         }
     }
+    if !case.independence.is_empty() {
+        line(8, "independence:");
+        for (producer, dimensions) in case.independence.iter() {
+            let dimensions: Vec<String> = dimensions
+                .iter()
+                .map(|dimension| quote(dimension.as_str()))
+                .collect();
+            line(
+                10,
+                &format!("{}: [{}]", quote(producer.as_str()), dimensions.join(", ")),
+            );
+        }
+    }
     if evidence.is_empty() {
         line(6, "evidence: []");
     } else {
@@ -398,6 +415,9 @@ fn scenario(
             );
             if let Some(observed_at) = &record.observed_at {
                 line(10, &format!("observed_at: {}", quote(observed_at.as_str())));
+            }
+            if let Some(producer) = &record.producer {
+                line(10, &format!("producer: {}", quote(producer.as_str())));
             }
             if !record.upstream_revisions.is_empty() {
                 line(10, "upstream_revisions:");

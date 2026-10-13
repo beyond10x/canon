@@ -6,7 +6,8 @@
 //!
 //! A protocol document declares a protocol id and revision, the case inputs a case gives values for
 //! (`case: inputs:`), artifacts, evidence kinds, claims with their predicates, obligations with
-//! when they apply, actions, outcomes and invalidation rules. Every declaration
+//! when they apply, actions, outcomes, invalidation rules and the independence dimensions its
+//! evidence matches may demand. Every declaration
 //! section is a map keyed by identifier; [`Declarations`] keeps the entries in source order and
 //! keeps repeated keys, so the validator can report a duplicate identifier instead of the parser
 //! silently dropping one.
@@ -42,8 +43,8 @@ pub use evidence::{EVIDENCE_FORMAT, EvidenceRecord};
 pub use explicit::{DECISIONS_FORMAT, ExplicitDecision};
 pub use ids::{
     ActionId, Age, ArtifactId, CapabilityId, CaseId, ClaimId, DecisionName, EffectClass,
-    EvidenceId, EvidenceKindId, InputId, InputValue, Instant, InvalidationRuleId, ObligationId,
-    OutcomeId, Principal, ProtocolId, Revision,
+    EvidenceId, EvidenceKindId, IndependenceDimensionId, InputId, InputValue, Instant,
+    InvalidationRuleId, ObligationId, OutcomeId, Principal, ProtocolId, Revision,
 };
 pub use parse::{FORMAT, ParseError, parse};
 pub use predicate::{
@@ -81,6 +82,19 @@ pub struct Protocol {
     /// without the section declares no input.
     #[serde(default, deserialize_with = "present::optional")]
     pub case: Option<CaseSection>,
+    /// The independence dimensions the protocol's evidence matches may demand, keyed by dimension
+    /// id; a protocol without the section declares none.
+    #[serde(default, deserialize_with = "present::defaulted")]
+    pub independence_dimensions: Declarations<IndependenceDimensionId, IndependenceDimension>,
+}
+
+/// One independence dimension: a relation between who produced a record and the case's work,
+/// which the trusted context resolves for each producer and Canon reads from the case.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct IndependenceDimension {
+    #[serde(default, deserialize_with = "present::optional")]
+    pub description: Option<String>,
 }
 
 impl Protocol {

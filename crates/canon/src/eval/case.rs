@@ -1,6 +1,6 @@
 //! The `canon-case/1` case snapshot as the evaluator reads and checks it. The type is
 //! [`crate::model::Case`]; this file reads it from text or a YAML value and checks it against the
-//! compiled protocol, its case inputs included. Whether a termination names a declared outcome is
+//! compiled protocol, its case inputs and its independence map (`independence.rs`) included. Whether a termination names a declared outcome is
 //! checked by `outcomes.rs`.
 
 use std::collections::BTreeSet;
@@ -81,7 +81,8 @@ pub(super) fn check(ir: &Ir, case: &Case) -> Result<(), Refusal> {
             ),
         ));
     }
-    inputs(ir, case)
+    inputs(ir, case)?;
+    super::independence::check(ir, case)
 }
 
 /// Checks the case's inputs against those the protocol declares: each input the case gives, in the

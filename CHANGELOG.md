@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## [0.4.0] - 2026-10-13
+
+Evidence requirements that demand an independent producer. Install the CLI or depend on the
+libraries from Git tag `0.4.0`.
+
+- Add `independence_dimensions` to `protocol/1`: the dimension ids a protocol demands independence
+  on, each with an optional description. Canon gives no dimension a meaning.
+- An evidence match takes `independent_on`, a non-empty list of declared dimensions. A record
+  satisfies it only when it names a `producer` (new on `canon-evidence/1`) and the case's
+  `independence` map (new on `canon-case/1`, written by the trusted context) lists every demanded
+  dimension for that producer. A record that fails the demand is inapplicable to that match,
+  never contrary: a claim resting only on such records is `unknown`, not `false`
+  (`CANON-INDEPENDENCE-001`). Explanations list it as `not_independent`.
+- Validation refuses an empty or duplicated `independent_on`, and an undeclared dimension in a
+  match or in the case's `independence`.
+- `canon diff`: a dimension added to a match read positively is `TIGHTENING`, removed is
+  `RELAXATION`; a changed demand under `not` or in a claim read in reverse is `BREAKING`; a
+  dimension declaration added is `EXPANSION`, removed is `BREAKING`.
+- `canon check` and `canon generate` give records producer profiles for demanded kinds, one value
+  per set of demands a record class meets; protocols without demands check as before.
+- The specification is held to ess 0.59.0.
+
 ## [0.3.0] - 2026-10-13
 
 Predicates over evidence order. Install the CLI or depend on the libraries from Git tag `0.3.0`.
