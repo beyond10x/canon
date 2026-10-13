@@ -156,7 +156,7 @@
     },
     {
       "label": "Protocols express step order",
-      "status": "decided",
+      "status": "shipped",
       "detail": "A predicate over evidence order, the first record of a kind and one kind before another; Atlas ADR 0084.",
       "area": "Design"
     }

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## [0.3.0] - 2026-10-13
+
+Predicates over evidence order. Install the CLI or depend on the libraries from Git tag `0.3.0`.
+
+- Add two predicate forms to `protocol/1`: `first: {kind, result}` holds when the first record of a
+  kind has that result, and `before: {first, then}` holds when one kind's first record was observed
+  strictly before another's; each may name a `subject`. Records are ordered on `canon-evidence/1`'s
+  existing `observed_at`; no evidence field is added.
+- Order forms read the case's evidence history, including records that revision binding,
+  freshness or invalidation keep from evidence matches, so a failing result recorded at an earlier
+  revision counts after a fix moves the subject to a later one. No records, a record without
+  `observed_at`, a tie at the earliest instant or conflicting earliest results leave a form
+  `unknown`; `before` is `false` once the later kind has a record and the earlier has none.
+- Validation refuses an order form naming an undeclared kind or subject, and a `before` naming one
+  kind twice (`self-ordered-evidence`). Action reasons and explanations name the forms; `canon diff`
+  classifies a changed order form as `BREAKING`.
+- `canon check` gains history and ordering dimensions for protocols that use order forms;
+  protocols without them check as before. Conformance scenario `CANON-ORDER-001`.
+- Known limit: a record on any earlier revision counts, whether or not the current revision
+  descends from it.
+
 ## [0.2.0] - 2026-10-12
 
 Case inputs and semantic diff. Install the CLI or depend on the libraries from Git tag `0.2.0`.

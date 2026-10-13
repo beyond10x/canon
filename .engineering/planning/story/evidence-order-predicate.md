@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:evidence-order-predicate
 kind: story
-status: active
+status: implemented
 title: 'Predicate over evidence order: first result of a kind, one kind before another'
 refs:
 - provider: atlas
@@ -40,10 +40,11 @@ scope:
   path: fixtures/investigation/evidence-order.yaml
 - confidence: cited
   path: website/docs/reference/
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-13T00:31:27Z", actor: "human:timo", revision: 6}
 - {from: "proposed", to: "active", at: "2026-10-13T00:31:27Z", actor: "human:timo", revision: 7}
+- {from: "active", to: "implemented", at: "2026-10-13T02:29:52Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 ## Outcome
 
