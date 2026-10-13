@@ -104,8 +104,9 @@ pub enum Command {
     /// moved, one record each. Evidence an order form reads (`first`, `before`) is also there with
     /// earlier records at a superseded revision, or with no known instant, in every order of first
     /// observations. Evidence an evidence match demanding independence reads (`independent_on`) is
-    /// there without a producer and from a producer independent on exactly each demand, in any
-    /// combination. A state space of more than 65536 states is refused.
+    /// there from a producer independent on exactly each demand, in every combination of demands
+    /// met, and without a producer when something that demands nothing reads it. A state space of
+    /// more than 65536 states is refused.
     Check {
         /// The protocol document to check.
         #[arg(long)]

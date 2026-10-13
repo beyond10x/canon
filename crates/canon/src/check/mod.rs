@@ -52,24 +52,33 @@
 //!   without upstream artifacts, and every dimension of a protocol that declares no invalidation
 //!   rule, has its classes alone, as before rules existed.
 //! - An evidence dimension has producer profiles when an evidence match that reads it demands
-//!   independence (`independent_on`): the empty profile, a record without a producer, which no
-//!   demand accepts and which stands for every producer independent on no demanded dimension, and
-//!   one profile per distinct demand of those matches (a set of dimensions; `[d, e]` and `[e, d]`
-//!   are one), a record from a producer independent on exactly those dimensions. Each class and
-//!   upstream vector then comes in one variant per profile, and the dimension takes every subset
-//!   of them: a dimension of `c` classes, `m` upstream artifacts and `p` profiles has
-//!   `2^(c * 2^m * p)` values. That is the smallest set that loses nothing: a producer decides a
-//!   record only through which demands it meets, and a record from a producer independent on any
-//!   set `S` is read by the same matches as the records of its class from a producer of each
-//!   demand within `S`, so every evidence set has a state each match reads the same classes in;
-//!   and a demand's own profile is the only one its match reads without also being read by a
-//!   match demanding more. A state names the producer of each profile `producer-n`, `n` its
-//!   position among every non-empty profile of the space, in set order, from 1, and lists each
-//!   producer its records name in the case's `independence`, on exactly its profile's dimensions.
-//!   A record from a producer is written `` evidence `k` result `r` by a producer independent on
-//!   `d`, `e` ``, and the bound refusal names the profiles of a dimension that has them (``
-//!   evidence kind `k` with producers independent on [`d`], [`d`, `e`] 8 ``). A profile weighs
-//!   nothing. A dimension no demanding match reads has the empty profile alone, as before
+//!   independence (`independent_on`): one profile per distinct demand of those matches (a set of
+//!   dimensions; `[d, e]` and `[e, d]` are one), a record from a producer independent on exactly
+//!   those dimensions, and, when a match that demands nothing or an order form reads the
+//!   dimension, the empty profile, a record without a producer, which no demand accepts and which
+//!   stands for every producer independent on no demanded dimension. When every reader demands
+//!   independence a record without a producer is read by nothing, and the dimension has no such
+//!   record. A producer decides a record only through which readers read it: a record from a
+//!   producer independent on any set `S` is read by every reader whose demand is within `S` (one
+//!   that demands nothing is within every set), and the readers that read some record of one class
+//!   and upstream vector are the union of such sets, which is down-closed: a demand within one
+//!   they meet is met too. So each class and upstream vector takes one value per down-closed set
+//!   of the dimension's profiles, written as one record per greatest member of the set, from a
+//!   producer independent on exactly that demand; the empty set is no record. A dimension of `c`
+//!   classes and `m` upstream artifacts whose profiles have `n` down-closed sets has
+//!   `n^(c * 2^m)` values (`[d]` and `[d, e]`, every reader demanding: `n = 3`, none, `[d]` alone,
+//!   or both). A match's value depends only on the classes of the records it reads, so every
+//!   evidence set has a state in which every reader reads the same classes and upstream vectors,
+//!   and no value is redundant to that: two values of a dimension differ in what some reader of it
+//!   reads. That is not minimal in the states that evaluate alike (a claim nothing reads, a match
+//!   whose mixed results are `unknown` either way), any more than the classes are. A state names
+//!   the producer of each profile `producer-n`, `n` its position among every non-empty profile of
+//!   the space, in set order, from 1, and lists each producer its records name in the case's
+//!   `independence`, on exactly its profile's dimensions. A record from a producer is written ``
+//!   evidence `k` result `r` by a producer independent on `d`, `e` ``, and the bound refusal names
+//!   the profiles of a dimension that has them (`` evidence kind `k` with producers independent on
+//!   [`d`], [`d`, `e`] 9 ``). A profile weighs nothing; each record weighs one. A dimension no
+//!   demanding match reads has the empty profile alone, `2^(c * 2^m)` values, as before
 //!   independence existed.
 //!
 //! The space is atemporal: no evaluation instant is given, so no record expires (an expired
