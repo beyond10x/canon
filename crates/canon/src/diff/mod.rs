@@ -46,8 +46,8 @@
 //! | value removed from a case input | `BREAKING` |
 //! | independence dimension added | `EXPANSION` |
 //! | independence dimension removed (a case listing a producer on it is refused) | `BREAKING` |
-//! | dimension added to an evidence match's `independent_on`, or the list introduced | `TIGHTENING`, reversed under `not` |
-//! | dimension removed from an evidence match's `independent_on`, or the list removed | `RELAXATION`, reversed under `not` |
+//! | dimension added to an evidence match's `independent_on`, or the list introduced | `TIGHTENING`; `BREAKING` under `not` |
+//! | dimension removed from an evidence match's `independent_on`, or the list removed | `RELAXATION`; `BREAKING` under `not` |
 //!
 //! An applicability predicate is not compared by implication: an obligation that applies in fewer
 //! cases requires less of them, but the classifier does not order two guards, so any change to one
@@ -70,13 +70,21 @@
 //! either: a match that demands more reads fewer records, which can leave records that disagree
 //! out of it, so it is not true only where the other is. It is classified by the design's rule for
 //! a stronger independence requirement (§ 31): when the two predicates differ only in the
-//! dimensions their matches demand, a dimension added to a match read positively, or removed from
-//! one under an odd number of `not`s, tightens (`predicate demands more independence`), the
-//! opposite relaxes (`predicate demands less independence`), and both at once is `BREAKING`
-//! (`changed`). A predicate whose demands changed along with anything else is `BREAKING`
-//! (`changed`); one whose demands are the same is classified by implication, a match implying only
-//! an equal one. A claim's predicate is then directed by how the protocol reads the claim, as
-//! below.
+//! dimensions their matches demand, a dimension added to a match read positively tightens
+//! (`predicate demands more independence`), one removed from it relaxes (`predicate demands less
+//! independence`), and both at once is `BREAKING` (`changed`). A dimension added to or removed from
+//! a match under an odd number of `not`s is `BREAKING`, its line saying what the dimensions did
+//! (`demands more independence` when added, `demands less independence` when removed): a match
+//! that demands more reads fewer records, so it can be `unknown` where it was `false`, and its
+//! negation `unknown` where it was `true`, which blocks work it admitted. A predicate whose demands
+//! changed along with anything else is `BREAKING` (`changed`); one whose demands are the same is
+//! classified by implication, a match implying only an equal one. A claim's predicate is then
+//! directed by how the protocol reads the claim, as below, except that a changed demand read in
+//! reverse is `BREAKING`, as under `not`.
+//!
+//! Because a match that reads mixed results is `unknown`, a demand added to a positive match can
+//! also turn `unknown` into `true` (an independent approval beside a non-independent rejection), so
+//! `TIGHTENING` here follows design § 31 and is not a proof that no work becomes admissible.
 //!
 //! The rules hold in three-valued logic: whenever the
 //! stronger predicate is true the weaker is true, and whenever the weaker is false the stronger is
@@ -93,7 +101,8 @@
 //! claim is read in each direction that claim is read in, composed, through any number of claims.
 //! The directions are taken from both revisions together. A claim read only positively, or read
 //! by nothing, is classified as its predicate is; a claim read only in reverse has `TIGHTENING`
-//! and `RELAXATION` exchanged, its line ending `, read in reverse`; a claim read in both directions
+//! and `RELAXATION` exchanged, its line ending `, read in reverse` (a changed independence demand
+//! read in reverse is `BREAKING` instead, as above); a claim read in both directions
 //! is `BREAKING`, its line ending `, read in both directions`. A predicate rewritten or changed is
 //! classified as it is, whatever the direction.
 //!
@@ -471,9 +480,11 @@ fn without_independence(predicate: &Predicate) -> Predicate {
 
 /// A predicate whose independence demands changed, classified by the design's rule for a stronger
 /// independence requirement (§ 31) rather than by implication: a demand added to a match read
-/// positively, or removed from one read in reverse, tightens; the opposite relaxes; both at once,
-/// or a change to anything else in the same predicate, is `BREAKING`. `None` when the demands are
-/// the same, so implication decides.
+/// positively tightens, one removed from it relaxes; a demand changed on a match under `not`, both
+/// added and removed, or a change to anything else in the same predicate, is `BREAKING`. The line
+/// says what the dimensions did, whatever the polarity: `demands more independence` when only
+/// added, `demands less independence` when only removed, `changed` otherwise. `None` when the
+/// demands are the same, so implication decides.
 fn independence_changed(from: &Predicate, to: &Predicate) -> Option<(Category, &'static str)> {
     let (before, after) = (demands(from), demands(to));
     if before == after {
@@ -482,26 +493,19 @@ fn independence_changed(from: &Predicate, to: &Predicate) -> Option<(Category, &
     if without_independence(from) != without_independence(to) {
         return Some((Category::Breaking, "changed"));
     }
-    let added = after.difference(&before);
-    let removed = before.difference(&after);
-    let (mut tightens, mut relaxes) = (false, false);
-    for (positive, ..) in added {
-        if *positive {
-            tightens = true;
-        } else {
-            relaxes = true;
-        }
-    }
-    for (positive, ..) in removed {
-        if *positive {
-            relaxes = true;
-        } else {
-            tightens = true;
-        }
-    }
-    Some(match (tightens, relaxes) {
-        (true, false) => (Category::Tightening, "demands more independence"),
-        (false, true) => (Category::Relaxation, "demands less independence"),
+    let added: Vec<_> = after.difference(&before).collect();
+    let removed: Vec<_> = before.difference(&after).collect();
+    // Under `not` a demand added can turn `false` into `unknown` (only records that fail it decided
+    // the match), which `not` makes `true` into `unknown`: less work is legitimate, not more.
+    let negative = added
+        .iter()
+        .chain(&removed)
+        .any(|(positive, ..)| !*positive);
+    Some(match (added.is_empty(), removed.is_empty()) {
+        (false, true) if negative => (Category::Breaking, "demands more independence"),
+        (false, true) => (Category::Tightening, "demands more independence"),
+        (true, false) if negative => (Category::Breaking, "demands less independence"),
+        (true, false) => (Category::Relaxation, "demands less independence"),
         _ => (Category::Breaking, "changed"),
     })
 }
@@ -652,7 +656,10 @@ fn claim_predicate(
         .reduce(Reading::or)
         .unwrap_or(Reading::POSITIVE);
     let directed = matches!(category, Category::Tightening | Category::Relaxation);
+    // A changed demand read in reverse is a demand under `not`: `BREAKING`, as there.
+    let demand = independence_changed(from, to).is_some();
     let (category, read) = match (directed, reading.positive, reading.reverse) {
+        (true, false, true) if demand => (Category::Breaking, ", read in reverse"),
         (true, false, true) => (
             if category == Category::Tightening {
                 Category::Relaxation

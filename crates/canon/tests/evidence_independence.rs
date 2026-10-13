@@ -218,8 +218,9 @@ fn changes(from: &str, to: &str) -> Vec<(Category, String)> {
         .collect()
 }
 
-/// A demand added under `not` relaxes and one removed there tightens; a claim read in reverse
-/// exchanges them; a demand changed along with another member is `BREAKING`; one dimension
+/// A demand added to a positive match tightens and one removed relaxes; one added or removed under
+/// `not`, or in a claim read in reverse, is `BREAKING`, its line saying what the dimensions did; a
+/// demand changed along with another member is `BREAKING`; one dimension
 /// swapped for another is `BREAKING`; the same demand in both is no change; and a dimension
 /// declared is `EXPANSION`, one removed `BREAKING`.
 #[test]
@@ -243,21 +244,34 @@ fn diff_classifies_a_changed_demand_by_its_polarity() {
             vec![(Tightening, "predicate demands more independence")],
         ),
         (
+            claim(one),
+            claim(plain),
+            vec![(Relaxation, "predicate demands less independence")],
+        ),
+        (
             negated(plain),
             negated(one),
-            vec![(Relaxation, "predicate demands less independence")],
+            vec![(Breaking, "predicate demands more independence")],
         ),
         (
             negated(one),
             negated(plain),
-            vec![(Tightening, "predicate demands more independence")],
+            vec![(Breaking, "predicate demands less independence")],
         ),
         (
             read_in_reverse(plain),
             read_in_reverse(one),
             vec![(
-                Relaxation,
+                Breaking,
                 "predicate demands more independence, read in reverse",
+            )],
+        ),
+        (
+            read_in_reverse(one),
+            read_in_reverse(plain),
+            vec![(
+                Breaking,
+                "predicate demands less independence, read in reverse",
             )],
         ),
         (
@@ -293,5 +307,51 @@ fn diff_classifies_a_changed_demand_by_its_polarity() {
     assert_eq!(
         changes(HEADER, &fewer),
         [(Category::Breaking, "removed".to_owned())]
+    );
+}
+
+/// A claim read in reverse is the `not` of the adversary's case one claim away: a demand added to
+/// `{evidence: review, result: approved}` turns the author's rejection from deciding the claim
+/// `false` to deciding nothing, so `{claim: c, is: false}` goes from admitting `merge` to blocking
+/// it. Less work is legitimate and the report must not say `RELAXATION`.
+#[test]
+fn a_demand_added_to_a_claim_read_in_reverse_that_blocks_an_admitted_case_is_breaking() {
+    let source = |predicate: &str| {
+        protocol(&format!(
+            "  c: {{true_when: {predicate}}}\n\
+             actions:\n  merge: {{precondition: {{claim: c, is: false}}}}\n"
+        ))
+    };
+    let from = source("{evidence: {kind: review, result: approved}}");
+    let to = source(
+        "{evidence: {kind: review, result: approved, independent_on: [different_principal]}}",
+    )
+    .replace("revision: 1}", "revision: 2}");
+    let merge = |text: &str| {
+        let case = eval::read_case(
+            "format: canon-case/1\nid: C-1\nprotocol: p\nartifacts: {change: {revision: r1}}\n\
+             independence: {author: []}\n",
+        )
+        .expect("a case");
+        let record: EvidenceRecord = eval::read_evidence(
+            "format: canon-evidence/1\nid: v1\nkind: review\nresult: rejected\nsubject: change\n\
+             subject_revision: r1\nproducer: author\n",
+        )
+        .expect("a record");
+        let decision = eval::evaluate(&compiled(text), &case, &[record]).expect("decides");
+        let rendered: Value = serde_json::from_str(&eval::render(&decision)).expect("JSON");
+        rendered["actions"]["merge"]["status"]
+            .as_str()
+            .expect("a status")
+            .to_owned()
+    };
+    assert_eq!(merge(&from), "admissible", "before the change");
+    assert_eq!(merge(&to), "blocked", "after the change");
+    assert_eq!(
+        changes(&from, &to),
+        [(
+            Category::Breaking,
+            "predicate demands more independence, read in reverse".to_owned()
+        )]
     );
 }
