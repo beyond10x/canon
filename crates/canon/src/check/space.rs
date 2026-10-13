@@ -460,7 +460,8 @@ impl<'a> Space<'a> {
     }
 
     /// The positions of the evidence dimensions `predicate` reads positively, each with its kind:
-    /// those whose records an evidence match or order form [`positive_reads`] finds reads.
+    /// those whose records an evidence match or order form [`positive_reads`] finds reads (an
+    /// order form in any position).
     pub(super) fn dimensions_read_positively(
         &self,
         ir: &Ir,
@@ -984,12 +985,13 @@ pub(super) fn kinds_read<'a>(ir: &'a Ir, predicate: &'a Predicate) -> BTreeSet<&
         .collect()
 }
 
-/// Every evidence match and order form `predicate` reaches in a positive position, where a record
-/// it reads can help the predicate hold: its own and those of every claim it tests, through any
-/// number of claim references. `not` flips the position, and so does a claim test `is: false` or
-/// `is: unknown`, each of which holds on what the claim's evidence does not establish; `all`,
-/// `any` and `is: true` keep it. Each claim is visited once per position. An order form in a
-/// positive position counts for every kind it reads.
+/// Every evidence match `predicate` reaches in a positive position, where a record it reads can
+/// help the predicate hold, and every order form it reaches in any position: its own and those of
+/// every claim it tests, through any number of claim references. `not` flips the position, and so
+/// does a claim test `is: false` or `is: unknown`, each of which holds on what the claim's evidence
+/// does not establish; `all`, `any` and `is: true` keep it. Each claim is visited once per
+/// position. An order form counts for every kind it reads whatever its position: with no record of
+/// its kinds it is `unknown` and so is its negation, so a record can help either hold.
 pub(super) fn positive_reads<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Reached<'a>> {
     let mut matches = Vec::new();
     let mut visited: BTreeSet<(&ClaimId, bool)> = BTreeSet::new();
@@ -1005,11 +1007,7 @@ pub(super) fn positive_reads<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Re
                     matches.push((&matching.kind, matching.subject.as_ref()));
                 }
             }
-            Predicate::First(_) | Predicate::Before(_) => {
-                if positive {
-                    matches.extend(next.order_reads());
-                }
-            }
+            Predicate::First(_) | Predicate::Before(_) => matches.extend(next.order_reads()),
             Predicate::Input(_) => {}
             Predicate::Claim(test) => {
                 let position = match test.is {

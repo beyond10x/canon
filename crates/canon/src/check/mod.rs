@@ -105,7 +105,9 @@
 //! observations 3 ``. Erasing a dimension (a property's `independent_of`, an `authority-bypass`
 //! witness) erases its history too and puts it first, alone, in the order, the others keeping their
 //! order. The kinds an order form reads count for `unproduced-evidence`, and for `authority-bypass`
-//! in a positive position, every kind it reads; a kind with an earlier record is present in a state.
+//! in every position, not only a positive one: with no record an order form is `unknown` and so is
+//! its negation, so a record helps `not` it and a claim test `is: false` over it hold too. A kind
+//! with an earlier record is present in a state.
 //!
 //! A state is evaluated as a case snapshot that lists each declared artifact, and the case itself,
 //! at one revision, and gives each case input its value in the state, with one evidence record per
@@ -137,8 +139,11 @@
 //!   each kind some action that requires a capability may produce. A requirement reads an evidence
 //!   match positively unless it sits under an odd number of flips, through the claims it tests: a
 //!   `not`, a claim test `is: false` and a claim test `is: unknown` each flip, and `all`, `any` and
-//!   `is: true` do not. The outcome is a bypass when some evidence dimension it reads positively is
-//!   of a governed kind, and it is legitimate in a state that takes no authority decision, whose
+//!   `is: true` do not. It reads every kind an order form reads positively, under any number of
+//!   flips: with no record of its kinds an order form is `unknown`, and so is its negation, so a
+//!   record helps the requirement hold in either position. The outcome is a bypass when some
+//!   evidence dimension it reads positively is of a governed kind, and it is legitimate in a state
+//!   that takes no authority decision, whose
 //!   every present evidence kind some action requiring no capability may produce, and from which
 //!   taking away one positively read dimension that is present blocks it. Each such dimension is
 //!   judged alone, so the outcome may rest on governed evidence produced without authority or on
