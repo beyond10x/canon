@@ -313,6 +313,7 @@ fn scenario(
     let revision = Revision::new(REVISION);
     let case = Case {
         format: CASE_FORMAT.to_owned(),
+        independence: crate::model::Declarations::default(),
         id: CaseId::new(WITNESS),
         protocol: ir.protocol.id.clone(),
         artifacts: Declarations::new(

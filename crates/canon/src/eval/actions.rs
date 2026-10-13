@@ -11,12 +11,15 @@
 //!   does); a test that is as needed is never named, nor is one in an `any` branch that holds. In
 //!   an `all` that is `false`, only its `false` members decide it. Each evidence match that decides
 //!   it, by the same rule, is a reason too, `{"evidence": <kind>, "present": <bool>}`, with
-//!   `"subject": <artifact>` added when the match names one; once per kind and subject, in kind
-//!   order and then subject order (no subject first), after the claim reasons, whether or not a
-//!   claim is also named. `present` is whether a record the match reads applies (one of its kind
-//!   and, when it names a subject, about that artifact): `false` when none does, `true` when one
-//!   does (one under `not` that a record satisfies, or a match whose records have another
-//!   result). A record about another artifact than the subject does not make it `true`. A
+//!   `"subject": <artifact>` added when the match names one and `"independent_on": [<dimension>,
+//!   ...]` when it demands independence (story:evidence-independence); once per kind, subject and
+//!   `independent_on`, in kind order, then subject order (no subject first), then `independent_on`
+//!   order (none first), after the claim reasons, whether or not a claim is also named. `present`
+//!   is whether a record the match reads applies (one of its kind and, when it names a subject,
+//!   about that artifact, and, when it demands independence, produced by a producer the case lists
+//!   on every dimension demanded): `false` when none does, `true` when one does (one under `not`
+//!   that a record satisfies, or a match whose records have another result). A record about
+//!   another artifact than the subject, or one that fails the demand, does not make it `true`. A
 //!   precondition that no claim test and no evidence
 //!   match decides, such as `{any: []}` or `{not: {all: []}}`, can never be `true`, and gives the
 //!   one reason `{"requirement": "unsatisfiable"}`. Each case input whose test decides it, by the
@@ -45,10 +48,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Map, Value};
 
 use super::authority::Authority;
-use super::claims::{EvidenceSets, Inputs, predicate, reads};
+use super::claims::{EvidenceSets, Inputs, predicate};
 use crate::ir::{Action, Ir};
 use crate::model::{
-    ArtifactId, CapabilityId, ClaimId, EvidenceKindId, Grant, InputId, Json, Predicate, Truth,
+    ArtifactId, CapabilityId, ClaimId, EvidenceKindId, EvidenceMatch, Grant,
+    IndependenceDimensionId, InputId, Json, Predicate, Truth,
 };
 
 /// The section, or `None` to leave the slot empty. `evidence` is what the claims were evaluated
@@ -121,13 +125,21 @@ fn admissibility(
     ("admissible", Vec::new())
 }
 
+/// An evidence match as a reason names it: its kind, its subject and the dimensions it demands
+/// independence on.
+type MatchKey<'a> = (
+    &'a EvidenceKindId,
+    Option<&'a ArtifactId>,
+    Option<&'a [IndependenceDimensionId]>,
+);
+
 /// The claim tests and evidence matches that decide a precondition, each named once.
 #[derive(Default)]
 struct Named<'a> {
     claims: BTreeSet<&'a ClaimId>,
-    /// Each evidence match by kind and subject: two matches that differ only in their subject are
-    /// two reasons.
-    matches: BTreeSet<(&'a EvidenceKindId, Option<&'a ArtifactId>)>,
+    /// Each evidence match by kind, subject and the independence it demands: two matches that
+    /// differ only in their subject, or only in their `independent_on`, are two reasons.
+    matches: BTreeSet<MatchKey<'a>>,
     /// Each input whose test decides it.
     inputs: BTreeSet<&'a InputId>,
     /// Each order form that decides it, in the order found; `order.rs` orders them and names each
@@ -159,20 +171,38 @@ pub(super) fn unmet(
         let value = claims.get(claim).copied().unwrap_or(Truth::Unknown);
         reason([("claim", claim.as_str()), ("value", &value.to_string())])
     });
-    let evidence_reasons = named.matches.into_iter().map(|(kind, subject)| {
-        let present = evidence
-            .left
-            .iter()
-            .any(|record| reads(kind, subject, record));
-        let mut entry = Map::from_iter([
-            ("evidence".to_owned(), Value::from(kind.as_str())),
-            ("present".to_owned(), Value::Bool(present)),
-        ]);
-        if let Some(subject) = subject {
-            entry.insert("subject".to_owned(), Value::from(subject.as_str()));
-        }
-        Value::Object(entry)
-    });
+    let evidence_reasons = named
+        .matches
+        .into_iter()
+        .map(|(kind, subject, independent_on)| {
+            let matching = EvidenceMatch {
+                kind: kind.clone(),
+                result: None,
+                subject: subject.cloned(),
+                independent_on: independent_on.map(<[_]>::to_vec),
+            };
+            let present = evidence
+                .left
+                .iter()
+                .any(|record| evidence.of_match(&matching, record));
+            let mut entry = Map::from_iter([
+                ("evidence".to_owned(), Value::from(kind.as_str())),
+                ("present".to_owned(), Value::Bool(present)),
+            ]);
+            if let Some(subject) = subject {
+                entry.insert("subject".to_owned(), Value::from(subject.as_str()));
+            }
+            if let Some(dimensions) = independent_on {
+                entry.insert(
+                    "independent_on".to_owned(),
+                    dimensions
+                        .iter()
+                        .map(|dimension| Value::from(dimension.as_str()))
+                        .collect(),
+                );
+            }
+            Value::Object(entry)
+        });
     // A case gives every input it is checked for; one it does not give, which only an IR a
     // caller builds can name, has the value `null`.
     let input_reasons = named.inputs.into_iter().map(|input| {
@@ -227,9 +257,11 @@ fn deciding<'a>(
         }
         Predicate::Evidence(matching) => {
             if value(node) != goal {
-                named
-                    .matches
-                    .insert((&matching.kind, matching.subject.as_ref()));
+                named.matches.insert((
+                    &matching.kind,
+                    matching.subject.as_ref(),
+                    matching.independent_on.as_deref(),
+                ));
             }
         }
         Predicate::Input(test) => {
@@ -329,6 +361,7 @@ mod tests {
              {evidence: {kind: k, result: pass, subject: a}}, {evidence: {kind: k, result: pass}}]}}\n");
         let record = EvidenceRecord {
             format: "canon-evidence/1".to_owned(),
+            producer: None,
             id: crate::model::EvidenceId::new("e"),
             kind: EvidenceKindId::new("k"),
             result: Some("fail".to_owned()),

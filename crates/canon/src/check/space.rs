@@ -201,6 +201,7 @@ impl<'a> Space<'a> {
                     id,
                     record: Some(EvidenceRecord {
                         format: EVIDENCE_FORMAT.to_owned(),
+                        producer: None,
                         id: EvidenceId::new("e"),
                         kind: id.clone(),
                         result: None,

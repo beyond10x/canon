@@ -21,7 +21,8 @@
 //!   that is `true`, only its `true` members). A claim test gives
 //!   `{"claim": <id>, "value": <the claim's own value>}`, an evidence match
 //!   `{"evidence": <kind>, "present": <whether a record the match reads is in the evidence left
-//!   after the exclusion stages>}`, with `"subject": <artifact>` added when the match names one:
+//!   after the exclusion stages>}`, with `"subject": <artifact>` added when the match names one
+//!   and `"independent_on"` when it demands independence, as an action's evidence reason is:
 //!   `false` for a required record that is missing, `true` for a record present under `not`. A
 //!   match reads the records of its kind and, when it names a subject, only those about that
 //!   artifact, so a record about another artifact leaves `present` `false`. An input test gives

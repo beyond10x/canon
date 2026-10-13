@@ -490,6 +490,7 @@ pub(crate) fn evaluate(ir: &Ir, space: &Space<'_>, state: &State) -> Result<Eval
     let revision = Revision::new(space::REVISION);
     let case = Case {
         format: CASE_FORMAT.to_owned(),
+        independence: crate::model::Declarations::default(),
         id: CaseId::new("check"),
         protocol: ir.protocol.id.clone(),
         artifacts: Declarations::new(

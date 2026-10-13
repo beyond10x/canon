@@ -471,6 +471,7 @@ const ORDERED: &str = "format: protocol/1\n\
 fn claim_values(ir: &Ir, evidence: &[crate::model::EvidenceRecord]) -> Vec<crate::model::Truth> {
     let case = Case {
         format: CASE_FORMAT.to_owned(),
+        independence: crate::model::Declarations::default(),
         id: CaseId::new("check"),
         protocol: ir.protocol.id.clone(),
         artifacts: Declarations::new(
@@ -537,6 +538,7 @@ fn every_value_of_every_order_form_is_reached_jointly_with_the_evidence_matches(
                 let at = instants[rng.below(4)];
                 crate::model::EvidenceRecord {
                     format: crate::model::EVIDENCE_FORMAT.to_owned(),
+                    producer: None,
                     id: crate::model::EvidenceId::new(format!("h{n}")),
                     kind: EvidenceKindId::new(kind),
                     result: result.map(str::to_owned),
