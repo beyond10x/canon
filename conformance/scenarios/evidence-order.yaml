@@ -553,6 +553,70 @@ steps:
           }
         }
 
+  # Expectation 6, for `before`: the first test_result (failed) and the first diff share one
+  # earliest instant. One second's resolution cannot order them, so `before` is UNKNOWN, not TRUE,
+  # though `first` is TRUE; the claim is UNKNOWN. A `before` that took equal instants as ordered
+  # would make the claim TRUE and the action admissible here. The evidence match reads the failed
+  # record at the current revision and is FALSE, which alone decides the outcome's `all`.
+  - id: test-result-and-diff-at-one-earliest-instant
+    evaluate:
+      case:
+        format: canon-case/1
+        id: FIX-7
+        protocol: regression
+        artifacts:
+          change: {revision: r2}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: d1
+          kind: diff
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T09:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "before": "test_result",
+                  "subject": "change",
+                  "then": "diff",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "regression.passes": {
+              "value": "false"
+            },
+            "regression.shown": {
+              "value": "unknown"
+            }
+          },
+          "outcomes": {
+            "fixed": {
+              "reasons": [
+                {
+                  "claim": "regression.passes",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
   # Expectation 7. The red record carries no observed_at: its place in the order is not known, so
   # both forms are UNKNOWN, though the green record and the diff carry instants.
   - id: a-test-result-without-observed-at
