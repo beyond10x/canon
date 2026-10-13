@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-13T12:34:57Z",
+  "actor": "human:timo",
+  "artifact": "story:evidence-independence",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test -p b10x-canon --locked on unit commit 7080c0c: 73 suites ok, 494 passed, 0 failed, EXIT=0"
+  }
+}

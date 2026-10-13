@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ess-pin-0-59
 kind: story
-status: active
+status: implemented
 title: Hold the specification to ess 0.59.0
 relations:
 - decomposes: epic:canon-kernel
@@ -20,10 +20,11 @@ scope:
   path: crates/canon/tests/ess_model_matches.rs
 - confidence: cited
   path: ess/ess-inputs.yaml
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-13T11:05:08Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-10-13T11:05:08Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-10-13T12:38:03Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

@@ -2,12 +2,14 @@
 format: aep.planning-md/3
 id: release-plan:canon-0-4-0
 kind: release-plan
-status: draft
+status: approved
 title: Release Canon 0.4.0
 relations:
 - delivers: story:evidence-independence
 - delivers: story:ess-pin-0-59
-revision: 1
+revision: 2
+transitions:
+- {from: "draft", to: "approved", at: "2026-10-13T12:38:07Z", actor: "human:timo", revision: 2}
 ---
 ## Intent
 

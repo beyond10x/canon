@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:evidence-independence
 kind: story
-status: active
+status: implemented
 title: Evidence requirements that demand an independent producer
 refs:
 - provider: atlas
@@ -42,10 +42,11 @@ scope:
   path: fixtures/investigation/evidence-independence.yaml
 - confidence: cited
   path: website/
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-13T11:05:08Z", actor: "human:timo", revision: 6}
 - {from: "proposed", to: "active", at: "2026-10-13T11:05:08Z", actor: "human:timo", revision: 7}
+- {from: "active", to: "implemented", at: "2026-10-13T12:38:04Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 ## Outcome
 

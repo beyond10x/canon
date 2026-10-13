@@ -150,7 +150,7 @@
     },
     {
       "label": "Evidence from an independent producer",
-      "status": "decided",
+      "status": "shipped",
       "detail": "An evidence match demands that its records' producer be independent on declared dimensions, which the case resolves for each producer; a record that fails the demand leaves the match UNKNOWN, never FALSE; scenario CANON-INDEPENDENCE-001.",
       "href": "/docs/reference/protocol#evidencematch",
       "area": "Language"
