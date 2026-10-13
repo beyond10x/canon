@@ -24,6 +24,7 @@ A `canon-case/1` case snapshot as written.
 | `termination` | [identifier](#identifiers) (`OutcomeId`) | optional | The outcome the case terminated through; absent while the case is open. Whether the protocol declares it is checked by the outcomes section (story:outcomes). |
 | `revision` | [identifier](#identifiers) (`Revision`) | optional | The case's own current revision. An explicit decision applies only while its `case_revision` is this one; a snapshot without one has no explicit decision applying. |
 | `inputs` | map from [identifier](#identifiers) (`InputId`) to [identifier](#identifiers) (`InputValue`) | optional | The value of each case input, keyed by input id, fixed when the case opens. Left out by a case of a protocol that declares no input. |
+| `independence` | map from [identifier](#identifiers) (`Principal`) to list of [identifier](#identifiers) (`IndependenceDimensionId`) | optional | The dimensions on which each producer is independent of the case's work, keyed by producer, as the trusted context that writes the case resolved them. A producer absent from it, or listed with `[]`, is independent on no dimension. |
 
 ### `CaseArtifact`
 
@@ -53,6 +54,7 @@ only while its subject revision is the case's current revision of that subject.
 | `subject_revision` | [identifier](#identifiers) (`Revision`) | required | The revision of that artifact the record is about. |
 | `observed_at` | [text](#text-formats) (`Instant`) | optional | When the observation was made; its age at the evaluation instant is measured from here. A record without it never expires. |
 | `upstream_revisions` | map from [identifier](#identifiers) (`ArtifactId`) to [identifier](#identifiers) (`Revision`) | optional | The revision of each upstream artifact the observation was made against, keyed by artifact. A record without it is never invalidated. |
+| `producer` | [identifier](#identifiers) (`Principal`) | optional | Who produced the record, recorded as given: Canon does not prove it. A record without one is of no evidence match that demands independence. |
 
 ## `canon-decision/1`
 
@@ -94,13 +96,15 @@ One evidence record an exclusion stage kept from a claim, and why.
 
 ### `ExclusionReason`
 
-Why evidence was excluded before claims were evaluated.
+Why evidence was excluded: before claims were evaluated, or, for `NotIndependent`, from the
+evidence matches that demand an independence its producer lacks.
 
 | Value | Meaning |
 |---|---|
 | `revision_mismatch` | Bound to a revision of its subject that is not the current one. |
 | `expired` | Older than its kind allows at the evaluation instant. |
 | `invalidated` | Invalidated by an invalidation rule. |
+| `not_independent` | Produced by a producer the case does not list as independent on every dimension an evidence match demands. |
 
 ## `canon-authority/1`
 
@@ -201,7 +205,8 @@ An identifier is text. A well-formed identifier is not empty, and without whites
 | `OutcomeId` | Identifies an outcome a protocol declares. |
 | `CapabilityId` | Names a capability an action requires authority for. |
 | `DecisionName` | Names an explicit decision an outcome may require (`explicitly_inconclusive`). |
-| `Principal` | Who took an explicit decision, recorded as given: Canon resolves no identity. |
+| `Principal` | Who took an explicit decision, or who produced an evidence record, recorded as given: Canon resolves no identity and proves no production. |
+| `IndependenceDimensionId` | Identifies an independence dimension a protocol declares (`different_principal`). Canon gives no dimension a meaning; the trusted context that writes the case resolves it. |
 | `InputId` | Identifies a case input a protocol declares. |
 | `InputValue` | One value a case input may take: an identifier its input declares. Read from any scalar, alike in the protocol and in the case: `values: [true, false]` declares the values `true` and `false`, and a case gives one as `flag: true`. |
 | `PropertyId` | Identifies one property of a `canon-properties/1` document. |

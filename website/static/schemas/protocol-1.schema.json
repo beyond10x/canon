@@ -111,6 +111,16 @@
         "case": {
           "description": "What a case governed by the protocol gives when it opens: its case inputs. A protocol without the section declares no input.",
           "$ref": "#/$defs/CaseSection"
+        },
+        "independence_dimensions": {
+          "description": "The independence dimensions the protocol's evidence matches may demand, keyed by dimension id; a protocol without the section declares none.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/IndependenceDimension"
+          }
         }
       },
       "required": [
@@ -282,6 +292,16 @@
           "additionalProperties": {
             "$ref": "#/$defs/CaseInput"
           }
+        }
+      }
+    },
+    "IndependenceDimension": {
+      "description": "One independence dimension: a relation between who produced a record and the case's work, which the trusted context resolves for each producer and Canon reads from the case.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
         }
       }
     },
@@ -476,7 +496,7 @@
       ]
     },
     "EvidenceMatch": {
-      "description": "Matches evidence of one kind, optionally with one result, and optionally only evidence about one declared artifact: a match that names a subject reads only the records whose subject it is.",
+      "description": "Matches evidence of one kind, optionally with one result, optionally only evidence about one declared artifact (a match that names a subject reads only the records whose subject it is), and optionally only evidence whose producer the case lists as independent on every dimension `independent_on` names.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -488,6 +508,13 @@
         },
         "subject": {
           "$ref": "#/$defs/Identifier"
+        },
+        "independent_on": {
+          "description": "The independence the match demands of a record's producer: declared dimensions, not empty, each once. A match without it reads records whoever produced them.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
         }
       },
       "required": [

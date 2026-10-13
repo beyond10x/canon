@@ -28,8 +28,12 @@ A claim's value is its `true_when` predicate's value over the evidence set:
 - An evidence match reads the records of its kind. One that names a `subject` reads only the
   records about that artifact: a record about another artifact, even at that artifact's
   current revision, is not of the match and neither establishes nor contradicts it
-  (CANON-EVIDENCE-003). One that names no subject reads records about any artifact. "Records of
-  the kind" below are the records the match reads.
+  (CANON-EVIDENCE-003). One that names no subject reads records about any artifact. One that
+  demands independence (`independent_on: [D, ...]`) reads only the records that name a
+  `producer` the case's `independence` map lists on every dimension `D`: any other record of
+  its kind and subject is not of the match, whatever its result, so it neither establishes nor
+  contradicts it (CANON-INDEPENDENCE-001, `independence.rs`). "Records of the kind" below are
+  the records the match reads.
 - An evidence match without a result is `true` when a record of the kind exists and `unknown`
   when none does.
 - An evidence match with a result is `unknown` when no record of the kind exists, `false` when
@@ -73,9 +77,13 @@ declares (listed by the case), each case input it gives, in the order written (i
 value identifiers, then declared by the protocol, else `undeclared-input`, given once, else
 `duplicate-identifier`, and its value declared by the input, else `undeclared-input-value`,
 naming the input and the value), each input the protocol declares (given by the case, else
-`missing-input`, naming it); then each evidence record in the order given: its format, its
-identifiers (id, kind, subject, subject revision, then each upstream artifact and revision in
-`upstream_revisions`), its `observed_at` when given (an instant, else `invalid-instant`), its id
+`missing-input`, naming it), each producer its `independence` map lists, in the order written
+(an identifier, listed once, else `duplicate-identifier`, and each dimension listed for it an
+identifier, listed once for it, else `duplicate-identifier`, and declared by the protocol, else
+`undeclared-dimension`, naming the producer and the dimension); then each evidence record in
+the order given: its format, its identifiers (id, kind, subject, subject revision, then each
+upstream artifact and revision in `upstream_revisions`, then its `producer` when given), its
+`observed_at` when given (an instant, else `invalid-instant`), its id
 (used once in the set), its kind (declared by the protocol) and each upstream artifact
 (declared by the protocol, else `undeclared-artifact`, naming the record and the artifact; named
 once, else `duplicate-identifier`). A record's subject and subject revision are checked here as
@@ -169,7 +177,11 @@ concept; this module holds only the order:
    it, so it is not listed under a claim that reaches its kind only through such a match. A
    record excluded from a claim is excluded from every claim built on it. A record invalidated
    for a claim is listed under it, with the reason `invalidated`, when an evidence match the
-   claim reaches reads it, and under no claim it was not invalidated for;
+   claim reaches reads it, and under no claim it was not invalidated for. Any other record is
+   listed under a claim, with the reason `not_independent`, when an evidence match the claim
+   reaches would read it by kind and subject and none of those matches accepts its producer
+   (`independence.rs`): a match that demands independence keeps it out, and no match demanding
+   less reads it. Each record is listed once, with the first of these reasons that applies;
 5. the `obligations`, `actions` and `outcomes` sections (`obligations.rs`, `actions.rs`,
    `outcomes.rs`), then the explanation (`crate::explain`). Each section evaluates its
    predicates with the one evaluator claims use (`claims::predicate`): discharge and

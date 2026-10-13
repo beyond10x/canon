@@ -21,8 +21,8 @@ Two lines of work fit none of those three states:
 - **Normative conformance suite: started.** The requirements below as runnable scenarios; scenarios
   cover `CANON-CLAIM-001`, `CANON-CLAIM-002`, `CANON-EVIDENCE-001`, `CANON-EVIDENCE-002`,
   `CANON-EVIDENCE-003`, `CANON-OBLIGATION-001`, `CANON-AUTHORITY-001`, `CANON-OUTCOME-001`,
-  `CANON-OUTCOME-002`, `CANON-EXPLAIN-001`, `CANON-DETERMINISM-001` and `CANON-INVALIDATION-001`,
-  by eleven scenarios, among them `CANON-REASONS-001`, which covers `CANON-EVIDENCE-003` in the
+  `CANON-OUTCOME-002`, `CANON-EXPLAIN-001`, `CANON-DETERMINISM-001`, `CANON-INVALIDATION-001` and
+  `CANON-INDEPENDENCE-001`, by their scenarios, among them `CANON-REASONS-001`, which covers `CANON-EVIDENCE-003` in the
   `actions` and `outcomes` sections.
 - **Protocol composition, a shared evidence envelope: open question.** Listed as open in the
   design; no decision yet.
@@ -36,8 +36,8 @@ The design proposes `canon frontier`, `canon inspect` and `canon conform synthes
 
 From the design document. Each is meant to become a conformance scenario. Today the scenarios in
 `conformance/scenarios` cover `CANON-CLAIM-001`, `CANON-CLAIM-002`, `CANON-EVIDENCE-001`,
-`CANON-EVIDENCE-002`, `CANON-AUTHORITY-001`, `CANON-OUTCOME-001`, `CANON-INVALIDATION-001` and
-`CANON-DETERMINISM-001`; `CANON-INDEPENDENCE-001` has none yet. Five more scenarios hold what
+`CANON-EVIDENCE-002`, `CANON-AUTHORITY-001`, `CANON-INDEPENDENCE-001`, `CANON-OUTCOME-001`,
+`CANON-INVALIDATION-001` and `CANON-DETERMINISM-001`. Five more scenarios hold what
 the design lists no requirement for: `CANON-OBLIGATION-001`, obligations, `CANON-OUTCOME-002`,
 outcomes that require an explicit decision, `CANON-EVIDENCE-003`, evidence matches bound to a
 subject, `CANON-REASONS-001`, the reasons such a match gives in the `actions` and `outcomes`
@@ -51,7 +51,7 @@ sections, and `CANON-EXPLAIN-001`, the structured explanation, which also covers
 | `CANON-EVIDENCE-001` | Evidence bound to a subject revision must not establish a current-revision claim after the subject revision changes. |
 | `CANON-EVIDENCE-002` | Expired evidence must become inapplicable or `UNKNOWN`; expiration alone must not imply `FALSE`. |
 | `CANON-AUTHORITY-001` | An action or transition with an unsatisfied authority requirement must not be treated as admissible. |
-| `CANON-INDEPENDENCE-001` | Evidence failing a declared independence relation must not satisfy a requirement that demands such independence. |
+| `CANON-INDEPENDENCE-001` | Evidence failing a declared independence relation must not satisfy a requirement that demands such independence. Scenario `CANON-INDEPENDENCE-001`: an evidence match demands independence with `independent_on`, and the case says on which dimensions each producer is independent. |
 | `CANON-OUTCOME-001` | A case must terminate only through an outcome declared by its governing protocol. |
 | `CANON-INVALIDATION-001` | Changing a bound upstream artifact must invalidate dependent claims whose only support was bound to the previous revision. |
 | `CANON-DETERMINISM-001` | Equivalent normalized protocol, case, evidence, authority and evaluation-time inputs must produce equivalent normalized outputs. |
@@ -62,7 +62,8 @@ The design sets one goal for the first milestone: a protocol can deterministical
 frontier and legitimate outcomes from a live case, evidence, authority and time, without owning
 execution or persistence. Parsing, validation, the compiled form, claim evaluation, revision
 binding, subject-bound evidence matches, freshness, obligations, action admissibility, outcomes,
-decision-based outcomes, invalidation rules and the structured explanation are done; the rest is
+decision-based outcomes, invalidation rules, evidence that demands an independent producer and
+the structured explanation are done; the rest is
 the planned work above.
 A service, database, UI, scheduling and workflow execution are not part of it.
 

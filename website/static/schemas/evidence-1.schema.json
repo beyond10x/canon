@@ -59,6 +59,10 @@
           "additionalProperties": {
             "$ref": "#/$defs/Identifier"
           }
+        },
+        "producer": {
+          "description": "Who produced the record, recorded as given: Canon does not prove it. A record without one is of no evidence match that demands independence.",
+          "$ref": "#/$defs/Identifier"
         }
       },
       "required": [

@@ -103,6 +103,11 @@ items:
     story: story:case-inputs
     detail: A protocol declares case inputs with closed value lists; the input predicate and applicable_when let one compiled protocol serve several profiles; scenario CANON-INPUT-001.
     href: /docs/reference/protocol
+  - label: Evidence from an independent producer
+    area: Language
+    story: story:evidence-independence
+    detail: An evidence match demands that its records' producer be independent on declared dimensions, which the case resolves for each producer; a record that fails the demand leaves the match UNKNOWN, never FALSE; scenario CANON-INDEPENDENCE-001.
+    href: /docs/reference/protocol#evidencematch
   - label: Cases compose at run time
     area: Design
     story: story:case-composition
