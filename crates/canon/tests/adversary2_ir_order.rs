@@ -63,6 +63,7 @@ fn claim(id: &str, is: Truth) -> Predicate {
 fn evidence(kind: &str, result: Option<&str>) -> Predicate {
     Predicate::Evidence(EvidenceMatch {
         kind: EvidenceKindId::new(kind),
+        independent_on: None,
         result: result.map(str::to_owned),
         subject: None,
     })
@@ -251,6 +252,7 @@ fn documented_normal_form(predicate: &Predicate) -> Predicate {
 fn protocol(requires: Predicate) -> Protocol {
     Protocol {
         format: "protocol/1".to_owned(),
+        independence_dimensions: Default::default(),
         protocol: ProtocolHeader {
             id: ProtocolId::new("p"),
             revision: 1,

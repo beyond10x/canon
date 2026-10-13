@@ -44,6 +44,10 @@
 //! | case input added or removed (a case gives a value to exactly the declared inputs) | `BREAKING` |
 //! | value added to a case input | `EXPANSION` |
 //! | value removed from a case input | `BREAKING` |
+//! | independence dimension added | `EXPANSION` |
+//! | independence dimension removed (a case listing a producer on it is refused) | `BREAKING` |
+//! | dimension added to an evidence match's `independent_on`, or the list introduced | `TIGHTENING`; `BREAKING` under `not` |
+//! | dimension removed from an evidence match's `independent_on`, or the list removed | `RELAXATION`; `BREAKING` under `not` |
 //!
 //! An applicability predicate is not compared by implication: an obligation that applies in fewer
 //! cases requires less of them, but the classifier does not order two guards, so any change to one
@@ -60,7 +64,29 @@
 //! cannot show is classified as changed. An order form (`first`, `before`) is compared
 //! structurally only: a predicate whose order forms, taken as a set, differ between the revisions
 //! is changed (`BREAKING`), whatever members around them were added or removed; one whose order
-//! forms are the same is classified by implication, each form implying only an equal one. The rules hold in three-valued logic: whenever the
+//! forms are the same is classified by implication, each form implying only an equal one.
+//!
+//! The independence an evidence match demands (`independent_on`) is not compared by implication
+//! either: a match that demands more reads fewer records, which can leave records that disagree
+//! out of it, so it is not true only where the other is. It is classified by the design's rule for
+//! a stronger independence requirement (§ 31): when the two predicates differ only in the
+//! dimensions their matches demand, a dimension added to a match read positively tightens
+//! (`predicate demands more independence`), one removed from it relaxes (`predicate demands less
+//! independence`), and both at once is `BREAKING` (`changed`). A dimension added to or removed from
+//! a match under an odd number of `not`s is `BREAKING`, its line saying what the dimensions did
+//! (`demands more independence` when added, `demands less independence` when removed): a match
+//! that demands more reads fewer records, so it can be `unknown` where it was `false`, and its
+//! negation `unknown` where it was `true`, which blocks work it admitted. A predicate whose demands
+//! changed along with anything else is `BREAKING` (`changed`); one whose demands are the same is
+//! classified by implication, a match implying only an equal one. A claim's predicate is then
+//! directed by how the protocol reads the claim, as below, except that a changed demand read in
+//! reverse is `BREAKING`, as under `not`.
+//!
+//! Because a match that reads mixed results is `unknown`, a demand added to a positive match can
+//! also turn `unknown` into `true` (an independent approval beside a non-independent rejection), so
+//! `TIGHTENING` here follows design § 31 and is not a proof that no work becomes admissible.
+//!
+//! The rules hold in three-valued logic: whenever the
 //! stronger predicate is true the weaker is true, and whenever the weaker is false the stronger is
 //! false.
 //!
@@ -75,7 +101,8 @@
 //! claim is read in each direction that claim is read in, composed, through any number of claims.
 //! The directions are taken from both revisions together. A claim read only positively, or read
 //! by nothing, is classified as its predicate is; a claim read only in reverse has `TIGHTENING`
-//! and `RELAXATION` exchanged, its line ending `, read in reverse`; a claim read in both directions
+//! and `RELAXATION` exchanged, its line ending `, read in reverse` (a changed independence demand
+//! read in reverse is `BREAKING` instead, as above); a claim read in both directions
 //! is `BREAKING`, its line ending `, read in both directions`. A predicate rewritten or changed is
 //! classified as it is, whatever the direction.
 //!
@@ -84,7 +111,7 @@
 //!
 //! Changes come in a fixed order, so the same two inputs always give the same report: the protocol
 //! header, then artifacts, evidence kinds, claims, obligations, actions, outcomes, invalidation
-//! rules and case inputs; within a section, by identifier; within a declaration, its description,
+//! rules, case inputs and independence dimensions; within a section, by identifier; within a declaration, its description,
 //! then its fields in the order the IR declares them (an obligation's discharge predicate and
 //! applicability predicate; an action's precondition, capability requirements, effect and evidence
 //! it may produce; a case input's values), each list in identifier order, removals before
@@ -101,7 +128,10 @@ use crate::ir::{
     Action, CaseInput, Claim, Described, EvidenceKind, Header, InvalidationRule, Ir, Obligation,
     Outcome,
 };
-use crate::model::{Age, ClaimId, Predicate, ProtocolId, Truth, one_line};
+use crate::model::{
+    Age, ArtifactId, ClaimId, EvidenceKindId, EvidenceMatch, IndependenceDimensionId, Predicate,
+    ProtocolId, Truth, one_line,
+};
 
 /// What a change does to legitimate work (design § 31).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -365,6 +395,9 @@ fn compared(from: &Predicate, to: &Predicate) -> Option<(Category, &'static str)
     if order_forms(from) != order_forms(to) {
         return Some((Category::Breaking, "changed"));
     }
+    if let Some(changed) = independence_changed(from, to) {
+        return Some(changed);
+    }
     let mut implication = Implication::default();
     let stronger = implication.implies(to, from);
     let weaker = implication.implies(from, to);
@@ -383,6 +416,98 @@ fn order_forms(predicate: &Predicate) -> Vec<&Predicate> {
     forms.sort_by_key(|form| format!("{form:?}"));
     forms.dedup();
     forms
+}
+
+/// One dimension an evidence match demands independence on, with the match it is demanded by
+/// (kind, result, subject) and whether the match is read positively (`true`: outside a `not`, or
+/// under an even number of them).
+type Demand<'a> = (
+    bool,
+    &'a EvidenceKindId,
+    Option<&'a str>,
+    Option<&'a ArtifactId>,
+    &'a IndependenceDimensionId,
+);
+
+/// Every independence demand `predicate` makes, each once.
+fn demands(predicate: &Predicate) -> BTreeSet<Demand<'_>> {
+    fn walk<'a>(predicate: &'a Predicate, positive: bool, found: &mut BTreeSet<Demand<'a>>) {
+        match predicate {
+            Predicate::All(members) | Predicate::Any(members) => {
+                for member in members {
+                    walk(member, positive, found);
+                }
+            }
+            Predicate::Not(inner) => walk(inner, !positive, found),
+            Predicate::Evidence(matching) => {
+                for dimension in matching.independent_on.iter().flatten() {
+                    found.insert((
+                        positive,
+                        &matching.kind,
+                        matching.result.as_deref(),
+                        matching.subject.as_ref(),
+                        dimension,
+                    ));
+                }
+            }
+            Predicate::Claim(_)
+            | Predicate::Input(_)
+            | Predicate::First(_)
+            | Predicate::Before(_) => {}
+        }
+    }
+    let mut found = BTreeSet::new();
+    walk(predicate, true, &mut found);
+    found
+}
+
+/// `predicate` with no evidence match demanding independence, in canonical form.
+fn without_independence(predicate: &Predicate) -> Predicate {
+    fn strip(predicate: &Predicate) -> Predicate {
+        match predicate {
+            Predicate::All(members) => Predicate::All(members.iter().map(strip).collect()),
+            Predicate::Any(members) => Predicate::Any(members.iter().map(strip).collect()),
+            Predicate::Not(inner) => Predicate::Not(Box::new(strip(inner))),
+            Predicate::Evidence(matching) => Predicate::Evidence(EvidenceMatch {
+                independent_on: None,
+                ..matching.clone()
+            }),
+            other => other.clone(),
+        }
+    }
+    crate::ir::normalize(&strip(predicate))
+}
+
+/// A predicate whose independence demands changed, classified by the design's rule for a stronger
+/// independence requirement (§ 31) rather than by implication: a demand added to a match read
+/// positively tightens, one removed from it relaxes; a demand changed on a match under `not`, both
+/// added and removed, or a change to anything else in the same predicate, is `BREAKING`. The line
+/// says what the dimensions did, whatever the polarity: `demands more independence` when only
+/// added, `demands less independence` when only removed, `changed` otherwise. `None` when the
+/// demands are the same, so implication decides.
+fn independence_changed(from: &Predicate, to: &Predicate) -> Option<(Category, &'static str)> {
+    let (before, after) = (demands(from), demands(to));
+    if before == after {
+        return None;
+    }
+    if without_independence(from) != without_independence(to) {
+        return Some((Category::Breaking, "changed"));
+    }
+    let added: Vec<_> = after.difference(&before).collect();
+    let removed: Vec<_> = before.difference(&after).collect();
+    // Under `not` a demand added can turn `false` into `unknown` (only records that fail it decided
+    // the match), which `not` makes `true` into `unknown`: less work is legitimate, not more.
+    let negative = added
+        .iter()
+        .chain(&removed)
+        .any(|(positive, ..)| !*positive);
+    Some(match (added.is_empty(), removed.is_empty()) {
+        (false, true) if negative => (Category::Breaking, "demands more independence"),
+        (false, true) => (Category::Tightening, "demands more independence"),
+        (true, false) if negative => (Category::Breaking, "demands less independence"),
+        (true, false) => (Category::Relaxation, "demands less independence"),
+        _ => (Category::Breaking, "changed"),
+    })
 }
 
 /// The directions a claim is read in: positively (it being true helps the place that reads it
@@ -531,7 +656,10 @@ fn claim_predicate(
         .reduce(Reading::or)
         .unwrap_or(Reading::POSITIVE);
     let directed = matches!(category, Category::Tightening | Category::Relaxation);
+    // A changed demand read in reverse is a demand under `not`: `BREAKING`, as there.
+    let demand = independence_changed(from, to).is_some();
     let (category, read) = match (directed, reading.positive, reading.reverse) {
+        (true, false, true) if demand => (Category::Breaking, ", read in reverse"),
         (true, false, true) => (
             if category == Category::Tightening {
                 Category::Relaxation
@@ -560,6 +688,7 @@ fn changes(from: &Ir, to: &Ir) -> Vec<Change> {
         outcomes: from_outcomes,
         invalidation: from_invalidation,
         inputs: from_inputs,
+        independence_dimensions: from_dimensions,
     } = from;
     let Ir {
         protocol: to_header,
@@ -571,6 +700,7 @@ fn changes(from: &Ir, to: &Ir) -> Vec<Change> {
         outcomes: to_outcomes,
         invalidation: to_invalidation,
         inputs: to_inputs,
+        independence_dimensions: to_dimensions,
     } = to;
 
     let mut changes = Changes {
@@ -683,6 +813,20 @@ fn changes(from: &Ir, to: &Ir) -> Vec<Change> {
         Breaking,
         Breaking,
         case_input,
+    );
+    // A dimension added requires nothing until a match demands it; one removed breaks every case
+    // that lists a producer on it.
+    changes.section(
+        "independence dimension",
+        from_dimensions,
+        to_dimensions,
+        Breaking,
+        Expansion,
+        |changes, id, from: &Described, to: &Described| {
+            let Described { description: from } = from;
+            let Described { description: to } = to;
+            changes.description("independence dimension", id, from, to);
+        },
     );
     changes.changes
 }
@@ -967,6 +1111,7 @@ mod tests {
     fn evidence(kind: &str) -> Predicate {
         Predicate::Evidence(EvidenceMatch {
             kind: EvidenceKindId::new(kind),
+            independent_on: None,
             result: None,
             subject: None,
         })

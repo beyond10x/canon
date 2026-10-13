@@ -27,6 +27,7 @@ A `protocol/1` source document as written.
 | `outcomes` | map from [identifier](#identifiers) (`OutcomeId`) to [`Outcome`](#outcome) | optional | — |
 | `invalidation` | map from [identifier](#identifiers) (`InvalidationRuleId`) to [`InvalidationRule`](#invalidationrule) | optional | The invalidation rules, keyed by rule id; a protocol without the section declares none. |
 | `case` | [`CaseSection`](#casesection) | optional | What a case governed by the protocol gives when it opens: its case inputs. A protocol without the section declares no input. |
+| `independence_dimensions` | map from [identifier](#identifiers) (`IndependenceDimensionId`) to [`IndependenceDimension`](#independencedimension) | optional | The independence dimensions the protocol's evidence matches may demand, keyed by dimension id; a protocol without the section declares none. |
 
 ## `ProtocolHeader`
 
@@ -119,6 +120,15 @@ The protocol's `case:` section.
 |---|---|---|---|
 | `inputs` | map from [identifier](#identifiers) (`InputId`) to [`CaseInput`](#caseinput) | optional | The case inputs, keyed by input id. |
 
+## `IndependenceDimension`
+
+One independence dimension: a relation between who produced a record and the case's work,
+which the trusted context resolves for each producer and Canon reads from the case.
+
+| Key | Value | Required | Meaning |
+|---|---|---|---|
+| `description` | text | optional | — |
+
 ## `Predicate`
 
 A predicate over evidence and claim values.
@@ -146,6 +156,13 @@ record of `K2` and none of `K1` (a later `K1` record comes after it), `unknown` 
 equal. A known limit: a record bound to any earlier revision counts, whether or not the current
 revision descends from it, since Canon does not know how revisions descend
 (story:revision-ordering).
+
+An evidence match may demand independence: `{evidence: {kind: K, result: R, independent_on: [D, ...]}}` reads a record only when it names a `producer` and the case's `independence` map
+lists that producer on every dimension `D` (dimensions the protocol declares under
+`independence_dimensions`). A record of the match's kind and subject that fails the demand is
+not of the match, whatever its result: it neither establishes nor contradicts it, and is
+excluded from it as `not_independent` (CANON-INDEPENDENCE-001). The order forms do not demand
+independence.
 
 | Key | Value | Meaning |
 |---|---|---|
@@ -197,14 +214,17 @@ values. Not evidence, so no evaluation has an unknown input.
 
 ## `EvidenceMatch`
 
-Matches evidence of one kind, optionally with one result, and optionally only evidence about one
-declared artifact: a match that names a subject reads only the records whose subject it is.
+Matches evidence of one kind, optionally with one result, optionally only evidence about one
+declared artifact (a match that names a subject reads only the records whose subject it is),
+and optionally only evidence whose producer the case lists as independent on every dimension
+`independent_on` names.
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `kind` | [identifier](#identifiers) (`EvidenceKindId`) | required | — |
 | `result` | text | optional | — |
 | `subject` | [identifier](#identifiers) (`ArtifactId`) | optional | — |
+| `independent_on` | list of [identifier](#identifiers) (`IndependenceDimensionId`) | optional | The independence the match demands of a record's producer: declared dimensions, not empty, each once. A match without it reads records whoever produced them. |
 
 ## `FirstResult`
 
@@ -257,6 +277,7 @@ An identifier is text. A well-formed identifier is not empty, and without whites
 | `CapabilityId` | Names a capability an action requires authority for. |
 | `EffectClass` | Names the class of effect an action has. |
 | `DecisionName` | Names an explicit decision an outcome may require (`explicitly_inconclusive`). |
+| `IndependenceDimensionId` | Identifies an independence dimension a protocol declares (`different_principal`). Canon gives no dimension a meaning; the trusted context that writes the case resolves it. |
 | `InvalidationRuleId` | Identifies an invalidation rule a protocol declares. |
 | `InputId` | Identifies a case input a protocol declares. |
 | `InputValue` | One value a case input may take: an identifier its input declares. Read from any scalar, alike in the protocol and in the case: `values: [true, false]` declares the values `true` and `false`, and a case gives one as `flag: true`. |

@@ -70,6 +70,19 @@
           "additionalProperties": {
             "$ref": "#/$defs/ScalarIdentifier"
           }
+        },
+        "independence": {
+          "description": "The dimensions on which each producer is independent of the case's work, keyed by producer, as the trusted context that writes the case resolved them. A producer absent from it, or listed with `[]`, is independent on no dimension.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Identifier"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Identifier"
+            }
+          }
         }
       },
       "required": [

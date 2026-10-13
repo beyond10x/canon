@@ -5,8 +5,8 @@
 //!
 //! 1. the format;
 //! 2. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
-//!    claims, obligations, actions, outcomes, invalidation rules and case inputs, in that section
-//!    order, then the capabilities and effect classes actions name, in action order, then the
+//!    claims, obligations, actions, outcomes, invalidation rules, case inputs and independence
+//!    dimensions, in that section order, then the capabilities and effect classes actions name, in action order, then the
 //!    decisions outcomes require, in outcome order, then the values case inputs declare, in input
 //!    order;
 //! 3. duplicate identifiers, in the same section order;
@@ -18,7 +18,11 @@
 //!    listing after its first), in the order the inputs are written;
 //! 6. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
 //!    the artifact an evidence match names as its subject, which is reported after the kind it is
-//!    written beside; for an order form, each kind it names, `first` before `then`, then its
+//!    written beside, then the evidence match's `independent_on`: an empty list,
+//!    `empty-independent-on`, or a dimension it lists more than once, `duplicate-independent-on`,
+//!    once for every listing after its first, then each dimension it lists that is not declared,
+//!    `undeclared-dimension`, once, in the order listed, every one naming the declaration the
+//!    match is written in; for an order form, each kind it names, `first` before `then`, then its
 //!    subject, then a `before` whose `first` and `then` name one kind, `self-ordered-evidence`,
 //!    naming it;
 //!    for an input test, first an empty `in` list, `empty-input-test`, or a value it lists more
@@ -47,8 +51,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use crate::model::{
-    ActionId, ArtifactId, ClaimId, EvidenceKindId, FORMAT, InputId, InputValue, InvalidationRuleId,
-    ObligationId, OutcomeId, Predicate, Protocol, is_identifier, one_line,
+    ActionId, ArtifactId, ClaimId, EvidenceKindId, FORMAT, IndependenceDimensionId, InputId,
+    InputValue, InvalidationRuleId, ObligationId, OutcomeId, Predicate, Protocol, is_identifier,
+    one_line,
 };
 
 /// What an identifier names: the protocol itself, a declaration section (named by the singular noun
@@ -69,6 +74,7 @@ pub enum Section {
     InvalidationRule,
     Input,
     InputValue,
+    IndependenceDimension,
 }
 
 impl fmt::Display for Section {
@@ -87,6 +93,7 @@ impl fmt::Display for Section {
             Section::Decision => "decision",
             Section::Input => "input",
             Section::InputValue => "input value",
+            Section::IndependenceDimension => "independence dimension",
         })
     }
 }
@@ -188,6 +195,22 @@ pub enum Problem {
         input: InputId,
         value: InputValue,
     },
+    /// An evidence match demands independence on no dimension: `independent_on` is empty.
+    EmptyIndependentOn {
+        referrer: Referrer,
+        kind: EvidenceKindId,
+    },
+    /// An evidence match lists a dimension in `independent_on` more than once.
+    DuplicateIndependentOn {
+        referrer: Referrer,
+        kind: EvidenceKindId,
+        dimension: IndependenceDimensionId,
+    },
+    /// An evidence match demands independence on a dimension that is not declared.
+    UndeclaredDimension {
+        referrer: Referrer,
+        dimension: IndependenceDimensionId,
+    },
     /// An invalidation rule names a claim that reaches no evidence match, in its own predicate or
     /// in a claim it tests, so no record could be kept from it.
     InertInvalidation {
@@ -218,6 +241,9 @@ impl Problem {
             Problem::DuplicateInputTestValue { .. } => "duplicate-input-test-value",
             Problem::UndeclaredInput { .. } => "undeclared-input",
             Problem::UndeclaredInputValue { .. } => "undeclared-input-value",
+            Problem::EmptyIndependentOn { .. } => "empty-independent-on",
+            Problem::DuplicateIndependentOn { .. } => "duplicate-independent-on",
+            Problem::UndeclaredDimension { .. } => "undeclared-dimension",
             Problem::InertInvalidation { .. } => "inert-invalidation",
             Problem::ClaimCycle { .. } => "claim-cycle",
         }
@@ -332,6 +358,29 @@ impl fmt::Display for Problem {
                 one_line(input.as_str()),
                 one_line(value.as_str())
             ),
+            Problem::EmptyIndependentOn { referrer, kind } => write!(
+                f,
+                "{referrer} demands independence on no dimension of evidence kind `{}`",
+                one_line(kind.as_str())
+            ),
+            Problem::DuplicateIndependentOn {
+                referrer,
+                kind,
+                dimension,
+            } => write!(
+                f,
+                "{referrer} demands independence on dimension `{}` more than once of evidence kind `{}`",
+                one_line(dimension.as_str()),
+                one_line(kind.as_str())
+            ),
+            Problem::UndeclaredDimension {
+                referrer,
+                dimension,
+            } => write!(
+                f,
+                "{referrer} references independence dimension `{}`, which is not declared",
+                one_line(dimension.as_str())
+            ),
             Problem::InertInvalidation { rule, claim } => write!(
                 f,
                 "invalidation rule `{}` invalidates claim `{}`, which reaches no evidence match",
@@ -360,7 +409,7 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         });
     }
 
-    let declared: [(Section, Vec<&str>); 9] = [
+    let declared: [(Section, Vec<&str>); 10] = [
         (Section::Protocol, vec![protocol.protocol.id.as_str()]),
         (Section::Artifact, strs(protocol.artifacts.ids())),
         (Section::EvidenceKind, strs(protocol.evidence_kinds.ids())),
@@ -372,6 +421,10 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         (
             Section::Input,
             protocol.inputs().map(|(id, _)| id.as_str()).collect(),
+        ),
+        (
+            Section::IndependenceDimension,
+            strs(protocol.independence_dimensions.ids()),
         ),
     ];
     let mut named = Vec::new();
@@ -648,6 +701,35 @@ fn references(
                     referrer: referrer.clone(),
                     artifact: subject.clone(),
                 });
+            }
+            if let Some(dimensions) = &matching.independent_on {
+                if dimensions.is_empty() {
+                    unresolved.push(Problem::EmptyIndependentOn {
+                        referrer: referrer.clone(),
+                        kind: matching.kind.clone(),
+                    });
+                }
+                // Each dimension at its first listing, in the order written.
+                let mut listed = Vec::new();
+                for dimension in dimensions {
+                    if listed.contains(&dimension) {
+                        unresolved.push(Problem::DuplicateIndependentOn {
+                            referrer: referrer.clone(),
+                            kind: matching.kind.clone(),
+                            dimension: dimension.clone(),
+                        });
+                    } else {
+                        listed.push(dimension);
+                    }
+                }
+                for dimension in listed {
+                    if !protocol.independence_dimensions.contains(dimension) {
+                        unresolved.push(Problem::UndeclaredDimension {
+                            referrer: referrer.clone(),
+                            dimension: dimension.clone(),
+                        });
+                    }
+                }
             }
         }
         Predicate::First(_) | Predicate::Before(_) => {

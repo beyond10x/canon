@@ -14,8 +14,8 @@ does not depend on the order the sections are written in:
 
 1. the format;
 2. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
-   claims, obligations, actions, outcomes, invalidation rules and case inputs, in that section
-   order, then the capabilities and effect classes actions name, in action order, then the
+   claims, obligations, actions, outcomes, invalidation rules, case inputs and independence
+   dimensions, in that section order, then the capabilities and effect classes actions name, in action order, then the
    decisions outcomes require, in outcome order, then the values case inputs declare, in input
    order;
 3. duplicate identifiers, in the same section order;
@@ -27,7 +27,11 @@ does not depend on the order the sections are written in:
    listing after its first), in the order the inputs are written;
 6. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
    the artifact an evidence match names as its subject, which is reported after the kind it is
-   written beside; for an order form, each kind it names, `first` before `then`, then its
+   written beside, then the evidence match's `independent_on`: an empty list,
+   `empty-independent-on`, or a dimension it lists more than once, `duplicate-independent-on`,
+   once for every listing after its first, then each dimension it lists that is not declared,
+   `undeclared-dimension`, once, in the order listed, every one naming the declaration the
+   match is written in; for an order form, each kind it names, `first` before `then`, then its
    subject, then a `before` whose `first` and `then` name one kind, `self-ordered-evidence`,
    naming it;
    for an input test, first an empty `in` list, `empty-input-test`, or a value it lists more
@@ -72,6 +76,9 @@ text on one line. The same document always yields the same problems in the same 
 | `duplicate-input-test-value` | An input test lists a value more than once. |
 | `undeclared-input` | An input test names an input that is not declared. |
 | `undeclared-input-value` | An input test lists a value its input does not declare. |
+| `empty-independent-on` | An evidence match demands independence on no dimension: `independent_on` is empty. |
+| `duplicate-independent-on` | An evidence match lists a dimension in `independent_on` more than once. |
+| `undeclared-dimension` | An evidence match demands independence on a dimension that is not declared. |
 | `inert-invalidation` | An invalidation rule names a claim that reaches no evidence match, in its own predicate or in a claim it tests, so no record could be kept from it. |
 | `claim-cycle` | Claims whose predicates test each other in a cycle; the first claim is repeated at the end. |
 

@@ -188,6 +188,7 @@ mod tests {
     ) -> EvidenceRecord {
         EvidenceRecord {
             format: crate::model::EVIDENCE_FORMAT.to_owned(),
+            producer: None,
             id: EvidenceId::new(id),
             kind: EvidenceKindId::new(kind),
             result: result.map(str::to_owned),

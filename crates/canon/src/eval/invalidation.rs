@@ -52,7 +52,7 @@ impl Invalidated {
 
 /// Every evidence match `claim` reaches: those of its own predicate and of every claim it tests,
 /// through any number of claim references, each claim visited once.
-fn reached_matches<'a>(ir: &'a Ir, claim: &ClaimId) -> Vec<&'a EvidenceMatch> {
+pub(crate) fn reached_matches<'a>(ir: &'a Ir, claim: &ClaimId) -> Vec<&'a EvidenceMatch> {
     let mut matches = Vec::new();
     let mut visited = BTreeSet::new();
     let mut pending = vec![claim.clone()];

@@ -173,6 +173,7 @@ fn check_of_a_caller_built_ir_beyond_the_bound_does_not_abort() {
 fn nested(levels: usize) -> Predicate {
     let mut predicate = Predicate::Evidence(model::EvidenceMatch {
         kind: model::EvidenceKindId::new("k"),
+        independent_on: None,
         result: None,
         subject: None,
     });

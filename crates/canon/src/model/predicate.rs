@@ -22,12 +22,22 @@
 //! equal. A known limit: a record bound to any earlier revision counts, whether or not the current
 //! revision descends from it, since Canon does not know how revisions descend
 //! (story:revision-ordering).
+//!
+//! An evidence match may demand independence: `{evidence: {kind: K, result: R, independent_on:
+//! [D, ...]}}` reads a record only when it names a `producer` and the case's `independence` map
+//! lists that producer on every dimension `D` (dimensions the protocol declares under
+//! `independence_dimensions`). A record of the match's kind and subject that fails the demand is
+//! not of the match, whatever its result: it neither establishes nor contradicts it, and is
+//! excluded from it as `not_independent` (CANON-INDEPENDENCE-001). The order forms do not demand
+//! independence.
 
 use std::fmt;
 
 use serde::Deserialize;
 
-use super::ids::{ArtifactId, ClaimId, EvidenceKindId, InputId, InputValue};
+use super::ids::{
+    ArtifactId, ClaimId, EvidenceKindId, IndependenceDimensionId, InputId, InputValue,
+};
 
 /// A three-valued truth value. `Unknown` is not `False`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -124,8 +134,10 @@ pub struct EvidenceOrder {
     pub subject: Option<ArtifactId>,
 }
 
-/// Matches evidence of one kind, optionally with one result, and optionally only evidence about one
-/// declared artifact: a match that names a subject reads only the records whose subject it is.
+/// Matches evidence of one kind, optionally with one result, optionally only evidence about one
+/// declared artifact (a match that names a subject reads only the records whose subject it is),
+/// and optionally only evidence whose producer the case lists as independent on every dimension
+/// `independent_on` names.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EvidenceMatch {
@@ -135,6 +147,10 @@ pub struct EvidenceMatch {
     pub result: Option<String>,
     #[serde(default, deserialize_with = "super::present::optional")]
     pub subject: Option<ArtifactId>,
+    /// The independence the match demands of a record's producer: declared dimensions, not empty,
+    /// each once. A match without it reads records whoever produced them.
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub independent_on: Option<Vec<IndependenceDimensionId>>,
 }
 
 /// Tests whether a claim has a given value.

@@ -83,7 +83,8 @@ pub struct EvidenceExclusion {
     pub reason: ExclusionReason,
 }
 
-/// Why evidence was excluded before claims were evaluated.
+/// Why evidence was excluded: before claims were evaluated, or, for `NotIndependent`, from the
+/// evidence matches that demand an independence its producer lacks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ExclusionReason {
     /// Bound to a revision of its subject that is not the current one.
@@ -92,6 +93,9 @@ pub enum ExclusionReason {
     Expired,
     /// Invalidated by an invalidation rule.
     Invalidated,
+    /// Produced by a producer the case does not list as independent on every dimension an
+    /// evidence match demands.
+    NotIndependent,
 }
 
 impl ExclusionReason {
@@ -101,6 +105,7 @@ impl ExclusionReason {
             ExclusionReason::RevisionMismatch => "revision_mismatch",
             ExclusionReason::Expired => "expired",
             ExclusionReason::Invalidated => "invalidated",
+            ExclusionReason::NotIndependent => "not_independent",
         }
     }
 }

@@ -73,6 +73,9 @@ fn check_record<'a>(
         )?;
         identifier(&format!("{named} upstream revision"), revision.as_str())?;
     }
+    if let Some(producer) = &record.producer {
+        identifier(&format!("{named} producer identifier"), producer.as_str())?;
+    }
     if let Some(observed_at) = &record.observed_at
         && observed_at.seconds().is_none()
     {

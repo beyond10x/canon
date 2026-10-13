@@ -1,0 +1,43 @@
+format: protocol/1
+
+protocol:
+  id: change-review
+  revision: 1
+  description: Decide whether a change is approved, and whether a reviewer independent of its author approved it.
+
+artifacts:
+  change:
+    description: The change under review.
+
+independence_dimensions:
+  different_principal:
+    description: The producer is another principal than the one who made the change.
+
+evidence_kinds:
+  review:
+    description: A review of the change; its result is approved or rejected.
+
+claims:
+  change.independently_approved:
+    description: A reviewer independent of the change's author approved it.
+    true_when:
+      evidence:
+        kind: review
+        result: approved
+        independent_on: [different_principal]
+
+  change.approved:
+    description: A review approved the change, whoever produced it.
+    true_when:
+      evidence:
+        kind: review
+        result: approved
+
+actions:
+  merge:
+    description: Merge the change once a reviewer independent of its author approved it.
+    precondition:
+      evidence:
+        kind: review
+        result: approved
+        independent_on: [different_principal]

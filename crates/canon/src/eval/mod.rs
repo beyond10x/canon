@@ -19,8 +19,12 @@
 //! - An evidence match reads the records of its kind. One that names a `subject` reads only the
 //!   records about that artifact: a record about another artifact, even at that artifact's
 //!   current revision, is not of the match and neither establishes nor contradicts it
-//!   (CANON-EVIDENCE-003). One that names no subject reads records about any artifact. "Records of
-//!   the kind" below are the records the match reads.
+//!   (CANON-EVIDENCE-003). One that names no subject reads records about any artifact. One that
+//!   demands independence (`independent_on: [D, ...]`) reads only the records that name a
+//!   `producer` the case's `independence` map lists on every dimension `D`: any other record of
+//!   its kind and subject is not of the match, whatever its result, so it neither establishes nor
+//!   contradicts it (CANON-INDEPENDENCE-001, `independence.rs`). "Records of the kind" below are
+//!   the records the match reads.
 //! - An evidence match without a result is `true` when a record of the kind exists and `unknown`
 //!   when none does.
 //! - An evidence match with a result is `unknown` when no record of the kind exists, `false` when
@@ -64,9 +68,13 @@
 //! value identifiers, then declared by the protocol, else `undeclared-input`, given once, else
 //! `duplicate-identifier`, and its value declared by the input, else `undeclared-input-value`,
 //! naming the input and the value), each input the protocol declares (given by the case, else
-//! `missing-input`, naming it); then each evidence record in the order given: its format, its
-//! identifiers (id, kind, subject, subject revision, then each upstream artifact and revision in
-//! `upstream_revisions`), its `observed_at` when given (an instant, else `invalid-instant`), its id
+//! `missing-input`, naming it), each producer its `independence` map lists, in the order written
+//! (an identifier, listed once, else `duplicate-identifier`, and each dimension listed for it an
+//! identifier, listed once for it, else `duplicate-identifier`, and declared by the protocol, else
+//! `undeclared-dimension`, naming the producer and the dimension); then each evidence record in
+//! the order given: its format, its identifiers (id, kind, subject, subject revision, then each
+//! upstream artifact and revision in `upstream_revisions`, then its `producer` when given), its
+//! `observed_at` when given (an instant, else `invalid-instant`), its id
 //! (used once in the set), its kind (declared by the protocol) and each upstream artifact
 //! (declared by the protocol, else `undeclared-artifact`, naming the record and the artifact; named
 //! once, else `duplicate-identifier`). A record's subject and subject revision are checked here as
@@ -164,7 +172,11 @@
 //!    it, so it is not listed under a claim that reaches its kind only through such a match. A
 //!    record excluded from a claim is excluded from every claim built on it. A record invalidated
 //!    for a claim is listed under it, with the reason `invalidated`, when an evidence match the
-//!    claim reaches reads it, and under no claim it was not invalidated for;
+//!    claim reaches reads it, and under no claim it was not invalidated for. Any other record is
+//!    listed under a claim, with the reason `not_independent`, when an evidence match the claim
+//!    reaches would read it by kind and subject and none of those matches accepts its producer
+//!    (`independence.rs`): a match that demands independence keeps it out, and no match demanding
+//!    less reads it. Each record is listed once, with the first of these reasons that applies;
 //! 5. the `obligations`, `actions` and `outcomes` sections (`obligations.rs`, `actions.rs`,
 //!    `outcomes.rs`), then the explanation (`crate::explain`). Each section evaluates its
 //!    predicates with the one evaluator claims use (`claims::predicate`): discharge and
@@ -267,6 +279,7 @@ mod decisions;
 mod depth;
 mod evidence;
 mod freshness;
+mod independence;
 mod invalidation;
 mod json;
 mod obligations;
@@ -292,6 +305,7 @@ pub(crate) use authority::Authority;
 pub(crate) use claims::{EvidenceSets, Inputs, reads};
 pub(crate) use decisions::Decisions;
 pub(crate) use depth::check as check_depth;
+pub(crate) use independence::Independence;
 pub(crate) use invalidation::{Invalidated, invalidated_claims};
 
 /// Why an evaluation was refused: a stable machine-readable code, a one-line message, and the
@@ -389,9 +403,11 @@ pub fn evaluate_with(
         let applicable: Vec<EvidenceRecord> = applicable.into_iter().cloned().collect();
         // Evidence matches read what the exclusion stages left; the order forms read every record
         // the evidence check accepted.
+        let independence = Independence::of(case);
         let sets = EvidenceSets {
             left: &applicable,
             history: evidence,
+            independence: Some(&independence),
         };
         let values = claims::values(ir, sets, &invalidated, &case_inputs)?;
         let obligations = obligations::section(ir, &values, &case_inputs);
@@ -403,7 +419,14 @@ pub fn evaluate_with(
             .map(|(id, value)| {
                 let entry = ClaimDecision {
                     value: *value,
-                    excluded_evidence: excluded_for(ir, id, evidence, &excluded, &invalidated),
+                    excluded_evidence: excluded_for(
+                        ir,
+                        id,
+                        evidence,
+                        &excluded,
+                        &invalidated,
+                        &independence,
+                    ),
                 };
                 (id.clone(), entry)
             })
@@ -484,16 +507,23 @@ fn set_aside(
 /// into an IR ends. The records the exclusion stages set aside for every claim (`excluded`) are
 /// listed with their reasons. A record the invalidation stage kept from this claim
 /// (`invalidated`) is listed with the reason `invalidated` when an evidence match the claim reaches
-/// reads it ([`invalidation::Invalidated::lists`]).
+/// reads it ([`invalidation::Invalidated::lists`]). Any other record is listed with the reason
+/// `not_independent` when a match the claim reaches would read it by kind and subject and none of
+/// those matches accepts its producer ([`independence::rejected`]). Each record is listed once.
 fn excluded_for(
     ir: &Ir,
     claim: &ClaimId,
     evidence: &[EvidenceRecord],
     excluded: &[EvidenceExclusion],
     invalidated: &invalidation::Invalidated,
+    independence: &Independence,
 ) -> Vec<EvidenceExclusion> {
     let kept = invalidated.for_claim(claim);
-    if excluded.is_empty() && kept.is_none_or(BTreeSet::is_empty) {
+    let reached = invalidation::reached_matches(ir, claim);
+    let demanding = reached
+        .iter()
+        .any(|matching| matching.independent_on.is_some());
+    if excluded.is_empty() && kept.is_none_or(BTreeSet::is_empty) && !demanding {
         return Vec::new();
     }
     let mut matches = BTreeSet::new();
@@ -543,6 +573,23 @@ fn excluded_for(
                 }),
         )
         .collect();
+    let set_aside: BTreeSet<&EvidenceId> = excluded
+        .iter()
+        .map(|exclusion| &exclusion.evidence)
+        .collect();
+    listed.extend(
+        evidence
+            .iter()
+            .filter(|record| {
+                !set_aside.contains(&record.id)
+                    && !invalidated.excludes(claim, &record.id)
+                    && independence::rejected(&reached, record, independence)
+            })
+            .map(|record| EvidenceExclusion {
+                evidence: record.id.clone(),
+                reason: ExclusionReason::NotIndependent,
+            }),
+    );
     listed.sort();
     listed
 }
@@ -863,6 +910,7 @@ mod tests {
     fn bare(id: &str, kind: &str) -> EvidenceRecord {
         EvidenceRecord {
             format: crate::model::EVIDENCE_FORMAT.to_owned(),
+            producer: None,
             id: EvidenceId::new(id),
             kind: crate::model::EvidenceKindId::new(kind),
             result: None,
@@ -951,6 +999,7 @@ mod tests {
                 &evidence,
                 &excluded,
                 &invalidation::Invalidated::default(),
+                &Independence::default(),
             )
             .iter()
             .map(|exclusion| exclusion.evidence.as_str().to_owned())
@@ -966,7 +1015,8 @@ mod tests {
                 &ClaimId::new("direct"),
                 &evidence,
                 &[],
-                &invalidation::Invalidated::default()
+                &invalidation::Invalidated::default(),
+                &Independence::default(),
             ),
             Vec::new()
         );

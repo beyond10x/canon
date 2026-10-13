@@ -469,8 +469,18 @@ const ORDERED: &str = "format: protocol/1\n\
 /// The value of every claim of `ir`, in claim order, for `evidence` about the current revision `r`
 /// of every artifact.
 fn claim_values(ir: &Ir, evidence: &[crate::model::EvidenceRecord]) -> Vec<crate::model::Truth> {
+    claim_values_with(ir, evidence, Declarations::default())
+}
+
+/// [`claim_values`] for a case that lists `independence`.
+fn claim_values_with(
+    ir: &Ir,
+    evidence: &[crate::model::EvidenceRecord],
+    independence: Declarations<crate::model::Principal, Vec<crate::model::IndependenceDimensionId>>,
+) -> Vec<crate::model::Truth> {
     let case = Case {
         format: CASE_FORMAT.to_owned(),
+        independence,
         id: CaseId::new("check"),
         protocol: ir.protocol.id.clone(),
         artifacts: Declarations::new(
@@ -537,6 +547,7 @@ fn every_value_of_every_order_form_is_reached_jointly_with_the_evidence_matches(
                 let at = instants[rng.below(4)];
                 crate::model::EvidenceRecord {
                     format: crate::model::EVIDENCE_FORMAT.to_owned(),
+                    producer: None,
                     id: crate::model::EvidenceId::new(format!("h{n}")),
                     kind: EvidenceKindId::new(kind),
                     result: result.map(str::to_owned),
@@ -671,4 +682,201 @@ fn a_state_writes_and_builds_its_history() {
     // Erasing `t` empties its dimension and history and leaves `d` alone in the order.
     let erased = space.erase(&state, &BTreeSet::from([1]));
     assert_eq!(space.render(&erased), "{evidence `d`}");
+}
+
+/// A protocol whose matches demand independence on `[d]`, `[e]`, `[d, e]` (twice, written in
+/// either order) and nothing.
+const DEMANDING: &str = "format: protocol/1\n\
+    protocol: {id: p, revision: 1}\n\
+    artifacts: {a: {}}\n\
+    independence_dimensions: {d: {}, e: {}}\n\
+    evidence_kinds: {k: {}}\n\
+    claims:\n\
+    \x20\x20on_d: {true_when: {evidence: {kind: k, result: ok, independent_on: [d]}}}\n\
+    \x20\x20on_de: {true_when: {evidence: {kind: k, result: ok, independent_on: [d, e]}}}\n\
+    \x20\x20on_e: {true_when: {evidence: {kind: k, result: ok, independent_on: [e]}}}\n\
+    \x20\x20on_ed_any: {true_when: {evidence: {kind: k, independent_on: [e, d]}}}\n\
+    \x20\x20ok: {true_when: {evidence: {kind: k, result: ok}}}\n\
+    actions: {act: {may_produce: [{evidence: k}]}}\n";
+
+/// Soundness of the space for independence demands: every combination of claim values an evidence
+/// set gives, its records from producers independent on any dimensions or none, or naming no
+/// producer, is the combination of some state. Records keep the space's one producer per distinct
+/// demand, and the case lists each producer they name on exactly its demand.
+#[test]
+fn every_combination_of_demands_met_is_reached_by_a_state() {
+    let ir = compiled(DEMANDING);
+    let space = Space::new(&ir);
+    // Classes ok and none; profiles none, [d], [d, e], [e]; per class one value per down-closed
+    // set of them: no record, {none}, {none, [d]}, {none, [e]}, {none, [d], [e]} and all four, so
+    // 6^2.
+    assert_eq!(
+        space.dimensions(),
+        "evidence kind `k` with producers independent on [`d`], [`d`, `e`], [`e`] 36"
+    );
+    let size = space.size().expect("fits");
+    let reached: BTreeSet<Vec<crate::model::Truth>> = (0..size)
+        .map(|index| {
+            let evidence = space.evidence(&space.state(index));
+            claim_values_with(&ir, &evidence, space.independence(&evidence))
+        })
+        .collect();
+    let listed = |ids: &[&str]| -> Vec<crate::model::IndependenceDimensionId> {
+        ids.iter()
+            .map(|id| crate::model::IndependenceDimensionId::new(*id))
+            .collect()
+    };
+    let independence = Declarations::new(vec![
+        (crate::model::Principal::new("x1"), listed(&["d"])),
+        (crate::model::Principal::new("x2"), listed(&["e"])),
+        (crate::model::Principal::new("x3"), listed(&["e", "d"])),
+        (crate::model::Principal::new("x4"), listed(&[])),
+    ]);
+    let mut rng = Rng(0x2545_F491_4F6C_DD1D);
+    let mut sets = 0;
+    for _ in 0..20_000 {
+        let records: Vec<crate::model::EvidenceRecord> = (0..rng.below(5))
+            .map(|n| crate::model::EvidenceRecord {
+                format: crate::model::EVIDENCE_FORMAT.to_owned(),
+                producer: [
+                    None,
+                    Some("x1"),
+                    Some("x2"),
+                    Some("x3"),
+                    Some("x4"),
+                    Some("x5"),
+                ][rng.below(6)]
+                .map(crate::model::Principal::new),
+                id: crate::model::EvidenceId::new(format!("h{n}")),
+                kind: EvidenceKindId::new("k"),
+                result: [Some("ok"), Some("bad"), None][rng.below(3)].map(str::to_owned),
+                subject: crate::model::ArtifactId::new("a"),
+                subject_revision: Revision::new(["r", "r0"][rng.below(2)]),
+                observed_at: None,
+                upstream_revisions: Declarations::default(),
+            })
+            .collect();
+        let values = claim_values_with(&ir, &records, independence.clone());
+        assert!(
+            reached.contains(&values),
+            "no state gives {values:?}, which {records:?} gives"
+        );
+        sets += 1;
+    }
+    assert_eq!(sets, 20_000);
+    // Not trivially everything: approvals independent on `d` alone and on `e` alone, and none on
+    // both, need two producers no other profile stands for.
+    use crate::model::Truth::{True, Unknown};
+    assert!(reached.contains(&vec![True, True, Unknown, True, Unknown]));
+    // A state names its producers and builds a case listing each on exactly its demand.
+    let state = (0..size)
+        .map(|index| space.state(index))
+        .find(|state| {
+            space.render(state)
+                == "{evidence `k` result `ok` by a producer independent on `d`, `e`}"
+        })
+        .expect("a state with an approval independent on both dimensions");
+    let evidence = space.evidence(&state);
+    assert_eq!(
+        evidence[0].producer.as_ref().map(|p| p.as_str()),
+        Some("producer-2")
+    );
+    let case_map: Vec<(String, Vec<String>)> = space
+        .independence(&evidence)
+        .iter()
+        .map(|(producer, dimensions)| {
+            (
+                producer.as_str().to_owned(),
+                dimensions.iter().map(|d| d.as_str().to_owned()).collect(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        case_map,
+        [(
+            "producer-2".to_owned(),
+            vec!["d".to_owned(), "e".to_owned()]
+        )]
+    );
+    assert_eq!(space.weight(&state), 1);
+}
+
+/// A dimension every reader of which demands independence: a record without a producer is read by
+/// none, so the space leaves it out, and each class takes one value per down-closed set of the
+/// demands `[d]` and `[d, e]` (none, `[d]` alone, both): 3^2 values. Every combination of claim
+/// values an evidence set gives is still the combination of some state, records without a producer
+/// or from a producer independent on nothing included.
+#[test]
+fn a_dimension_only_demanding_matches_read_has_no_record_without_a_producer() {
+    let ir = compiled(
+        "format: protocol/1\n\
+         protocol: {id: p, revision: 1}\n\
+         artifacts: {a: {}}\n\
+         independence_dimensions: {d: {}, e: {}}\n\
+         evidence_kinds: {k: {}}\n\
+         claims:\n\
+         \x20\x20on_d: {true_when: {evidence: {kind: k, result: ok, independent_on: [d]}}}\n\
+         \x20\x20on_de: {true_when: {not: {evidence: {kind: k, result: ok, \
+         independent_on: [e, d]}}}}\n\
+         actions: {act: {may_produce: [{evidence: k}]}}\n",
+    );
+    let space = Space::new(&ir);
+    assert_eq!(
+        space.dimensions(),
+        "evidence kind `k` with producers independent on [`d`], [`d`, `e`] 9"
+    );
+    let size = space.size().expect("fits");
+    let mut rendered = Vec::new();
+    let reached: BTreeSet<Vec<crate::model::Truth>> = (0..size)
+        .map(|index| {
+            let state = space.state(index);
+            rendered.push(space.render(&state));
+            let evidence = space.evidence(&state);
+            assert!(evidence.iter().all(|record| record.producer.is_some()));
+            claim_values_with(&ir, &evidence, space.independence(&evidence))
+        })
+        .collect();
+    assert!(
+        rendered.contains(
+            &"{evidence `k` result `ok` by a producer independent on `d`, \
+          evidence `k` by a producer independent on `d`, `e`}"
+                .to_owned()
+        )
+    );
+    let independence = Declarations::new(vec![
+        (
+            crate::model::Principal::new("x1"),
+            vec![crate::model::IndependenceDimensionId::new("d")],
+        ),
+        (crate::model::Principal::new("x2"), Vec::new()),
+        (
+            crate::model::Principal::new("x3"),
+            vec![
+                crate::model::IndependenceDimensionId::new("e"),
+                crate::model::IndependenceDimensionId::new("d"),
+            ],
+        ),
+    ]);
+    let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
+    for _ in 0..5_000 {
+        let records: Vec<crate::model::EvidenceRecord> = (0..rng.below(5))
+            .map(|n| crate::model::EvidenceRecord {
+                format: crate::model::EVIDENCE_FORMAT.to_owned(),
+                producer: [None, Some("x1"), Some("x2"), Some("x3"), Some("x4")][rng.below(5)]
+                    .map(crate::model::Principal::new),
+                id: crate::model::EvidenceId::new(format!("h{n}")),
+                kind: EvidenceKindId::new("k"),
+                result: [Some("ok"), Some("bad"), None][rng.below(3)].map(str::to_owned),
+                subject: crate::model::ArtifactId::new("a"),
+                subject_revision: Revision::new("r"),
+                observed_at: None,
+                upstream_revisions: Declarations::default(),
+            })
+            .collect();
+        let values = claim_values_with(&ir, &records, independence.clone());
+        assert!(
+            reached.contains(&values),
+            "no state gives {values:?}, which {records:?} gives"
+        );
+    }
 }

@@ -1,12 +1,16 @@
 //! The `canon-case/1` case snapshot: one concrete undertaking governed by one protocol, with the
 //! current revision of each artifact the protocol declares (design § 4.2), and optionally the
-//! case's own revision, which explicit decisions are bound to, and the value of each case input the
-//! protocol declares.
+//! case's own revision, which explicit decisions are bound to, the value of each case input the
+//! protocol declares, and the dimensions on which each evidence producer is independent of the
+//! case's work.
 
 use serde::Deserialize;
 
 use super::Declarations;
-use super::ids::{ArtifactId, CaseId, InputId, InputValue, OutcomeId, ProtocolId, Revision};
+use super::ids::{
+    ArtifactId, CaseId, IndependenceDimensionId, InputId, InputValue, OutcomeId, Principal,
+    ProtocolId, Revision,
+};
 
 /// The case snapshot format this model reads.
 pub const CASE_FORMAT: &str = "canon-case/1";
@@ -38,6 +42,11 @@ pub struct Case {
     /// case of a protocol that declares no input.
     #[serde(default, deserialize_with = "super::present::defaulted")]
     pub inputs: Declarations<InputId, InputValue>,
+    /// The dimensions on which each producer is independent of the case's work, keyed by producer,
+    /// as the trusted context that writes the case resolved them. A producer absent from it, or
+    /// listed with `[]`, is independent on no dimension.
+    #[serde(default, deserialize_with = "super::present::defaulted")]
+    pub independence: Declarations<Principal, Vec<IndependenceDimensionId>>,
 }
 
 /// One declared artifact as the case snapshot records it.
