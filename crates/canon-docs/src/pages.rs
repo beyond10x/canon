@@ -1272,6 +1272,26 @@ fn words(predicate: &Predicate) -> String {
             code(test.claim.as_str()),
             code(&test.is.to_string())
         ),
+        Predicate::First(form) => {
+            let mut words = format!("the first evidence of kind {}", code(form.kind.as_str()));
+            if let Some(subject) = &form.subject {
+                words.push_str(&format!(" about {}", code(subject.as_str())));
+            }
+            words.push_str(&format!(" has result {}", code(&form.result)));
+            words
+        }
+        Predicate::Before(form) => {
+            let about = form
+                .subject
+                .as_ref()
+                .map(|subject| format!(" about {}", code(subject.as_str())))
+                .unwrap_or_default();
+            format!(
+                "the first evidence of kind {}{about} was observed before the first of kind {}",
+                code(form.first.as_str()),
+                code(form.then.as_str())
+            )
+        }
         Predicate::Input(test) => format!(
             "input {} is one of {}",
             code(test.input.as_str()),

@@ -57,7 +57,10 @@
 //! under an `all` strengthens it, a member added under an `any` weakens it, `not` reverses the
 //! direction, and two evidence matches, claim tests or input tests imply each other only when they
 //! are equal, so an input test whose `in` list changed implies nothing it did not before. What it
-//! cannot show is classified as changed. The rules hold in three-valued logic: whenever the
+//! cannot show is classified as changed. An order form (`first`, `before`) is compared
+//! structurally only: a predicate whose order forms, taken as a set, differ between the revisions
+//! is changed (`BREAKING`), whatever members around them were added or removed; one whose order
+//! forms are the same is classified by implication, each form implying only an equal one. The rules hold in three-valued logic: whenever the
 //! stronger predicate is true the weaker is true, and whenever the weaker is false the stronger is
 //! false.
 //!
@@ -357,6 +360,11 @@ fn compared(from: &Predicate, to: &Predicate) -> Option<(Category, &'static str)
     if from == to {
         return None;
     }
+    // Order forms are compared structurally only: a predicate whose order forms changed is
+    // `BREAKING`, whatever else it implies.
+    if order_forms(from) != order_forms(to) {
+        return Some((Category::Breaking, "changed"));
+    }
     let mut implication = Implication::default();
     let stronger = implication.implies(to, from);
     let weaker = implication.implies(from, to);
@@ -366,6 +374,15 @@ fn compared(from: &Predicate, to: &Predicate) -> Option<(Category, &'static str)
         (false, true) => (Category::Relaxation, "weakened"),
         (false, false) => (Category::Breaking, "changed"),
     })
+}
+
+/// The order forms `predicate` holds, each once, in canonical-IR form: two predicates hold the same
+/// order forms exactly when these are equal.
+fn order_forms(predicate: &Predicate) -> Vec<&Predicate> {
+    let mut forms = predicate.order_forms();
+    forms.sort_by_key(|form| format!("{form:?}"));
+    forms.dedup();
+    forms
 }
 
 /// The directions a claim is read in: positively (it being true helps the place that reads it
@@ -488,7 +505,10 @@ fn reads(predicate: &Predicate, reading: Reading, found: &mut Vec<(ClaimId, Read
             };
             found.push((test.claim.clone(), read));
         }
-        Predicate::Evidence(_) | Predicate::Input(_) => {}
+        Predicate::Evidence(_)
+        | Predicate::Input(_)
+        | Predicate::First(_)
+        | Predicate::Before(_) => {}
     }
 }
 
@@ -885,7 +905,8 @@ impl Implication {
     /// 3. an `all` on the left: some member implies `right`;
     /// 4. an `any` on the right: `left` implies some member;
     /// 5. two `not`s: what the right negates implies what the left negates;
-    /// 6. two evidence matches, two claim tests or two input tests: they are equal.
+    /// 6. two evidence matches, two claim tests, two input tests or two order forms of one kind:
+    ///    they are equal.
     fn implies(&mut self, left: &Predicate, right: &Predicate) -> bool {
         let key = (
             std::ptr::from_ref(left) as usize,
@@ -923,6 +944,10 @@ impl Implication {
             // Their `in` lists are sorted and kept once in the IR, so equal sets are equal tests.
             // A test with more values is weaker, but a changed `in` list is not ordered.
             (Predicate::Input(left), Predicate::Input(right)) => left == right,
+            // Order forms are compared structurally; `compared` has already classified a change to
+            // one as `BREAKING`.
+            (Predicate::First(left), Predicate::First(right)) => left == right,
+            (Predicate::Before(left), Predicate::Before(right)) => left == right,
             // Two different kinds of leaf, or an `all`, `any` or `not` the rules above leave
             // undecided: not shown, so not implied.
             _ => false,
@@ -1160,5 +1185,65 @@ mod tests {
             ["BREAKING: action `a` precondition changed"]
         );
         assert!(lines(&action("high, low"), &action("low, high")).is_empty());
+    }
+
+    /// An order form is compared structurally (story:evidence-order-predicate): a predicate whose
+    /// order forms changed, were added or were removed is changed, `BREAKING`, even where a member
+    /// added under an `all` would otherwise strengthen it. With the same order forms, a predicate is
+    /// classified by implication as before, and an equal form implies itself.
+    #[test]
+    fn a_changed_order_form_is_breaking() {
+        let claim = |true_when: &str| {
+            ir(&format!(
+                "artifacts: {{a: {{}}}}\nevidence_kinds: {{k: {{}}, m: {{}}}}\nclaims: {{c: {{true_when: {true_when}}}}}\n"
+            ))
+        };
+        let red = "{first: {kind: k, result: red}}";
+        let km = "{before: {first: k, then: m}}";
+        let mk = "{before: {first: m, then: k}}";
+        let both = format!("{{all: [{red}, {km}]}}");
+        for (from, to) in [
+            (
+                red.to_owned(),
+                "{first: {kind: k, result: green}}".to_owned(),
+            ),
+            (
+                red.to_owned(),
+                "{first: {kind: k, result: red, subject: a}}".to_owned(),
+            ),
+            (km.to_owned(), mk.to_owned()),
+            (red.to_owned(), both.clone()),
+            (both.clone(), red.to_owned()),
+            (
+                "{evidence: {kind: k}}".to_owned(),
+                format!("{{all: [{{evidence: {{kind: k}}}}, {km}]}}"),
+            ),
+        ] {
+            assert_eq!(
+                lines(&claim(&from), &claim(&to)),
+                ["BREAKING: claim `c` predicate changed"],
+                "{from} -> {to}"
+            );
+        }
+        assert_eq!(
+            lines(
+                &claim(&both),
+                &claim(&format!(
+                    "{{all: [{red}, {km}, {{evidence: {{kind: k}}}}]}}"
+                ))
+            ),
+            ["TIGHTENING: claim `c` predicate strengthened"]
+        );
+        assert!(lines(&claim(&both), &claim(&format!("{{all: [{km}, {red}]}}"))).is_empty());
+        let first = |result: &str| {
+            Predicate::First(crate::model::FirstResult {
+                kind: EvidenceKindId::new("k"),
+                result: result.to_owned(),
+                subject: None,
+            })
+        };
+        assert!(implies(&first("red"), &first("red")));
+        assert!(!implies(&first("red"), &first("green")));
+        assert!(!implies(&first("red"), &evidence("k")));
     }
 }

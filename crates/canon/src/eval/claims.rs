@@ -11,6 +11,27 @@ use crate::model::{
     InputTest, InputValue, Predicate, Truth, one_line,
 };
 
+/// The evidence a predicate reads: the records the exclusion stages `left`, which evidence matches
+/// read, and the `history`, every record the evidence check accepted, which the order forms read
+/// (`order.rs`). The default reads no record.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct EvidenceSets<'a> {
+    pub(crate) left: &'a [EvidenceRecord],
+    pub(crate) history: &'a [EvidenceRecord],
+}
+
+impl<'a> EvidenceSets<'a> {
+    /// `records` both as what is left and as the history: what an evaluation that excluded nothing
+    /// reads.
+    #[cfg(test)]
+    pub(crate) fn all(records: &'a [EvidenceRecord]) -> Self {
+        Self {
+            left: records,
+            history: records,
+        }
+    }
+}
+
 /// The value of each case input, as the case snapshot gives it, keyed by input id: what input
 /// tests read. The case check (`case.rs`) has refused a case that leaves a declared input out.
 pub(crate) type Inputs = BTreeMap<InputId, InputValue>;
@@ -36,7 +57,7 @@ fn input_test(test: &InputTest, inputs: &Inputs) -> Truth {
 /// either of them kept out; the value reported for that claim is its own, in its own context.
 pub(super) fn values(
     ir: &Ir,
-    evidence: &[EvidenceRecord],
+    evidence: EvidenceSets<'_>,
     invalidated: &Invalidated,
     inputs: &Inputs,
 ) -> Result<BTreeMap<ClaimId, Truth>, Refusal> {
@@ -63,7 +84,7 @@ type Context = BTreeSet<EvidenceId>;
 /// outermost first.
 struct Walk<'a> {
     ir: &'a Ir,
-    evidence: &'a [EvidenceRecord],
+    evidence: EvidenceSets<'a>,
     /// What the invalidation stage kept from each claim.
     invalidated: &'a Invalidated,
     /// The case's input values, which input tests read.
@@ -121,9 +142,14 @@ impl Walk<'_> {
             Predicate::Evidence(matching) => evidence_match_in(
                 matching,
                 self.evidence
+                    .left
                     .iter()
                     .filter(|record| !context.contains(&record.id)),
             ),
+            // The history, whatever is invalidated for the claim: order is not invalidated.
+            Predicate::First(_) | Predicate::Before(_) => {
+                super::order::value(predicate, self.evidence.history).unwrap_or(Truth::Unknown)
+            }
             Predicate::Claim(test) => {
                 let mut tested_in: Context = self.own(&test.claim);
                 tested_in.extend(context.iter().cloned());
@@ -149,7 +175,7 @@ pub(super) fn predicate(
     predicate: &Predicate,
     claims: &BTreeMap<ClaimId, Truth>,
     inputs: &Inputs,
-    evidence: &[EvidenceRecord],
+    evidence: EvidenceSets<'_>,
 ) -> Truth {
     let members = |members: &[Predicate]| -> Vec<Truth> {
         members
@@ -161,7 +187,10 @@ pub(super) fn predicate(
         Predicate::All(members_of) => all(&members(members_of)),
         Predicate::Any(members_of) => any(&members(members_of)),
         Predicate::Not(inner) => not(self::predicate(inner, claims, inputs, evidence)),
-        Predicate::Evidence(matching) => evidence_match(matching, evidence),
+        Predicate::Evidence(matching) => evidence_match(matching, evidence.left),
+        Predicate::First(_) | Predicate::Before(_) => {
+            super::order::value(predicate, evidence.history).unwrap_or(Truth::Unknown)
+        }
         Predicate::Claim(test) => tested(
             claims.get(&test.claim).copied().unwrap_or(Truth::Unknown),
             test.is,
@@ -432,10 +461,21 @@ mod tests {
             vec![record("l", None)],
         ] {
             let none = Inputs::new();
-            let claims = values(&ir, &evidence, &Invalidated::default(), &none).expect("acyclic");
+            let claims = values(
+                &ir,
+                EvidenceSets::all(&evidence),
+                &Invalidated::default(),
+                &none,
+            )
+            .expect("acyclic");
             for (id, claim) in &ir.claims {
                 assert_eq!(
-                    predicate(&claim.true_when, &claims, &none, &evidence),
+                    predicate(
+                        &claim.true_when,
+                        &claims,
+                        &none,
+                        EvidenceSets::all(&evidence)
+                    ),
                     claims[id],
                     "{id:?} over {evidence:?}"
                 );
@@ -454,16 +494,26 @@ mod tests {
         let none = BTreeMap::new();
         let inputs = Inputs::new();
         assert_eq!(
-            predicate(&test(Truth::True), &none, &inputs, &[]),
+            predicate(&test(Truth::True), &none, &inputs, EvidenceSets::default()),
             Truth::Unknown
         );
         assert_eq!(
-            predicate(&test(Truth::Unknown), &none, &inputs, &[]),
+            predicate(
+                &test(Truth::Unknown),
+                &none,
+                &inputs,
+                EvidenceSets::default()
+            ),
             Truth::True
         );
         let given = BTreeMap::from([(ClaimId::new("missing"), Truth::False)]);
         assert_eq!(
-            predicate(&test(Truth::False), &given, &inputs, &[]),
+            predicate(
+                &test(Truth::False),
+                &given,
+                &inputs,
+                EvidenceSets::default()
+            ),
             Truth::True
         );
     }
@@ -480,10 +530,16 @@ mod tests {
         let given =
             |value: &str| Inputs::from([(InputId::new("severity"), InputValue::new(value))]);
         let claims = BTreeMap::new();
-        assert_eq!(predicate(&test, &claims, &given("high"), &[]), Truth::True);
-        assert_eq!(predicate(&test, &claims, &given("low"), &[]), Truth::False);
         assert_eq!(
-            predicate(&test, &claims, &Inputs::new(), &[]),
+            predicate(&test, &claims, &given("high"), EvidenceSets::default()),
+            Truth::True
+        );
+        assert_eq!(
+            predicate(&test, &claims, &given("low"), EvidenceSets::default()),
+            Truth::False
+        );
+        assert_eq!(
+            predicate(&test, &claims, &Inputs::new(), EvidenceSets::default()),
             Truth::Unknown
         );
         let ir = crate::ir::compile(
@@ -500,8 +556,13 @@ mod tests {
             ("high", Truth::True, Truth::False),
             ("low", Truth::False, Truth::True),
         ] {
-            let decided =
-                values(&ir, &[], &Invalidated::default(), &given(value)).expect("acyclic");
+            let decided = values(
+                &ir,
+                EvidenceSets::default(),
+                &Invalidated::default(),
+                &given(value),
+            )
+            .expect("acyclic");
             assert_eq!(decided[&ClaimId::new("severe")], severe, "{value}");
             assert_eq!(decided[&ClaimId::new("mild")], mild, "{value}");
         }

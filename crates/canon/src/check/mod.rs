@@ -52,10 +52,62 @@
 //!   without upstream artifacts, and every dimension of a protocol that declares no invalidation
 //!   rule, has its classes alone, as before rules existed.
 //!
-//! The space is atemporal: no record carries an observation instant, so none expires (an expired
-//! record is an absent one). Invalidation is not absence: a record invalidated for some claims
-//! still applies to the others, so it has variants of its own. Obligation status is not a
-//! dimension: it is computed from the claims in each state, and no `protocol/1` predicate reads it.
+//! The space is atemporal: no evaluation instant is given, so no record expires (an expired
+//! record is an absent one to every evidence match). Invalidation is not absence: a record
+//! invalidated for some claims still applies to the others, so it has variants of its own.
+//! Obligation status is not a dimension: it is computed from the claims in each state, and no
+//! `protocol/1` predicate reads it.
+//!
+//! # Order forms
+//!
+//! A protocol with no order form (`first`, `before`) has exactly the dimensions above, and its
+//! records carry no observation instant: it checks as it did before order forms existed. An order
+//! form reads every record of its kind the evidence check accepts, including those the exclusion
+//! stages keep from evidence matches, ordered by `observed_at` (`crate::eval`, `order.rs`). Its
+//! value depends only on the records first observed in each evidence dimension it reads (their
+//! classes, and how the first observations of the dimensions are ordered, ties included) and on
+//! whether some record has no known instant. So the space gains, for those dimensions only:
+//!
+//! - its kinds of record: an order form reads evidence dimensions by the rule evidence matches
+//!   do, so a `subject` it names makes a bound dimension, and a `first` adds its result to the
+//!   classes of each dimension it reads;
+//! - a history dimension for each evidence dimension an order form reads, after the case inputs,
+//!   in dimension order, of `2^classes + 1` values. Value 0 adds nothing: the dimension's current
+//!   records are its first observations. Value 1 leaves the order unknown: no record of the
+//!   dimension carries `observed_at`, and when it has no current record, one earlier record
+//!   without a result stands in for the history. Each further value is a non-empty set of
+//!   classes, one earlier record each, observed first; the current records come after them. An
+//!   earlier record is about the dimension's artifact at a superseded revision (`r0`), so revision
+//!   binding keeps it from every evidence match, as a record observed before a fix moved the
+//!   artifact is kept;
+//! - when two or more dimensions have a history dimension, an order dimension last: every weak
+//!   order of those dimensions (their first observations earlier, later or at one instant), in
+//!   lexicographic order of their ranks, as many values as the ordered Bell number of their count
+//!   (3 for two, 13 for three). The rank of a dimension that holds no record, or whose order is
+//!   unknown, decides nothing.
+//!
+//! A state's records of such a dimension are observed at whole minutes from
+//! `2000-01-01T00:00:00Z`, one per rank, its current records after every rank when it has earlier
+//! ones. Every evidence set maps to a state that evaluates the same way: its evidence matches read
+//! the same current records, and every order form the same first observations in the same order,
+//! so every value each order form can take, together with the evidence matches over the same
+//! records and every other order form, is reached by some state; and every state is an evidence
+//! set. Several states can stand for one evaluation (a dimension whose current records are its
+//! first observations, and the same classes as earlier records), which changes no finding: a
+//! witness is still the state of least weight.
+//!
+//! A history dimension's earlier records weigh one each, and so does an unknown order; the order
+//! dimension weighs nothing. A state writes them after its case inputs: `` evidence `k` result `r`
+//! earlier `` for each earlier record, `` evidence `k` observed at no known instant `` (with
+//! `earlier,` before `observed` when the dimension has no current record), and, when two or more
+//! dimensions have a first observation at a known instant, their order, `` order `k` < `m` = `n`
+//! ``. The bound refusal names them `` history of evidence kind `k` 9 `` and `` order of first
+//! observations 3 ``. Erasing a dimension (a property's `independent_of`, an `authority-bypass`
+//! witness) erases its history too and puts it first, alone, in the order, the others keeping their
+//! order. The kinds an order form reads count for `unproduced-evidence`, and for `authority-bypass`
+//! in every position, not only a positive one: with no record an order form is `unknown` and so is
+//! its negation, so a record helps `not` it and a claim test `is: false` over it hold too. A kind
+//! with an earlier record is present in a state.
 //!
 //! A state is evaluated as a case snapshot that lists each declared artifact, and the case itself,
 //! at one revision, and gives each case input its value in the state, with one evidence record per
@@ -87,8 +139,11 @@
 //!   each kind some action that requires a capability may produce. A requirement reads an evidence
 //!   match positively unless it sits under an odd number of flips, through the claims it tests: a
 //!   `not`, a claim test `is: false` and a claim test `is: unknown` each flip, and `all`, `any` and
-//!   `is: true` do not. The outcome is a bypass when some evidence dimension it reads positively is
-//!   of a governed kind, and it is legitimate in a state that takes no authority decision, whose
+//!   `is: true` do not. It reads every kind an order form reads positively, under any number of
+//!   flips: with no record of its kinds an order form is `unknown`, and so is its negation, so a
+//!   record helps the requirement hold in either position. The outcome is a bypass when some
+//!   evidence dimension it reads positively is of a governed kind, and it is legitimate in a state
+//!   that takes no authority decision, whose
 //!   every present evidence kind some action requiring no capability may produce, and from which
 //!   taking away one positively read dimension that is present blocks it. Each such dimension is
 //!   judged alone, so the outcome may rest on governed evidence produced without authority or on
@@ -534,7 +589,7 @@ fn bypasses(ir: &Ir, space: &Space<'_>, states: &[State], evaluated: &[Evaluated
             without_authority
                 && legitimate(state, at)
                 && positive.keys().any(|dimension| {
-                    state[*dimension] != 0
+                    space.holds(state, *dimension)
                         && !legitimate(&space.erase(state, &BTreeSet::from([*dimension])), at)
                 })
         });

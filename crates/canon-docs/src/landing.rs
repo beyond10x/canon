@@ -57,6 +57,26 @@ fn predicate(predicate: &Predicate) -> Json {
             }
             obj([("claim", Json::Obj(members))])
         }
+        Predicate::First(form) => {
+            let mut members = vec![
+                ("kind".to_owned(), json::str(form.kind.as_str())),
+                ("result".to_owned(), json::str(form.result.clone())),
+            ];
+            if let Some(subject) = &form.subject {
+                members.push(("subject".to_owned(), json::str(subject.as_str())));
+            }
+            obj([("first", Json::Obj(members))])
+        }
+        Predicate::Before(form) => {
+            let mut members = vec![
+                ("first".to_owned(), json::str(form.first.as_str())),
+                ("then".to_owned(), json::str(form.then.as_str())),
+            ];
+            if let Some(subject) = &form.subject {
+                members.push(("subject".to_owned(), json::str(subject.as_str())));
+            }
+            obj([("before", Json::Obj(members))])
+        }
         Predicate::Input(test) => obj([(
             "input",
             Json::Obj(vec![
@@ -75,10 +95,11 @@ fn predicate(predicate: &Predicate) -> Json {
     }
 }
 
-/// The evidence matches (kind, result) and the claim tests (claim, value) inside a predicate.
+/// The evidence matches (kind, result) and the claim tests (claim, value) inside a predicate; an
+/// order form counts as a match of each kind it reads, `first` with its result.
 type Leaves = (Vec<(String, Option<String>)>, Vec<(String, Truth)>);
 
-/// Every evidence match and claim test inside a predicate.
+/// Every evidence match, order form and claim test inside a predicate.
 fn leaves(predicate: &Predicate) -> Leaves {
     let mut evidence = Vec::new();
     let mut claims = Vec::new();
@@ -87,6 +108,13 @@ fn leaves(predicate: &Predicate) -> Leaves {
             evidence.push((matching.kind.as_str().to_owned(), matching.result.clone()))
         }
         Predicate::Claim(test) => claims.push((test.claim.as_str().to_owned(), test.is)),
+        Predicate::First(form) => {
+            evidence.push((form.kind.as_str().to_owned(), Some(form.result.clone())))
+        }
+        Predicate::Before(form) => {
+            evidence.push((form.first.as_str().to_owned(), None));
+            evidence.push((form.then.as_str().to_owned(), None));
+        }
         _ => {}
     });
     (evidence, claims)

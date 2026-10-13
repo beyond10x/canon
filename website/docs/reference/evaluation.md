@@ -50,6 +50,14 @@ A claim's value is its `true_when` predicate's value over the evidence set:
   it lists and `false` otherwise. A case gives every input the protocol declares a value (the
   case check refuses one that does not), so an input test is never `unknown`: inputs are
   configuration fixed when the case opens, not evidence.
+- An order form, `{first: {kind: K, result: R}}` or `{before: {first: K1, then: K2}}`, reads the
+  evidence history instead: every record of its kind (about its `subject` when it names one)
+  the evidence check accepted, the records the exclusion stages set aside included, ordered by
+  `observed_at`. `first` is whether the first record of `K` has result `R`; `before` whether the
+  first record of `K1` was observed strictly before the first of `K2`. Each is `unknown` while
+  the order is not established: no record, or a record without `observed_at`; the predicate's
+  reference in `protocol/1` gives every rule (CANON-ORDER-001). No record is listed in
+  `excluded_evidence` because of an order form.
 
 `unknown` and `false` are never collapsed, and only `true` satisfies a positive requirement.
 
@@ -149,7 +157,8 @@ concept; this module holds only the order:
    before it left. Revision binding and freshness return the records they exclude from every
    claim, with their reason; invalidation returns, for each claim, the records it keeps from
    that claim alone;
-4. evaluate every claim over the evidence left (`claims.rs`), each in its own context: no
+4. evaluate every claim over the evidence left (`claims.rs`), and its order forms over every
+   record the evidence check accepted (`order.rs`), each in its own context: no
    evidence match in its evaluation reads a record invalidated for it, including the matches of
    every claim it tests, which are evaluated for that use without the records invalidated for
    either; the value reported for a tested claim is its own. Each claim's
@@ -165,8 +174,9 @@ concept; this module holds only the order:
    `outcomes.rs`), then the explanation (`crate::explain`). Each section evaluates its
    predicates with the one evaluator claims use (`claims::predicate`): discharge and
    applicability predicates over the claim values, action preconditions and outcome
-   requirements over the claim values and the evidence left after step 3, each with the case's
-   input values, which every input test reads. The invalidation stage keeps a record from claims only, so
+   requirements over the claim values and the evidence left after step 3 (their order forms
+   over every record accepted), each with the case's input values, which every input test
+   reads. The invalidation stage keeps a record from claims only, so
    these predicates' own evidence matches read it. An outcome that requires an explicit
    decision is decided by the explicit decisions instead.
 
@@ -197,7 +207,8 @@ declares no obligation has no `obligations` key, and likewise for actions and ou
   evidence match that decides it is a reason, `{"claim": <id>, "value": <the claim's value>}`
   or `{"evidence": <kind>, "present": <whether a record the match reads applies>}`, with
   `"subject": <artifact>` added when the match names one (a record about another artifact
-  is not read by it), then each input test that decides it, `{"input": <id>, "value": <the case's value>}`, or
+  is not read by it), then each input test that decides it, `{"input": <id>, "value": <the case's value>}`, then each order form that decides it, `{"before": <kind>, "then": <kind>, "value": <its value>}` or `{"first": <kind>, "result": <result>, "value": <its value>}`, with
+  `"subject"` added when it names one, or
   `{"requirement": "unsatisfiable"}` when none does. `blocked` too when the precondition is
   `true` and the authority decisions deny a capability the action requires, each a reason
   `{"capability": <id>, "decision": "denied"}`. `approval-required` when the precondition is

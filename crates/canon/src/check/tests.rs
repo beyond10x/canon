@@ -445,3 +445,230 @@ fn a_rule_dimension_counts_toward_the_bound_and_is_named() {
     .expect("65536 states are within the bound");
     assert_eq!(without_rule.states, 65536);
 }
+
+// ---------------------------------------------------------------------------------------------
+// Order forms (story:evidence-order-predicate).
+
+/// Order forms over two artifacts: `k` read with and without a subject, so it has a dimension bound
+/// to `a` and an unbound one about `b`; `m` read only about `a`, so one dimension bound to `a`.
+/// Three dimensions an order form reads, so 13 orders of first observations.
+const ORDERED: &str = "format: protocol/1\n\
+    protocol: {id: p, revision: 1}\n\
+    artifacts: {a: {}, b: {}}\n\
+    evidence_kinds: {k: {}, m: {}}\n\
+    claims:\n\
+    \x20\x20first_k: {true_when: {first: {kind: k, result: pass}}}\n\
+    \x20\x20first_k_a: {true_when: {first: {kind: k, result: pass, subject: a}}}\n\
+    \x20\x20k_before_m_a: {true_when: {before: {first: k, then: m, subject: a}}}\n\
+    \x20\x20m_before_k_a: {true_when: {before: {first: m, then: k, subject: a}}}\n\
+    \x20\x20pass_k: {true_when: {evidence: {kind: k, result: pass}}}\n\
+    \x20\x20pass_k_a: {true_when: {evidence: {kind: k, result: pass, subject: a}}}\n\
+    \x20\x20some_m_a: {true_when: {evidence: {kind: m, subject: a}}}\n\
+    actions: {act: {may_produce: [{evidence: k}, {evidence: m}]}}\n";
+
+/// The value of every claim of `ir`, in claim order, for `evidence` about the current revision `r`
+/// of every artifact.
+fn claim_values(ir: &Ir, evidence: &[crate::model::EvidenceRecord]) -> Vec<crate::model::Truth> {
+    let case = Case {
+        format: CASE_FORMAT.to_owned(),
+        id: CaseId::new("check"),
+        protocol: ir.protocol.id.clone(),
+        artifacts: Declarations::new(
+            ir.artifacts
+                .keys()
+                .map(|id| {
+                    let current = CaseArtifact {
+                        revision: Revision::new(REVISION),
+                    };
+                    (id.clone(), current)
+                })
+                .collect(),
+        ),
+        termination: None,
+        revision: None,
+        inputs: Declarations::default(),
+    };
+    eval::evaluate(ir, &case, evidence)
+        .expect("evaluates")
+        .claims
+        .iter()
+        .map(|(_, entry)| entry.value)
+        .collect()
+}
+
+/// xorshift64*, a fixed seed: the same histories on every run.
+struct Rng(u64);
+
+impl Rng {
+    fn below(&mut self, n: usize) -> usize {
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        (self.0.wrapping_mul(0x2545_F491_4F6C_DD1D) % n as u64) as usize
+    }
+}
+
+/// Soundness of the space for order forms: every combination of claim values that an evidence set
+/// gives — records of either kind, about either artifact, at the current or a superseded revision,
+/// with any result, at one of three instants or none — is the combination of some state. The
+/// claims hold every order form jointly with evidence matches over the same records.
+#[test]
+fn every_value_of_every_order_form_is_reached_jointly_with_the_evidence_matches() {
+    let ir = compiled(ORDERED);
+    let space = Space::new(&ir);
+    let size = space.size().expect("fits");
+    assert_eq!(size, 31200, "{}", space.dimensions());
+    let reached: BTreeSet<Vec<crate::model::Truth>> = (0..size)
+        .map(|index| claim_values(&ir, &space.evidence(&space.state(index))))
+        .collect();
+    let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
+    let instants = [
+        Some("2026-10-01T09:00:00Z"),
+        Some("2026-10-01T09:00:01Z"),
+        Some("2026-10-01T09:00:02Z"),
+        None,
+    ];
+    let mut histories = 0;
+    for _ in 0..20_000 {
+        let records: Vec<crate::model::EvidenceRecord> = (0..rng.below(6))
+            .map(|n| {
+                let kind = ["k", "m"][rng.below(2)];
+                let result = [Some("pass"), Some("fail"), None][rng.below(3)];
+                let at = instants[rng.below(4)];
+                crate::model::EvidenceRecord {
+                    format: crate::model::EVIDENCE_FORMAT.to_owned(),
+                    id: crate::model::EvidenceId::new(format!("h{n}")),
+                    kind: EvidenceKindId::new(kind),
+                    result: result.map(str::to_owned),
+                    subject: crate::model::ArtifactId::new(["a", "b"][rng.below(2)]),
+                    subject_revision: Revision::new(["r", "r0"][rng.below(2)]),
+                    observed_at: at.map(crate::model::Instant::new),
+                    upstream_revisions: Declarations::default(),
+                }
+            })
+            .collect();
+        let values = claim_values(&ir, &records);
+        assert!(
+            reached.contains(&values),
+            "no state gives {values:?}, which {records:?} gives"
+        );
+        histories += 1;
+    }
+    assert_eq!(histories, 20_000);
+    // The space is not trivially everything: `first_k_a` true and `first_k` false needs `b`'s
+    // first record before `a`'s, so both orders are reached.
+    assert!(reached.len() > 100, "{}", reached.len());
+}
+
+/// A protocol with order forms is checked over its history and order dimensions: an outcome no
+/// order of first observations can satisfy is unreachable, and one that needs a red record no
+/// longer at the current revision is reached. The bound refusal names the new dimensions.
+#[test]
+fn order_forms_are_checked_over_the_history_and_order_dimensions() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {t: {}, d: {}}\n\
+        claims:\n\
+        \x20\x20red_first: {true_when: {first: {kind: t, result: failed}}}\n\
+        \x20\x20green_first: {true_when: {first: {kind: t, result: passed}}}\n\
+        \x20\x20passes: {true_when: {evidence: {kind: t, result: passed}}}\n\
+        actions: {run: {may_produce: [{evidence: t}, {evidence: d}]}}\n\
+        outcomes:\n\
+        \x20\x20both: {requires: {all: [{claim: red_first}, {claim: green_first}]}}\n\
+        \x20\x20fixed: {requires: {all: [{claim: red_first}, {claim: passes}, \
+        {before: {first: t, then: d}}]}}\n";
+    let report = check(&compiled(source), None).expect("checked");
+    assert_eq!(
+        report.to_string(),
+        "unreachable-outcome: outcome `both` is legitimate in no state\n\
+         checked: protocol `p` revision 1: 1296 states, 0 properties, 1 finding\n"
+    );
+    let ir = compiled(source);
+    let space = Space::new(&ir);
+    // `t` has classes failed, passed and none: 8 values and 9 histories; `d` 2 and 3; 3 orders.
+    assert_eq!(
+        space.dimensions(),
+        "evidence kind `d` 2, evidence kind `t` 8, history of evidence kind `d` 3, history of \
+         evidence kind `t` 9, order of first observations 3"
+    );
+    let wide: Vec<String> = (0..12)
+        .map(|n| format!("{{first: {{kind: t, result: r{n}}}}}"))
+        .collect();
+    let refusal = check(
+        &compiled(&source.replace(
+            "{claim: red_first}, {claim: passes}",
+            &format!("{{any: [{}]}}, {{claim: passes}}", wide.join(", ")),
+        )),
+        None,
+    )
+    .expect_err("refused");
+    assert_eq!(refusal.code(), "state-space-bound", "{refusal}");
+    assert!(
+        refusal.to_string().ends_with(
+            "evidence kind `d` 2, evidence kind `t` 32768, history of evidence kind `d` 3, \
+             history of evidence kind `t` 32769, order of first observations 3"
+        ),
+        "{refusal}"
+    );
+}
+
+/// A state writes its earlier records, an unknown order and the order of first observations after
+/// its case inputs, and builds the records it stands for: earlier ones at the superseded revision,
+/// every record of an ordered dimension at its rank's instant.
+#[test]
+fn a_state_writes_and_builds_its_history() {
+    let ir = compiled(
+        "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}}\n\
+         evidence_kinds: {t: {}, d: {}}\n\
+         claims: {c: {true_when: {before: {first: t, then: d}}}, \
+         r: {true_when: {first: {kind: t, result: failed}}}}\n",
+    );
+    let space = Space::new(&ir);
+    // Dimensions: d (2), t (4: failed, none), history d (3), history t (5), order (3).
+    let find = |wanted: &str| {
+        (0..space.size().expect("fits"))
+            .map(|index| space.state(index))
+            .find(|state| space.render(state) == wanted)
+            .unwrap_or_else(|| panic!("no state renders {wanted}"))
+    };
+    let state = find("{evidence `d`, evidence `t` result `failed` earlier, order `t` < `d`}");
+    let records: Vec<(String, Option<String>, String, Option<String>)> = space
+        .evidence(&state)
+        .into_iter()
+        .map(|record| {
+            (
+                record.kind.as_str().to_owned(),
+                record.result,
+                record.subject_revision.as_str().to_owned(),
+                record.observed_at.map(|at| at.as_str().to_owned()),
+            )
+        })
+        .collect();
+    assert_eq!(
+        records,
+        [
+            (
+                "d".to_owned(),
+                None,
+                "r".to_owned(),
+                Some("2000-01-01T00:01:00Z".to_owned())
+            ),
+            (
+                "t".to_owned(),
+                Some("failed".to_owned()),
+                "r0".to_owned(),
+                Some("2000-01-01T00:00:00Z".to_owned())
+            ),
+        ]
+    );
+    assert_eq!(space.weight(&state), 2);
+    let unknown = find("{evidence `t` earlier, observed at no known instant}");
+    let records = space.evidence(&unknown);
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].observed_at, None);
+    assert_eq!(records[0].subject_revision.as_str(), "r0");
+    // Erasing `t` empties its dimension and history and leaves `d` alone in the order.
+    let erased = space.erase(&state, &BTreeSet::from([1]));
+    assert_eq!(space.render(&erased), "{evidence `d`}");
+}

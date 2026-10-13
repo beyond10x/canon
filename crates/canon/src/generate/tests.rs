@@ -269,3 +269,30 @@ fn fold_treats_as_equal_what_the_docs_say() {
     }
     assert_ne!(fold(&file("\u{130}")), fold(&file("i")));
 }
+
+/// A protocol with order forms (story:evidence-order-predicate): the witness of an outcome that
+/// needs a red record first and a green one now is the green record at the current revision and a
+/// red one at the superseded revision `r0`, each written with the instant its state gives it, and
+/// the scenario passes when run.
+#[test]
+fn a_witness_of_an_order_form_writes_its_earlier_records_and_instants() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {t: {}}\n\
+        claims: {fixed: {true_when: {all: [{first: {kind: t, result: failed}}, \
+        {evidence: {kind: t, result: passed}}]}}}\n\
+        actions: {run: {may_produce: [{evidence: t}]}}\n\
+        outcomes: {done: {requires: {claim: fixed}}}\n";
+    let scenarios = generated(source);
+    let files: Vec<&str> = scenarios.iter().map(|s| s.file.as_str()).collect();
+    assert_eq!(files, ["outcome.done.legitimate.yaml"]);
+    assert_eq!(kinds(&scenarios[0]), ["t", "t"]);
+    let text = &scenarios[0].text;
+    for expected in [
+        "          result: \"passed\"\n          subject: \"a\"\n          subject_revision: \"r\"\n          observed_at: \"2000-01-01T00:01:00Z\"\n",
+        "          result: \"failed\"\n          subject: \"a\"\n          subject_revision: \"r0\"\n          observed_at: \"2000-01-01T00:00:00Z\"\n",
+    ] {
+        assert!(text.contains(expected), "{expected}\n{text}");
+    }
+}
