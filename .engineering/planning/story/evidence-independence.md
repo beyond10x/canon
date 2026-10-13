@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:evidence-independence
 kind: story
-status: draft
+status: active
 title: Evidence requirements that demand an independent producer
 refs:
 - provider: atlas
@@ -14,13 +14,18 @@ relations:
 - depends_on: story:three-valued-claims
 - depends_on: story:evaluator-skeleton
 - depends_on: story:invalidation-rules
+- depends_on: story:ess-pin-0-59
 scope:
 - confidence: cited
   path: conformance/scenarios/evidence-independence.yaml
 - confidence: cited
-  path: crates/canon/src/eval/claims.rs
+  path: crates/canon-docs/
 - confidence: cited
-  path: crates/canon/src/eval/independence.rs
+  path: crates/canon/src/diff/
+- confidence: cited
+  path: crates/canon/src/eval/
+- confidence: cited
+  path: crates/canon/src/explain/
 - confidence: cited
   path: crates/canon/src/ir/
 - confidence: cited
@@ -31,66 +36,98 @@ scope:
   path: ess/
 - confidence: cited
   path: fixtures/investigation/evidence-independence.yaml
-revision: 3
+- confidence: cited
+  path: website/
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-13T11:05:08Z", actor: "human:timo", revision: 6}
+- {from: "proposed", to: "active", at: "2026-10-13T11:05:08Z", actor: "human:timo", revision: 7}
 ---
 ## Outcome
 
-An evidence requirement can demand independence: a record produced by the agent working the case
-does not satisfy it alone; a record produced by an independent producer (the test runner) does.
-This carries AEP's `EvidenceRequirement.independent` (aep
-`crates/govern/aep-domain/src/requirement.rs:291`; `principles/development/test-driven.yaml:42`)
-into Canon, as Atlas ADR 0084 § "Also needed" requires. A requirement left unsatisfied this way is
-UNKNOWN, not FALSE: the evidence is inapplicable, not contrary.
+An evidence match can demand independence: it names the independence dimensions its records must
+satisfy, and a record satisfies it only when the trusted context says the record's producer is
+independent on every one of them. A record that fails the requirement is inapplicable to that match,
+whatever its result: a claim resting only on such records is UNKNOWN, not FALSE (CANON-INDEPENDENCE-001,
+design § 32; design § 39.4: Canon declares the requirement shape, trusted runtime context resolves
+identities and relationships). This carries AEP's `EvidenceRequirement.independent` (aep
+`crates/govern/aep-domain/src/requirement.rs:291`) into Canon, as Atlas ADR 0084 § "Also needed"
+requires, and is the form the engineering-protocols stories `story:security-independence-rules` and
+`story:rollback-verification-rule` declare their rules in.
 
-## First step: where independence is declared
+## First step: where independence is declared (settled 2026-10-13)
 
-ADR 0084 § Open leaves "where independence is declared in `protocol/1` (on the evidence kind, or on
-the requirement)" open. This story settles it in its first step, before the ESS-first commit, and
-records the choice in this body, together with the field on `canon-evidence/1` that says who
-produced a record.
+ADR 0084 § Open left "on the evidence kind, or on the requirement" open. Settled: on the
+requirement, because one kind can be required independent by one claim and not by another.
+
+- `protocol/1`: a top-level `independence_dimensions` section declares the dimension ids the
+  protocol uses (each with an optional `description`), like `inputs` declares case inputs. Canon gives
+  no dimension a meaning; a domain names them (`different_principal`, `different_agent_run`).
+- `protocol/1`: an evidence match (`{evidence: {kind, result, subject}}`) takes an optional
+  `independent_on`, a non-empty list of declared dimension ids, without duplicates.
+- `canon-evidence/1`: a record takes an optional `producer`, an opaque principal id naming who
+  produced it. Canon does not prove it (signing, attestation are out).
+- `canon-case/1`: the case takes an optional `independence` map, keyed by producer, whose value is
+  the list of declared dimensions on which that producer is independent of the case's work. The
+  trusted context that writes the case resolves it; a producer absent from the map, or listed with
+  `[]`, is independent on no dimension.
+- Evaluation: a record matches an evidence match with `independent_on: D` only when it has a
+  `producer` and the case lists every dimension of `D` for that producer. Otherwise the record is
+  excluded from that match with the reason `not_independent` in the explanation, beside
+  `revision_mismatch`, `expired` and `invalidated`. A match without `independent_on` is unchanged.
+  The order forms (`first`, `before`) are unchanged: they read the evidence history.
+- Validation refuses an `independent_on` naming an undeclared dimension, an empty or duplicated
+  list, and a case `independence` entry naming an undeclared dimension.
+- `canon diff` classifies adding a dimension to an evidence match's `independent_on` as TIGHTENING
+  and removing one as RELAXATION (design § 31, "stronger independence requirement"), so a changed
+  requirement is never reported as no change.
 
 ## ESS first
 
-- Specification change, first commit: in `ess/domains/protocol.yaml`, the independence flag where
-  the first step put it (on `canon.protocol.EvidenceKind` or on the evidence match of
-  `canon.protocol.Predicate`) and the producer field on the evidence record; with the fixture
+- Specification change, first commit: in `ess/domains/protocol.yaml`, the `independence_dimensions`
+  section, `independent_on` on the evidence match of `canon.protocol.Predicate`, `producer` on the
+  evidence record and `independence` on the Case; with the fixture
   `fixtures/investigation/evidence-independence.yaml` and the scenario file
   `conformance/scenarios/evidence-independence.yaml`.
 - Red on that commit: `crates/canon/tests/ess_model_matches.rs` fails naming the new fields; then
-  `CANON-INDEPENDENT-001` fails under `canon conform run`.
+  `CANON-INDEPENDENCE-001` fails under `canon conform run`.
 
 ## Scope
 
-- In: the flag and the producer field in model, validator and IR; excluding non-independent
-  records for an independent requirement.
-- Out: proving who produced a record (signing, attestation), which Canon takes as input;
-  classifying independence changes in `canon diff` (story:semantic-diff § Scope already excludes
-  independence).
+- In: the dimension declarations, `independent_on`, `producer` and the case's `independence` in
+  model, validator, IR, evaluator, explanation and diff; the generated reference pages and schemas;
+  the status page row for CANON-INDEPENDENCE-001.
+- Out: proving who produced a record (signing, attestation), which Canon takes as input; resolving
+  identities or relationships, which the trusted context does; the requirements catalogue
+  (story:conformance-suite).
 - Surfaces: `ess/`, `crates/canon/src/model/`, `crates/canon/src/validate/`, `crates/canon/src/ir/`,
-  `crates/canon/src/eval/claims.rs` (the match evaluation), `crates/canon/src/eval/independence.rs`
-  (new), `fixtures/investigation/evidence-independence.yaml`,
+  `crates/canon/src/eval/` (`claims.rs`, `evidence.rs`, new `independence.rs`),
+  `crates/canon/src/explain/`, `crates/canon/src/diff/`, `crates/canon-docs/`,
+  `website/docs/reference/`, `website/static/schemas/`, `website/data/`, `website/status.yaml`,
+  `fixtures/investigation/evidence-independence.yaml`,
   `conformance/scenarios/evidence-independence.yaml`.
 
 ## Order
 
 depends_on story:three-valued-claims (it changes which records satisfy a match) and
 story:evaluator-skeleton (it adds `eval/independence.rs` beside the per-concept files).
-
-depends_on story:invalidation-rules is an ordering edge, stated as one: every story that changes
-`protocol/1` shares `ess/`, `model/`, `validate/` and `ir/` and runs one per wave regardless; the
-edge keeps the proposed chain that story:semantic-diff is written against in front (reasoning in
-story:case-composition § Order).
+depends_on story:invalidation-rules is an ordering edge: every story that changes `protocol/1`
+shares `ess/`, `model/`, `validate/` and `ir/` and runs one per wave.
 
 ## Acceptance
 
-Conformance scenario `CANON-INDEPENDENT-001` passes under `canon conform run` over
-`fixtures/investigation/evidence-independence.yaml`, for a claim over an independent `test_result`,
-with three expectations: a passing record produced by the agent alone leaves the claim UNKNOWN; a
-passing record produced by the test runner makes it TRUE; both together make it TRUE.
-`crates/canon/tests/ess_model_matches.rs` passes.
+Conformance scenario `CANON-INDEPENDENCE-001` passes under `canon conform run` over
+`fixtures/investigation/evidence-independence.yaml`, for a claim over a `review` match with
+`independent_on: [different_principal]`, with five expectations: no record leaves the claim
+UNKNOWN; an approving record whose producer the case lists with `[]` leaves it UNKNOWN; an
+approving record whose producer the case lists on `different_principal` makes it TRUE; both records
+together make it TRUE; an approving record without a `producer` leaves it UNKNOWN. A sixth
+expectation: the same claim with `independent_on` removed is TRUE on the non-independent record
+alone. `crates/canon/tests/ess_model_matches.rs` passes; `canon diff` of the protocol before and
+after adding `independent_on` reports TIGHTENING.
 
 ## Source
 
-Atlas ADR 0084 (accepted 2026-10-04; on Atlas branch `plan/ga-adrs-0084-0085` at `38266148`, not yet
-on `main`) § Also needed and § Open; aep `crates/govern/aep-domain/src/requirement.rs:291`; draft
-`canon-stories-step-order.md`; Atlas ADR 0080.
+Atlas ADR 0084 § Also needed and § Open; `docs/design/canon-protocol-calculus-design.md` § 7.1,
+§ 31, § 32 (CANON-INDEPENDENCE-001), § 39.4; aep `crates/govern/aep-domain/src/requirement.rs:291`;
+Atlas ADR 0080.
