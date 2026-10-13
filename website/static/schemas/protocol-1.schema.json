@@ -378,6 +378,32 @@
           "required": [
             "input"
           ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "first": {
+              "description": "Whether the first record of a kind, in the evidence history, has a result.",
+              "$ref": "#/$defs/FirstResult"
+            }
+          },
+          "required": [
+            "first"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "before": {
+              "description": "Whether the first record of one kind, in the evidence history, was observed strictly before the first record of another.",
+              "$ref": "#/$defs/EvidenceOrder"
+            }
+          },
+          "required": [
+            "before"
+          ]
         }
       ]
     },
@@ -466,6 +492,52 @@
       },
       "required": [
         "kind"
+      ]
+    },
+    "FirstResult": {
+      "description": "An order form: whether the first record of `kind`, about `subject` when it names one, has `result`. It reads every record of the kind the evidence check accepted, excluded or not.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "The evidence kind whose first record is read.",
+          "$ref": "#/$defs/Identifier"
+        },
+        "result": {
+          "description": "The result that first record is to have.",
+          "type": "string"
+        },
+        "subject": {
+          "description": "The declared artifact the records read are about; without it, records about any artifact.",
+          "$ref": "#/$defs/Identifier"
+        }
+      },
+      "required": [
+        "kind",
+        "result"
+      ]
+    },
+    "EvidenceOrder": {
+      "description": "An order form: whether the first record of kind `first` was observed strictly before the first record of kind `then`, both about `subject` when it names one. It reads every record of the two kinds the evidence check accepted, excluded or not.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "first": {
+          "description": "The evidence kind whose first record is to come first.",
+          "$ref": "#/$defs/Identifier"
+        },
+        "then": {
+          "description": "The evidence kind whose first record is to come after it; another kind than `first`.",
+          "$ref": "#/$defs/Identifier"
+        },
+        "subject": {
+          "description": "The declared artifact the records of both kinds are about; without it, records about any artifact.",
+          "$ref": "#/$defs/Identifier"
+        }
+      },
+      "required": [
+        "first",
+        "then"
       ]
     },
     "Truth": {
