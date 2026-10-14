@@ -9,7 +9,8 @@
 # story:evidence-order-predicate adds the order forms `first` and `before` of the predicate.
 # story:evidence-independence adds the independence dimensions a protocol declares, the
 # independence an evidence match demands of its records, the producer an evidence record names and
-# the independence a case gives each producer.
+# the independence a case gives each producer. story:action-arguments adds the argument schema an
+# action declares.
 # crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
 domain: canon.protocol
 
@@ -155,6 +156,26 @@ types:
       # read from: crates/canon/src/model/mod.rs:106
       - name: may_produce
         type: List<canon.protocol.EvidenceProduction>
+      # The one argument schema the action declares (story:action-arguments). Absent: the action
+      # takes no arguments; a runner accepts only `{}`. Canon never validates arguments at run
+      # time: the runner that calls the action validates them against this schema. The schema is a JSON
+      # Schema in Canon's argument-schema dialect, a subset of JSON Schema 2020-12 with the same
+      # meaning and no reference at all: every schema, the top level and each nested one, names
+      # exactly one `type` (object, array, string, integer, number, boolean or null), the top level
+      # `object`; `title` and `description` (strings) anywhere; `enum` on any type, a non-empty list
+      # of distinct scalars of the schema's type; `properties`, `required` (distinct names, each
+      # declared in `properties`) and `additionalProperties` (a boolean) on an object; `items`,
+      # `minItems` and `maxItems` on an array; `minLength` and `maxLength` on a string; `minimum`
+      # and `maximum` (integers) on an integer or a number; every length or count bound a
+      # non-negative integer and every minimum at most its maximum; nesting within the depth bound
+      # of predicates. Any other keyword, a keyword on a type it does not apply to, a list-valued
+      # `type` and a schema-valued `additionalProperties` are refused by canon validate as
+      # `action-arguments`, one problem per keyword, naming the action and the keyword's JSON
+      # Pointer. Json here, not a typed schema: the dialect is checked by Canon's validator and its
+      # conformance tests, like every other validation rule.
+      # read from: .engineering/planning/story/action-arguments.md:36-72
+      - name: arguments
+        type: Optional<Json>
 
   # read from: crates/canon/src/model/mod.rs:110-114
   - name: canon.protocol.CapabilityRequirement
