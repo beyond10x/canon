@@ -156,6 +156,13 @@
       "area": "Language"
     },
     {
+      "label": "Action argument schemas",
+      "status": "planned",
+      "detail": "An action declares one argument schema in Canon's JSON Schema 2020-12 dialect, which a runner reads and validates calls against; absent, the action takes only {}. canon validate refuses a schema outside the dialect, canon compile carries it unchanged into canon-ir/1 and canon diff classifies its changes.",
+      "href": "/docs/concepts/protocols#argument-schemas",
+      "area": "Language"
+    },
+    {
       "label": "Cases compose at run time",
       "status": "decided",
       "detail": "Child cases and their outcomes as evidence; Atlas ADR 0081.",

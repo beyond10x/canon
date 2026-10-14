@@ -25,7 +25,11 @@ does not depend on the order the sections are written in:
 5. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
    more than once (`duplicate-input-value`, naming the input and the value, once for every
    listing after its first), in the order the inputs are written;
-6. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
+6. action argument schemas outside the argument-schema dialect (`action-arguments`; the dialect,
+   and the order within one schema, are stated with it), each naming the action, the JSON
+   Pointer of the keyword inside the schema and why it is refused, one per offending keyword,
+   in the order the actions are written;
+7. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
    the artifact an evidence match names as its subject, which is reported after the kind it is
    written beside, then the evidence match's `independent_on`: an empty list,
    `empty-independent-on`, or a dimension it lists more than once, `duplicate-independent-on`,
@@ -47,14 +51,51 @@ does not depend on the order the sections are written in:
    actions, then those in outcomes, then those in invalidation rules (the upstream artifact,
    then each claim the rule invalidates); within a section, in the order its declarations are
    written, and within a declaration, in the order its references are written;
-7. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
+8. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
    claim it tests through any number of claim references (`inert-invalidation`), in the order
    the rules and their claims are written. An order form is not an evidence match here: it reads
    the history, which an invalidation rule does not change;
-8. cycles between claims.
+9. cycles between claims.
 
 Within a section, entries come in the order they are written. Every message renders document
 text on one line. The same document always yields the same problems in the same order.
+
+## The argument-schema dialect
+
+Generated from the module documentation of [`crates/canon/src/validate/arguments.rs`](https://github.com/beyond10x/canon/blob/main/crates/canon/src/validate/arguments.rs).
+
+Canon's argument-schema dialect (story:action-arguments): the JSON Schemas an action's
+`arguments` may be.
+
+The dialect is a subset of JSON Schema 2020-12. Every schema in it is a valid 2020-12 schema
+with the same meaning, so a runner can hand it to any 2020-12 validator; protocols load
+offline, so it has no reference at all.
+
+- Every schema, the top level and each nested one, names exactly one `type`: `object`,
+  `array`, `string`, `integer`, `number`, `boolean` or `null`. The top level is `type: object`.
+- `title` and `description`, strings, anywhere.
+- `enum`, on any type: a non-empty list of distinct JSON scalars, each of the schema's type.
+- `object`: `properties` (a map of name to schema), `required` (a list of distinct names, each
+  declared in `properties`), `additionalProperties` (a boolean only).
+- `array`: `items` (one schema), `minItems`, `maxItems`.
+- `string`: `minLength`, `maxLength`.
+- `integer` and `number`: `minimum`, `maximum`, integers.
+- `minItems`, `maxItems`, `minLength` and `maxLength` are non-negative integers, and each
+  minimum is at most its maximum.
+- Schemas nest at most `MAX_IR_DEPTH` deep, the bound on predicates: the top level is one
+  level, and each schema in `properties` or `items` one more.
+
+Anything else is outside the dialect: `$ref`, `$defs`, `$schema`, `$id`, `allOf`, `anyOf`,
+`oneOf`, `not`, `if`, `then`, `else`, `patternProperties`, `pattern`, `format`, `const`,
+`exclusiveMinimum` and `exclusiveMaximum` by name, a list-valued `type`, a schema-valued
+`additionalProperties`, a keyword on a type it does not apply to and any unknown keyword.
+
+`check` reports one problem per offending keyword, at the keyword's JSON Pointer inside the
+schema (an element's, for an `enum` value or a `required` name): a schema that is not an object,
+names no `type` or nests too deep is reported at its own pointer. A schema whose `type` is
+missing or not one of the seven has its other keywords checked only for being in the dialect,
+since which apply depends on the type. Problems come in document order, the keys of every
+object in code-point order, and the walk keeps a stack of its own, never recursing.
 
 ## Problem codes
 
@@ -81,5 +122,6 @@ text on one line. The same document always yields the same problems in the same 
 | `undeclared-dimension` | An evidence match demands independence on a dimension that is not declared. |
 | `inert-invalidation` | An invalidation rule names a claim that reaches no evidence match, in its own predicate or in a claim it tests, so no record could be kept from it. |
 | `claim-cycle` | Claims whose predicates test each other in a cycle; the first claim is repeated at the end. |
+| `action-arguments` | An action's argument schema is outside the argument-schema dialect: `pointer` is the JSON Pointer of the offending keyword inside the schema (`""` for the schema itself) and `reason` why it is refused. |
 
 A document that is not well-formed YAML, or not shaped like `protocol/1`, fails earlier, while parsing; the command line reports it as `parse`.

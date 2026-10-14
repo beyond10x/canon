@@ -89,6 +89,7 @@ has and what evidence it may produce (design § 10).
 | `requires` | list of [`CapabilityRequirement`](#capabilityrequirement) | optional | — |
 | `effect` | [identifier](#identifiers) (`EffectClass`) | optional | — |
 | `may_produce` | list of [`EvidenceProduction`](#evidenceproduction) | optional | — |
+| `arguments` | any JSON value | optional | The JSON Schema, in Canon's argument-schema dialect, that the action's arguments satisfy. Absent: the action takes no arguments; a runner accepts only `{}`. Canon never validates arguments at run time: the runner that calls the action validates them against the schema, and `canon validate` holds the schema to the dialect (`action-arguments`). |
 
 ## `Outcome`
 
