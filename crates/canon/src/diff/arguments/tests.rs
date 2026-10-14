@@ -35,10 +35,10 @@ fn accepts(schema: &Value, doc: &Value) -> bool {
         }
     }
     let bound = |key: &str| s.get(key).map(|b| b.as_f64().unwrap());
-    if let Some(n) = doc.as_f64() {
-        if bound("minimum").is_some_and(|m| n < m) || bound("maximum").is_some_and(|m| n > m) {
-            return false;
-        }
+    if let Some(n) = doc.as_f64()
+        && (bound("minimum").is_some_and(|m| n < m) || bound("maximum").is_some_and(|m| n > m))
+    {
+        return false;
     }
     if let Some(text) = doc.as_str() {
         let len = text.chars().count() as f64;
@@ -54,10 +54,10 @@ fn accepts(schema: &Value, doc: &Value) -> bool {
         {
             return false;
         }
-        if let Some(item) = s.get("items") {
-            if !items.iter().all(|i| accepts(item, i)) {
-                return false;
-            }
+        if let Some(item) = s.get("items")
+            && !items.iter().all(|i| accepts(item, i))
+        {
+            return false;
         }
     }
     if let Some(members) = doc.as_object() {
