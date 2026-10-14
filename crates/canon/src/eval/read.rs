@@ -355,6 +355,8 @@ fn action(entry: &Json) -> Shape<Action> {
         requires,
         effect: optional_text(entry, "effect")?.map(EffectClass::new),
         may_produce,
+        // Written only when declared; read as the JSON it is, and held to the dialect by compiling.
+        arguments: field(entry, "arguments").cloned(),
     })
 }
 

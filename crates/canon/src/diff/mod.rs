@@ -920,6 +920,7 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         requires: from_requires,
         effect: from_effect,
         may_produce: from_may_produce,
+        arguments: from_arguments,
     } = from;
     let Action {
         description: to_description,
@@ -927,6 +928,7 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         requires: to_requires,
         effect: to_effect,
         may_produce: to_may_produce,
+        arguments: to_arguments,
     } = to;
     changes.description(SECTION, id, from_description, to_description);
     changes.predicate(
@@ -968,6 +970,15 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         (Category::Breaking, "may no longer produce evidence"),
         (Category::Expansion, "may now produce evidence"),
     );
+    // Placeholder until the argument-schema classifier is wired in: any difference is BREAKING.
+    if from_arguments != to_arguments {
+        changes.push(
+            Category::Breaking,
+            SECTION,
+            id,
+            "arguments changed".to_owned(),
+        );
+    }
 }
 
 fn invalidation_rule(

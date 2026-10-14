@@ -14,7 +14,11 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Value {
     Null,
+    Bool(bool),
     Integer(u64),
+    /// Any other JSON number, as an action's argument schema writes it: written as `serde_json`
+    /// writes it, which is the same text for the same number.
+    Number(serde_json::Number),
     String(String),
     Array(Vec<Value>),
     Object(BTreeMap<String, Value>),
@@ -39,6 +43,28 @@ impl Value {
         )
     }
 
+    /// A JSON value as canonical JSON: object keys sorted like every object's.
+    pub(crate) fn json(value: &serde_json::Value) -> Self {
+        match value {
+            serde_json::Value::Null => Value::Null,
+            serde_json::Value::Bool(value) => Value::Bool(*value),
+            serde_json::Value::Number(number) => match number.as_u64() {
+                Some(number) => Value::Integer(number),
+                None => Value::Number(number.clone()),
+            },
+            serde_json::Value::String(text) => Value::string(text.as_str()),
+            serde_json::Value::Array(items) => {
+                Value::Array(items.iter().map(Value::json).collect())
+            }
+            serde_json::Value::Object(members) => Value::Object(
+                members
+                    .iter()
+                    .map(|(key, value)| (key.clone(), Value::json(value)))
+                    .collect(),
+            ),
+        }
+    }
+
     /// The canonical rendering, ending with a newline.
     pub(crate) fn render(&self) -> String {
         let mut out = String::new();
@@ -51,7 +77,9 @@ impl Value {
 fn write(value: &Value, indent: usize, out: &mut String) {
     match value {
         Value::Null => out.push_str("null"),
+        Value::Bool(value) => out.push_str(if *value { "true" } else { "false" }),
         Value::Integer(number) => out.push_str(&number.to_string()),
+        Value::Number(number) => out.push_str(&number.to_string()),
         Value::String(text) => write_string(text, out),
         Value::Array(items) if items.is_empty() => out.push_str("[]"),
         Value::Array(items) => {

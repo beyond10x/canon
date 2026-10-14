@@ -16,7 +16,11 @@
 //! 5. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
 //!    more than once (`duplicate-input-value`, naming the input and the value, once for every
 //!    listing after its first), in the order the inputs are written;
-//! 6. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
+//! 6. action argument schemas outside the argument-schema dialect (`action-arguments`; the dialect,
+//!    and the order within one schema, are stated with it), each naming the action, the JSON
+//!    Pointer of the keyword inside the schema and why it is refused, one per offending keyword,
+//!    in the order the actions are written;
+//! 7. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
 //!    the artifact an evidence match names as its subject, which is reported after the kind it is
 //!    written beside, then the evidence match's `independent_on`: an empty list,
 //!    `empty-independent-on`, or a dimension it lists more than once, `duplicate-independent-on`,
@@ -38,14 +42,16 @@
 //!    actions, then those in outcomes, then those in invalidation rules (the upstream artifact,
 //!    then each claim the rule invalidates); within a section, in the order its declarations are
 //!    written, and within a declaration, in the order its references are written;
-//! 7. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
+//! 8. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
 //!    claim it tests through any number of claim references (`inert-invalidation`), in the order
 //!    the rules and their claims are written. An order form is not an evidence match here: it reads
 //!    the history, which an invalidation rule does not change;
-//! 8. cycles between claims.
+//! 9. cycles between claims.
 //!
 //! Within a section, entries come in the order they are written. Every message renders document
 //! text on one line. The same document always yields the same problems in the same order.
+
+mod arguments;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -219,6 +225,14 @@ pub enum Problem {
     },
     /// Claims whose predicates test each other in a cycle; the first claim is repeated at the end.
     ClaimCycle { claims: Vec<ClaimId> },
+    /// An action's argument schema is outside the argument-schema dialect: `pointer` is the JSON
+    /// Pointer of the offending keyword inside the schema (`""` for the schema itself) and `reason`
+    /// why it is refused.
+    ActionArguments {
+        action: ActionId,
+        pointer: String,
+        reason: String,
+    },
 }
 
 impl Problem {
@@ -246,6 +260,7 @@ impl Problem {
             Problem::UndeclaredDimension { .. } => "undeclared-dimension",
             Problem::InertInvalidation { .. } => "inert-invalidation",
             Problem::ClaimCycle { .. } => "claim-cycle",
+            Problem::ActionArguments { .. } => "action-arguments",
         }
     }
 }
@@ -395,6 +410,17 @@ impl fmt::Display for Problem {
                     path.join(" -> ")
                 )
             }
+            Problem::ActionArguments {
+                action,
+                pointer,
+                reason,
+            } => {
+                write!(f, "action `{}` arguments", one_line(action.as_str()))?;
+                if !pointer.is_empty() {
+                    write!(f, " at `{}`", one_line(pointer))?;
+                }
+                write!(f, ": {}", one_line(reason))
+            }
         }
     }
 }
@@ -485,6 +511,18 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
                 problems.push(Problem::DuplicateInputValue {
                     input: id.clone(),
                     value: value.clone(),
+                });
+            }
+        }
+    }
+
+    for (id, action) in protocol.actions.iter() {
+        if let Some(schema) = &action.arguments {
+            for (pointer, reason) in arguments::check(schema) {
+                problems.push(Problem::ActionArguments {
+                    action: id.clone(),
+                    pointer,
+                    reason,
                 });
             }
         }
