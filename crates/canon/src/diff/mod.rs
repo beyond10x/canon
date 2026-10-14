@@ -36,6 +36,8 @@
 //! | action effect changed | `BREAKING` |
 //! | evidence kind an action may produce added | `EXPANSION` |
 //! | evidence kind an action may produce removed | `BREAKING` |
+//! | action argument schema introduced or removed (absent, the action takes only `{}`) | `BREAKING` |
+//! | action argument schema narrowed, widened, rewritten or changed | by the rules in `diff/arguments.rs` |
 //! | outcome added | `EXPANSION` |
 //! | outcome removed, or its requirement changed | `BREAKING` |
 //! | invalidation rule added, or a claim added to what it invalidates | `TIGHTENING` |
@@ -113,8 +115,8 @@
 //! header, then artifacts, evidence kinds, claims, obligations, actions, outcomes, invalidation
 //! rules, case inputs and independence dimensions; within a section, by identifier; within a declaration, its description,
 //! then its fields in the order the IR declares them (an obligation's discharge predicate and
-//! applicability predicate; an action's precondition, capability requirements, effect and evidence
-//! it may produce; a case input's values), each list in identifier order, removals before
+//! applicability predicate; an action's precondition, capability requirements, effect, evidence
+//! it may produce and argument schema; a case input's values), each list in identifier order, removals before
 //! additions. Every IR declaration is destructured whole, so a field added to one does not compile
 //! here until the classifier says what a change to it is.
 //!
@@ -972,14 +974,10 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         (Category::Breaking, "may no longer produce evidence"),
         (Category::Expansion, "may now produce evidence"),
     );
-    // Placeholder until the argument-schema classifier is wired in: any difference is BREAKING.
-    if from_arguments != to_arguments {
-        changes.push(
-            Category::Breaking,
-            SECTION,
-            id,
-            "arguments changed".to_owned(),
-        );
+    if let Some((category, what)) =
+        arguments::classify(from_arguments.as_ref(), to_arguments.as_ref())
+    {
+        changes.push(category, SECTION, id, what.to_owned());
     }
 }
 

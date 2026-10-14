@@ -45,8 +45,6 @@
 //! Two schemas are equal, and give no change, when they are equal as JSON values; a list whose
 //! members are only reordered (`required`, `enum`) gives no direction, so it is `rewritten`.
 
-#![allow(dead_code)]
-
 use std::collections::BTreeSet;
 
 use serde_json::{Map, Value};
