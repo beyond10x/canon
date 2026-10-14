@@ -1219,6 +1219,12 @@ fn validation(root: &Path) -> Result<String, String> {
         "Validation",
         "What canon validate checks, in which order, and every problem code it reports.",
     )?;
+    let dialect = "crates/canon/src/validate/arguments.rs";
+    out.push_str(&format!(
+        "\n## The argument-schema dialect\n\nGenerated from the module documentation of {}.\n\n",
+        source_link(dialect)
+    ));
+    out.push_str(&block(&source::module_doc(root, dialect)?, 2));
     out.push_str("\n## Problem codes\n\n");
     let rows: Vec<Vec<String>> = source::problem_codes(root)?
         .iter()

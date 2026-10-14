@@ -95,3 +95,53 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Required<T> {
         required(deserializer).map(Required)
     }
 }
+
+/// For a JSON-valued field declared `#[serde(default, deserialize_with = "present::optional_json")]`:
+/// [`optional`], reading the YAML value as the JSON value it writes. YAML says more than JSON can,
+/// and serde would quietly read a non-finite number (`.nan`, `.inf`) as JSON `null`; here a
+/// non-finite number, a mapping key that is not a string and a tagged value are refused instead.
+pub(crate) fn optional_json<'de, D>(deserializer: D) -> Result<Option<serde_json::Value>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let yaml: serde_yaml_ng::Value = not_null(deserializer, NULL)?;
+    json(yaml).map(Some).map_err(D::Error::custom)
+}
+
+/// The JSON value a YAML value writes, or why it has none.
+fn json(yaml: serde_yaml_ng::Value) -> Result<serde_json::Value, &'static str> {
+    use serde_json::Value as Json;
+    use serde_yaml_ng::Value as Yaml;
+    Ok(match yaml {
+        Yaml::Null => Json::Null,
+        Yaml::Bool(value) => Json::Bool(value),
+        Yaml::Number(number) => {
+            if let Some(value) = number.as_u64() {
+                Json::from(value)
+            } else if let Some(value) = number.as_i64() {
+                Json::from(value)
+            } else {
+                number
+                    .as_f64()
+                    .and_then(serde_json::Number::from_f64)
+                    .map(Json::Number)
+                    .ok_or("a number that is not finite has no JSON value")?
+            }
+        }
+        Yaml::String(text) => Json::String(text),
+        Yaml::Sequence(items) => {
+            Json::Array(items.into_iter().map(json).collect::<Result<_, _>>()?)
+        }
+        Yaml::Mapping(mapping) => {
+            let mut object = serde_json::Map::new();
+            for (key, value) in mapping {
+                let Yaml::String(key) = key else {
+                    return Err("a mapping key that is not a string has no JSON value");
+                };
+                object.insert(key, json(value)?);
+            }
+            Json::Object(object)
+        }
+        Yaml::Tagged(_) => return Err("a tagged YAML value has no JSON value"),
+    })
+}

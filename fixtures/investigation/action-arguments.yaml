@@ -1,0 +1,98 @@
+format: protocol/1
+
+protocol:
+  id: investigation
+  revision: 1
+  description: Decide whether an explanation is supported, with an argument schema on each action a runner calls with arguments.
+
+artifacts:
+  explanation:
+    description: The explanation under investigation.
+
+evidence_kinds:
+  supporting_observation:
+    description: An observation consistent with the explanation.
+  falsification_attempt:
+    description: An attempt to refute the explanation; its result is survived or refuted.
+
+claims:
+  explanation.supported:
+    description: The explanation is supported by observation and has survived falsification.
+    true_when:
+      all:
+        - evidence:
+            kind: supporting_observation
+        - evidence:
+            kind: falsification_attempt
+            result: survived
+
+actions:
+  inspect:
+    description: Look for observations bearing on the explanation.
+    may_produce:
+      - evidence: supporting_observation
+    arguments:
+      type: object
+      title: Inspection
+      description: Where to look, and how many observations to collect at most.
+      properties:
+        source:
+          type: string
+          description: The source to inspect.
+          minLength: 1
+          maxLength: 200
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+        filters:
+          type: array
+          description: Observation tags to keep; none keeps every observation.
+          minItems: 0
+          maxItems: 10
+          items:
+            type: string
+            enum: [measurement, interview, log]
+      required: [source]
+      additionalProperties: false
+
+  attempt_falsification:
+    description: Try to refute the explanation.
+    may_produce:
+      - evidence: falsification_attempt
+    arguments:
+      type: object
+      properties:
+        method:
+          type: object
+          description: How the attempt is made.
+          properties:
+            kind:
+              type: string
+              enum: [replication, counterexample]
+            confidence:
+              type: number
+              minimum: 0
+              maximum: 1
+            blind:
+              type: boolean
+            note:
+              type: "null"
+          required: [kind]
+          additionalProperties: false
+      required: [method]
+      additionalProperties: false
+
+  publish_finding:
+    description: Publish the finding that the explanation is supported; it declares no `arguments`, so it takes no arguments.
+    precondition:
+      claim: explanation.supported
+      is: true
+    requires:
+      - capability: finding.publish
+
+outcomes:
+  supported:
+    description: The explanation is supported.
+    requires:
+      claim: explanation.supported
