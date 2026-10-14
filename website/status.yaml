@@ -108,6 +108,11 @@ items:
     story: story:evidence-independence
     detail: An evidence match demands that its records' producer be independent on declared dimensions, which the case resolves for each producer; a record that fails the demand leaves the match UNKNOWN, never FALSE; scenario CANON-INDEPENDENCE-001.
     href: /docs/reference/protocol#evidencematch
+  - label: Action argument schemas
+    area: Language
+    story: story:action-arguments
+    detail: An action declares one argument schema in Canon's JSON Schema 2020-12 dialect, which a runner reads and validates calls against; absent, the action takes only {}. canon validate refuses a schema outside the dialect, canon compile carries it unchanged into canon-ir/1 and canon diff classifies its changes.
+    href: /docs/concepts/protocols#argument-schemas
   - label: Cases compose at run time
     area: Design
     story: story:case-composition
