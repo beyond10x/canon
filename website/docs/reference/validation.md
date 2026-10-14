@@ -82,7 +82,7 @@ offline, so it has no reference at all.
 - `integer` and `number`: `minimum`, `maximum`, integers.
 - `minItems`, `maxItems`, `minLength` and `maxLength` are non-negative integers, and each
   minimum is at most its maximum.
-- Schemas nest at most `MAX_IR_DEPTH` deep, the bound on predicates: the top level is one
+- Schemas nest at most `MAX_SCHEMA_DEPTH` deep: the top level is one
   level, and each schema in `properties` or `items` one more.
 
 Anything else is outside the dialect: `$ref`, `$defs`, `$schema`, `$id`, `allOf`, `anyOf`,

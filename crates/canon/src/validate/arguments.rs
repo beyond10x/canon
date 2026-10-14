@@ -16,7 +16,7 @@
 //! - `integer` and `number`: `minimum`, `maximum`, integers.
 //! - `minItems`, `maxItems`, `minLength` and `maxLength` are non-negative integers, and each
 //!   minimum is at most its maximum.
-//! - Schemas nest at most [`MAX_IR_DEPTH`] deep, the bound on predicates: the top level is one
+//! - Schemas nest at most [`MAX_SCHEMA_DEPTH`] deep: the top level is one
 //!   level, and each schema in `properties` or `items` one more.
 //!
 //! Anything else is outside the dialect: `$ref`, `$defs`, `$schema`, `$id`, `allOf`, `anyOf`,
@@ -35,7 +35,9 @@ use std::collections::BTreeSet;
 
 use serde_json::{Map, Value};
 
-use crate::eval::MAX_IR_DEPTH;
+/// How deep schemas nest: far below the bound on predicates, since every pass over a schema value
+/// (parsing, writing, reading back, comparing and dropping it) recurses once per level.
+pub(crate) const MAX_SCHEMA_DEPTH: usize = 64;
 
 /// The seven types, each a keyword's applicability.
 const TYPES: [&str; 7] = [
@@ -156,10 +158,10 @@ fn schema_items<'a>(
     let Value::Object(schema) = value else {
         return vec![offence(at, "the schema is not an object".to_owned())];
     };
-    if depth > MAX_IR_DEPTH {
+    if depth > MAX_SCHEMA_DEPTH {
         return vec![offence(
             at,
-            format!("the schema nests schemas deeper than {MAX_IR_DEPTH}"),
+            format!("the schema nests schemas deeper than {MAX_SCHEMA_DEPTH}"),
         )];
     }
     let mut items = Vec::new();
@@ -402,7 +404,7 @@ fn required_items(
 mod tests {
     use serde_json::{Value, json};
 
-    use super::{MAX_IR_DEPTH, check};
+    use super::{MAX_SCHEMA_DEPTH, check};
 
     /// A top-level object whose property `p` nests `levels` more object schemas.
     fn nested(levels: usize) -> Value {
@@ -415,14 +417,14 @@ mod tests {
 
     #[test]
     fn schemas_nest_within_the_bound_on_predicates() {
-        assert_eq!(check(&nested(MAX_IR_DEPTH - 1)), Vec::new());
-        let found = check(&nested(MAX_IR_DEPTH));
+        assert_eq!(check(&nested(MAX_SCHEMA_DEPTH - 1)), Vec::new());
+        let found = check(&nested(MAX_SCHEMA_DEPTH));
         assert_eq!(found.len(), 1, "{:?}", found.first());
         let (pointer, reason) = &found[0];
-        assert_eq!(pointer, &"/properties/p".repeat(MAX_IR_DEPTH));
+        assert_eq!(pointer, &"/properties/p".repeat(MAX_SCHEMA_DEPTH));
         assert_eq!(
             reason,
-            &format!("the schema nests schemas deeper than {MAX_IR_DEPTH}")
+            &format!("the schema nests schemas deeper than {MAX_SCHEMA_DEPTH}")
         );
     }
 
