@@ -28,7 +28,7 @@ scope:
   path: fixtures/investigation/action-arguments.yaml
 - confidence: cited
   path: website/
-revision: 12
+revision: 13
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-14T21:46:07Z", actor: "human:timo", revision: 11}
 - {from: "proposed", to: "active", at: "2026-10-14T21:46:07Z", actor: "human:timo", revision: 12}
@@ -40,7 +40,7 @@ protocol it loads. Each `actions:` entry of `protocol/1` takes an optional `argu
 `effect` and `requires`: a JSON Schema in Canon's argument-schema dialect. `canon validate` refuses
 any schema outside the dialect, naming the keyword and its path; `canon compile` carries the schema
 unchanged into `canon-ir/1`; `canon diff` classifies a changed schema as narrowing, widening or
-changed. Absent, the action declares no argument schema and Canon says nothing about its arguments.
+changed. Absent, the action takes no arguments: a runner accepts only the empty object `{}` and refuses any other.
 Canon never validates an action's arguments itself: it evaluates no call; the runner that calls the
 action validates them against the schema.
 
@@ -77,8 +77,8 @@ change to a protocol. `canon diff` tells a runner what the change does to calls:
 
 | Change | Category | Line |
 |---|---|---|
-| `arguments` introduced on an action | `TIGHTENING` | `arguments introduced` |
-| `arguments` removed from an action | `RELAXATION` | `arguments removed` |
+| `arguments` introduced on an action (it took only `{}`) | `BREAKING` | `arguments introduced` |
+| `arguments` removed from an action (it now takes only `{}`) | `BREAKING` | `arguments removed` |
 | only `title` or `description` changed, anywhere in the schema | `NO SEMANTIC CHANGE` | `arguments rewritten` |
 | the new schema accepts only argument documents the old one accepted | `TIGHTENING` | `arguments narrowed` |
 | the old schema accepts only argument documents the new one accepts | `RELAXATION` | `arguments widened` |
