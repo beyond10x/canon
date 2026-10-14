@@ -121,6 +121,8 @@
 //! Out of scope (story:semantic-diff): live-case impact, which needs case data Canon does not hold
 //! (design § 38), and constructs the kernel does not yet have.
 
+mod arguments;
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 
