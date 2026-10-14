@@ -94,7 +94,8 @@ needs it decided either way.
 
 An action is a semantically named possibility, not a workflow step. It says when it applies
 (`precondition`), which capabilities it needs authority for (`requires`), what class of effect it
-has (`effect`) and which evidence kinds it may produce (`may_produce`). A person, planner, agent or
+has (`effect`), which evidence kinds it may produce (`may_produce`) and what arguments it takes
+(`arguments`, [below](#argument-schemas)). A person, planner, agent or
 workflow engine decides how to carry it out.
 
 ```yaml
@@ -123,6 +124,84 @@ nothing is denied and some required capability is not decided, and `admissible` 
 precondition is `TRUE` and every required capability is granted. A status other than
 `admissible` comes with the claims, evidence or capabilities that decide it. Conformance scenario
 `CANON-AUTHORITY-001` holds this.
+
+:::
+
+### Argument schemas
+
+An action may declare one argument schema, `arguments`: a JSON Schema saying what arguments the
+action is called with. A runner reads it from the protocol it loads and validates each call's
+arguments against it. Absent: the action takes no arguments; a runner accepts only `{}`. Canon
+itself never validates arguments: it evaluates no call.
+
+```yaml
+actions:
+  inspect:
+    arguments:
+      type: object
+      properties:
+        source: {type: string, minLength: 1}
+        limit: {type: integer, minimum: 1, maximum: 50}
+      required: [source]
+      additionalProperties: false
+```
+
+The schema is written in Canon's argument-schema dialect, a subset of JSON Schema 2020-12. Every
+schema in it is a valid 2020-12 schema with the same meaning, so a runner can hand it to any
+2020-12 validator. Protocols load offline, so the dialect has no reference at all.
+
+- Every schema, the top level and each nested one, names exactly one `type`: `object`, `array`,
+  `string`, `integer`, `number`, `boolean` or `null`. The top level is `type: object`.
+- `title` and `description`, strings, anywhere.
+- `enum`, on any type: a non-empty list of distinct JSON scalars, each of the schema's type.
+- `object`: `properties` (a map of name to schema), `required` (a list of distinct names, each
+  declared in `properties`), `additionalProperties` (a boolean only).
+- `array`: `items` (one schema), `minItems`, `maxItems`.
+- `string`: `minLength`, `maxLength`.
+- `integer` and `number`: `minimum`, `maximum`, integers.
+- Every length and count bound is a non-negative integer, and a minimum is at most its maximum.
+- Nesting is bounded by the same depth bound as predicates (4096).
+
+Anything else is refused: `$ref`, `$defs`, `$schema`, `$id`, `allOf`, `anyOf`, `oneOf`, `not`,
+`if`/`then`/`else`, `patternProperties`, `pattern`, `format`, `const`, `exclusiveMinimum`,
+`exclusiveMaximum`, a list-valued `type`, a schema-valued `additionalProperties`, a keyword on a
+type it does not apply to, and any unknown keyword. `canon validate` reports each offending keyword
+as its own `action-arguments` problem, naming the action, the keyword's JSON Pointer inside the
+schema and why it is refused:
+
+```text
+action `inspect` arguments at `/properties/source/pattern`: `pattern` is outside the dialect
+```
+
+`canon compile` carries each schema into `canon-ir/1` as declared, its object keys sorted like
+every object's, and writes no `arguments` for an action without one.
+
+Every change to an action's `arguments` is made under a new `protocol.revision`, like every other
+change to a protocol. `canon diff` tells a runner what the change does to calls:
+
+| Change | Category | Line |
+|---|---|---|
+| `arguments` introduced on an action (it took only `{}`) | `BREAKING` | `arguments introduced` |
+| `arguments` removed from an action (it now takes only `{}`) | `BREAKING` | `arguments removed` |
+| only `title` or `description` changed, anywhere in the schema | `NO SEMANTIC CHANGE` | `arguments rewritten` |
+| the new schema accepts only argument documents the old one accepted | `TIGHTENING` | `arguments narrowed` |
+| the old schema accepts only argument documents the new one accepts | `RELAXATION` | `arguments widened` |
+| anything else, or both | `BREAKING` | `arguments changed` |
+
+Narrowing and widening are decided structurally and soundly, never guessed. Per keyword: `integer`
+to `number` widens and the reverse narrows, and any other type change is changed; an `enum`
+introduced or a value removed narrows, and removed or a value added widens; a lower bound
+introduced or raised, or an upper bound introduced or lowered, narrows, and the reverse widens; a
+name added to `required` narrows, and one removed widens. For an object, each property name is
+compared by its effective schema: the declared one, else any value when `additionalProperties` is
+absent or true and no value when it is false; `items` and each property recurse. The directions of
+all keywords are combined: none is `rewritten`, only narrowing is `narrowed`, only widening is
+`widened`, both is `changed`.
+
+:::shipped[Action argument schemas]
+
+Shipped in Canon 0.5.0 (story:action-arguments): `arguments` on an action, its dialect check in
+`canon validate`, its carry into `canon-ir/1` and its classification by `canon diff`.
 
 :::
 
@@ -191,8 +270,8 @@ otherwise; `any` is the mirror image; `not` swaps `true` and `false` and keeps `
 
 ## Validation and the compiled form
 
-`canon validate` checks the format, identifiers, duplicates, unresolved references and claim
-cycles, and reports every problem in a stable order ([validation](../reference/validation.md)). A
+`canon validate` checks the format, identifiers, duplicates, argument schemas, unresolved
+references and claim cycles, and reports every problem in a stable order ([validation](../reference/validation.md)). A
 valid document compiles into [`canon-ir/1`](../reference/canon-ir.md): declarations sorted by
 identifier, defaults written out, authoring shortcuts removed, so that documents meaning the same
 thing compile to the same bytes.

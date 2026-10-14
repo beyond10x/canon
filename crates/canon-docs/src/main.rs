@@ -529,4 +529,19 @@ mod tests {
         assert!(example.contains("`duplicate-identifier`"));
         assert!(example.contains("`undeclared-claim`"));
     }
+
+    /// story:action-arguments: the validation page states the dialect and its problem code, and the
+    /// protocol reference and schema carry the field.
+    #[test]
+    fn the_argument_schema_dialect_is_documented() {
+        let files = generated();
+        let validation = &files["website/docs/reference/validation.md"];
+        assert!(validation.contains("\n## The argument-schema dialect\n"));
+        assert!(validation.contains("`exclusiveMaximum`"));
+        assert!(validation.contains("| `action-arguments` |"));
+        let protocol = &files["website/docs/reference/protocol.md"];
+        assert!(protocol.contains("| `arguments` |"));
+        let schema = &files["website/static/schemas/protocol-1.schema.json"];
+        assert!(schema.contains("\"arguments\": {"));
+    }
 }
