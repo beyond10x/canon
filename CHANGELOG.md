@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## [0.5.0] - 2026-10-15
+
+One argument schema per action. Install the CLI or depend on the libraries from Git tag `0.5.0`.
+
+- Each `actions:` entry of `protocol/1` takes an optional `arguments`: a JSON Schema in Canon's
+  argument-schema dialect, a subset of JSON Schema 2020-12 with no references. Every schema names
+  one `type`, the top level `type: object`; the dialect has `title`, `description`, `enum`,
+  `properties`, `required`, a boolean `additionalProperties`, `items`, `minItems`, `maxItems`,
+  `minLength`, `maxLength` and integer `minimum` and `maximum`, nested at most 32 deep. Absent, the
+  action takes no arguments: a runner accepts only `{}`. Canon validates no call itself.
+- `canon validate` refuses a schema outside the dialect as `action-arguments`, one problem per
+  offending keyword, naming the action and the keyword's JSON Pointer.
+- `canon compile` carries each schema unchanged into `canon-ir/1`, and writes no `arguments` for an
+  action without one.
+- `canon diff`: a schema introduced or removed is `BREAKING`; one changed only in `title` or
+  `description` is `NO SEMANTIC CHANGE`; one that accepts only documents the old one accepted is
+  `TIGHTENING` (`arguments narrowed`), the reverse `RELAXATION` (`arguments widened`), anything
+  else `BREAKING` (`arguments changed`). Every change is made under a new `protocol.revision`.
+
 ## [0.4.0] - 2026-10-13
 
 Evidence requirements that demand an independent producer. Install the CLI or depend on the

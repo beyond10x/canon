@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:action-arguments
 kind: story
-status: active
+status: implemented
 title: Declare one argument schema per action
 relations:
 - decomposes: epic:canon-kernel
@@ -28,10 +28,11 @@ scope:
   path: fixtures/investigation/action-arguments.yaml
 - confidence: cited
   path: website/
-revision: 15
+revision: 16
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-14T21:46:07Z", actor: "human:timo", revision: 11}
 - {from: "proposed", to: "active", at: "2026-10-14T21:46:07Z", actor: "human:timo", revision: 12}
+- {from: "active", to: "implemented", at: "2026-10-15T01:13:19Z", actor: "human:timo", revision: 16, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 ## Outcome
 
