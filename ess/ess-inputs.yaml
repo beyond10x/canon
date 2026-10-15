@@ -5,4 +5,5 @@ specification:
   - domains/protocol.yaml
   - domains/check.yaml
   - domains/expr.yaml
+  - domains/conform.yaml
 scenarios: []

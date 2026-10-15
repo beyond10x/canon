@@ -2,7 +2,8 @@
 //! and `canon-decision/1` documents an evaluation reads and writes (`case.rs`, `evidence.rs`,
 //! `decision.rs`), the `canon-authority/1` authority decisions (`authority.rs`) and
 //! `canon-decisions/1` explicit decisions (`explicit.rs`) an evaluation may read, and the
-//! `canon-properties/1` properties `canon check` reads (`properties.rs`).
+//! `canon-properties/1` properties `canon check` reads (`properties.rs`), and the
+//! `canon-requirements/1` catalogue `canon conform run --requirements` reads (`catalogue.rs`).
 //!
 //! A protocol document declares a protocol id and revision, the case inputs a case gives values for
 //! (`case: inputs:`), artifacts, evidence kinds, claims with their predicates, obligations with
@@ -12,13 +13,16 @@
 //! keeps repeated keys, so the validator can report a duplicate identifier instead of the parser
 //! silently dropping one.
 
+// `ids` declares the `identifier!` macro, which a module can use only when declared after it.
+#[macro_use]
+mod ids;
+
 mod authority;
 mod case;
+mod catalogue;
 mod decision;
 mod evidence;
 mod explicit;
-#[macro_use]
-mod ids;
 mod parse;
 mod predicate;
 mod present;
@@ -35,6 +39,10 @@ use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 
 pub use authority::{AUTHORITY_FORMAT, AuthorityDecision, Grant};
 pub use case::{CASE_FORMAT, Case, CaseArtifact};
+pub use catalogue::{
+    NormativeRequirement, REQUIREMENTS_FORMAT, RequirementCatalogue, RequirementId,
+    RequirementStatus,
+};
 pub use decision::{
     ClaimDecision, DECISION_FORMAT, Decision, EvidenceExclusion, ExclusionReason, Json,
     ObligationStatus,
