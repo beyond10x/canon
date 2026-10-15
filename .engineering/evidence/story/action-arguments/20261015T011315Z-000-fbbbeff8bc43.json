@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-15T01:13:15Z",
+  "actor": "human:timo",
+  "artifact": "story:action-arguments",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "fmt --check; clippy -D warnings and cargo test --locked --no-fail-fast for b10x-canon, canon-docs, canon-cli on 04b9405 plus release edits: 113 test results ok, GATE_RC=0; canon-docs generate --check: 18 generated files current"
+  }
+}

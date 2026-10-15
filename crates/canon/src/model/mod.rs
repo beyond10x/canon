@@ -194,6 +194,12 @@ pub struct Action {
     pub effect: Option<EffectClass>,
     #[serde(default, deserialize_with = "present::defaulted")]
     pub may_produce: Vec<EvidenceProduction>,
+    /// The JSON Schema, in Canon's argument-schema dialect, that the action's arguments satisfy.
+    /// Absent: the action takes no arguments; a runner accepts only `{}`. Canon never validates
+    /// arguments at run time: the runner that calls the action validates them against the
+    /// schema, and `canon validate` holds the schema to the dialect (`action-arguments`).
+    #[serde(default, deserialize_with = "present::optional_json")]
+    pub arguments: Option<Json>,
 }
 
 /// One capability an action requires authority for.

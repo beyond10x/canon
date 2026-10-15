@@ -23,15 +23,18 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
 - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
   evidence match without a result has `"result": null`; a claim test without `is` has
   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-  true; absent lists and sections are empty. The seven exceptions are an evidence kind's
+  true; absent lists and sections are empty. The eight exceptions are an evidence kind's
   `max_age`, the `subject` of an evidence match or an order form, an evidence match's
-  `independent_on`, an obligation's `applicable_when`, the `invalidation` section, the `case`
+  `independent_on`, an obligation's `applicable_when`, an action's `arguments`, the
+  `invalidation` section, the `case`
   section and the `independence_dimensions` section: each written only when it is declared (a
   section only when it holds a rule, an input or a dimension), so the IR of a protocol that
   declares none of them is the IR it was before they existed. The `independence_dimensions`
   section is `{<id>: {"description": …}}`. The `case` section is
   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
   authored: `{"first": {"kind": …, "result": …}}` and `{"before": {"first": …, "then": …}}`.
+  An action's `arguments` is its JSON Schema as declared, the same JSON value, its object keys
+  sorted like every object's (story:action-arguments).
 - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
   it was written, and an input test `{"input": {"id": …, "in": [...]}}`. An outcome that
   requires an explicit decision has the requirement `{"decision": <name>}`, as written; any

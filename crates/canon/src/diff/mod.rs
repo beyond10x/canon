@@ -36,6 +36,8 @@
 //! | action effect changed | `BREAKING` |
 //! | evidence kind an action may produce added | `EXPANSION` |
 //! | evidence kind an action may produce removed | `BREAKING` |
+//! | action argument schema introduced or removed (absent, the action takes only `{}`) | `BREAKING` |
+//! | action argument schema narrowed, widened, rewritten or changed | by the rules in `diff/arguments.rs` |
 //! | outcome added | `EXPANSION` |
 //! | outcome removed, or its requirement changed | `BREAKING` |
 //! | invalidation rule added, or a claim added to what it invalidates | `TIGHTENING` |
@@ -113,13 +115,15 @@
 //! header, then artifacts, evidence kinds, claims, obligations, actions, outcomes, invalidation
 //! rules, case inputs and independence dimensions; within a section, by identifier; within a declaration, its description,
 //! then its fields in the order the IR declares them (an obligation's discharge predicate and
-//! applicability predicate; an action's precondition, capability requirements, effect and evidence
-//! it may produce; a case input's values), each list in identifier order, removals before
+//! applicability predicate; an action's precondition, capability requirements, effect, evidence
+//! it may produce and argument schema; a case input's values), each list in identifier order, removals before
 //! additions. Every IR declaration is destructured whole, so a field added to one does not compile
 //! here until the classifier says what a change to it is.
 //!
 //! Out of scope (story:semantic-diff): live-case impact, which needs case data Canon does not hold
 //! (design § 38), and constructs the kernel does not yet have.
+
+mod arguments;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
@@ -920,6 +924,7 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         requires: from_requires,
         effect: from_effect,
         may_produce: from_may_produce,
+        arguments: from_arguments,
     } = from;
     let Action {
         description: to_description,
@@ -927,6 +932,7 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         requires: to_requires,
         effect: to_effect,
         may_produce: to_may_produce,
+        arguments: to_arguments,
     } = to;
     changes.description(SECTION, id, from_description, to_description);
     changes.predicate(
@@ -968,6 +974,11 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         (Category::Breaking, "may no longer produce evidence"),
         (Category::Expansion, "may now produce evidence"),
     );
+    if let Some((category, what)) =
+        arguments::classify(from_arguments.as_ref(), to_arguments.as_ref())
+    {
+        changes.push(category, SECTION, id, what.to_owned());
+    }
 }
 
 fn invalidation_rule(
