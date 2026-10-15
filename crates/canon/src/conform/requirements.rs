@@ -34,7 +34,8 @@ fn refuse<T>(message: String) -> Result<T, CatalogueError> {
 /// Parses `canon-requirements/1` catalogue text. A text that does not deserialize is refused by
 /// kind and position only, as a registry file is; then the format, each requirement id (`CANON-`
 /// followed by an identifier, listed once) and each statement and source (not empty) are checked,
-/// in source order, and the first problem is the refusal.
+/// in source order, and the first problem is the refusal. A format or a key that is not one the
+/// catalogue admits is named by position, never quoted: the file may not be a catalogue at all.
 pub fn parse_catalogue(source: &str) -> Result<RequirementCatalogue, CatalogueError> {
     let catalogue: RequirementCatalogue = match serde_yaml_ng::from_str(source) {
         Ok(catalogue) => catalogue,
@@ -47,13 +48,10 @@ pub fn parse_catalogue(source: &str) -> Result<RequirementCatalogue, CatalogueEr
         }
     };
     if catalogue.format != REQUIREMENTS_FORMAT {
-        return refuse(format!(
-            "format is `{}`, expected `{REQUIREMENTS_FORMAT}`",
-            model::one_line(&catalogue.format)
-        ));
+        return refuse(format!("format is not `{REQUIREMENTS_FORMAT}`"));
     }
     let mut seen = BTreeSet::new();
-    for (id, requirement) in catalogue.requirements.iter() {
+    for (position, (id, requirement)) in catalogue.requirements.iter().enumerate() {
         let shown = model::one_line(id.as_str());
         let named = id
             .as_str()
@@ -61,7 +59,8 @@ pub fn parse_catalogue(source: &str) -> Result<RequirementCatalogue, CatalogueEr
             .is_some_and(model::is_identifier);
         if !named {
             return refuse(format!(
-                "requirement `{shown}` is not a {REQUIREMENT_PREFIX}* requirement"
+                "requirement {} is not a {REQUIREMENT_PREFIX}* requirement",
+                position + 1
             ));
         }
         if !seen.insert(id.as_str()) {
@@ -200,12 +199,13 @@ fn nondeterminism(compiled: &ir::Ir, inputs: &EvaluateInputs) -> Option<(&'stati
 }
 
 /// One run's output, as compared: the canonical `canon-decision/1` document, or the refusal code
-/// (`refusal: <code>`), or why a list could not be written back (`unserializable: <why>`).
+/// (`refusal: <code>`), or `unserializable` when a list could not be written back: that step was
+/// never evaluated and fails on its own, so its runs are equal whichever entry stopped it.
 fn output(compiled: &ir::Ir, inputs: &EvaluateInputs) -> String {
     match evaluation(compiled, inputs) {
         Ok(Ok(decision)) => crate::eval::render(&decision),
         Ok(Err(refusal)) => format!("refusal: {}\n", refusal.code()),
-        Err(why) => format!("unserializable: {why}\n"),
+        Err(_) => "unserializable\n".to_owned(),
     }
 }
 
@@ -251,15 +251,15 @@ mod tests {
                     "format: canon-requirements/2\nrequirements:\n{}",
                     entry("CANON-A-001", "implemented")
                 ),
-                "format is `canon-requirements/2`, expected `canon-requirements/1`",
+                "format is not `canon-requirements/1`",
             ),
             (
                 format!("{HEAD}{}", entry("CLAIM-001", "implemented")),
-                "requirement `CLAIM-001` is not a CANON-* requirement",
+                "requirement 1 is not a CANON-* requirement",
             ),
             (
                 format!("{HEAD}{}", entry("'CANON-A 1'", "implemented")),
-                "requirement `CANON-A 1` is not a CANON-* requirement",
+                "requirement 1 is not a CANON-* requirement",
             ),
             (
                 format!("{HEAD}{}", entry("CANON-A-001", "done")),
