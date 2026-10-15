@@ -99,6 +99,7 @@ version = "0.5.0"
 dependencies = [
  "b10x-canon",
  "clap",
+ "serde_yaml_ng",
 ]
 
 [[package]]

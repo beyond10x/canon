@@ -1,0 +1,19 @@
+format: protocol/1
+
+# The protocol every fixture scenario of the requirements checks compiles: one artifact, one
+# evidence kind, one claim a review of the change establishes.
+protocol:
+  id: requirements-fixture
+  revision: 1
+
+artifacts:
+  change: {}
+
+evidence_kinds:
+  review: {}
+
+claims:
+  change.reviewed:
+    true_when:
+      evidence:
+        kind: review

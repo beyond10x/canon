@@ -38,6 +38,11 @@ items:
     story: story:conformance-runner
     detail: Runs canon-conformance/1 scenarios that compile a fixture and evaluate a case, with authority decisions, explicit decisions and an evaluation instant when a step gives them.
     href: /docs/reference/conformance
+  - label: Normative conformance suite
+    area: Evaluation
+    story: story:conformance-suite
+    detail: The canon-requirements/1 catalogue lists the CANON-* requirements Canon implements; canon conform run --requirements fails when an implemented one has no passing scenario, a scenario covers one the catalogue omits, or an evaluate step gives another decision when rerun or with its evidence, authority and decisions reversed.
+    href: /docs/reference/conformance#the-requirements-catalogue
   - label: Evidence bound to revisions
     area: Evaluation
     story: story:evidence-revision-binding
