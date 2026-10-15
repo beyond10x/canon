@@ -15,7 +15,10 @@ relations:
 - depends_on: story:three-valued-claims
 - depends_on: story:invalidation-rules
 - depends_on: story:protocol-imports
+- depends_on: story:conformance-suite
 scope:
+- confidence: inferred
+  path: conformance/requirements.yaml
 - confidence: cited
   path: conformance/scenarios/case-composition.yaml
 - confidence: cited
@@ -40,7 +43,7 @@ scope:
   path: website/static/schemas/
 - confidence: inferred
   path: website/status.yaml
-revision: 9
+revision: 10
 ---
 ## Outcome
 
