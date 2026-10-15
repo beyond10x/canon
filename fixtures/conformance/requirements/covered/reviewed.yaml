@@ -1,0 +1,29 @@
+format: canon-conformance/1
+id: FIXTURE-REVIEWED
+covers: [CANON-FIXTURE-001]
+fixture: fixtures/conformance/requirements/protocol.yaml
+steps:
+  # One review of the change at its current revision establishes the claim.
+  - id: reviewed
+    evaluate:
+      case:
+        format: canon-case/1
+        id: CHANGE-1
+        protocol: requirements-fixture
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: review-1
+          kind: review
+          subject: change
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "claims": {
+            "change.reviewed": {
+              "value": "true"
+            }
+          }
+        }

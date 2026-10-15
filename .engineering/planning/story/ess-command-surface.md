@@ -13,12 +13,13 @@ relations:
 - depends_on: story:semantic-diff
 - serves: vision:O2
 - serves: vision:governed-autonomy
+- depends_on: story:conformance-suite
 scope:
 - confidence: inferred
   path: ess/domains/cli.yaml
 - confidence: inferred
   path: ess/system.yaml
-revision: 5
+revision: 6
 ---
 ## Outcome
 
@@ -56,5 +57,7 @@ Atlas ADR 0076; gap named while drafting story:ess-hard-gate (2026-10-04); Atlas
   may share a wave.
 - Order: after story:semantic-diff (existing edge); before story:protocol-imports and
   story:protocol-floor, which depend on this story and declare their command changes here.
-- Shared files: `ess/system.yaml` with any other story that adds a domain; none in the 2026-10-07
-  order does.
+- Shared files: `ess/system.yaml` with any other story that adds a domain. story:conformance-suite
+  adds the `canon.conform` domain there and the `--requirements` flag of `conform run`, so this
+  story depends_on it for those two surfaces, and its `conform run` declaration includes
+  `--requirements`.

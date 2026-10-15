@@ -1,0 +1,8 @@
+format: canon-requirements/1
+# The catalogue the fixture registries `covered/`, `unlisted/` and `nondeterministic/` are checked
+# against: the one requirement each of their scenarios covers. `unlisted/` covers another as well.
+requirements:
+  CANON-FIXTURE-001:
+    status: implemented
+    statement: A review of the change MUST establish that the change is reviewed.
+    source: fixtures/conformance/requirements/catalogue.yaml

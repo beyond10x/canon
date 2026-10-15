@@ -13,7 +13,10 @@ relations:
 - serves: vision:governed-autonomy
 - depends_on: story:evidence-revision-binding
 - depends_on: story:evidence-order-predicate
+- depends_on: story:conformance-suite
 scope:
+- confidence: inferred
+  path: conformance/requirements.yaml
 - confidence: cited
   path: conformance/scenarios/revision-ordering.yaml
 - confidence: cited
@@ -28,7 +31,7 @@ scope:
   path: ess/
 - confidence: cited
   path: fixtures/investigation/revision-ordering.yaml
-revision: 2
+revision: 3
 ---
 ## Outcome
 

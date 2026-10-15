@@ -58,6 +58,13 @@
       "area": "Evaluation"
     },
     {
+      "label": "Normative conformance suite",
+      "status": "shipped",
+      "detail": "The canon-requirements/1 catalogue lists the CANON-* requirements Canon implements; canon conform run --requirements fails when an implemented one has no passing scenario, a scenario covers one the catalogue omits, or an evaluate step gives another decision when rerun or with its evidence, authority and decisions reversed.",
+      "href": "/docs/reference/conformance#the-requirements-catalogue",
+      "area": "Evaluation"
+    },
+    {
       "label": "Evidence bound to revisions",
       "status": "shipped",
       "detail": "Evidence applies only to the current revision of the artifact it names; a record bound to another revision is listed as excluded under each claim that reaches its kind, and one about an undeclared artifact is refused; scenario CANON-EVIDENCE-001.",

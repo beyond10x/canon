@@ -1,0 +1,12 @@
+format: canon-requirements/1
+# Checked against the registry `covered/`, which covers CANON-FIXTURE-001 only: CANON-FIXTURE-002
+# is implemented and no scenario covers it, so the run reports it uncovered.
+requirements:
+  CANON-FIXTURE-001:
+    status: implemented
+    statement: A review of the change MUST establish that the change is reviewed.
+    source: fixtures/conformance/requirements/catalogue.yaml
+  CANON-FIXTURE-002:
+    status: implemented
+    statement: A requirement listed as implemented that no scenario covers.
+    source: fixtures/conformance/requirements/uncovered.yaml

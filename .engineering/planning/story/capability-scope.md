@@ -13,7 +13,10 @@ relations:
 - serves: vision:governed-autonomy
 - depends_on: story:action-admissibility
 - depends_on: story:invalidation-rules
+- depends_on: story:conformance-suite
 scope:
+- confidence: inferred
+  path: conformance/requirements.yaml
 - confidence: cited
   path: conformance/scenarios/capability-scope.yaml
 - confidence: cited
@@ -28,7 +31,7 @@ scope:
   path: ess/
 - confidence: cited
   path: fixtures/investigation/capability-scope.yaml
-revision: 3
+revision: 4
 ---
 ## Outcome
 

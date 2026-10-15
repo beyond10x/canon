@@ -16,6 +16,7 @@ relations:
 - depends_on: story:semantic-diff
 - depends_on: story:protocol-imports
 - depends_on: story:ess-command-surface
+- depends_on: story:conformance-suite
 scope:
 - confidence: inferred
   path: crates/canon-cli/src/floor.rs

@@ -1,0 +1,33 @@
+format: canon-conformance/1
+id: FIXTURE-NONDETERMINISTIC
+covers: [CANON-FIXTURE-001]
+fixture: fixtures/conformance/requirements/protocol.yaml
+steps:
+  # Two records, each refused for its own reason. The evaluator checks records in the order given
+  # and refuses at the first that fails: as written, `opinion-1`, of a kind the protocol does not
+  # declare (`undeclared-evidence-kind`); with the evidence list reversed, `review-1`, which records
+  # a revision of an upstream artifact the protocol does not declare (`undeclared-artifact`). The
+  # expectation holds as written, so the scenario passes; the reversed list gives another refusal,
+  # and the determinism check reports the step.
+  - id: two-faults
+    evaluate:
+      case:
+        format: canon-case/1
+        id: CHANGE-1
+        protocol: requirements-fixture
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: opinion-1
+          kind: opinion
+          subject: change
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: review-1
+          kind: review
+          subject: change
+          subject_revision: r1
+          upstream_revisions: {dataset: d1}
+    expect:
+      refusal: undeclared-evidence-kind

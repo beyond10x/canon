@@ -9,8 +9,14 @@ use b10x_canon::{conform, model};
 use crate::{REJECTED, UNREADABLE, read_text};
 
 /// Reads every `*.yaml` file of the registry directory in sorted file-name order, and hands the
-/// texts and a fixture reader to the library, which decides every verdict.
-pub(crate) fn run(scenarios: &Path) -> ExitCode {
+/// texts and a fixture reader to the library, which decides every verdict. With a requirements
+/// catalogue, the catalogue is read and parsed first, and the library checks the registry against
+/// it after the run.
+pub(crate) fn run(scenarios: &Path, requirements: Option<&Path>) -> ExitCode {
+    let catalogue = match requirements.map(read_catalogue).transpose() {
+        Ok(catalogue) => catalogue,
+        Err(code) => return code,
+    };
     // The directory as given, rendered as the report renders every path.
     let shown = model::one_line(&scenarios.display().to_string());
     let entries = match std::fs::read_dir(scenarios) {
@@ -44,9 +50,19 @@ pub(crate) fn run(scenarios: &Path) -> ExitCode {
         })
         .collect();
     let working_directory = std::env::current_dir().and_then(|dir| dir.canonicalize());
-    let report = conform::run_registry(&files, |fixture| read_fixture(&working_directory, fixture));
-    print!("{}", report.render());
-    if report.all_passed() {
+    let read = |fixture: &str| read_fixture(&working_directory, fixture);
+    let (rendered, passed) = match &catalogue {
+        None => {
+            let report = conform::run_registry(&files, read);
+            (report.render(), report.all_passed())
+        }
+        Some(catalogue) => {
+            let report = conform::run_registry_with_requirements(&files, read, catalogue);
+            (report.render(), report.all_passed())
+        }
+    };
+    print!("{rendered}");
+    if passed {
         ExitCode::SUCCESS
     } else {
         ExitCode::from(REJECTED)
@@ -72,4 +88,18 @@ fn read_fixture(
         return Err(conform::FixtureError::Outside);
     }
     read_text(&resolved).map_err(unreadable)
+}
+
+/// Reads and parses the `canon-requirements/1` catalogue: `error[unreadable]` and exit 2 when it
+/// cannot be read, `error[catalogue]` and exit 1 when it does not parse as one.
+fn read_catalogue(path: &Path) -> Result<model::RequirementCatalogue, ExitCode> {
+    let shown = model::one_line(&path.display().to_string());
+    let source = read_text(path).map_err(|error| {
+        eprintln!("error[unreadable]: {shown}: {error}");
+        ExitCode::from(UNREADABLE)
+    })?;
+    conform::parse_catalogue(&source).map_err(|error| {
+        eprintln!("error[catalogue]: {shown}: {error}");
+        ExitCode::from(REJECTED)
+    })
 }

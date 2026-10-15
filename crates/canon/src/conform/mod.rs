@@ -112,6 +112,60 @@
 //! or evidence entry that is not a document of its format is refused as `malformed-input`);
 //! otherwise `<what differed>` is `expected refusal `<code>`, the evaluation gave a decision` or
 //! `expected refusal `<code>`, the evaluation refused with `<code>`: <why>`.
+//!
+//! # The requirements catalogue
+//!
+//! The registry answers for a catalogue of the normative requirements Canon implements,
+//! `conformance/requirements.yaml`, a `canon-requirements/1` document:
+//!
+//! ```yaml
+//! format: canon-requirements/1
+//! requirements:
+//!   CANON-CLAIM-001:
+//!     status: implemented        # implemented | planned
+//!     statement: A required positive predicate evaluating to UNKNOWN MUST NOT be treated as satisfied.
+//!     source: design § 32        # where the requirement is stated
+//! ```
+//!
+//! Keys are `CANON-` followed by an identifier, each listed once; `status`, `statement` and
+//! `source` are required, and the statement and source are not empty. Unknown keys are refused. A
+//! `planned` requirement is stated but not yet implemented.
+//!
+//! `canon conform run --requirements <catalogue>` reads the catalogue before the registry; one
+//! that cannot be read exits 2 with `error[unreadable]: <path>: <why>` on standard error, and one
+//! that does not parse as a catalogue exits 1 with `error[catalogue]: <path>: <why>`, the
+//! catalogue reported by kind and position only, as a registry file is. Either way nothing is
+//! printed on standard output. Then the registry runs as above, and these checks follow:
+//!
+//! 1. **Coverage.** Every `implemented` requirement is covered by at least one scenario that
+//!    passed; otherwise `uncovered: requirement `<id>``. A `planned` requirement needs no
+//!    scenario; one a passing scenario covers is reported `planned requirement `<id>` is covered`,
+//!    so the catalogue is moved forward rather than drifting. Both in catalogue order.
+//! 2. **Unlisted.** A scenario that covers a requirement the catalogue does not list, passed or
+//!    not, is reported `unlisted: requirement `<id>` covered by scenario `<scenario>``, in registry
+//!    order.
+//! 3. **Determinism.** Every evaluate step of every scenario whose fixture compiles runs three
+//!    times: as written, again as written, and with its `evidence`, `authority` and `decisions`
+//!    lists in reverse order, an equivalent input, since none of the three is ordered by position
+//!    (CANON-DETERMINISM-001). The three outputs, each the canonical `canon-decision/1` document or
+//!    the refusal's code, must be byte-identical; otherwise `nondeterministic: scenario `<id>` step
+//!    `<step>`: <rerun|permuted> differs at line <n>`, `<n>` the first line, counted from 1, where
+//!    that run's output differs from the first. In registry and step order.
+//!
+//! The check lines come after the registry's lines and before its summary, and a second summary
+//! line follows it:
+//!
+//! ```text
+//! requirements: <n> implemented, <n> covered, <n> planned
+//! ```
+//!
+//! `covered` counts the implemented requirements a passing scenario covers. The run exits 0 only
+//! when the registry passed and no check failed, and 1 otherwise. Without `--requirements` the
+//! report is the registry's alone, byte for byte.
+
+mod requirements;
+
+pub use requirements::{CatalogueError, parse_catalogue};
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -495,32 +549,10 @@ fn evaluate_step(
         Ok(compiled) => compiled,
         Err(why) => return Some(why),
     };
-    let written = |list: &Option<Vec<serde_yaml_ng::Value>>, name: &str| {
-        list.as_deref()
-            .map(|list| list_text(name, list))
-            .transpose()
-    };
-    let authority = match written(&inputs.authority, "authority") {
-        Ok(authority) => authority,
+    let evaluation = match evaluation(&compiled, inputs) {
+        Ok(evaluation) => evaluation,
         Err(why) => return Some(why),
     };
-    let decisions = match written(&inputs.decisions, "decisions") {
-        Ok(decisions) => decisions,
-        Err(why) => return Some(why),
-    };
-    let supplied = eval::Supplied {
-        authority: authority.as_deref(),
-        at: inputs.at.as_deref(),
-        decisions: decisions.as_deref(),
-    };
-    let evaluation = eval::case_from_value(&inputs.case).and_then(|case| {
-        let evidence = inputs
-            .evidence
-            .iter()
-            .map(eval::evidence_from_value)
-            .collect::<Result<Vec<_>, _>>()?;
-        eval::evaluate_with(&compiled, &case, &evidence, supplied)
-    });
     match (expected, evaluation) {
         (EvaluateExpectation::Decision(expected), Ok(decision)) => {
             decision_difference(&decision, expected)
@@ -539,6 +571,35 @@ fn evaluate_step(
             refusal.code()
         )),
     }
+}
+
+/// Evaluates an evaluate step's inputs against the compiled fixture: the decision or the refusal,
+/// or why the `authority` or `decisions` list cannot be written back as YAML (see the module
+/// docs), in which case nothing is evaluated.
+fn evaluation(
+    compiled: &ir::Ir,
+    inputs: &EvaluateInputs,
+) -> Result<Result<model::Decision, eval::Refusal>, String> {
+    let written = |list: &Option<Vec<serde_yaml_ng::Value>>, name: &str| {
+        list.as_deref()
+            .map(|list| list_text(name, list))
+            .transpose()
+    };
+    let authority = written(&inputs.authority, "authority")?;
+    let decisions = written(&inputs.decisions, "decisions")?;
+    let supplied = eval::Supplied {
+        authority: authority.as_deref(),
+        at: inputs.at.as_deref(),
+        decisions: decisions.as_deref(),
+    };
+    Ok(eval::case_from_value(&inputs.case).and_then(|case| {
+        let evidence = inputs
+            .evidence
+            .iter()
+            .map(eval::evidence_from_value)
+            .collect::<Result<Vec<_>, _>>()?;
+        eval::evaluate_with(compiled, &case, &evidence, supplied)
+    }))
 }
 
 /// Why a fixture that [`model::parse`] refused does not parse, by kind and position only. A
@@ -811,10 +872,35 @@ pub enum FixtureError {
 /// file-name order). `read_fixture` returns a fixture's text, or why it returned none; it is the
 /// caller's, so this function reads nothing itself. A file whose scenario id an earlier file
 /// already used, or whose fixture resolves outside the working directory, is reported unreadable.
-pub fn run_registry<F>(files: &[ScenarioFile], mut read_fixture: F) -> Report
+pub fn run_registry<F>(files: &[ScenarioFile], read_fixture: F) -> Report
 where
     F: FnMut(&str) -> Result<String, FixtureError>,
 {
+    run_scenarios(files, read_fixture).0
+}
+
+/// Runs a registry as [`run_registry`] does, then checks it against a `canon-requirements/1`
+/// catalogue (see the module docs): coverage, requirements the catalogue does not list, and the
+/// determinism of every evaluate step.
+pub fn run_registry_with_requirements<F>(
+    files: &[ScenarioFile],
+    read_fixture: F,
+    catalogue: &model::RequirementCatalogue,
+) -> CheckedReport
+where
+    F: FnMut(&str) -> Result<String, FixtureError>,
+{
+    let (report, ran) = run_scenarios(files, read_fixture);
+    let checks = requirements::check(catalogue, &ran);
+    CheckedReport { report, checks }
+}
+
+/// [`run_registry`]'s report, and every scenario it parsed with its verdict and compiled fixture.
+fn run_scenarios<F>(files: &[ScenarioFile], mut read_fixture: F) -> (Report, Vec<requirements::Ran>)
+where
+    F: FnMut(&str) -> Result<String, FixtureError>,
+{
+    let mut ran = Vec::new();
     let mut report = Report::default();
     let mut seen: BTreeMap<String, &str> = BTreeMap::new();
     for file in files {
@@ -843,9 +929,12 @@ where
             continue;
         }
         seen.insert(scenario.id.clone(), &file.path);
-        let verdict = match read_fixture(&scenario.fixture) {
-            Ok(text) => run(&scenario, Ok(&text)),
-            Err(FixtureError::Unreadable(why)) => run(&scenario, Err(&why)),
+        let (verdict, compiled) = match read_fixture(&scenario.fixture) {
+            Ok(text) => (
+                run(&scenario, Ok(&text)),
+                compiled_fixture(&scenario, Ok(&text)).ok(),
+            ),
+            Err(FixtureError::Unreadable(why)) => (run(&scenario, Err(&why)), None),
             Err(FixtureError::Outside) => {
                 report.unreadable(
                     &file.path,
@@ -858,8 +947,37 @@ where
             }
         };
         report.scenario(&scenario.id, &verdict);
+        ran.push(requirements::Ran {
+            passed: verdict == Verdict::Passed,
+            scenario,
+            compiled,
+        });
     }
-    report
+    (report, ran)
+}
+
+/// The report `canon conform run --requirements` prints: the registry's lines, the line of each
+/// failed check, the registry's summary and the `requirements:` summary.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckedReport {
+    report: Report,
+    checks: requirements::Checks,
+}
+
+impl CheckedReport {
+    /// Whether the registry passed ([`Report::all_passed`]) and every check passed.
+    pub fn all_passed(&self) -> bool {
+        self.report.all_passed() && self.checks.failures == 0
+    }
+
+    /// The report text, the two summary lines last.
+    pub fn render(&self) -> String {
+        format!(
+            "{}{}",
+            self.report.render_with(&self.checks.lines),
+            self.checks.summary()
+        )
+    }
 }
 
 /// The report `canon conform run` prints: one line per file, then a summary line.
@@ -911,13 +1029,18 @@ impl Report {
 
     /// The report text, summary line last.
     pub fn render(&self) -> String {
+        self.render_with("")
+    }
+
+    /// The report text with `checks`, lines that each end in a newline, before the summary line.
+    fn render_with(&self, checks: &str) -> String {
         let empty = if self.is_empty() {
             "no scenario ran: the registry holds no scenario file\n"
         } else {
             ""
         };
         format!(
-            "{}{empty}conform: {} passed, {} failed, {} unreadable\n",
+            "{}{empty}{checks}conform: {} passed, {} failed, {} unreadable\n",
             self.lines, self.passed, self.failed, self.unreadable
         )
     }
@@ -1559,5 +1682,136 @@ mod tests {
              conform: 0 passed, 0 failed, 1 unreadable\n"
         );
         assert!(!report.all_passed());
+    }
+
+    fn catalogue(entries: &str) -> model::RequirementCatalogue {
+        parse_catalogue(&format!(
+            "format: canon-requirements/1\nrequirements:{entries}\n"
+        ))
+        .expect("catalogue parses")
+    }
+
+    fn checked(files: &[ScenarioFile], entries: &str) -> CheckedReport {
+        run_registry_with_requirements(files, |_| Ok(PROTOCOL.to_owned()), &catalogue(entries))
+    }
+
+    fn one_file(text: String) -> [ScenarioFile; 1] {
+        [ScenarioFile {
+            path: "dir/a.yaml".to_owned(),
+            text: Ok(text),
+        }]
+    }
+
+    /// The scenario of [`scenario_text`] covers CANON-DETERMINISM-001 and passes.
+    #[test]
+    fn a_checked_registry_reports_coverage_between_the_scenarios_and_both_summaries() {
+        let files = one_file(scenario_text("S", &compiled()));
+        let entry = |id: &str, status: &str| {
+            format!("\n  {id}: {{status: {status}, statement: s, source: d}}")
+        };
+
+        let covered = checked(&files, &entry("CANON-DETERMINISM-001", "implemented"));
+        assert_eq!(
+            covered.render(),
+            format!(
+                "{}requirements: 1 implemented, 1 covered, 0 planned\n",
+                run_registry(&files, |_| Ok(PROTOCOL.to_owned())).render()
+            )
+        );
+        assert!(covered.all_passed());
+
+        let uncovered = checked(
+            &files,
+            &format!(
+                "{}{}{}",
+                entry("CANON-X-001", "implemented"),
+                entry("CANON-DETERMINISM-001", "implemented"),
+                entry("CANON-Y-001", "planned")
+            ),
+        );
+        assert_eq!(
+            uncovered.render(),
+            "passed: scenario `S`\n\
+             uncovered: requirement `CANON-X-001`\n\
+             conform: 1 passed, 0 failed, 0 unreadable\n\
+             requirements: 2 implemented, 1 covered, 1 planned\n"
+        );
+        assert!(!uncovered.all_passed());
+
+        let planned = checked(&files, &entry("CANON-DETERMINISM-001", "planned"));
+        assert_eq!(
+            planned.render(),
+            "passed: scenario `S`\n\
+             planned requirement `CANON-DETERMINISM-001` is covered\n\
+             conform: 1 passed, 0 failed, 0 unreadable\n\
+             requirements: 0 implemented, 0 covered, 1 planned\n"
+        );
+        assert!(!planned.all_passed());
+
+        let unlisted = checked(&files, " {}");
+        assert_eq!(
+            unlisted.render(),
+            "passed: scenario `S`\n\
+             unlisted: requirement `CANON-DETERMINISM-001` covered by scenario `S`\n\
+             conform: 1 passed, 0 failed, 0 unreadable\n\
+             requirements: 0 implemented, 0 covered, 0 planned\n"
+        );
+        assert!(!unlisted.all_passed());
+    }
+
+    /// A requirement only a failing scenario covers is not covered.
+    #[test]
+    fn a_failing_scenario_covers_nothing() {
+        let files = one_file(scenario_text("S", "not the ir\n"));
+        let report = checked(
+            &files,
+            "\n  CANON-DETERMINISM-001: {status: implemented, statement: s, source: d}",
+        );
+        assert!(
+            report
+                .render()
+                .contains("uncovered: requirement `CANON-DETERMINISM-001`\n"),
+            "{}",
+            report.render()
+        );
+        assert!(!report.all_passed());
+    }
+
+    /// The evaluator checks evidence records in the order given and refuses at the first that
+    /// fails, so two records refused for different reasons give a different refusal code when the
+    /// list is reversed: the step is reported, although the scenario passes.
+    #[test]
+    fn an_evaluate_step_whose_reversed_evidence_differs_is_nondeterministic() {
+        let evidence = "      evidence:\n\
+             \x20       - {format: canon-evidence/1, id: e1, kind: k, subject: a, subject_revision: r1}\n\
+             \x20       - {format: canon-evidence/1, id: e2, kind: 'k k', subject: a, subject_revision: r1}\n";
+        let source = format!(
+            "format: canon-conformance/1\nid: S\ncovers: [CANON-DETERMINISM-001]\nfixture: p.yaml\nsteps:\n  - id: e\n    evaluate:\n      case: {CASE}\n{evidence}    expect:\n      refusal: undeclared-evidence-kind\n"
+        );
+        let files = one_file(source);
+        let report = checked(
+            &files,
+            "\n  CANON-DETERMINISM-001: {status: implemented, statement: s, source: d}",
+        );
+        assert_eq!(
+            report.render(),
+            "passed: scenario `S`\n\
+             nondeterministic: scenario `S` step `e`: permuted differs at line 1\n\
+             conform: 1 passed, 0 failed, 0 unreadable\n\
+             requirements: 1 implemented, 1 covered, 0 planned\n"
+        );
+        assert!(!report.all_passed());
+
+        // A step whose three runs give one decision is not reported.
+        let deterministic = format!(
+            "format: canon-conformance/1\nid: S\ncovers: [CANON-DETERMINISM-001]\nfixture: p.yaml\nsteps:\n  - id: e\n    evaluate:\n      case: {CASE}\n      evidence: []\n    expect:\n      decision: |\n{DECISION}"
+        );
+        assert!(
+            checked(
+                &one_file(deterministic),
+                "\n  CANON-DETERMINISM-001: {status: implemented, statement: s, source: d}",
+            )
+            .all_passed()
+        );
     }
 }

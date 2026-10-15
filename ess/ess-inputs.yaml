@@ -1,8 +1,9 @@
 format: ess-inputs/2
-requires: ess 0.59.0
+requires: ess 0.60.0
 specification:
   - system.yaml
   - domains/protocol.yaml
   - domains/check.yaml
   - domains/expr.yaml
+  - domains/conform.yaml
 scenarios: []

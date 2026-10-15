@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-15T10:32:37Z",
+  "actor": "human:timo",
+  "artifact": "story:conformance-suite",
+  "kind": "story",
+  "revision": 14,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test -p b10x-canon and -p canon-cli --locked --no-fail-fast on 21a147c: all ok, adversary_conformance_suite 13 and adversary_conformance_suite_cli 6 passed; conform_run_checks_requirements ok; canon conform run --requirements conformance/requirements.yaml: 14 passed, requirements: 15 implemented, 15 covered, 0 planned; clippy -D warnings clean; canon-docs generate --check current"
+  }
+}

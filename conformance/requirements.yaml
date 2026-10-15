@@ -1,0 +1,90 @@
+format: canon-requirements/1
+# The normative requirements Canon implements (Atlas ADR 0067): each `implemented` one is covered by
+# at least one passing scenario of the registry conformance/scenarios/, which
+# `canon conform run --requirements conformance/requirements.yaml` checks. A statement comes from
+# docs/design/canon-protocol-calculus-design.md § 32 where it states the requirement, else from the
+# story that introduced its scenario, named in `source`. A requirement stated but not yet
+# implemented is `planned`; none is listed today.
+requirements:
+  CANON-CLAIM-001:
+    status: implemented
+    statement: A required positive predicate evaluating to UNKNOWN MUST NOT be treated as satisfied.
+    source: design § 32
+  CANON-CLAIM-002:
+    status: implemented
+    statement: A required positive predicate evaluating to FALSE MUST NOT be treated as satisfied.
+    source: design § 32
+  CANON-EVIDENCE-001:
+    status: implemented
+    statement: >-
+      Evidence bound to a subject revision MUST NOT establish a current-revision claim after the
+      subject revision changes.
+    source: design § 32
+  CANON-EVIDENCE-002:
+    status: implemented
+    statement: >-
+      Expired evidence MUST become inapplicable or UNKNOWN; expiration alone MUST NOT imply FALSE.
+    source: design § 32
+  CANON-EVIDENCE-003:
+    status: implemented
+    statement: >-
+      An evidence match that names the artifact its record must be about MUST NOT be satisfied by a
+      record about another artifact.
+    source: story:subject-bound-evidence-match
+  CANON-AUTHORITY-001:
+    status: implemented
+    statement: >-
+      An action or transition with an unsatisfied authority requirement MUST NOT be treated as
+      admissible.
+    source: design § 32
+  CANON-INDEPENDENCE-001:
+    status: implemented
+    statement: >-
+      Evidence failing a declared independence relation MUST NOT satisfy a requirement that demands
+      such independence.
+    source: design § 32
+  CANON-OUTCOME-001:
+    status: implemented
+    statement: A Case MUST terminate only through an outcome declared by its governing protocol.
+    source: design § 32
+  CANON-OUTCOME-002:
+    status: implemented
+    statement: >-
+      An outcome that requires an explicit decision MUST be legitimate only with a decision of that
+      name, for that outcome, taken at the case snapshot's current revision.
+    source: story:decision-outcomes
+  CANON-INVALIDATION-001:
+    status: implemented
+    statement: >-
+      Changing a bound upstream artifact MUST invalidate dependent claims whose only support was
+      bound to the previous revision.
+    source: design § 32
+  CANON-DETERMINISM-001:
+    status: implemented
+    statement: >-
+      Equivalent normalized protocol, case, evidence, authority, and evaluation-time inputs MUST
+      produce equivalent normalized evaluation outputs.
+    source: design § 32
+  CANON-EXPLAIN-001:
+    status: implemented
+    statement: >-
+      Every non-TRUE claim, open obligation, non-admissible action and blocked outcome MUST carry a
+      structured explanation down to the evidence records that applied or were excluded, each
+      exclusion with its reason.
+    source: story:explanation
+  CANON-OBLIGATION-001:
+    status: implemented
+    statement: An obligation whose discharge predicate is not TRUE MUST be open.
+    source: story:obligations
+  CANON-INPUT-001:
+    status: implemented
+    statement: >-
+      An obligation whose applicability predicate over case inputs and claims is FALSE MUST NOT hold
+      back an outcome; one whose applicability is UNKNOWN MUST stay open.
+    source: story:case-inputs
+  CANON-ORDER-001:
+    status: implemented
+    statement: >-
+      A predicate over evidence order MUST read the history of records, including those bound to a
+      superseded revision, and MUST be UNKNOWN while the order is not established.
+    source: story:evidence-order-predicate

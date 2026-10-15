@@ -11,6 +11,7 @@ relations:
 - depends_on: story:action-admissibility
 - serves: vision:O2
 - serves: vision:governed-autonomy
+- depends_on: story:conformance-suite
 scope:
 - confidence: cited
   path: crates/canon-cli/src/main.rs

@@ -15,7 +15,10 @@ relations:
 - serves: vision:governed-autonomy
 - depends_on: story:case-inputs
 - depends_on: story:ess-command-surface
+- depends_on: story:conformance-suite
 scope:
+- confidence: inferred
+  path: conformance/requirements.yaml
 - confidence: inferred
   path: conformance/scenarios/imports.yaml
 - confidence: inferred
@@ -48,7 +51,7 @@ scope:
   path: website/static/schemas/
 - confidence: inferred
   path: website/status.yaml
-revision: 7
+revision: 9
 ---
 ## Outcome
 
@@ -103,8 +106,11 @@ copying the library protocol (https://github.com/beyond10x/canon/issues/5, gap 1
   to this one; `aep plan artifact waves` keeps each in a wave of its own by the shared directories.
 - Shared files named for the waves: `crates/canon-cli/src/lib.rs` and `crates/canon-cli/src/main.rs`
   with story:canon-mutate (the `Command` enum and its dispatch), and `crates/canon/src/conform/` with
-  story:conformance-suite. Neither has an edge to this story; `waves` reports both collisions and
-  never puts the pair in one wave.
+  story:conformance-suite. story:canon-mutate has no edge to this story; `waves` reports that
+  collision and never puts the pair in one wave. story:conformance-suite also shares `lib.rs`,
+  `main.rs`, `website/docs/reference/` and `website/status.yaml`, and this story depends_on it for
+  those files; the scenario this story adds (CANON-IMPORT-001) is listed in
+  `conformance/requirements.yaml`, which the suite creates.
 
 ## Scope
 

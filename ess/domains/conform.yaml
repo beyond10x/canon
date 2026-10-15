@@ -1,0 +1,60 @@
+# Specified first (story:conformance-suite, Atlas ADR 0080): the canon-requirements/1 catalogue
+# `canon conform run --requirements` reads, the normative requirements Canon implements or plans,
+# each by its CANON-* id. Which scenarios cover a requirement, and whether the registry is
+# deterministic, is Canon's own conformance suite (crates/canon/src/conform/), not this file.
+# crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
+domain: canon.conform
+
+summary: >-
+  The catalogue of normative requirements the conformance suite answers for: each requirement's
+  status, statement and where it is stated. canon conform run checks that every implemented
+  requirement is covered by a passing scenario and that no scenario covers one the catalogue does
+  not list.
+
+naming:
+  wire: conform
+  display: Conform
+
+types:
+  # A requirement id: CANON- followed by an identifier, as a scenario's covers lists it.
+  # read from: conformance/requirements.yaml:9
+  - name: canon.conform.RequirementId
+    kind: newtype
+    of: String
+
+  # The canon-requirements/1 document: its format and its requirements, keyed by id, each once.
+  # read from: conformance/requirements.yaml:1-8
+  - name: canon.conform.RequirementCatalogue
+    kind: struct
+    fields:
+      # The only accepted value is canon-requirements/1.
+      # read from: conformance/requirements.yaml:1
+      - name: format
+        type: String
+      # read from: conformance/requirements.yaml:8-12
+      - name: requirements
+        type: Map<canon.conform.RequirementId, canon.conform.NormativeRequirement>
+
+  # One normative requirement.
+  # read from: conformance/requirements.yaml:9-12
+  - name: canon.conform.NormativeRequirement
+    kind: struct
+    fields:
+      # read from: conformance/requirements.yaml:10
+      - name: status
+        type: canon.conform.RequirementStatus
+      # What the requirement demands, in the words of its source.
+      # read from: conformance/requirements.yaml:11
+      - name: statement
+        type: String
+      # Where the requirement is stated: a section of the design, or the story that introduced it.
+      # read from: conformance/requirements.yaml:12
+      - name: source
+        type: String
+
+  # implemented: a passing scenario must cover it. planned: stated, not yet implemented; a passing
+  # scenario covering it fails the run, so the catalogue moves forward.
+  # read from: conformance/requirements.yaml:10
+  - name: canon.conform.RequirementStatus
+    kind: enum
+    variants: ["implemented", "planned"]
