@@ -37,7 +37,7 @@ use serde_json::{Map, Value};
 
 /// How deep schemas nest: far below the bound on predicates, since every pass over a schema value
 /// (parsing, writing, reading back, comparing and dropping it) recurses once per level.
-pub(crate) const MAX_SCHEMA_DEPTH: usize = 64;
+pub(crate) const MAX_SCHEMA_DEPTH: usize = 32;
 
 /// The seven types, each a keyword's applicability.
 const TYPES: [&str; 7] = [
@@ -346,7 +346,7 @@ fn of_type(value: &Value, ty: &str) -> bool {
 }
 
 /// JSON Schema's equality of two scalars: numbers by value, so `1` and `1.0` are one value.
-fn same(left: &Value, right: &Value) -> bool {
+pub(crate) fn same(left: &Value, right: &Value) -> bool {
     match (left, right) {
         (Value::Number(left), Value::Number(right)) => {
             match (integer_of(left), integer_of(right)) {

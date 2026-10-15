@@ -50,6 +50,7 @@ use std::collections::BTreeSet;
 use serde_json::{Map, Value};
 
 use super::Category;
+use crate::validate::arguments::same;
 
 /// The category and line of a change to an action's `arguments`, or `None` when the two are equal.
 pub(super) fn classify(
@@ -166,8 +167,12 @@ impl Directions {
             (Some(_), None) => self.widens = true,
             (Some(from), Some(to)) => match (from.as_array(), to.as_array()) {
                 (Some(from), Some(to)) => {
-                    self.narrows |= from.iter().any(|value| !to.contains(value));
-                    self.widens |= to.iter().any(|value| !from.contains(value));
+                    self.narrows |= from
+                        .iter()
+                        .any(|value| !to.iter().any(|other| same(value, other)));
+                    self.widens |= to
+                        .iter()
+                        .any(|value| !from.iter().any(|other| same(value, other)));
                 }
                 _ => self.undecided = true,
             },

@@ -11,6 +11,7 @@ tasks:
       - cargo fmt --all --check
       - cargo clippy --workspace --all-targets --locked -- -D warnings
       - cargo test --workspace --locked
+      - cargo test -p b10x-canon --locked --test adversary_action_arguments
       - task: docs-check
 
   ess-gate:

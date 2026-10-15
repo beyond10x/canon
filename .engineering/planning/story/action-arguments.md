@@ -28,7 +28,7 @@ scope:
   path: fixtures/investigation/action-arguments.yaml
 - confidence: cited
   path: website/
-revision: 14
+revision: 15
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-14T21:46:07Z", actor: "human:timo", revision: 11}
 - {from: "proposed", to: "active", at: "2026-10-14T21:46:07Z", actor: "human:timo", revision: 12}
@@ -65,7 +65,7 @@ reference at all.
   `anyOf`, `oneOf`, `not`, `if`/`then`/`else`, `patternProperties`, `pattern`, `format`, `const`,
   `exclusiveMinimum`, `exclusiveMaximum`, a list-valued `type`, a schema-valued
   `additionalProperties`, a keyword on a type it does not apply to, and any unknown keyword.
-- Schemas nest at most 64 deep, far below the bound on predicates: every pass over a schema value
+- Schemas nest at most 32 deep, far below the bound on predicates and within the YAML parser's recursion limit through `properties` (two YAML levels per schema level): every pass over a schema value
   (parsing, writing, reading back, comparing, dropping) recurses once per level.
 
 Validation problem code: `action-arguments`, one problem per offending keyword, its message naming

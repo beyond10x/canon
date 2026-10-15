@@ -160,7 +160,7 @@ schema in it is a valid 2020-12 schema with the same meaning, so a runner can ha
 - `string`: `minLength`, `maxLength`.
 - `integer` and `number`: `minimum`, `maximum`, integers.
 - Every length and count bound is a non-negative integer, and a minimum is at most its maximum.
-- Schemas nest at most 64 deep: the top level is one level, and each schema in `properties` or `items` one more.
+- Schemas nest at most 32 deep: the top level is one level, and each schema in `properties` or `items` one more.
 
 Anything else is refused: `$ref`, `$defs`, `$schema`, `$id`, `allOf`, `anyOf`, `oneOf`, `not`,
 `if`/`then`/`else`, `patternProperties`, `pattern`, `format`, `const`, `exclusiveMinimum`,

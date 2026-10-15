@@ -51,7 +51,7 @@
 //! Within a section, entries come in the order they are written. Every message renders document
 //! text on one line. The same document always yields the same problems in the same order.
 
-mod arguments;
+pub(crate) mod arguments;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
