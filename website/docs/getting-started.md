@@ -5,11 +5,11 @@ description: Build the canon command line from source, then validate, compile an
 
 # Getting started
 
-Install source release `0.5.0`. You need a current stable Rust toolchain;
+Install source release `0.6.0`. You need a current stable Rust toolchain;
 the code uses the 2024 edition. The `canon-cli` crate installs a binary named `canon`.
 
 ```bash
-git clone --branch 0.5.0 https://github.com/beyond10x/canon.git
+git clone --branch 0.6.0 https://github.com/beyond10x/canon.git
 cd canon
 cargo install --locked --path crates/canon-cli
 canon --help
@@ -63,6 +63,14 @@ canon conform run
 From the repository root this runs every [`canon-conformance/1` scenario](./reference/conformance.md)
 in `conformance/scenarios`. Scenarios can compile a fixture and evaluate a case, with the
 authority decisions and evaluation instant a step names.
+
+```bash
+canon conform run --requirements conformance/requirements.yaml
+```
+
+adds the checks against the [requirements catalogue](./reference/conformance.md#the-requirements-catalogue):
+every requirement Canon implements is covered by a passing scenario, and every evaluation gives the
+same decision when run again and with its evidence, authority and decisions reversed.
 
 ## Next
 

@@ -14,7 +14,7 @@ case under one protocol it is meant to answer: what is known, what is unknown, w
 remain open, which actions are admissible, which need authority, and whether an outcome has been
 earned.
 
-:::note[Source release 0.5.0]
+:::note[Source release 0.6.0]
 
 Canon is early. Today it parses, validates and compiles protocols, and runs conformance
 scenarios. `canon evaluate` gives every claim of a case a three-valued value, applying evidence

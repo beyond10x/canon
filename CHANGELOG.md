@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## [0.6.0] - 2026-10-15
+
+A normative requirements catalogue the conformance suite is checked against. Install the CLI or
+depend on the libraries from Git tag `0.6.0`.
+
 - Add the `canon-requirements/1` catalogue, `conformance/requirements.yaml`: the 15 `CANON-*`
   requirements Canon implements, each with its status (`implemented` or `planned`), statement and
   source. ESS declares it in the new domain `canon.conform`.
@@ -12,6 +17,9 @@
   `authority` and `decisions` lists reversed (`nondeterministic: …`). The report ends with
   `requirements: <n> implemented, <n> covered, <n> planned`. Without the flag the report is
   unchanged. `task check` runs the registry with the catalogue.
+- A catalogue that is refused is named by kind and position only: a wrong `format` or a key that
+  is not a `CANON-` id is not quoted back.
+- The specification is held to ess 0.60.0, which CI installs.
 
 ## [0.5.0] - 2026-10-15
 

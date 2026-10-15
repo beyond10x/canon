@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:conformance-suite
 kind: story
-status: active
+status: implemented
 title: Run the normative conformance suite
 refs:
 - provider: taskboard
@@ -56,10 +56,11 @@ scope:
   path: website/docs/reference/
 - confidence: inferred
   path: website/status.yaml
-revision: 14
+revision: 15
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-04T00:00:50Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":5}}}
 - {from: "proposed", to: "active", at: "2026-10-15T04:11:44Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"review_outcome":9}}}
+- {from: "active", to: "implemented", at: "2026-10-15T10:32:37Z", actor: "human:timo", revision: 15, decided_on: {"recorded":{"test_result":1,"review_outcome":11}}}
 ---
 ## Outcome
 
