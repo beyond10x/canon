@@ -30,7 +30,9 @@ fn err(output: &Output) -> String {
 
 /// A fresh directory under this test target's own scratch area (inside the tree's `target/`).
 fn scratch(name: &str) -> PathBuf {
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("adversary_conformance_suite").join(name);
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("adversary_conformance_suite")
+        .join(name);
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("scratch directory");
     dir
@@ -60,13 +62,20 @@ fn a_directory_given_as_the_catalogue_exits_2() {
 #[test]
 fn a_file_that_is_not_a_catalogue_exits_1_by_kind_and_position() {
     let dir = scratch("not_a_catalogue");
-    std::fs::write(dir.join("c.yaml"), "format: canon-requirements/1\nrequirements: {}\nSECRET: 1\n")
-        .unwrap();
+    std::fs::write(
+        dir.join("c.yaml"),
+        "format: canon-requirements/1\nrequirements: {}\nSECRET: 1\n",
+    )
+    .unwrap();
     std::fs::create_dir_all(dir.join("s")).unwrap();
     let output = canon(&dir, &["--scenarios", "s", "--requirements", "c.yaml"]);
     assert_eq!(output.status.code(), Some(1), "{}", err(&output));
     assert_eq!(out(&output), "");
-    assert!(err(&output).starts_with("error[catalogue]: c.yaml: "), "{}", err(&output));
+    assert!(
+        err(&output).starts_with("error[catalogue]: c.yaml: "),
+        "{}",
+        err(&output)
+    );
     assert!(!err(&output).contains("SECRET"), "{}", err(&output));
 }
 
@@ -81,7 +90,10 @@ fn the_real_registry_with_the_flag_is_the_plain_report_and_one_line() {
     assert_eq!(checked.status.code(), Some(0), "{}", out(&checked));
     assert_eq!(
         out(&checked),
-        format!("{}requirements: 15 implemented, 15 covered, 0 planned\n", out(&plain))
+        format!(
+            "{}requirements: 15 implemented, 15 covered, 0 planned\n",
+            out(&plain)
+        )
     );
     assert_eq!(err(&checked), "");
 }
@@ -93,7 +105,10 @@ fn without_the_flag_no_check_runs() {
     let root = repository_root();
     let output = canon(
         &root,
-        &["--scenarios", "fixtures/conformance/requirements/nondeterministic"],
+        &[
+            "--scenarios",
+            "fixtures/conformance/requirements/nondeterministic",
+        ],
     );
     assert_eq!(output.status.code(), Some(0), "{}", out(&output));
     assert_eq!(

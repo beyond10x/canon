@@ -90,13 +90,20 @@ fn a_refused_catalogue_does_not_echo_its_values() {
 #[test]
 fn an_unknown_key_inside_a_requirement_is_refused() {
     let source = "format: canon-requirements/1\nrequirements:\n  CANON-A-001:\n    status: implemented\n    statement: s\n    source: d\n    owner: someone\n";
-    let message = parse_catalogue(source).expect_err("unknown key refused").to_string();
+    let message = parse_catalogue(source)
+        .expect_err("unknown key refused")
+        .to_string();
     assert!(!message.contains("owner"), "{message}");
 }
 
 #[test]
 fn malformed_ids_are_refused() {
-    for id in ["'CANON-'", "'CANON-\u{200b}'", "canon-A-001", "' CANON-A-001'"] {
+    for id in [
+        "'CANON-'",
+        "'CANON-\u{200b}'",
+        "canon-A-001",
+        "' CANON-A-001'",
+    ] {
         let source = format!(
             "format: canon-requirements/1\nrequirements:\n  {id}: {{status: implemented, statement: s, source: d}}\n"
         );
@@ -107,8 +114,13 @@ fn malformed_ids_are_refused() {
 #[test]
 fn a_duplicate_id_spelled_two_ways_is_refused() {
     let source = "format: canon-requirements/1\nrequirements:\n  CANON-A-001: {status: implemented, statement: s, source: d}\n  \"CANON-A-001\": {status: planned, statement: s, source: d}\n";
-    let message = parse_catalogue(source).expect_err("duplicate refused").to_string();
-    assert_eq!(message, "requirement `CANON-A-001` is listed more than once");
+    let message = parse_catalogue(source)
+        .expect_err("duplicate refused")
+        .to_string();
+    assert_eq!(
+        message,
+        "requirement `CANON-A-001` is listed more than once"
+    );
 }
 
 #[test]
@@ -155,7 +167,10 @@ fn a_planned_requirement_only_a_failing_scenario_covers_is_not_reported() {
         &[("CANON-A-001", "planned")],
     );
     assert!(!text.contains("planned requirement"), "{text}");
-    assert!(text.ends_with("requirements: 0 implemented, 0 covered, 1 planned\n"), "{text}");
+    assert!(
+        text.ends_with("requirements: 0 implemented, 0 covered, 1 planned\n"),
+        "{text}"
+    );
 }
 
 #[test]
@@ -202,7 +217,10 @@ fn a_passing_registry_with_the_flag_is_the_plain_report_plus_one_line() {
     let files = [file("a", passing("S", "CANON-A-001"))];
     let protocol = protocol();
     let plain = run_registry(&files, |_| Ok(protocol.clone())).render();
-    assert_eq!(plain, "passed: scenario `S`\nconform: 1 passed, 0 failed, 0 unreadable\n");
+    assert_eq!(
+        plain,
+        "passed: scenario `S`\nconform: 1 passed, 0 failed, 0 unreadable\n"
+    );
     let (text, passed) = run(&files, &[("CANON-A-001", "implemented")]);
     assert!(passed);
     assert_eq!(
