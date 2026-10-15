@@ -207,6 +207,7 @@ Run every `canon-conformance/1` scenario of a registry directory and report each
 | Option | Required | Default | Meaning |
 |---|---|---|---|
 | `--scenarios <SCENARIOS>` | no | `conformance/scenarios` | The registry directory; every `*.yaml` file in it is one scenario |
+| `--requirements <REQUIREMENTS>` | no | none | A `canon-requirements/1` catalogue of the normative requirements the registry answers for. After the run, every implemented requirement must be covered by a passing scenario, no scenario may cover one the catalogue does not list, no planned one may be covered, and every evaluate step must give byte-identical output when run again and with its `evidence`, `authority` and `decisions` lists reversed. Adds a `requirements:` summary line |
 
 ```text
 Run every `canon-conformance/1` scenario of a registry directory and report each
@@ -219,6 +220,9 @@ Options:
 
           [default: conformance/scenarios]
 
+      --requirements <REQUIREMENTS>
+          A `canon-requirements/1` catalogue of the normative requirements the registry answers for. After the run, every implemented requirement must be covered by a passing scenario, no scenario may cover one the catalogue does not list, no planned one may be covered, and every evaluate step must give byte-identical output when run again and with its `evidence`, `authority` and `decisions` lists reversed. Adds a `requirements:` summary line
+
   -h, --help
           Print help
 ```
@@ -228,6 +232,6 @@ Options:
 | Status | Meaning |
 |---|---|
 | `0` | Success: the document is valid or compiled, the case was evaluated, every conformance scenario ran and passed, a check found nothing, or the scenarios were generated. |
-| `1` | Rejected: a document was read and rejected, an evaluation or a check was refused, a conformance scenario failed or was unreadable, no scenario ran, a check found something, or generation was refused. |
+| `1` | Rejected: a document was read and rejected, an evaluation or a check was refused, a conformance scenario failed or was unreadable, no scenario ran, a requirement check failed, a check found something, or generation was refused. |
 | `2` | Unreadable: an input file or directory could not be read, or an output file could not be written. |
 | `64` | Usage error: the command line was not understood (an unknown command or option, a missing required option, or a value that cannot be parsed); nothing was read. |

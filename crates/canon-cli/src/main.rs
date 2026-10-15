@@ -36,8 +36,12 @@ fn main() -> ExitCode {
         Command::Validate { path } => validate_command(&path),
         Command::Compile { path } => compile_command(&path),
         Command::Conform {
-            command: ConformCommand::Run { scenarios },
-        } => conform::run(&scenarios),
+            command:
+                ConformCommand::Run {
+                    scenarios,
+                    requirements,
+                },
+        } => conform::run(&scenarios, requirements.as_deref()),
         Command::Evaluate {
             ir,
             case,

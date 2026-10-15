@@ -116,3 +116,48 @@ A step expecting `refusal` passes when the evaluation is refused with exactly th
 or evidence entry that is not a document of its format is refused as `malformed-input`);
 otherwise `<what differed>` is `expected refusal `&lt;code&gt;`, the evaluation gave a decision` or
 `expected refusal `&lt;code&gt;`, the evaluation refused with `&lt;code&gt;`: <why>`.
+
+## The requirements catalogue
+
+The registry answers for a catalogue of the normative requirements Canon implements,
+`conformance/requirements.yaml`, a `canon-requirements/1` document:
+
+```yaml
+format: canon-requirements/1
+requirements:
+  CANON-CLAIM-001:
+    status: implemented        # implemented | planned
+    statement: A required positive predicate evaluating to UNKNOWN MUST NOT be treated as satisfied.
+    source: design § 32        # where the requirement is stated
+```
+
+Keys are `CANON-` followed by an identifier, each listed once; `status`, `statement` and
+`source` are required, and the statement and source are not empty. Unknown keys are refused. A
+`planned` requirement is stated but not yet implemented.
+
+`canon conform run --requirements <catalogue>` reads the catalogue before the registry; one
+that cannot be read exits 2 with `error[unreadable]: <path>: <why>` on standard error, and one
+that does not parse as a catalogue exits 1 with `error[catalogue]: <path>: <why>`, the
+catalogue reported by kind and position only, as a registry file is. Either way nothing is
+printed on standard output. Then the registry runs as above, and these checks follow:
+
+1. **Coverage.** Every `implemented` requirement is covered by at least one scenario that
+   passed; otherwise `uncovered: requirement `&lt;id&gt;``. A `planned` requirement needs no scenario; one a passing scenario covers is reported `planned requirement `<id>` is covered`, so the catalogue is moved forward rather than drifting. Both in catalogue order. 2. **Unlisted.** A scenario that covers a requirement the catalogue does not list, passed or not, is reported `unlisted: requirement `<id>` covered by scenario `<scenario>``, in registry
+   order.
+3. **Determinism.** Every evaluate step of every scenario whose fixture compiles runs three
+   times: as written, again as written, and with its `evidence`, `authority` and `decisions`
+   lists in reverse order, an equivalent input, since none of the three is ordered by position
+   (CANON-DETERMINISM-001). The three outputs, each the canonical `canon-decision/1` document or
+   the refusal's code, must be byte-identical; otherwise `nondeterministic: scenario `&lt;id&gt;` step `&lt;step&gt;`: <rerun|permuted> differs at line <n>`, `<n>` the first line, counted from 1, where
+   that run's output differs from the first. In registry and step order.
+
+The check lines come after the registry's lines and before its summary, and a second summary
+line follows it:
+
+```text
+requirements: <n> implemented, <n> covered, <n> planned
+```
+
+`covered` counts the implemented requirements a passing scenario covers. The run exits 0 only
+when the registry passed and no check failed, and 1 otherwise. Without `--requirements` the
+report is the registry's alone, byte for byte.

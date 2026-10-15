@@ -55,7 +55,7 @@ pub struct NormativeRequirement {
 
 /// Whether a requirement is implemented, so a passing scenario must cover it, or only planned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "lowercase")]
 pub enum RequirementStatus {
     /// Implemented: at least one passing scenario of the registry covers it.
     Implemented,

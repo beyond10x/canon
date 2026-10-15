@@ -27,8 +27,8 @@ pub const EXIT_STATUSES: [(u8, &str); 4] = [
     (
         REJECTED,
         "Rejected: a document was read and rejected, an evaluation or a check was refused, a \
-         conformance scenario failed or was unreadable, no scenario ran, a check found \
-         something, or generation was refused.",
+         conformance scenario failed or was unreadable, no scenario ran, a requirement check \
+         failed, a check found something, or generation was refused.",
     ),
     (
         UNREADABLE,
@@ -160,5 +160,13 @@ pub enum ConformCommand {
         /// The registry directory; every `*.yaml` file in it is one scenario.
         #[arg(long, default_value = "conformance/scenarios")]
         scenarios: PathBuf,
+        /// A `canon-requirements/1` catalogue of the normative requirements the registry answers
+        /// for. After the run, every implemented requirement must be covered by a passing
+        /// scenario, no scenario may cover one the catalogue does not list, no planned one may be
+        /// covered, and every evaluate step must give byte-identical output when run again and with
+        /// its `evidence`, `authority` and `decisions` lists reversed. Adds a `requirements:`
+        /// summary line.
+        #[arg(long)]
+        requirements: Option<PathBuf>,
     },
 }
