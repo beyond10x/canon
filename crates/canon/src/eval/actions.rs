@@ -269,7 +269,7 @@ fn deciding<'a>(
                 named.inputs.insert(&test.input);
             }
         }
-        Predicate::First(_) | Predicate::Before(_) => {
+        Predicate::First(_) | Predicate::Before(_) | Predicate::After(_) => {
             if value(node) != goal {
                 named.orders.push(node);
             }

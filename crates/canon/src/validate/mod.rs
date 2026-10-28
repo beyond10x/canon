@@ -28,7 +28,8 @@
 //!    `undeclared-dimension`, once, in the order listed, every one naming the declaration the
 //!    match is written in; for an order form, each kind it names, `first` before `then`, then its
 //!    subject, then a `before` whose `first` and `then` name one kind, `self-ordered-evidence`,
-//!    naming it;
+//!    naming it (an `after` may name one kind as both: a later record of a kind follows the
+//!    first record of that kind);
 //!    for an input test, first an empty `in` list, `empty-input-test`, or a value it lists more
 //!    than once, `duplicate-input-test-value`, once for every listing after its first, then an
 //!    input it names that is not declared, `undeclared-input`, or a value it lists that its input
@@ -655,7 +656,8 @@ fn reaches_evidence(protocol: &Protocol, claim: &ClaimId) -> bool {
 
 /// Every evidence match and order form in an obligation's discharge or applicability predicate, in
 /// the order written, each with its kind and its path from `root` (`discharged_when`,
-/// `applicable_when`); a `before` gives each kind it names once, `first` before `then`.
+/// `applicable_when`); a `before` or an `after` gives each kind it names once, `first` before
+/// `then`.
 fn evidence_at(root: &str, predicate: &Predicate) -> Vec<(EvidenceKindId, String)> {
     let mut found = Vec::new();
     let mut pending = vec![(predicate, root.to_owned())];
@@ -682,6 +684,12 @@ fn evidence_at(root: &str, predicate: &Predicate) -> Vec<(EvidenceKindId, String
                 found.push((form.first.clone(), format!("{path}.before")));
                 if form.then != form.first {
                     found.push((form.then.clone(), format!("{path}.before")));
+                }
+            }
+            Predicate::After(form) => {
+                found.push((form.first.clone(), format!("{path}.after")));
+                if form.then.kind != form.first {
+                    found.push((form.then.kind.clone(), format!("{path}.after")));
                 }
             }
             Predicate::Claim(_) | Predicate::Input(_) => {}
@@ -770,7 +778,7 @@ fn references(
                 }
             }
         }
-        Predicate::First(_) | Predicate::Before(_) => {
+        Predicate::First(_) | Predicate::Before(_) | Predicate::After(_) => {
             let reads = node.order_reads();
             let mut kinds: Vec<&EvidenceKindId> = Vec::new();
             for (kind, _) in &reads {
@@ -1225,6 +1233,82 @@ mod tests {
                  {before: {first: m, then: k, subject: a}}, {before: {first: k, then: m}}]}}}\n"
             ),
             Vec::<String>::new()
+        );
+    }
+
+    /// An `after` resolves its first kind, then its later kind, each once, then its subject; one kind
+    /// as both is valid, and in a discharge or applicability predicate it is refused with its path,
+    /// each kind once.
+    #[test]
+    fn an_after_form_resolves_its_kinds_and_subject() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            artifacts: {a: {}}\nevidence_kinds: {k: {}, m: {}}\n\
+            claims: {c: {true_when: {any: [\
+            {after: {first: y, then: {kind: z, result: r}, subject: w}}, \
+            {after: {first: z, then: {kind: z, result: r}}}, \
+            {after: {first: k, then: {kind: k, result: r}, subject: a}}]}}}\n\
+            obligations: {o: {discharged_when: {after: {first: k, then: {kind: m, result: r}}}, \
+            applicable_when: {not: {after: {first: m, then: {kind: m, result: r}}}}}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "undeclared-evidence-kind: claim `c` references evidence kind `y`, which is not declared",
+                "undeclared-evidence-kind: claim `c` references evidence kind `z`, which is not declared",
+                "undeclared-artifact: claim `c` references artifact `w`, which is not declared",
+                "undeclared-evidence-kind: claim `c` references evidence kind `z`, which is not declared",
+                "evidence-in-discharge: obligation `o` tests evidence kind `k` at `discharged_when.after`; a discharge predicate tests only claim values",
+                "evidence-in-discharge: obligation `o` tests evidence kind `m` at `discharged_when.after`; a discharge predicate tests only claim values",
+                "evidence-in-applicability: obligation `o` tests evidence kind `m` at `applicable_when.not.after`; an applicability predicate tests only claim values and case inputs",
+            ]
+        );
+    }
+
+    /// `after` is a map with required keys `first` and `then`, its `then` a map with required keys
+    /// `kind` and `result`; an unknown key, a null and a second form beside it do not parse.
+    #[test]
+    fn an_after_form_is_written_with_its_required_keys() {
+        for written in [
+            "{after: {first: k}}",
+            "{after: {then: {kind: m, result: r}}}",
+            "{after: {first: k, then: m}}",
+            "{after: {first: k, then: {kind: m}}}",
+            "{after: {first: k, then: {result: r}}}",
+            "{after: {first: k, then: {kind: m, result: ~}}}",
+            "{after: {first: k, then: {kind: m, result: r, subject: a}}}",
+            "{after: {first: k, then: {kind: m, result: r}, result: r}}",
+            "{after: {first: k, then: {kind: m, result: r}, subject: ~}}",
+            "{after: {first: ~, then: {kind: m, result: r}}}",
+            "{after: ~}",
+            "{after: {first: k, then: {kind: m, result: r}}, before: {first: k, then: m}}",
+        ] {
+            let source = format!(
+                "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nevidence_kinds: {{k: {{}}, m: {{}}}}\nclaims: {{c: {{true_when: {written}}}}}\n"
+            );
+            assert!(crate::model::parse(&source).is_err(), "{written} parses");
+            let source = format!(
+                "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nevidence_kinds: {{k: {{}}, m: {{}}}}\nclaims: {{c: {{true_when: {{all: []}}}}}}\noutcomes: {{o: {{requires: {written}}}}}\n"
+            );
+            assert!(
+                crate::model::parse(&source).is_err(),
+                "{written} parses as a requirement"
+            );
+        }
+        let parsed = crate::model::parse(
+            "format: protocol/1\nprotocol: {id: p, revision: 1}\nevidence_kinds: {k: {}, m: {}}\n\
+             outcomes: {o: {requires: {after: {first: k, then: {kind: m, result: r}}}}}\n",
+        )
+        .expect("parses");
+        let (_, outcome) = parsed.outcomes.iter().next().expect("o");
+        assert_eq!(
+            outcome.requires,
+            Predicate::After(crate::model::EvidenceAfter {
+                first: EvidenceKindId::new("k"),
+                then: crate::model::LaterRecord {
+                    kind: EvidenceKindId::new("m"),
+                    result: "r".to_owned(),
+                },
+                subject: None,
+            })
         );
     }
 

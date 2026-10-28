@@ -88,6 +88,20 @@ fn predicate(predicate: &Predicate) -> Json {
             }
             obj([("before", Json::Obj(members))])
         }
+        Predicate::After(form) => {
+            let mut members = vec![("first".to_owned(), json::str(form.first.as_str()))];
+            if let Some(subject) = &form.subject {
+                members.push(("subject".to_owned(), json::str(subject.as_str())));
+            }
+            members.push((
+                "then".to_owned(),
+                Json::Obj(vec![
+                    ("kind".to_owned(), json::str(form.then.kind.as_str())),
+                    ("result".to_owned(), json::str(form.then.result.clone())),
+                ]),
+            ));
+            obj([("after", Json::Obj(members))])
+        }
         Predicate::Input(test) => obj([(
             "input",
             Json::Obj(vec![
@@ -107,7 +121,8 @@ fn predicate(predicate: &Predicate) -> Json {
 }
 
 /// The evidence matches (kind, result) and the claim tests (claim, value) inside a predicate; an
-/// order form counts as a match of each kind it reads, `first` with its result.
+/// order form counts as a match of each kind it reads, `first` and the later kind of `after` with
+/// their result.
 type Leaves = (Vec<(String, Option<String>)>, Vec<(String, Truth)>);
 
 /// Every evidence match, order form and claim test inside a predicate.
@@ -125,6 +140,13 @@ fn leaves(predicate: &Predicate) -> Leaves {
         Predicate::Before(form) => {
             evidence.push((form.first.as_str().to_owned(), None));
             evidence.push((form.then.as_str().to_owned(), None));
+        }
+        Predicate::After(form) => {
+            evidence.push((form.first.as_str().to_owned(), None));
+            evidence.push((
+                form.then.kind.as_str().to_owned(),
+                Some(form.then.result.clone()),
+            ));
         }
         _ => {}
     });
