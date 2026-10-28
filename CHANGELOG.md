@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `ess/ess-inputs.yaml` and CI pin ess 0.72.0 (was 0.60.0); the ESS gate tests name the new pin.
+
 ## [0.6.0] - 2026-10-15
 
 A normative requirements catalogue the conformance suite is checked against. Install the CLI or
