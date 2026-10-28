@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- `ess/ess-inputs.yaml` and CI pin ess 0.72.0 (was 0.60.0); the ESS gate tests name the new pin.
+- `ess/ess-inputs.yaml` and CI pin ess 0.74.0 (was 0.60.0); the ESS gate tests name the new pin.
 
 ## [0.6.0] - 2026-10-15
 
