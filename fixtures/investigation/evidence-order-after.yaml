@@ -1,0 +1,65 @@
+format: protocol/1
+
+protocol:
+  id: red-after-change
+  revision: 1
+  description: Decide whether a test was seen failing after its tests were changed, from the order its evidence was observed in.
+
+artifacts:
+  change:
+    description: The change under review; making it pass moves it to a later revision.
+  notes:
+    description: Notes kept beside the change, whose tests are not the change's.
+
+evidence_kinds:
+  tests_change:
+    description: A change to the tests of an artifact.
+  test_result:
+    description: A run of the tests against an artifact; its result is failed or passed.
+
+claims:
+  red.after.change:
+    description: A failed test result was recorded, at any revision, strictly after the first change to the tests.
+    true_when:
+      after:
+        first: tests_change
+        then:
+          kind: test_result
+          result: failed
+
+  red.again:
+    description: A failed test result was recorded strictly after the first test result of all.
+    true_when:
+      after:
+        first: test_result
+        then:
+          kind: test_result
+          result: failed
+
+  passes:
+    description: The tests pass at the current revision.
+    true_when:
+      evidence:
+        kind: test_result
+        result: passed
+
+actions:
+  merge:
+    description: Merge the change once its tests, after they were changed, were seen failing and now pass.
+    precondition:
+      all:
+        - claim: passes
+        - after:
+            first: tests_change
+            then:
+              kind: test_result
+              result: failed
+            subject: change
+
+outcomes:
+  done:
+    description: The tests were seen failing after they changed, and pass now.
+    requires:
+      all:
+        - claim: red.after.change
+        - claim: passes
