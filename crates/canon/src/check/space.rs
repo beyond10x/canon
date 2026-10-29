@@ -50,9 +50,13 @@ struct Read<'a> {
     /// The independence an evidence match demands; `None` for a match that demands none and for an
     /// order form.
     independent_on: Option<&'a [IndependenceDimensionId]>,
-    /// Whether an order form or a `children` form reads: the dimension then has a history
-    /// dimension, whose earlier records a `children` form reads and no evidence match does.
+    /// Whether an order form reads: the dimension then has a history dimension and a place in the
+    /// order.
     ordered: bool,
+    /// Whether a `children` form reads (story:case-composition): the dimension then has a history
+    /// dimension, whose earlier records the form reads and no evidence match does, and no place
+    /// in the order, since the form does not read when a record was observed.
+    history: bool,
 }
 
 /// The history dimension's value that adds no record: the dimension's current records, if any, are
@@ -173,9 +177,12 @@ struct Kind<'a> {
     /// from a claim, in identifier order: those whose rules invalidate a claim that reaches an
     /// evidence match reading it, in its own predicate or a claim it tests. Empty when no rule can.
     upstreams: Vec<&'a ArtifactId>,
-    /// Whether an order form or a `children` form reads this dimension, which then has a history
-    /// dimension.
+    /// Whether an order form reads this dimension, which then has a history dimension and a place
+    /// in the order.
     ordered: bool,
+    /// Whether a `children` form reads this dimension, which then has a history dimension and,
+    /// unless an order form reads it too, no place in the order.
+    history: bool,
     /// The producer profiles of its records, in set order: each distinct demand of the evidence
     /// matches that read it, and the empty profile when a match that demands nothing or an order
     /// form reads it. Only the empty profile when no match that reads it demands independence.
@@ -296,10 +303,13 @@ impl<'a> Kind<'a> {
 
 /// The dimensions, in order: the evidence dimensions, each capability, each decision name, each
 /// case input, then, only when an order form reads evidence, the history dimension of each
-/// evidence dimension an order form reads, the later-record dimension of each result an `after` or
-/// a `since` compares the records of a dimension with, the last-record dimension of each evidence
-/// dimension a `since` reads as its `last` kind and, when there are two or more of those histories
-/// and later records together, the order dimension.
+/// evidence dimension an order form reads, then, only when a `children` form reads evidence, the
+/// history dimension of each other evidence dimension it reads, then the later-record dimension
+/// of each result an `after` or a `since` compares the records of a dimension with, the
+/// last-record dimension of each evidence dimension a `since` reads as its `last` kind and, when
+/// there are two or more of the histories an order form reads and later records together, the
+/// order dimension. A `children` form adds no place in the order: its value does not depend on
+/// when a record was observed.
 pub(crate) struct Space<'a> {
     kinds: Vec<Kind<'a>>,
     capabilities: Vec<&'a CapabilityId>,
@@ -309,8 +319,12 @@ pub(crate) struct Space<'a> {
     /// the index of one of them.
     inputs: Vec<(&'a InputId, &'a [InputValue])>,
     /// The position in `kinds` of each evidence dimension an order form reads, in dimension order:
-    /// each has a history dimension.
+    /// each has a history dimension and a place in the order.
     ordered: Vec<usize>,
+    /// The position in `kinds` of each other evidence dimension a `children` form reads, in
+    /// dimension order (story:case-composition): each has a history dimension, after those of the
+    /// `ordered` dimensions, and no place in the order, so its records have no `observed_at`.
+    children: Vec<usize>,
     /// Each result an `after` or a `since` compares the records of an evidence dimension with, in
     /// dimension and then result order: each has a later-record dimension and a place in the
     /// order, after the `ordered` dimensions. Empty when the protocol has neither, which then
@@ -361,6 +375,7 @@ impl<'a> Space<'a> {
                     classes: Vec::new(),
                     upstreams: Vec::new(),
                     ordered: false,
+                    history: false,
                     profiles: vec![Profile::new()],
                     values: Some(vec![Vec::new(), vec![0]]),
                 });
@@ -399,6 +414,7 @@ impl<'a> Space<'a> {
                     classes: Vec::new(),
                     upstreams: Vec::new(),
                     ordered: false,
+                    history: false,
                     profiles: Vec::new(),
                     values: None,
                 };
@@ -412,6 +428,7 @@ impl<'a> Space<'a> {
                     .collect();
                 kind.classes = results.into_iter().map(Some).chain([None]).collect();
                 kind.ordered = reading.iter().any(|matching| matching.ordered);
+                kind.history = reading.iter().any(|matching| matching.history);
                 kind.profiles = profiles(reading.iter().map(|m| m.independent_on));
                 kind.values = down_sets(&kind.profiles);
                 kinds.push(kind);
@@ -449,6 +466,12 @@ impl<'a> Space<'a> {
             .iter()
             .enumerate()
             .filter(|(_, kind)| kind.ordered)
+            .map(|(at, _)| at)
+            .collect();
+        let children: Vec<usize> = kinds
+            .iter()
+            .enumerate()
+            .filter(|(_, kind)| kind.history && !kind.ordered)
             .map(|(at, _)| at)
             .collect();
         let mut compared: BTreeSet<(usize, &'a str)> = BTreeSet::new();
@@ -538,6 +561,7 @@ impl<'a> Space<'a> {
                 .map(|(id, input)| (id, input.values.as_slice()))
                 .collect(),
             ordered,
+            children,
             later,
             last,
             orders: orders.flatten(),
@@ -562,9 +586,15 @@ impl<'a> Space<'a> {
         !self.later.is_empty()
     }
 
+    /// The evidence dimensions with a history dimension, in the order of their history
+    /// dimensions: the `ordered` ones, then the `children` ones.
+    fn with_history(&self) -> impl Iterator<Item = &usize> {
+        self.ordered.iter().chain(&self.children)
+    }
+
     /// The position of the first later-record dimension.
     fn first_later(&self) -> usize {
-        self.first_history() + self.ordered.len()
+        self.first_history() + self.ordered.len() + self.children.len()
     }
 
     /// The position of the first last-record dimension.
@@ -698,7 +728,7 @@ impl<'a> Space<'a> {
             .inputs
             .iter()
             .map(|(_, values)| u128::try_from(values.len()).ok());
-        let histories = self.ordered.iter().map(|at| self.kinds[*at].histories());
+        let histories = self.with_history().map(|at| self.kinds[*at].histories());
         let later = self
             .later
             .iter()
@@ -725,9 +755,9 @@ impl<'a> Space<'a> {
     }
 
     /// The value of the history dimension of the evidence dimension at `at`, which an order form
-    /// reads.
+    /// or a `children` form reads.
     fn history(&self, state: &State, at: usize) -> Option<u32> {
-        let index = self.ordered.iter().position(|ordered| *ordered == at)?;
+        let index = self.with_history().position(|with| *with == at)?;
         Some(state[self.first_history() + index])
     }
 
@@ -854,7 +884,7 @@ impl<'a> Space<'a> {
             .inputs
             .iter()
             .map(|(id, values)| format!("input `{}` {}", one_line(id.as_str()), values.len()));
-        let histories = self.ordered.iter().map(|at| {
+        let histories = self.with_history().map(|at| {
             let kind = &self.kinds[*at];
             let count = kind.histories().map_or_else(
                 || format!("2^{} + 1", kind.classes.len()),
@@ -1094,7 +1124,7 @@ impl<'a> Space<'a> {
                 one_line(value.as_str())
             ));
         }
-        for at in &self.ordered {
+        for at in self.with_history() {
             let kind = &self.kinds[*at];
             let name = kind.name();
             match self.history(state, *at) {
@@ -1171,7 +1201,9 @@ impl<'a> Space<'a> {
     /// value names, at its rank's instant, and its current records after every rank's instant. An
     /// earlier record is about the dimension's artifact at [`EARLIER`], so revision binding keeps
     /// it from every evidence match, and records no upstream revision. Earlier records come after
-    /// the current ones, in dimension and then class order.
+    /// the current ones, in dimension and then class order. A dimension only a `children` form
+    /// reads has the same history values and no rank: none of its records, current or earlier, has
+    /// an `observed_at`, which the form does not read.
     ///
     /// In a protocol with an `after` or a `since` form (story:evidence-order-after,
     /// story:evidence-order-since), a dimension with earlier records has its current records
@@ -1235,7 +1267,7 @@ impl<'a> Space<'a> {
                 });
             }
         }
-        for at in &self.ordered {
+        for at in self.with_history() {
             let kind = &self.kinds[*at];
             let Some(record) = &kind.record else {
                 continue;
@@ -1256,13 +1288,14 @@ impl<'a> Space<'a> {
                     }
                 }
                 Some(value) => {
-                    let rank = rank_of(*at).expect("an ordered dimension has a rank");
+                    // A dimension only a `children` form reads has no rank and no instant.
+                    let observed_at = rank_of(*at).map(instant);
                     for (bit, class) in kind.classes.iter().enumerate() {
                         if (value - UNPLACED) & (1 << bit) == 0 {
                             continue;
                         }
                         if !self.stood_in(state, *at, *class) {
-                            records.push(earlier(*class, Some(instant(rank)), records.len()));
+                            records.push(earlier(*class, observed_at.clone(), records.len()));
                         }
                     }
                 }
@@ -1396,12 +1429,13 @@ impl<'a> Space<'a> {
     }
 
     /// `state` with every dimension of the kinds in `erased` set to absent: the states that agree
-    /// on everything else share it. An erased evidence dimension an order form reads loses its
-    /// history too, and its later and last records with it, and they stand first, together and
-    /// alone, in the order, the others keeping their order behind them: they hold no record, so
-    /// their rank decides nothing. A last record that stays but is placed against a thing that goes
-    /// is moved to a place against a thing that stays from which it stands as it did against every
-    /// record that stays; when there is none, the thing it was placed against keeps its rank.
+    /// on everything else share it. An erased evidence dimension an order form or a `children`
+    /// form reads loses its history too. One an order form reads loses its later and last records
+    /// with it, and they stand first, together and alone, in the order, the others keeping their
+    /// order behind them: they hold no record, so their rank decides nothing. A last record that
+    /// stays but is placed against a thing that goes is moved to a place against a thing that
+    /// stays from which it stands as it did against every record that stays; when there is none,
+    /// the thing it was placed against keeps its rank.
     pub(super) fn erase(&self, state: &State, erased: &BTreeSet<usize>) -> State {
         let first_history = self.first_history();
         let first_later = self.first_later();
@@ -1412,7 +1446,7 @@ impl<'a> Space<'a> {
             .map(|(at, value)| {
                 let history_of = at
                     .checked_sub(first_history)
-                    .and_then(|index| self.ordered.get(index));
+                    .and_then(|index| self.with_history().nth(index));
                 let later_of = at
                     .checked_sub(first_later)
                     .and_then(|index| self.later.get(index))
@@ -1758,7 +1792,8 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
                         subject: None,
                         result: Some(result),
                         independent_on: None,
-                        ordered: true,
+                        ordered: false,
+                        history: true,
                     });
                 }
             }
@@ -1769,6 +1804,7 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
             result: matching.result.as_deref(),
             independent_on: matching.independent_on.as_deref(),
             ordered: false,
+            history: false,
         }),
         Predicate::First(form) => found.push(Read {
             kind: &form.kind,
@@ -1776,6 +1812,7 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
             result: Some(form.result.as_str()),
             independent_on: None,
             ordered: true,
+            history: false,
         }),
         Predicate::Before(_) | Predicate::After(_) | Predicate::Since(_) => {
             for (kind, subject) in node.order_reads() {
@@ -1785,6 +1822,7 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
                     result: None,
                     independent_on: None,
                     ordered: true,
+                    history: false,
                 });
             }
         }

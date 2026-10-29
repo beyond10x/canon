@@ -55,7 +55,12 @@ fn evaluate_names_the_file_of_each_record_for_one_child() {
             "fixtures/investigation/case-composition.yaml",
         ],
     );
-    assert_eq!(compiled.status.code(), Some(0), "{}", text(&compiled.stderr));
+    assert_eq!(
+        compiled.status.code(),
+        Some(0),
+        "{}",
+        text(&compiled.stderr)
+    );
     std::fs::write(work.join("ir.json"), &compiled.stdout).expect("the IR writes");
     std::fs::write(
         work.join("case.yaml"),
@@ -64,8 +69,11 @@ fn evaluate_names_the_file_of_each_record_for_one_child() {
     .expect("the case writes");
     std::fs::create_dir_all(work.join("evidence")).expect("the evidence directory");
     // File names in the other order than the record ids.
-    std::fs::write(work.join("evidence/a.yaml"), record("o2", "CHG-1", "accepted"))
-        .expect("a record writes");
+    std::fs::write(
+        work.join("evidence/a.yaml"),
+        record("o2", "CHG-1", "accepted"),
+    )
+    .expect("a record writes");
     std::fs::write(work.join("evidence/b.yaml"), record("o1", "CHG-1", "open"))
         .expect("a record writes");
     std::fs::write(work.join("evidence/c.yaml"), record("o3", "CHG-2", "open"))
@@ -73,7 +81,13 @@ fn evaluate_names_the_file_of_each_record_for_one_child() {
     let run = canon(
         &work,
         &[
-            "evaluate", "--ir", "ir.json", "--case", "case.yaml", "--evidence", "evidence",
+            "evaluate",
+            "--ir",
+            "ir.json",
+            "--case",
+            "case.yaml",
+            "--evidence",
+            "evidence",
         ],
     );
     assert_eq!(text(&run.stdout), "");

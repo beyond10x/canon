@@ -218,8 +218,11 @@ fn check_reaches_an_open_child_beside_a_match_without_result() {
          \x20\x20c: {{true_when: {{children: {{in: [accepted]}}}}}}\n\
          \x20\x20any: {{true_when: {{evidence: {{kind: case_outcome}}}}}}\n"
     );
-    let found =
-        assert_every_combination_reachable(&head, &["accepted", "open", "abandoned"], &["findings"]);
+    let found = assert_every_combination_reachable(
+        &head,
+        &["accepted", "open", "abandoned"],
+        &["findings"],
+    );
     assert!(
         found.contains(&vec![
             ("any".to_owned(), Truth::True),
@@ -423,22 +426,15 @@ fn a_cycle_through_a_second_action_and_ids_that_differ_by_case() {
         opener("review", &opens(&[])),
     ];
     assert_eq!(
-        check_openings(&set)
-            .expect_err("a cycle")
-            .to_string(),
+        check_openings(&set).expect_err("a cycle").to_string(),
         "protocols open cases under each other in a cycle: audit -> software.change -> audit"
     );
     let source = "format: protocol/1\nprotocol: {id: audit, revision: 1}\n\
         artifacts: {a: {}}\nactions: {o: {case_open: {protocol: Audit, subject: a}}}\n";
     assert_eq!(problems(source), Vec::<String>::new());
-    let set = [
-        compiled(source),
-        opener("Audit", &opens(&["audit"])),
-    ];
+    let set = [compiled(source), opener("Audit", &opens(&["audit"]))];
     assert_eq!(
-        check_openings(&set)
-            .expect_err("a cycle")
-            .to_string(),
+        check_openings(&set).expect_err("a cycle").to_string(),
         "protocols open cases under each other in a cycle: Audit -> audit -> Audit"
     );
 }

@@ -223,18 +223,20 @@
 //! accepts, about any artifact and at any revision, as the order forms read the history: each
 //! outcome it lists and `open` are classes of every `case_outcome` dimension, as an evidence
 //! match's result is, and each such dimension has a history dimension, as one an order form reads
-//! has. Its value depends only on which of those outcomes, or another, some child has, among the
-//! current records the evidence matches read and the earlier records at a superseded revision
-//! they do not: so every value of every `children` form, jointly with the evidence matches over
-//! the same records, is reached by some state. Each `case_outcome` record of a state is the
-//! outcome of a child case of its own, named by the record's id, and a record of the class without
-//! a result carries an outcome no predicate names (`other`, primed until it is none), since a
-//! `case_outcome` record must give one; the state still writes it `` evidence `case_outcome` ``. A
-//! protocol with no `children` form checks as it did before the form existed. A protocol in which
-//! an order form reads `case_outcome` too is refused as `ordered-child-outcomes`: an earlier record
-//! the form needs could change what the order form reads. The kind counts for
-//! `unproduced-evidence` and, in every position, for `authority-bypass`, as for the order forms:
-//! with no record the form is `unknown`, and so is its negation.
+//! has, but no place in the order of first observations: the form does not read when a record was
+//! observed, so its records carry no `observed_at` and it adds no order dimension. Its value
+//! depends only on which of those outcomes, or another, some child has, among the current records
+//! the evidence matches read and the earlier records at a superseded revision they do not: so every
+//! value of every `children` form, jointly with the evidence matches over the same records, is
+//! reached by some state. Each `case_outcome` record of a state is the outcome of a child case of
+//! its own, named by the record's id, and a record of the class without a result carries an outcome
+//! no predicate names (`other`, primed until it is none), since a `case_outcome` record must give
+//! one; the state still writes it `` evidence `case_outcome` ``. A protocol with no `children` form
+//! checks as it did before the form existed. A protocol in which an order form reads `case_outcome`
+//! too is refused as `ordered-child-outcomes`: an earlier record the form needs could change what
+//! the order form reads. The kind counts for `unproduced-evidence` and, in every position, for
+//! `authority-bypass`, as for the order forms: with no record the form is `unknown`, and so is its
+//! negation.
 //!
 //! A state is evaluated as a case snapshot that lists each declared artifact, and the case itself,
 //! at one revision, gives each case input its value in the state and lists each producer its
