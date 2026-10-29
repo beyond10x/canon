@@ -185,22 +185,37 @@
 //! `after`; a protocol without a `since` has none of what follows. A protocol with one gains:
 //!
 //! - a last-record dimension for each evidence dimension a `since` reads as its `last` kind,
-//!   after the later-record dimensions and before the order dimension, of 3 values. Value 0 adds
-//!   nothing; value 1 adds one record of the kind about the dimension's artifact at `r0`, observed
-//!   at the instant of the dimension's current records; value 2 adds it forty-five seconds after
-//!   its rank's instant, after every current record of that rank. A last record is not placed in
-//!   the order on its own: it takes the dimension's rank, so the order keeps the values it has
-//!   without it. When the dimension is also the `then` kind of a `since`, the last record carries
-//!   that result, so a record of one kind is both the latest and a candidate;
-//! - a dimension that holds only a last record takes its place in the order like one with records.
+//!   after the later-record dimensions and before the order dimension. Value 0 adds nothing; every
+//!   other value adds one record of the kind about the dimension's artifact at `r0`, with one of
+//!   its results at one of its places. Its results are none and, when the dimension is also the
+//!   `then` kind of a `since` anchored on it, that `since`'s result, so that a record of one kind
+//!   is both the latest and a candidate. Its places are two per thing in the order it is placed
+//!   against: the dimension's own rank and the later record of each result a `since` anchored on
+//!   the dimension compares. At such a place the record is observed at that thing's instant, tied
+//!   with it, or forty-five seconds after it, after it and after every current record thirty
+//!   seconds past it, before the next rank's instant. A two-kind `since` has 5 values (none, then
+//!   the record at and after its own rank and at and after the later record), a one-kind one 9
+//!   (each place without and with the result);
+//! - the last record is a thing in the order of its own, after the history dimensions and the
+//!   later records, and the order dimension is unchanged: a latest record at a superseded revision
+//!   can come after the current records of its kind, before, with or after a record it is
+//!   compared with at its own revision or another, so a failed run between two changes at one
+//!   revision, and a latest change about an older revision followed by a run about another, are
+//!   both states. A dimension is not placed in the order because it holds a last record.
 //!
 //! So every value of every `since`, jointly with the other order forms and the evidence matches
 //! over the same records, is reached by some state within the bound. A last record weighs one. A
-//! state writes it after the later records, `` evidence `k` earlier, observed last together with
-//! the current records `` or `` evidence `k` earlier, observed last ``, with `` result `r` `` when
-//! it carries one. The bound refusal names `` last evidence kind `k` 3 ``. Erasing a dimension
-//! erases its last record too. The kinds a `since` reads count for `unproduced-evidence` and, in
-//! every position, for `authority-bypass`, as for the other order forms.
+//! state writes it after the later records, `` evidence `k` last `` (`` evidence `k` result `r`
+//! last `` when it carries a result), and names it in the order the same way without
+//! `evidence`, with `=` for a tie: `` order `k` < `m` result `r` later < `k` last ``. The bound
+//! refusal names `` last evidence kind `k` 5 `` and `` last evidence kind `m` with or without
+//! result `r` 9 ``. Erasing a dimension erases its last record too. A last record that stays but is
+//! placed against a later record that goes moves to the first place against a thing that stays
+//! from which it stands as before against every record that stays; when there is none, the thing
+//! it was placed against keeps its rank in the erased order, so an erased state evaluates as the
+//! state's records without the erased ones. The kinds a `since` reads count for
+//! `unproduced-evidence` and, in every position, for `authority-bypass`, as for the other order
+//! forms.
 //!
 //! A state is evaluated as a case snapshot that lists each declared artifact, and the case itself,
 //! at one revision, gives each case input its value in the state and lists each producer its

@@ -1230,11 +1230,12 @@ fn every_value_of_a_since_naming_a_subject_is_reached() {
     assert!(takes_every_value(&reached, 0), "since_a");
 }
 
-/// A protocol with a `since` writes the last record of the kind it reads as `last` and builds it:
-/// at the superseded revision, forty-five seconds past its dimension's rank's instant, after the
-/// dimension's current records, or at the instant of those records; its dimension then takes its
-/// place in the order, so the state says where the last record stands against a later record.
-/// Erasing the kind takes the last record with it.
+/// A protocol with a `since` writes the last record of the kind it reads as `last` and builds it,
+/// at the superseded revision: a thing in the order of its own, at or forty-five seconds past the
+/// instant of its dimension's rank or of the later record the `since` compares, so it can stand
+/// before, with or after the records the `since` judges by, and after its dimension's current
+/// records. Erasing the compared kind moves a last record placed against its later record to a
+/// place that stands the same against every record that stays; erasing the last kind takes it.
 #[test]
 fn a_state_writes_and_builds_its_last_records() {
     use crate::model::Truth;
@@ -1247,7 +1248,7 @@ fn a_state_writes_and_builds_its_last_records() {
     assert_eq!(
         space.dimensions(),
         "evidence kind `d` 2, evidence kind `t` 2, history of evidence kind `d` 3, history of \
-         evidence kind `t` 3, later evidence kind `t` result `failed` 3, last evidence kind `d` 3, \
+         evidence kind `t` 3, later evidence kind `t` result `failed` 3, last evidence kind `d` 5, \
          order of first observations and later records 13"
     );
     let find = |wanted: &str| {
@@ -1279,14 +1280,14 @@ fn a_state_writes_and_builds_its_last_records() {
         )
     };
     let red_after = find(
-        "{evidence `t` result `failed` later, evidence `d` earlier, observed last, order `d` < \
-         `t` result `failed` later}",
+        "{evidence `t` result `failed` later, evidence `d` last, order `d` last < `t` result \
+         `failed` later}",
     );
     assert_eq!(
         built(&red_after),
         [
             record("t", Some("failed"), "r0", "2000-01-01T00:01:00Z"),
-            record("d", None, "r0", "2000-01-01T00:00:45Z"),
+            record("d", None, "r0", "2000-01-01T00:00:00Z"),
         ]
     );
     assert_eq!(
@@ -1295,30 +1296,69 @@ fn a_state_writes_and_builds_its_last_records() {
     );
     assert_eq!(space.weight(&red_after), 2);
     let red_before = find(
-        "{evidence `t` result `failed` later, evidence `d` earlier, observed last, order `t` \
-         result `failed` later < `d`}",
+        "{evidence `t` result `failed` later, evidence `d` last, order `t` result `failed` later \
+         < `d` last}",
     );
     assert_eq!(
         built(&red_before),
         [
             record("t", Some("failed"), "r0", "2000-01-01T00:00:00Z"),
-            record("d", None, "r0", "2000-01-01T00:01:45Z"),
+            record("d", None, "r0", "2000-01-01T00:00:45Z"),
         ]
     );
     assert_eq!(
         claim_values(&ir, &space.evidence(&red_before)),
         [Truth::False]
     );
-    let with_current = find(
-        "{evidence `d`, evidence `d` earlier, evidence `d` earlier, observed last together with \
-         the current records}",
+    let tied = find(
+        "{evidence `t` result `failed` later, evidence `d` last, order `t` result `failed` later \
+         = `d` last}",
     );
+    assert_eq!(
+        built(&tied),
+        [
+            record("t", Some("failed"), "r0", "2000-01-01T00:00:00Z"),
+            record("d", None, "r0", "2000-01-01T00:00:00Z"),
+        ]
+    );
+    assert_eq!(claim_values(&ir, &space.evidence(&tied)), [Truth::Unknown]);
+    let with_current = find("{evidence `d`, evidence `d` last, order `d` = `d` last}");
     assert_eq!(
         built(&with_current),
         [
-            record("d", None, "r", "2000-01-01T00:00:30Z"),
+            record("d", None, "r", "2000-01-01T00:00:00Z"),
             record("d", None, "r0", "2000-01-01T00:00:00Z"),
-            record("d", None, "r0", "2000-01-01T00:00:30Z"),
+        ]
+    );
+    // A change at the current revision, then a failed run and a change at a superseded one: the
+    // latest change is about the older revision, and the run before it, at that revision, is not
+    // since it.
+    let superseded = find(
+        "{evidence `d`, evidence `t` result `failed` later, evidence `d` last, order `d` < `t` \
+         result `failed` later < `d` last}",
+    );
+    assert_eq!(
+        built(&superseded),
+        [
+            record("d", None, "r", "2000-01-01T00:00:00Z"),
+            record("t", Some("failed"), "r0", "2000-01-01T00:01:00Z"),
+            record("d", None, "r0", "2000-01-01T00:01:45Z"),
+        ]
+    );
+    assert_eq!(
+        claim_values(&ir, &space.evidence(&superseded)),
+        [Truth::False]
+    );
+    let erased = space.erase(&superseded, &BTreeSet::from([1]));
+    assert_eq!(
+        space.render(&erased),
+        "{evidence `d`, evidence `d` last, order `d` < `d` last}"
+    );
+    assert_eq!(
+        built(&erased),
+        [
+            record("d", None, "r", "2000-01-01T00:01:00Z"),
+            record("d", None, "r0", "2000-01-01T00:01:45Z"),
         ]
     );
     let erased = space.erase(&red_after, &BTreeSet::from([0]));
@@ -1326,6 +1366,93 @@ fn a_state_writes_and_builds_its_last_records() {
         space.render(&erased),
         "{evidence `t` result `failed` later}"
     );
+}
+
+/// Erasing dimensions from a state of a protocol with `since` evaluates every claim as the state's
+/// own records without the erased dimensions' records do: a last record placed against a thing
+/// that goes moves to a place that stands the same against every record that stays, or that thing
+/// keeps its rank. Over every third state of a protocol with a `since` and a `first` over its
+/// `last` kind, erasing each dimension and every dimension a claim does not read. Leaving a last
+/// record where its place was when its compared kind goes puts it before the current records it
+/// was observed with, and changes `first_k_x`.
+#[test]
+fn erasing_from_a_since_state_keeps_every_claim_value() {
+    let ir = compiled(
+        "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}}\n\
+         evidence_kinds: {k: {}, m: {}}\n\
+         claims:\n\
+         \x20\x20since_k_m: {true_when: {since: {last: k, then: {kind: m, result: fail}}}}\n\
+         \x20\x20first_k_x: {true_when: {first: {kind: k, result: x}}}\n",
+    );
+    let space = Space::new(&ir);
+    let size = space.size().expect("fits");
+    assert!(size <= STATE_BOUND, "{size} states: {}", space.dimensions());
+    let about = space.evidence_dimensions();
+    let mut sets: Vec<BTreeSet<usize>> = (0..about.len()).map(|at| BTreeSet::from([at])).collect();
+    let all: BTreeSet<usize> = (0..about.len()).collect();
+    for claim in ir.claims.values() {
+        let read: BTreeSet<usize> = space
+            .dimensions_read(&ir, &claim.true_when)
+            .into_keys()
+            .collect();
+        sets.push(all.difference(&read).copied().collect());
+    }
+    let mut wrong = Vec::new();
+    for index in (0..size).step_by(3) {
+        let state = space.state(index);
+        let records = space.evidence(&state);
+        for set in &sets {
+            let kept: Vec<crate::model::EvidenceRecord> = records
+                .iter()
+                .filter(|record| {
+                    !set.iter().any(|at| {
+                        about[*at].is_some_and(|(kind, subject)| {
+                            *kind == record.kind && *subject == record.subject
+                        })
+                    })
+                })
+                .cloned()
+                .collect();
+            let erased = space.erase(&state, set);
+            let want = claim_values(&ir, &kept);
+            let got = claim_values(&ir, &space.evidence(&erased));
+            if want != got && wrong.len() < 5 {
+                wrong.push(format!(
+                    "erasing {set:?} from {} gives {}: {want:?}, not {got:?}",
+                    space.render(&state),
+                    space.render(&erased)
+                ));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+/// Soundness of the space for a `since` jointly with an `after` over the same kinds and evidence
+/// matches over the same records, the adversary's protocol for story:evidence-order-since: a latest
+/// change at a superseded revision with a failed run at another and no current failure, and a
+/// failed run between two changes at one superseded revision, are reached with every other value.
+#[test]
+fn every_value_of_since_is_reached_jointly_with_after_and_matches() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {k: {}, m: {}}\n\
+        claims:\n\
+        \x20\x20since_k_m: {true_when: {since: {last: k, then: {kind: m, result: fail}}}}\n\
+        \x20\x20after_k_m: {true_when: {after: {first: k, then: {kind: m, result: fail}}}}\n\
+        \x20\x20fail_m: {true_when: {evidence: {kind: m, result: fail}}}\n\
+        \x20\x20some_k: {true_when: {evidence: {kind: k}}}\n\
+        actions: {act: {may_produce: [{evidence: k}, {evidence: m}]}}\n";
+    let reached = every_since_history_is_reached(
+        source,
+        &["k", "m"],
+        &["a"],
+        &[Some("fail"), Some("pass"), None],
+        0x1F83_D9AB_FB41_BD6B,
+    );
+    assert!(takes_every_value(&reached, 0), "since_k_m");
+    assert!(takes_every_value(&reached, 1), "after_k_m");
 }
 
 /// A protocol with an `after` writes its later records and the order they take part in, and builds
@@ -1489,6 +1616,6 @@ fn since_is_checked_over_last_records_and_counts_for_authority_bypass() {
         "unreachable-outcome: outcome `both` is legitimate in no state\n\
          authority-bypass: outcome `clean` is legitimate without authority in state \
          {evidence `change` earlier, observed at no known instant}\n\
-         checked: protocol `p` revision 1: 12636 states, 0 properties, 2 findings\n"
+         checked: protocol `p` revision 1: 21060 states, 0 properties, 2 findings\n"
     );
 }

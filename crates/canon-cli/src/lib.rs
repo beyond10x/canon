@@ -107,7 +107,8 @@ pub enum Command {
     /// every order of first observations; evidence an `after` or a `since` compares with its result
     /// also with a later record of that result, placed anywhere in that order or at no known
     /// instant; and evidence a `since` reads as its last kind also with a last record at a
-    /// superseded revision, observed with or after its current records. Evidence an evidence match
+    /// superseded revision, placed in that order on its own, with or just after its own first
+    /// observations or a later record it is compared with. Evidence an evidence match
     /// demanding independence reads (`independent_on`) is there from a producer independent on
     /// exactly each demand, in every combination of demands met, and without a producer when
     /// something that demands nothing reads it. A state space of more than 65536 states is refused.

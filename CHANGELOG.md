@@ -57,12 +57,14 @@ An order form that reads the latest record of a kind.
   `BREAKING`.
 - In `canon check`, a protocol with `since` gains:
   - a later-record dimension for each result it compares, as for `after`;
-  - a last-record dimension of 3 values for each dimension it reads as `last`: none, a record at
-    a superseded revision observed with the current records, or one observed after them.
+  - a last-record dimension for each dimension it reads as `last`: none, or a record at a
+    superseded revision placed in the order on its own, tied with or just after the dimension's
+    rank or a later record a `since` compares, with no result or, for a one-kind `since`, its
+    result (5 values for a two-kind `since`, 9 for a one-kind one).
 
   It counts `since`'s kinds for `authority-bypass` in every position. A protocol without `since`
   builds the same space, states and reports as before. A protocol whose space exceeds 65536
-  states is refused as before; the `since` conformance fixture is such a protocol (126360 states).
+  states is refused as before; the `since` conformance fixture is such a protocol (210600 states).
 - `canon generate` writes the last record at `r0`. The reference pages and the `protocol/1` JSON
   Schema name the form.
 - Breaking for Rust consumers: `Predicate` gains the variant `Since(EvidenceSince)`, so an
