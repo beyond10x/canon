@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-29T00:15:38Z",
+  "actor": "human:timo",
+  "artifact": "story:evidence-order-after",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "green on 365ec5d (wave/evidence-order-after): task check exit 0, cargo test 126 suites 827 passed 0 failed 3 ignored (pre-existing child-process tests); canon conform run 15 passed 0 failed, requirements 16 implemented 16 covered 0 planned; canon-docs 18 generated files current; ess_gate 11 and ess_model_matches 28 passed"
+  }
+}

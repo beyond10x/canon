@@ -24,10 +24,11 @@ use super::Refusal;
 use crate::ir::{self, Ir};
 use crate::model::{
     self, Action, Age, Artifact, ArtifactId, CapabilityId, CapabilityRequirement, CaseInput,
-    CaseSection, Claim, ClaimId, ClaimTest, Declarations, EffectClass, EvidenceKind,
+    CaseSection, Claim, ClaimId, ClaimTest, Declarations, EffectClass, EvidenceAfter, EvidenceKind,
     EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceProduction, FirstResult,
-    IndependenceDimension, IndependenceDimensionId, InputId, InputTest, InputValue, Obligation,
-    Outcome, OutcomeRequirement, Predicate, Protocol, ProtocolHeader, ProtocolId, Truth, one_line,
+    IndependenceDimension, IndependenceDimensionId, InputId, InputTest, InputValue, LaterRecord,
+    Obligation, Outcome, OutcomeRequirement, Predicate, Protocol, ProtocolHeader, ProtocolId,
+    Truth, one_line,
 };
 
 /// A `malformed-input` refusal: `what` is not a document of its format, and why.
@@ -423,8 +424,19 @@ fn predicate(value: &Json) -> Shape<Predicate> {
             then: EvidenceKindId::new(text(inner, "then")?),
             subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
         })),
+        "after" => {
+            let later = required(inner, "then")?;
+            Ok(Predicate::After(EvidenceAfter {
+                first: EvidenceKindId::new(text(inner, "first")?),
+                then: LaterRecord {
+                    kind: EvidenceKindId::new(text(later, "kind")?),
+                    result: text(later, "result")?,
+                },
+                subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
+            }))
+        }
         _ => Err(
-            "a predicate is not one of all, any, not, evidence, claim, input, first or before"
+            "a predicate is not one of all, any, not, evidence, claim, input, first, before or after"
                 .to_owned(),
         ),
     }

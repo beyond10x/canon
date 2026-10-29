@@ -1,0 +1,957 @@
+format: canon-conformance/1
+id: CANON-ORDER-002
+covers: [CANON-ORDER-002]
+fixture: fixtures/investigation/evidence-order-after.yaml
+# The fixture declares two artifacts, the change and the notes, and two evidence kinds,
+# tests_change and test_result. Claim red.after.change requires a failed test_result observed
+# strictly after the first tests_change (`after`); claim red.again a failed test_result observed
+# strictly after the first test_result (`after` over one kind). Claim passes is an evidence match,
+# which reads only records bound to their subject's current revision. Action merge requires passes
+# and the same `after` as red.after.change, bound to the change as its subject; outcome done
+# requires red.after.change and passes. Every case gives the change at r2 and the notes at n1, so a
+# record bound to r1 or n0 is excluded from the evidence match as revision_mismatch, while `after`
+# still reads it: it reads the history.
+steps:
+  # The form compiles to `{"after": {...}}`, written as authored, a subject only when named, its
+  # `then` a map of kind and result. Among the members of an `all` or `any`, `after` comes first,
+  # before `all`, `any` and `claim`.
+  - id: compile
+    compile: {}
+    expect:
+      canon-ir: |
+        {
+          "actions": {
+            "merge": {
+              "description": "Merge the change once its tests, after they were changed, were seen failing and now pass.",
+              "effect": null,
+              "may_produce": [],
+              "precondition": {
+                "all": [
+                  {
+                    "after": {
+                      "first": "tests_change",
+                      "subject": "change",
+                      "then": {
+                        "kind": "test_result",
+                        "result": "failed"
+                      }
+                    }
+                  },
+                  {
+                    "claim": {
+                      "id": "passes",
+                      "is": "true"
+                    }
+                  }
+                ]
+              },
+              "requires": []
+            }
+          },
+          "artifacts": {
+            "change": {
+              "description": "The change under review; making it pass moves it to a later revision."
+            },
+            "notes": {
+              "description": "Notes kept beside the change, whose tests are not the change's."
+            }
+          },
+          "claims": {
+            "passes": {
+              "description": "The tests pass at the current revision.",
+              "true_when": {
+                "evidence": {
+                  "kind": "test_result",
+                  "result": "passed"
+                }
+              }
+            },
+            "red.after.change": {
+              "description": "A failed test result was recorded, at any revision, strictly after the first change to the tests.",
+              "true_when": {
+                "after": {
+                  "first": "tests_change",
+                  "then": {
+                    "kind": "test_result",
+                    "result": "failed"
+                  }
+                }
+              }
+            },
+            "red.again": {
+              "description": "A failed test result was recorded strictly after the first test result of all.",
+              "true_when": {
+                "after": {
+                  "first": "test_result",
+                  "then": {
+                    "kind": "test_result",
+                    "result": "failed"
+                  }
+                }
+              }
+            }
+          },
+          "evidence_kinds": {
+            "test_result": {
+              "description": "A run of the tests against an artifact; its result is failed or passed."
+            },
+            "tests_change": {
+              "description": "A change to the tests of an artifact."
+            }
+          },
+          "format": "canon-ir/1",
+          "obligations": {},
+          "outcomes": {
+            "done": {
+              "description": "The tests were seen failing after they changed, and pass now.",
+              "requires": {
+                "all": [
+                  {
+                    "claim": {
+                      "id": "passes",
+                      "is": "true"
+                    }
+                  },
+                  {
+                    "claim": {
+                      "id": "red.after.change",
+                      "is": "true"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "protocol": {
+            "description": "Decide whether a test was seen failing after its tests were changed, from the order its evidence was observed in.",
+            "id": "red-after-change",
+            "revision": 1
+          }
+        }
+
+  # Expectation 1. The tests changed at r1, a run failed after that at r1, and the change now
+  # passes at r2. The failed record is excluded from the evidence match as revision_mismatch; `after`
+  # reads it all the same: TRUE. red.again is FALSE: its only failed record is the first
+  # test_result itself, and a record is not later than itself.
+  - id: red-after-the-tests-change-then-green
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-after-change
+        artifacts:
+          change: {revision: r2}
+          notes: {revision: n1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T10:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T11:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "status": "admissible"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.after.change": {
+              "value": "true"
+            },
+            "red.again": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # Expectation 2. The run failed before the tests changed, and nothing failed after: FALSE. The
+  # blocked action names the order form that decides it, with its subject and value.
+  - id: red-before-the-tests-change
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-after-change
+        artifacts:
+          change: {revision: r2}
+          notes: {revision: n1}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T10:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T11:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "after": "tests_change",
+                  "result": "failed",
+                  "subject": "change",
+                  "then": "test_result",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.after.change": {
+              "value": "false"
+            },
+            "red.again": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.after.change",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 3. A failed run and no tests_change: the first record `after` is read against is
+  # not established, so it is UNKNOWN, not FALSE.
+  - id: no-tests-change
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-after-change
+        artifacts:
+          change: {revision: r2}
+          notes: {revision: n1}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T10:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "after": "tests_change",
+                  "result": "failed",
+                  "subject": "change",
+                  "then": "test_result",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.after.change": {
+              "value": "unknown"
+            },
+            "red.again": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.after.change",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 4. The tests changed and only a passing run followed: the first record is
+  # established and no failed run was observed at all, so `after` is FALSE.
+  - id: tests-change-and-only-a-pass
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-after-change
+        artifacts:
+          change: {revision: r2}
+          notes: {revision: n1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T10:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "after": "tests_change",
+                  "result": "failed",
+                  "subject": "change",
+                  "then": "test_result",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "passes": {
+              "value": "true"
+            },
+            "red.after.change": {
+              "value": "false"
+            },
+            "red.again": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.after.change",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 5. The failed run shares the instant of the first tests_change. One second's
+  # resolution cannot order them, so `after` is UNKNOWN, not TRUE: an `after` that took an equal
+  # instant as later would make the action admissible here. red.again is FALSE: the failed run is
+  # the first test_result.
+  - id: red-at-the-instant-of-the-tests-change
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-after-change
+        artifacts:
+          change: {revision: r2}
+          notes: {revision: n1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T10:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "after": "tests_change",
+                  "result": "failed",
+                  "subject": "change",
+                  "then": "test_result",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.after.change": {
+              "value": "unknown"
+            },
+            "red.again": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.after.change",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 5, with a second failed run one second after the instant: that one is strictly
+  # later, so `after` is TRUE, whatever the run at the instant. red.again is TRUE too: the second
+  # failed run came after the first test_result.
+  - id: red-at-and-a-second-after-the-instant
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-after-change
+        artifacts:
+          change: {revision: r2}
+          notes: {revision: n1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t3
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T09:00:01Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T10:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "status": "admissible"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                },
+                {
+                  "evidence": "t3",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.after.change": {
+              "value": "true"
+            },
+            "red.again": {
+              "value": "true"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # Expectation 6. The failed run carries no observed_at: its place in the order is not known, so
+  # both `after` forms are UNKNOWN, though every other record carries an instant.
+  - id: a-failed-run-without-observed-at
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-after-change
+        artifacts:
+          change: {revision: r2}
+          notes: {revision: n1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T10:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "after": "tests_change",
+                  "result": "failed",
+                  "subject": "change",
+                  "then": "test_result",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.after.change": {
+              "value": "unknown"
+            },
+            "red.again": {
+              "value": "unknown"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.after.change",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 6, for a record of the later kind with another result: the passing run carries no
+  # observed_at, but `after` over failed runs does not compare it, so red.after.change is TRUE.
+  # red.again reads every test_result as its first records, the passing one among them, so it is
+  # UNKNOWN: the first test_result is not known.
+  - id: a-passing-run-without-observed-at-takes-no-part
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-after-change
+        artifacts:
+          change: {revision: r2}
+          notes: {revision: n1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T10:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r2
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "status": "admissible"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.after.change": {
+              "value": "true"
+            },
+            "red.again": {
+              "value": "unknown"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # Expectation 7. A second tests_change carries no observed_at: the first one is not known, so
+  # `after` is UNKNOWN, though the failed run came after the one that has an instant.
+  - id: a-tests-change-without-observed-at
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-after-change
+        artifacts:
+          change: {revision: r2}
+          notes: {revision: n1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: c2
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T10:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T11:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "after": "tests_change",
+                  "result": "failed",
+                  "subject": "change",
+                  "then": "test_result",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.after.change": {
+              "value": "unknown"
+            },
+            "red.again": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.after.change",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 8. Two failed runs a second apart and no tests_change: red.again is TRUE (the
+  # second came after the first test_result), red.after.change UNKNOWN (no tests_change).
+  - id: two-failed-runs-and-no-tests-change
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-after-change
+        artifacts:
+          change: {revision: r2}
+          notes: {revision: n1}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t3
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T09:00:01Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T10:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "after": "tests_change",
+                  "result": "failed",
+                  "subject": "change",
+                  "then": "test_result",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                },
+                {
+                  "evidence": "t3",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.after.change": {
+              "value": "unknown"
+            },
+            "red.again": {
+              "value": "true"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.after.change",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 9. The run that failed after the tests changed is about the notes, at a superseded
+  # revision of them. red.after.change names no subject and reads it: TRUE, and the outcome is
+  # legitimate. The action's `after` is bound to the change, reads no failed run about it and is
+  # FALSE, so the action is blocked.
+  - id: a-failed-run-about-the-notes
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-after-change
+        artifacts:
+          change: {revision: r2}
+          notes: {revision: n1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: n1
+          kind: test_result
+          result: failed
+          subject: notes
+          subject_revision: n0
+          observed_at: 2026-10-01T10:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r2
+          observed_at: 2026-10-01T11:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "after": "tests_change",
+                  "result": "failed",
+                  "subject": "change",
+                  "then": "test_result",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "n1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.after.change": {
+              "value": "true"
+            },
+            "red.again": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "status": "legitimate"
+            }
+          }
+        }

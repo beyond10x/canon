@@ -1308,6 +1308,19 @@ fn words(predicate: &Predicate) -> String {
                 code(form.then.as_str())
             )
         }
+        Predicate::After(form) => {
+            let about = form
+                .subject
+                .as_ref()
+                .map(|subject| format!(" about {}", code(subject.as_str())))
+                .unwrap_or_default();
+            format!(
+                "evidence of kind {}{about} with result {} was observed after the first of kind {}",
+                code(form.then.kind.as_str()),
+                code(&form.then.result),
+                code(form.first.as_str())
+            )
+        }
         Predicate::Input(test) => format!(
             "input {} is one of {}",
             code(test.input.as_str()),

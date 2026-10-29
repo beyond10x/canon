@@ -427,6 +427,19 @@
           "required": [
             "before"
           ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "after": {
+              "description": "Whether a record of a kind with a result, in the evidence history, was observed strictly after the first record of a kind.",
+              "$ref": "#/$defs/EvidenceAfter"
+            }
+          },
+          "required": [
+            "after"
+          ]
         }
       ]
     },
@@ -570,6 +583,29 @@
         "then"
       ]
     },
+    "EvidenceAfter": {
+      "description": "An order form: whether some record of `then.kind` with result `then.result` was observed strictly after the first record of kind `first`, all about `subject` when it names one. It reads every record of the two kinds the evidence check accepted, excluded or not. `first` and `then.kind` may be one kind: a record is not later than itself.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "first": {
+          "description": "The evidence kind whose first record the later one is to come after.",
+          "$ref": "#/$defs/Identifier"
+        },
+        "then": {
+          "description": "The record that is to come after it: its kind and its result.",
+          "$ref": "#/$defs/LaterRecord"
+        },
+        "subject": {
+          "description": "The declared artifact the records of both kinds are about; without it, records about any artifact.",
+          "$ref": "#/$defs/Identifier"
+        }
+      },
+      "required": [
+        "first",
+        "then"
+      ]
+    },
     "Truth": {
       "description": "A three-valued truth value. `Unknown` is not `False`.",
       "oneOf": [
@@ -583,6 +619,25 @@
             "unknown"
           ]
         }
+      ]
+    },
+    "LaterRecord": {
+      "description": "What an `after` form reads later than the first record of its `first` kind: a record of `kind` with `result`.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "The evidence kind of the later record.",
+          "$ref": "#/$defs/Identifier"
+        },
+        "result": {
+          "description": "The result the later record is to have.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "result"
       ]
     }
   }

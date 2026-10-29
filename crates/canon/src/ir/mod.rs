@@ -23,7 +23,8 @@
 //!   declares none of them is the IR it was before they existed. The `independence_dimensions`
 //!   section is `{<id>: {"description": …}}`. The `case` section is
 //!   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
-//!   authored: `{"first": {"kind": …, "result": …}}` and `{"before": {"first": …, "then": …}}`.
+//!   authored: `{"first": {"kind": …, "result": …}}`, `{"before": {"first": …, "then": …}}` and
+//!   `{"after": {"first": …, "then": {"kind": …, "result": …}}}`.
 //!   An action's `arguments` is its JSON Schema as declared, the same JSON value, its object keys
 //!   sorted like every object's (story:action-arguments).
 //! - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
@@ -50,10 +51,10 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use crate::model::{
-    self, ActionId, Age, ArtifactId, CapabilityId, ClaimId, ClaimTest, EffectClass, EvidenceKindId,
-    EvidenceMatch, EvidenceOrder, FirstResult, IndependenceDimensionId, InputId, InputTest,
-    InputValue, InvalidationRuleId, ObligationId, OutcomeId, OutcomeRequirement, Predicate,
-    Protocol, ProtocolId, Truth,
+    self, ActionId, Age, ArtifactId, CapabilityId, ClaimId, ClaimTest, EffectClass, EvidenceAfter,
+    EvidenceKindId, EvidenceMatch, EvidenceOrder, FirstResult, IndependenceDimensionId, InputId,
+    InputTest, InputValue, InvalidationRuleId, ObligationId, OutcomeId, OutcomeRequirement,
+    Predicate, Protocol, ProtocolId, Truth,
 };
 use crate::validate::{self, Problem};
 
@@ -269,7 +270,9 @@ pub(crate) fn normalize(predicate: &Predicate) -> Predicate {
             independent_on: matching.independent_on.clone().map(unique),
             ..matching.clone()
         }),
-        Predicate::Claim(_) | Predicate::First(_) | Predicate::Before(_) => predicate.clone(),
+        Predicate::Claim(_) | Predicate::First(_) | Predicate::Before(_) | Predicate::After(_) => {
+            predicate.clone()
+        }
     }
 }
 
@@ -291,8 +294,8 @@ fn unique<T: Ord>(mut ids: Vec<T>) -> Vec<T> {
 /// The canonical order of predicates, which is the order of the members of every `all` and `any`
 /// in `canon-ir/1`. Text (identifiers and results) compares by Unicode code point.
 ///
-/// 1. Different forms compare by form, in the order `all`, `any`, `before`, `claim`, `evidence`,
-///    `first`, `input`, `not`.
+/// 1. Different forms compare by form, in the order `after`, `all`, `any`, `before`, `claim`,
+///    `evidence`, `first`, `input`, `not`.
 /// 2. Two `all`s, or two `any`s, compare their members pairwise in order; the first pair that
 ///    differs decides, and when one list runs out first, the shorter list comes first.
 /// 3. Two `not`s compare what they negate.
@@ -306,18 +309,20 @@ fn unique<T: Ord>(mut ids: Vec<T>) -> Vec<T> {
 /// 6. Two input tests compare by input, then by the values they list, in their own (identifier)
 ///    order, pairwise as text; when one list runs out first, the shorter list comes first.
 /// 7. Two `first` forms compare by kind, then result, then subject; two `before` forms by `first`,
-///    then `then`, then subject; no subject comes before any subject.
+///    then `then`, then subject; two `after` forms by `first`, then the later kind, then the later
+///    result, then subject; no subject comes before any subject.
 fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
     fn form(predicate: &Predicate) -> u8 {
         match predicate {
-            Predicate::All(_) => 0,
-            Predicate::Any(_) => 1,
-            Predicate::Before(_) => 2,
-            Predicate::Claim(_) => 3,
-            Predicate::Evidence(_) => 4,
-            Predicate::First(_) => 5,
-            Predicate::Input(_) => 6,
-            Predicate::Not(_) => 7,
+            Predicate::After(_) => 0,
+            Predicate::All(_) => 1,
+            Predicate::Any(_) => 2,
+            Predicate::Before(_) => 3,
+            Predicate::Claim(_) => 4,
+            Predicate::Evidence(_) => 5,
+            Predicate::First(_) => 6,
+            Predicate::Input(_) => 7,
+            Predicate::Not(_) => 8,
         }
     }
     fn tested(value: Truth) -> u8 {
@@ -405,6 +410,17 @@ fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
         (Predicate::Before(left), Predicate::Before(right)) => {
             text(left.first.as_str(), right.first.as_str())
                 .then_with(|| text(left.then.as_str(), right.then.as_str()))
+                .then_with(|| {
+                    optional(
+                        left.subject.as_ref().map(|subject| subject.as_str()),
+                        right.subject.as_ref().map(|subject| subject.as_str()),
+                    )
+                })
+        }
+        (Predicate::After(left), Predicate::After(right)) => {
+            text(left.first.as_str(), right.first.as_str())
+                .then_with(|| text(left.then.kind.as_str(), right.then.kind.as_str()))
+                .then_with(|| text(&left.then.result, &right.then.result))
                 .then_with(|| {
                     optional(
                         left.subject.as_ref().map(|subject| subject.as_str()),
@@ -664,6 +680,24 @@ fn predicate_value(predicate: &Predicate) -> Value {
                 fields.push(("subject", Value::string(subject.as_str())));
             }
             Value::object([("before", Value::object(fields))])
+        }
+        Predicate::After(EvidenceAfter {
+            first,
+            then,
+            subject,
+        }) => {
+            let mut fields = vec![("first", Value::string(first.as_str()))];
+            if let Some(subject) = subject {
+                fields.push(("subject", Value::string(subject.as_str())));
+            }
+            fields.push((
+                "then",
+                Value::object([
+                    ("kind", Value::string(then.kind.as_str())),
+                    ("result", Value::string(&then.result)),
+                ]),
+            ));
+            Value::object([("after", Value::object(fields))])
         }
         Predicate::Claim(ClaimTest { claim, is }) => Value::object([(
             "claim",

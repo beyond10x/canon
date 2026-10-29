@@ -59,7 +59,39 @@ const CURRENT: u32 = 0;
 
 /// The history dimension's value that leaves the order unknown: no record of the dimension has an
 /// `observed_at`, and when it has no current record, one earlier record without a result stands in.
+/// In a protocol with an `after` form, the earlier record without a result and without an
+/// `observed_at` stands in whatever the current records are, and they are observed at the rank's
+/// instant.
 const UNPLACED: u32 = 1;
+
+/// A later-record dimension's value that adds no record.
+const NO_LATER: u32 = 0;
+
+/// A later-record dimension's value that adds one record of its result, about the dimension's
+/// artifact at [`EARLIER`], observed at the instant of its own place in the order.
+const LATER: u32 = 1;
+
+/// A later-record dimension's value that adds one record of its result, about the dimension's
+/// artifact at [`EARLIER`], with no `observed_at`.
+const LATER_UNPLACED: u32 = 2;
+
+/// A later-record dimension's value, when its result is one of the dimension's classes, that adds
+/// no record and observes the dimension's current records of that class at its rank's instant,
+/// with its first observations, in place of an earlier record of the class; its other current
+/// records still come after them.
+const CURRENT_FIRST: u32 = 3;
+
+/// A result an `after` form compares the records of an evidence dimension its `then` reads with
+/// (story:evidence-order-after): each has a later-record dimension and a place in the order.
+#[derive(Clone, Copy)]
+struct Later<'a> {
+    /// The position of the evidence dimension in `kinds`.
+    at: usize,
+    result: &'a str,
+    /// Whether the result is one of the dimension's classes: the dimension's current records can
+    /// then have it, and the later-record dimension has the value [`CURRENT_FIRST`].
+    class: bool,
+}
 
 /// One evidence dimension: the records of one kind about one artifact. Its classes are each
 /// result a match that reads such a record matches, in code-point order, then `None`, a record
@@ -206,8 +238,9 @@ impl<'a> Kind<'a> {
 
 /// The dimensions, in order: the evidence dimensions, each capability, each decision name, each
 /// case input, then, only when an order form reads evidence, the history dimension of each
-/// evidence dimension an order form reads and, when there are two or more of those, the order
-/// dimension.
+/// evidence dimension an order form reads, the later-record dimension of each result an `after`
+/// compares the records of a dimension with and, when there are two or more of those histories and
+/// later records together, the order dimension.
 pub(crate) struct Space<'a> {
     kinds: Vec<Kind<'a>>,
     capabilities: Vec<&'a CapabilityId>,
@@ -219,11 +252,17 @@ pub(crate) struct Space<'a> {
     /// The position in `kinds` of each evidence dimension an order form reads, in dimension order:
     /// each has a history dimension.
     ordered: Vec<usize>,
-    /// How many weak orders of the `ordered` dimensions there are, when there are two or more: the
-    /// values of the order dimension. `None` when it does not fit.
+    /// Each result an `after` compares the records of an evidence dimension with, in dimension and
+    /// then result order: each has a later-record dimension and a place in the order, after the
+    /// `ordered` dimensions. Empty when the protocol has no `after`, which then checks as it did
+    /// before `after` existed.
+    later: Vec<Later<'a>>,
+    /// How many weak orders of the `ordered` dimensions and the `later` records there are, when
+    /// there are two or more: the values of the order dimension. `None` when it does not fit.
     orders: Option<u128>,
-    /// Each of those weak orders, as the rank of each `ordered` dimension, in lexicographic order;
-    /// listed only when the space is within the bound, empty otherwise.
+    /// Each of those weak orders, as the rank of each `ordered` dimension and then each `later`
+    /// record, in lexicographic order; listed only when the space is within the bound, empty
+    /// otherwise.
     rankings: Vec<Vec<u32>>,
     /// Every non-empty producer profile of every evidence dimension, in set order: the producer of
     /// a record of profile `P` is named [`PRODUCER`]`-n`, `n` the position of `P` here from 1, and
@@ -342,7 +381,29 @@ impl<'a> Space<'a> {
             .filter(|(_, kind)| kind.ordered)
             .map(|(at, _)| at)
             .collect();
-        let orders = (ordered.len() >= 2).then(|| weak_orders(ordered.len()));
+        let mut compared: BTreeSet<(usize, &'a str)> = BTreeSet::new();
+        for (_, predicate) in readers(ir) {
+            for form in predicate.order_forms() {
+                let Predicate::After(form) = form else {
+                    continue;
+                };
+                for (at, kind) in kinds.iter().enumerate() {
+                    if kind.read_as(&form.then.kind, form.subject.as_ref()) {
+                        compared.insert((at, form.then.result.as_str()));
+                    }
+                }
+            }
+        }
+        let later: Vec<Later<'a>> = compared
+            .into_iter()
+            .map(|(at, result)| Later {
+                at,
+                result,
+                class: kinds[at].classes.contains(&Some(result)),
+            })
+            .collect();
+        let placeable = ordered.len() + later.len();
+        let orders = (placeable >= 2).then(|| weak_orders(placeable));
         let producers: BTreeSet<Profile<'a>> = kinds
             .iter()
             .flat_map(|kind| kind.profiles.iter().filter(|p| !p.is_empty()).cloned())
@@ -358,13 +419,71 @@ impl<'a> Space<'a> {
                 .map(|(id, input)| (id, input.values.as_slice()))
                 .collect(),
             ordered,
+            later,
             orders: orders.flatten(),
             rankings: Vec::new(),
         };
         if orders.is_some() && space.size().is_some_and(|size| size <= super::STATE_BOUND) {
-            space.rankings = rankings(space.ordered.len());
+            space.rankings = rankings(space.placeable());
         }
         space
+    }
+
+    /// How many things have a place in the order: the `ordered` dimensions and the `later`
+    /// records.
+    fn placeable(&self) -> usize {
+        self.ordered.len() + self.later.len()
+    }
+
+    /// Whether the protocol has an `after` form reading evidence, which observes records as
+    /// [`UNPLACED`] and [`Space::evidence`] say for such a protocol.
+    fn after(&self) -> bool {
+        !self.later.is_empty()
+    }
+
+    /// The position of the first later-record dimension.
+    fn first_later(&self) -> usize {
+        self.first_history() + self.ordered.len()
+    }
+
+    /// Whether `state` observes the current records of `class` of the evidence dimension at `at`
+    /// first ([`CURRENT_FIRST`]).
+    fn current_first(&self, state: &State, at: usize, class: Option<&str>) -> bool {
+        let first_later = self.first_later();
+        class.is_some_and(|class| {
+            self.later.iter().enumerate().any(|(index, later)| {
+                later.at == at
+                    && later.result == class
+                    && state[first_later + index] == CURRENT_FIRST
+            })
+        })
+    }
+
+    /// Whether the earlier record of `class` of the evidence dimension at `at` is left out of
+    /// `state` because current records of the class it holds are observed first in its place
+    /// ([`CURRENT_FIRST`]).
+    fn stood_in(&self, state: &State, at: usize, class: Option<&str>) -> bool {
+        self.current_first(state, at, class)
+            && self.kinds[at]
+                .records(state[at])
+                .iter()
+                .any(|(held, _, _)| *held == class)
+    }
+
+    /// The name of the thing at `item` in the order: an `ordered` dimension, `` `k` ``, or a
+    /// `later` record, `` `k` result `r` later ``.
+    fn item_name(&self, item: usize) -> String {
+        match item.checked_sub(self.ordered.len()) {
+            None => self.kinds[self.ordered[item]].name(),
+            Some(index) => {
+                let later = &self.later[index];
+                format!(
+                    "{} result `{}` later",
+                    self.kinds[later.at].name(),
+                    one_line(later.result)
+                )
+            }
+        }
     }
 
     /// How many values each dimension has, in dimension order; `None` for an evidence kind with
@@ -378,12 +497,17 @@ impl<'a> Space<'a> {
             .iter()
             .map(|(_, values)| u128::try_from(values.len()).ok());
         let histories = self.ordered.iter().map(|at| self.kinds[*at].histories());
-        let orders = (self.ordered.len() >= 2).then_some(self.orders);
+        let later = self
+            .later
+            .iter()
+            .map(|later| Some(if later.class { 4 } else { 3 }));
+        let orders = (self.placeable() >= 2).then_some(self.orders);
         kinds
             .chain(capabilities)
             .chain(decisions)
             .chain(inputs)
             .chain(histories)
+            .chain(later)
             .chain(orders)
             .collect()
     }
@@ -400,38 +524,52 @@ impl<'a> Space<'a> {
         Some(state[self.first_history() + index])
     }
 
-    /// The rank of each `ordered` dimension in `state`: all `0` when there is only one.
+    /// The rank of each `ordered` dimension and then each `later` record in `state`: all `0` when
+    /// there is only one.
     fn ranks(&self, state: &State) -> Vec<u32> {
-        if self.ordered.len() < 2 {
-            return vec![0; self.ordered.len()];
+        if self.placeable() < 2 {
+            return vec![0; self.placeable()];
         }
-        let at = self.first_history() + self.ordered.len();
+        let at = self.first_later() + self.later.len();
         self.rankings[state[at] as usize].clone()
     }
 
     /// Whether the evidence dimension at `at` holds a record in `state`: a current one, or one its
-    /// history dimension adds.
+    /// history dimension or one of its later-record dimensions adds.
     pub(super) fn holds(&self, state: &State, at: usize) -> bool {
+        let first_later = self.first_later();
         state[at] != 0
             || self
                 .history(state, at)
                 .is_some_and(|value| value != CURRENT)
+            || self.later.iter().enumerate().any(|(index, later)| {
+                later.at == at && matches!(state[first_later + index], LATER | LATER_UNPLACED)
+            })
     }
 
-    /// The evidence dimensions an order form reads whose first record has a known instant in
-    /// `state`, each with its rank: those with a current record and no history, and those with an
-    /// earlier record observed at an instant.
+    /// The things in the order with a known instant in `state`, each as its position (the
+    /// `ordered` dimensions, then the `later` records) and its rank: the dimensions an order form
+    /// reads with a current record and no history (or, in a protocol with an `after`, an unknown
+    /// order), those with an earlier record observed at an instant, and the later records placed
+    /// in the order.
     fn placed(&self, state: &State) -> Vec<(usize, u32)> {
         let ranks = self.ranks(state);
-        self.ordered
-            .iter()
-            .zip(ranks)
-            .filter(|(at, _)| match self.history(state, **at) {
-                Some(CURRENT) => state[**at] != 0,
-                Some(UNPLACED) | None => false,
+        let first_later = self.first_later();
+        let dimensions = self.ordered.iter().enumerate().filter_map(|(item, at)| {
+            let placed = match self.history(state, *at) {
+                Some(CURRENT) => state[*at] != 0,
+                Some(UNPLACED) => self.after() && state[*at] != 0,
+                None => false,
                 Some(_) => true,
-            })
-            .map(|(at, rank)| (*at, rank))
+            };
+            placed.then_some(item)
+        });
+        let later = (0..self.later.len())
+            .filter(|index| state[first_later + index] == LATER)
+            .map(|index| self.ordered.len() + index);
+        dimensions
+            .chain(later)
+            .map(|item| (item, ranks[item]))
             .collect()
     }
 
@@ -500,17 +638,30 @@ impl<'a> Space<'a> {
             );
             format!("history of evidence kind {} {count}", kind.name())
         });
-        let orders = (self.ordered.len() >= 2).then(|| {
+        let later = self.later.iter().map(|later| {
+            format!(
+                "later evidence kind {} result `{}` {}",
+                self.kinds[later.at].name(),
+                one_line(later.result),
+                if later.class { 4 } else { 3 }
+            )
+        });
+        let orders = (self.placeable() >= 2).then(|| {
             let count = self
                 .orders
                 .map_or_else(|| format!("more than {}", u128::MAX), |n| n.to_string());
-            format!("order of first observations {count}")
+            if self.later.is_empty() {
+                format!("order of first observations {count}")
+            } else {
+                format!("order of first observations and later records {count}")
+            }
         });
         kinds
             .chain(capabilities)
             .chain(decisions)
             .chain(inputs)
             .chain(histories)
+            .chain(later)
             .chain(orders)
             .collect::<Vec<_>>()
             .join(", ")
@@ -598,25 +749,26 @@ impl<'a> Space<'a> {
     /// decisions. A record weighs one, and one more for each upstream artifact it was observed
     /// before the move of, so a witness prefers current records. A case input weighs nothing:
     /// every state gives each input a value. An earlier record a history dimension adds weighs one,
-    /// and so does leaving a dimension's order unknown; the order of first observations weighs
-    /// nothing. A witness is the state of least weight, ties broken by its rendering.
+    /// and so does leaving a dimension's order unknown; a later record weighs one, and so does
+    /// observing current records first; the order weighs nothing. A witness is the state of least
+    /// weight, ties broken by its rendering.
     pub(super) fn weight(&self, state: &State) -> u32 {
         let kinds = self.kinds.len();
         let capabilities = self.capabilities.len();
         let first_input = self.first_input();
         let first_history = self.first_history();
+        let first_later = self.first_later();
         state
             .iter()
             .enumerate()
             .map(|(at, value)| {
-                if at >= first_history {
+                if at >= first_later {
+                    u32::from(at < first_later + self.later.len() && *value != NO_LATER)
+                } else if at >= first_history {
                     match *value {
-                        CURRENT if at < first_history + self.ordered.len() => 0,
-                        UNPLACED if at < first_history + self.ordered.len() => 1,
-                        earlier if at < first_history + self.ordered.len() => {
-                            (earlier - UNPLACED).count_ones()
-                        }
-                        _ => 0,
+                        CURRENT => 0,
+                        UNPLACED => 1,
+                        earlier => (earlier - UNPLACED).count_ones(),
                     }
                 } else if at < kinds {
                     self.kinds[at]
@@ -697,7 +849,7 @@ impl<'a> Space<'a> {
             let kind = &self.kinds[*at];
             let name = kind.name();
             match self.history(state, *at) {
-                Some(UNPLACED) if state[*at] == 0 => {
+                Some(UNPLACED) if state[*at] == 0 || self.after() => {
                     items.push(format!(
                         "evidence {name} earlier, observed at no known instant"
                     ));
@@ -708,7 +860,9 @@ impl<'a> Space<'a> {
                 Some(CURRENT) | None => {}
                 Some(earlier) => {
                     for (bit, class) in kind.classes.iter().enumerate() {
-                        if (earlier - UNPLACED) & (1 << bit) == 0 {
+                        if (earlier - UNPLACED) & (1 << bit) == 0
+                            || self.stood_in(state, *at, *class)
+                        {
                             continue;
                         }
                         items.push(match class {
@@ -721,13 +875,29 @@ impl<'a> Space<'a> {
                 }
             }
         }
+        let first_later = self.first_later();
+        for (index, later) in self.later.iter().enumerate() {
+            let name = format!(
+                "evidence {} result `{}`",
+                self.kinds[later.at].name(),
+                one_line(later.result)
+            );
+            match state[first_later + index] {
+                LATER => items.push(format!("{name} later")),
+                LATER_UNPLACED => {
+                    items.push(format!("{name} later, observed at no known instant"));
+                }
+                CURRENT_FIRST => items.push(format!("{name} observed first")),
+                _ => {}
+            }
+        }
         let mut placed = self.placed(state);
         if placed.len() >= 2 {
-            placed.sort_by_key(|(at, rank)| (*rank, *at));
-            let mut order = format!("order {}", self.kinds[placed[0].0].name());
+            placed.sort_by_key(|(item, rank)| (*rank, *item));
+            let mut order = format!("order {}", self.item_name(placed[0].0));
             for pair in placed.windows(2) {
                 let tie = if pair[0].1 == pair[1].1 { "=" } else { "<" };
-                order.push_str(&format!(" {tie} {}", self.kinds[pair[1].0].name()));
+                order.push_str(&format!(" {tie} {}", self.item_name(pair[1].0)));
             }
             items.push(order);
         }
@@ -748,9 +918,19 @@ impl<'a> Space<'a> {
     /// earlier record is about the dimension's artifact at [`EARLIER`], so revision binding keeps
     /// it from every evidence match, and records no upstream revision. Earlier records come after
     /// the current ones, in dimension and then class order.
+    ///
+    /// In a protocol with an `after` form (story:evidence-order-after), a dimension with earlier
+    /// records has its current records thirty seconds after its rank's instant instead, before the
+    /// next rank's, and those of a class [`CURRENT_FIRST`] names at its rank's instant, in place of
+    /// the earlier record of the class; with [`UNPLACED`], its current records are at its rank's
+    /// instant and the earlier record without a result and without `observed_at` is always there.
+    /// Each later record comes last, in later-record order: one record of its result about its
+    /// dimension's artifact at [`EARLIER`], at the instant of its own rank with [`LATER`] and
+    /// without `observed_at` with [`LATER_UNPLACED`].
     pub(crate) fn evidence(&self, state: &State) -> Vec<EvidenceRecord> {
         let ranks = self.ranks(state);
         let late = u32::try_from(self.ordered.len()).expect("few ordered dimensions");
+        let after = self.after();
         let rank_of = |at: usize| {
             self.ordered
                 .iter()
@@ -759,9 +939,15 @@ impl<'a> Space<'a> {
         };
         let mut records = Vec::new();
         for (at, (kind, value)) in self.kinds.iter().zip(state).enumerate() {
-            let observed_at = match (self.history(state, at), rank_of(at)) {
+            let observed_at = |class: Option<&str>| match (self.history(state, at), rank_of(at)) {
                 (Some(CURRENT), Some(rank)) => Some(instant(rank)),
+                (Some(UNPLACED), Some(rank)) if after => Some(instant(rank)),
                 (Some(UNPLACED), _) | (None, _) | (_, None) => None,
+                (Some(_), Some(rank)) if after => Some(if self.current_first(state, at, class) {
+                    instant(rank)
+                } else {
+                    half_past(rank)
+                }),
                 (Some(_), Some(_)) => Some(instant(late)),
             };
             let Some(record) = &kind.record else {
@@ -782,7 +968,7 @@ impl<'a> Space<'a> {
                 records.push(EvidenceRecord {
                     id: EvidenceId::new(format!("e{}", records.len())),
                     result: class.map(str::to_owned),
-                    observed_at: observed_at.clone(),
+                    observed_at: observed_at(class),
                     upstream_revisions,
                     producer: self.producer(profile),
                     ..record.clone()
@@ -805,19 +991,40 @@ impl<'a> Space<'a> {
             match self.history(state, *at) {
                 Some(CURRENT) | None => {}
                 Some(UNPLACED) => {
-                    if state[*at] == 0 {
+                    if state[*at] == 0 || after {
                         records.push(earlier(None, None, records.len()));
                     }
                 }
                 Some(value) => {
                     let rank = rank_of(*at).expect("an ordered dimension has a rank");
                     for (bit, class) in kind.classes.iter().enumerate() {
-                        if (value - UNPLACED) & (1 << bit) != 0 {
+                        if (value - UNPLACED) & (1 << bit) == 0 {
+                            continue;
+                        }
+                        if !self.stood_in(state, *at, *class) {
                             records.push(earlier(*class, Some(instant(rank)), records.len()));
                         }
                     }
                 }
             }
+        }
+        let first_later = self.first_later();
+        for (index, later) in self.later.iter().enumerate() {
+            let observed_at = match state[first_later + index] {
+                LATER => Some(instant(ranks[self.ordered.len() + index])),
+                LATER_UNPLACED => None,
+                _ => continue,
+            };
+            let Some(record) = &self.kinds[later.at].record else {
+                continue;
+            };
+            records.push(EvidenceRecord {
+                id: EvidenceId::new(format!("e{}", records.len())),
+                result: Some(later.result.to_owned()),
+                subject_revision: Revision::new(EARLIER),
+                observed_at,
+                ..record.clone()
+            });
         }
         records
     }
@@ -906,10 +1113,12 @@ impl<'a> Space<'a> {
 
     /// `state` with every dimension of the kinds in `erased` set to absent: the states that agree
     /// on everything else share it. An erased evidence dimension an order form reads loses its
-    /// history too, and stands first, alone, in the order of first observations, the others
-    /// keeping their order behind it: it holds no record, so its rank decides nothing.
+    /// history too, and its later records with it, and they stand first, together and alone, in
+    /// the order, the others keeping their order behind them: they hold no record, so their rank
+    /// decides nothing.
     pub(super) fn erase(&self, state: &State, erased: &BTreeSet<usize>) -> State {
         let first_history = self.first_history();
+        let first_later = self.first_later();
         let mut erased_state: State = state
             .iter()
             .enumerate()
@@ -917,24 +1126,35 @@ impl<'a> Space<'a> {
                 let history_of = at
                     .checked_sub(first_history)
                     .and_then(|index| self.ordered.get(index));
-                if erased.contains(&at) || history_of.is_some_and(|of| erased.contains(of)) {
+                let later_of = at
+                    .checked_sub(first_later)
+                    .and_then(|index| self.later.get(index))
+                    .map(|later| &later.at);
+                if erased.contains(&at)
+                    || history_of.is_some_and(|of| erased.contains(of))
+                    || later_of.is_some_and(|of| erased.contains(of))
+                {
                     0
                 } else {
                     *value
                 }
             })
             .collect();
-        if self.ordered.len() >= 2 && self.ordered.iter().any(|at| erased.contains(at)) {
+        // The evidence dimension each thing in the order belongs to.
+        let items: Vec<&usize> = self
+            .ordered
+            .iter()
+            .chain(self.later.iter().map(|later| &later.at))
+            .collect();
+        if items.len() >= 2 && items.iter().any(|at| erased.contains(at)) {
             let ranks = self.ranks(state);
-            let kept: BTreeSet<u32> = self
-                .ordered
+            let kept: BTreeSet<u32> = items
                 .iter()
                 .zip(&ranks)
                 .filter(|(at, _)| !erased.contains(at))
                 .map(|(_, rank)| *rank)
                 .collect();
-            let normalized: Vec<u32> = self
-                .ordered
+            let normalized: Vec<u32> = items
                 .iter()
                 .zip(&ranks)
                 .map(|(at, rank)| {
@@ -949,7 +1169,7 @@ impl<'a> Space<'a> {
                 .rankings
                 .binary_search(&normalized)
                 .expect("a normalized ranking is a weak order");
-            let at = first_history + self.ordered.len();
+            let at = first_later + self.later.len();
             erased_state[at] = u32::try_from(index).expect("within the bound");
         }
         erased_state
@@ -1065,6 +1285,11 @@ fn instant(rank: u32) -> Instant {
     Instant::new(format!("2000-01-01T{:02}:{:02}:00Z", rank / 60, rank % 60))
 }
 
+/// Thirty seconds after the instant of rank `rank`: after it, and before the next rank's.
+fn half_past(rank: u32) -> Instant {
+    Instant::new(format!("2000-01-01T{:02}:{:02}:30Z", rank / 60, rank % 60))
+}
+
 /// How many weak orders (orderings with ties) `n` things have: the ordered Bell number, or `None`
 /// when it does not fit.
 fn weak_orders(n: usize) -> Option<u128> {
@@ -1148,7 +1373,7 @@ fn reads_in(predicate: &Predicate) -> Vec<Read<'_>> {
             independent_on: None,
             ordered: true,
         }),
-        Predicate::Before(_) => {
+        Predicate::Before(_) | Predicate::After(_) => {
             for (kind, subject) in node.order_reads() {
                 found.push(Read {
                     kind,
@@ -1200,7 +1425,9 @@ fn evidence_reached<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Reached<'a>
             Predicate::Evidence(matching) => {
                 reached.push((&matching.kind, matching.subject.as_ref()));
             }
-            Predicate::First(_) | Predicate::Before(_) => reached.extend(node.order_reads()),
+            Predicate::First(_) | Predicate::Before(_) | Predicate::After(_) => {
+                reached.extend(node.order_reads());
+            }
             Predicate::Claim(test) => {
                 if visited.insert(&test.claim)
                     && let Some(claim) = ir.claims.get(&test.claim)
@@ -1245,7 +1472,9 @@ pub(super) fn positive_reads<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Re
                     matches.push((&matching.kind, matching.subject.as_ref()));
                 }
             }
-            Predicate::First(_) | Predicate::Before(_) => matches.extend(next.order_reads()),
+            Predicate::First(_) | Predicate::Before(_) | Predicate::After(_) => {
+                matches.extend(next.order_reads());
+            }
             Predicate::Input(_) => {}
             Predicate::Claim(test) => {
                 let position = match test.is {

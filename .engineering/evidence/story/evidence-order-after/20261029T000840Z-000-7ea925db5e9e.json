@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-29T00:08:40Z",
+  "actor": "human:timo",
+  "artifact": "story:evidence-order-after",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "adversary pass 1: generation test fixed in 65094ed, evaluation and explanation docs fixed in 76729fc; adversary cases c4abeb1 green",
+    "review": "review-result:adversary-evidence-order-after-pass-1",
+    "outcome": "fixed"
+  }
+}
