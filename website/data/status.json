@@ -183,7 +183,7 @@
     },
     {
       "label": "A record observed after the first of a kind",
-      "status": "planned",
+      "status": "shipped",
       "detail": "The after order form tests whether a record of one kind with a given result was observed strictly after the first record of another kind, or of the same kind, read from the evidence history like first and before; scenario CANON-ORDER-002.",
       "href": "/docs/reference/protocol",
       "area": "Language"

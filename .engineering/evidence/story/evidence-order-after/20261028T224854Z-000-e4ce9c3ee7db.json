@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-28T22:48:54Z",
+  "actor": "human:timo",
+  "artifact": "story:evidence-order-after",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "red on 8185c75 (spec: specify the after order form): cargo test -p b10x-canon --locked --test ess_model_matches failed 3 of 28 (Predicate: ess/ variant after: EvidenceAfter is not in the Rust model); canon conform run --requirements conformance/requirements.yaml: 14 passed, 1 failed (CANON-ORDER-002 step compile: fixture does not parse), uncovered CANON-ORDER-002, requirements: 16 implemented, 15 covered, 0 planned"
+  }
+}

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:evidence-order-after
 kind: story
-status: active
+status: implemented
 title: 'Predicate over evidence order: a record of a kind with a result after the first of another'
 relations:
 - decomposes: epic:canon-kernel
@@ -15,9 +15,11 @@ scope:
 - confidence: cited
   path: conformance/requirements.yaml
 - confidence: cited
-  path: conformance/scenarios/evidence-after.yaml
+  path: conformance/scenarios/evidence-order-after.yaml
 - confidence: cited
   path: crates/canon-cli/src/lib.rs
+- confidence: cited
+  path: crates/canon-cli/tests/
 - confidence: cited
   path: crates/canon-docs/
 - confidence: cited
@@ -37,25 +39,30 @@ scope:
 - confidence: cited
   path: crates/canon/src/validate/
 - confidence: cited
+  path: crates/canon/tests/
+- confidence: cited
   path: ess/domains/protocol.yaml
 - confidence: cited
-  path: fixtures/investigation/evidence-after.yaml
+  path: fixtures/investigation/evidence-order-after.yaml
+- confidence: cited
+  path: website/data/
 - confidence: cited
   path: website/docs/reference/
 - confidence: cited
   path: website/static/schemas/
 - confidence: cited
   path: website/status.yaml
-revision: 4
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-28T22:43:54Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-28T22:43:54Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-29T00:15:39Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":2,"review_outcome":1}}}
 ---
 ## Outcome
 
 `protocol/1` gains a third order form over the evidence history, `after`, which reads a record
 later than the first of a kind: "a `test_result` with result `failed` was observed strictly after
-the first `tests_change`". The two order forms of 0.2.0 read only the first record of a kind:
+the first `tests_change`". The two order forms of 0.3.0 read only the first record of a kind:
 `first` the result of the first record, `before` the order of two first records. Neither can say
 that some later record of a kind, with a given result, followed the first record of another, which
 a consumer's test-first profile needs: the tests change, then a run of them fails, whatever ran
@@ -148,8 +155,8 @@ there. A malformed form (a missing or unknown key, `then` not a map) is a parse 
 
 - Specification change, first commit: in `ess/domains/protocol.yaml`, the `canon.protocol.Predicate`
   union gains `after`, with `canon.protocol.EvidenceAfter` and `canon.protocol.LaterRecord`; the
-  fixture `fixtures/investigation/evidence-after.yaml`, the scenario file
-  `conformance/scenarios/evidence-after.yaml` (`CANON-ORDER-002`) and the requirement
+  fixture `fixtures/investigation/evidence-order-after.yaml`, the scenario file
+  `conformance/scenarios/evidence-order-after.yaml` (`CANON-ORDER-002`) and the requirement
   `CANON-ORDER-002` in `conformance/requirements.yaml`.
 - Red on that commit: `crates/canon/tests/ess_model_matches.rs` fails naming the new variant and
   structs, because the Rust `Predicate` does not have them yet; `canon conform run` fails
@@ -171,7 +178,7 @@ there. A malformed form (a missing or unknown key, `then` not a map) is a parse 
   `crates/canon/src/explain/`, `crates/canon/src/check/`, `crates/canon/src/diff/`,
   `crates/canon/src/generate/`, `crates/canon-cli/src/lib.rs` (help text), `crates/canon-docs/`,
   `website/docs/reference/` and `website/static/schemas/` (generated), `website/status.yaml`,
-  `fixtures/investigation/evidence-after.yaml`, `conformance/scenarios/evidence-after.yaml`,
+  `fixtures/investigation/evidence-order-after.yaml`, `conformance/scenarios/evidence-order-after.yaml`,
   `conformance/requirements.yaml`, `CHANGELOG.md`.
 
 ## Order
@@ -183,7 +190,7 @@ history and order dimensions), implemented. It runs alone in its wave: it shares
 ## Acceptance
 
 Conformance scenario `CANON-ORDER-002` passes under `canon conform run` over
-`fixtures/investigation/evidence-after.yaml`, for a claim requiring a failed `test_result` after
+`fixtures/investigation/evidence-order-after.yaml`, for a claim requiring a failed `test_result` after
 the first `tests_change` (`after`), an action requiring the same about the change as subject, and
 a claim requiring a failed `test_result` after the first `test_result` (one kind), with these
 expectations:
@@ -212,3 +219,30 @@ the same records, and the golden check reports of protocols without `after` unch
 A consumer's test-first profile: the tests are changed, then a run of them is seen failing, then
 the change makes them pass. Canon 0.6.0 has `first` and `before`, which read only first records
 (story:evidence-order-predicate).
+
+## Delivered
+
+- The form, its values and its readers as settled above: the evaluator in `eval/order.rs`, the IR
+  sorted first among members, validation, `canon diff`, the reasons order `after`, `before`,
+  `first`, and the generated reference. A protocol without `after` compiles, evaluates, checks,
+  diffs and generates as before: no existing conformance expectation and no golden check report
+  changed.
+- `canon check`: one later-record dimension per dimension an `after` reads as its `then` and per
+  result asked for (absent, at no known instant, placed in the order; a fourth value, current
+  records of the result observed first, when the result is a class of the dimension), current
+  records thirty seconds after their rank's instant when the dimension has earlier records, and
+  an unknown order that keeps current records placed beside a stand-in record without a result
+  or an instant. Random-history tests show every value of `after` reached jointly with the other
+  order forms, over two kinds, one kind and a subject.
+- Known limit of the check: the scenario fixture `fixtures/investigation/evidence-order-after.yaml`
+  reads both kinds bound to the change and unbound at once, and its space (606916800 states) is
+  beyond the bound of 65536, as the same fixture with `before` would be (about 1080000). It is
+  written for `CANON-ORDER-002`'s evaluate steps; the generation adversary test names it among the
+  fixtures refused as `state-space-bound` and generates from a smaller protocol with `after` over
+  two kinds, one kind and under `not` (4212 states).
+- Adversary pass: no break of the form's semantics. One finding fixed: the evaluator's module
+  docs, an action's reasons and an explanation's claim reasons named only `first` and `before`.
+  Recorded as by design: a `K1` record without `observed_at` leaves `after` unknown even when a
+  later candidate follows every placed `K1` record (expectation 7, the convention of `first` and
+  `before`); an `invalidation` rule whose claim reads only order forms is refused as inert, as
+  before.
