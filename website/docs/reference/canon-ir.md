@@ -16,18 +16,20 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   are written in. The members of an `all` or `any` predicate are sorted by `canonical_order`,
   and an action's capability requirements, the evidence kinds it may produce, the claims an
   invalidation rule invalidates, the values a case input declares, the values an input test
-  lists and the dimensions an evidence match demands independence on by identifier.
-- **No repetition.** Each of those eight lists holds every member once: in three-valued logic
+  lists and the dimensions an evidence match demands independence on by identifier, and the
+  outcomes a `children` form lists by code point.
+- **No repetition.** Each of those nine lists holds every member once: in three-valued logic
   `all` and `any` are idempotent, and the two action lists, the invalidated claims, the two
-  lists of input values and the dimensions of `independent_on` are sets.
+  lists of input values, the dimensions of `independent_on` and the outcomes of `children` are
+  sets.
 - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
   evidence match without a result has `"result": null`; a claim test without `is` has
   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-  true; absent lists and sections are empty. The eight exceptions are an evidence kind's
+  true; absent lists and sections are empty. The nine exceptions are an evidence kind's
   `max_age`, the `subject` of an evidence match or an order form, an evidence match's
-  `independent_on`, an obligation's `applicable_when`, an action's `arguments`, the
-  `invalidation` section, the `case`
-  section and the `independence_dimensions` section: each written only when it is declared (a
+  `independent_on`, an obligation's `applicable_when`, an action's `arguments`, an action's
+  `case_open`, the `invalidation` section, the `case` section and the
+  `independence_dimensions` section: each written only when it is declared (a
   section only when it holds a rule, an input or a dimension), so the IR of a protocol that
   declares none of them is the IR it was before they existed. The `independence_dimensions`
   section is `{<id>: {"description": …}}`. The `case` section is
@@ -35,6 +37,8 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   authored: `{"first": {"kind": …, "result": …}}`, `{"before": {"first": …, "then": …}}`,
   `{"after": {"first": …, "then": {"kind": …, "result": …}}}` and
   `{"since": {"last": …, "then": {"kind": …, "result": …}}}`.
+  The form over the child cases is `{"children": {"in": [...]}}`, and an action's `case_open`
+  is `{"protocol": …, "subject": …}`, as declared (story:case-composition).
   An action's `arguments` is its JSON Schema as declared, the same JSON value, its object keys
   sorted like every object's (story:action-arguments).
 - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
@@ -42,10 +46,11 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   requires an explicit decision has the requirement `{"decision": <name>}`, as written; any
   other requirement is its predicate.
 - **Resolved references.** Only a document the validator accepts compiles, so every claim and
-  evidence kind the IR references is declared in it, and so is every artifact an evidence match
-  or an order form names as its subject or an invalidation rule names as its upstream artifact,
-  every input an input test names, with every value it lists, and every dimension an evidence
-  match demands independence on.
+  evidence kind the IR references is declared in it (`case_outcome` wherever a `children` form
+  reads it), and so is every artifact an evidence match or an order form names as its subject,
+  an action opens a case about (`case_open`) or an invalidation rule names as its upstream
+  artifact, every input an input test names, with every value it lists, and every dimension an
+  evidence match demands independence on.
 
 The IR carries the protocol id and revision (design § 37) and nothing about where the document
 came from: no path, no working directory, no time. `Ir::canonical_json` is its one
@@ -54,3 +59,11 @@ listed above give the same bytes. Other logical equivalences are not normalized,
 different bytes: a one-member `all` or `any` and its member, a nested `all` inside an `all` and
 the flattened list, `not` of `not` and what it negates, and maximum ages of the same length
 written in different units (`60m` and `1h`).
+
+`check_openings` takes a set of compiled protocols and refuses it when their actions'
+`case_open` openings form a cycle (`case-open-cycle`, D206): a protocol opens a case under
+another when one of its actions names that protocol in `case_open`, and a cycle is a path of
+openings back to where it began. The refusal names the first cycle a walk from the least
+protocol id on any cycle finds, in the order its openings go, back to that id
+(`protocols open cases under each other in a cycle: audit -> review -> audit`). An opening
+under a protocol outside the set closes no cycle; a chain of openings is accepted.

@@ -55,6 +55,7 @@ only while its subject revision is the case's current revision of that subject.
 | `observed_at` | [text](#text-formats) (`Instant`) | optional | When the observation was made; its age at the evaluation instant is measured from here. A record without it never expires. |
 | `upstream_revisions` | map from [identifier](#identifiers) (`ArtifactId`) to [identifier](#identifiers) (`Revision`) | optional | The revision of each upstream artifact the observation was made against, keyed by artifact. A record without it is never invalidated. |
 | `producer` | [identifier](#identifiers) (`Principal`) | optional | Who produced the record, recorded as given: Canon does not prove it. A record without one is of no evidence match that demands independence. |
+| `child_case` | [identifier](#identifiers) (`CaseId`) | optional | The child case a `case_outcome` record is about (story:case-composition): one record per child case, its `result` the child's outcome, `open` while the child runs. Written only on a `case_outcome` record, which must name its child and give an outcome. |
 
 ## `canon-decision/1`
 
