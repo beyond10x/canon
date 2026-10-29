@@ -112,3 +112,12 @@ requirements:
       NOT take a record observed at an overlapping instant as later, and MUST be UNKNOWN while the
       latest record or the order of a record it compares is not established.
     source: story:evidence-order-since
+  CANON-COMPOSE-001:
+    status: implemented
+    statement: >-
+      An action MAY declare a child case it opens, by protocol and subject. A predicate over the
+      outcomes of the child cases MUST be FALSE once a child case ended with an outcome it does not
+      list, otherwise MUST be UNKNOWN while a child case is open or when no child case is recorded,
+      and MUST be TRUE only when every child case ended with an outcome it lists. Two outcome
+      records for one child case MUST be refused.
+    source: story:case-composition

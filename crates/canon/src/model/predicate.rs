@@ -1,11 +1,11 @@
 //! The predicate language: a small, total, deterministic expression language (design § 39.2).
 //!
 //! A predicate is one of `all`, `any`, `not`, an evidence match by kind, optional result and
-//! optional subject, a test on a claim value, a test on a case input's value, or one of the four
-//! order forms over the evidence history. Written in source as a map with exactly one of the keys
-//! `all`, `any`, `not`, `evidence`, `claim`, `input`, `first`, `before`, `after` or `since`; a claim
-//! test may add `is`, which defaults to `true`, and an input test adds `in`, the values it is true
-//! for (`{input: severity, in: [high]}`).
+//! optional subject, a test on a claim value, a test on a case input's value, one of the four order
+//! forms over the evidence history, or the form over the case's child cases. Written in source as
+//! a map with exactly one of the keys `all`, `any`, `not`, `evidence`, `claim`, `input`, `first`,
+//! `before`, `after`, `since` or `children`; a claim test may add `is`, which defaults to `true`,
+//! and an input test adds `in`, the values it is true for (`{input: severity, in: [high]}`).
 //!
 //! The order forms read the evidence history: every record of their kind (about their `subject`
 //! when they name one) that the evidence check accepted, including the records the exclusion
@@ -48,6 +48,15 @@
 //! not of the match, whatever its result: it neither establishes nor contradicts it, and is
 //! excluded from it as `not_independent` (CANON-INDEPENDENCE-001). The order forms do not demand
 //! independence.
+//!
+//! `{children: {in: [O, ...]}}` (story:case-composition) asks whether every child case of the case
+//! ended with one of the outcomes `O`. It reads every `case_outcome` record the evidence check
+//! accepted, as the order forms read the history, one record per child case: its `child_case`
+//! names the child, its `result` the child's outcome, `open` while the child runs. `unknown` with no
+//! record; `false` when a record's outcome is neither listed nor `open`, a child that ended outside
+//! the set; otherwise `unknown` while a child is `open`, and `true` when every child ended with a
+//! listed outcome. A child's outcome is a fact about the child case, so a record about an earlier
+//! revision of its subject, an expired one and an invalidated one still count.
 
 use std::fmt;
 
@@ -121,6 +130,9 @@ pub enum Predicate {
     /// Whether a record of a kind with a result, at the subject revision of the latest record of a
     /// kind in the evidence history, was observed after that record.
     Since(EvidenceSince),
+    /// Whether every child case of the case ended with one of the outcomes listed, over its
+    /// `case_outcome` records (story:case-composition).
+    Children(ChildOutcomes),
     Claim(ClaimTest),
 }
 
@@ -232,6 +244,30 @@ pub struct EvidenceMatch {
     pub independent_on: Option<Vec<IndependenceDimensionId>>,
 }
 
+/// The evidence kind whose records carry a child case's outcome (story:case-composition, Atlas ADR
+/// 0081): one record per child case, its `child_case` the child's id and its `result` the child's
+/// outcome. A protocol that writes a [`ChildOutcomes`] form declares it; a record of it names its
+/// child and its outcome.
+pub const CASE_OUTCOME: &str = "case_outcome";
+
+/// The outcome a `case_outcome` record gives a child case that is still running.
+pub const OPEN_OUTCOME: &str = "open";
+
+/// The form over the case's child cases, written `{children: {in: [<outcome>, ...]}}`: whether
+/// every child case ended with one of the outcomes listed. It reads every `case_outcome` record
+/// the evidence check accepted, as the order forms read the history: `unknown` with no record,
+/// `false` when a record's outcome is neither listed nor `open` (a child that ended outside the
+/// set), otherwise `unknown` when a child is still `open` and `true` when every child ended with
+/// a listed outcome.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChildOutcomes {
+    /// The outcomes a child case may have ended with, written `in`: not empty, each once, never
+    /// `open`.
+    #[serde(deserialize_with = "super::present::required")]
+    pub r#in: Vec<String>,
+}
+
 /// Tests whether a claim has a given value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClaimTest {
@@ -283,7 +319,8 @@ impl Predicate {
             | Predicate::First(_)
             | Predicate::Before(_)
             | Predicate::After(_)
-            | Predicate::Since(_) => {}
+            | Predicate::Since(_)
+            | Predicate::Children(_) => {}
         }
     }
 
@@ -293,6 +330,17 @@ impl Predicate {
         self.visit(&mut |predicate| {
             if let Predicate::Input(test) = predicate {
                 found.push(test);
+            }
+        });
+        found
+    }
+
+    /// Every form over the child cases (`children`) inside this predicate, in source order.
+    pub fn children_forms(&self) -> Vec<&ChildOutcomes> {
+        let mut found = Vec::new();
+        self.visit(&mut |predicate| {
+            if let Predicate::Children(form) = predicate {
+                found.push(form);
             }
         });
         found
@@ -369,6 +417,8 @@ pub(crate) struct WrittenPredicate {
     pub(crate) after: Option<EvidenceAfter>,
     #[serde(default, deserialize_with = "super::present::form")]
     pub(crate) since: Option<EvidenceSince>,
+    #[serde(default, deserialize_with = "super::present::form")]
+    pub(crate) children: Option<ChildOutcomes>,
 }
 
 impl TryFrom<WrittenPredicate> for Predicate {
@@ -388,6 +438,7 @@ impl TryFrom<WrittenPredicate> for Predicate {
             before,
             after,
             since,
+            children,
         } = written;
         let forms = [
             all.is_some(),
@@ -400,13 +451,14 @@ impl TryFrom<WrittenPredicate> for Predicate {
             before.is_some(),
             after.is_some(),
             since.is_some(),
+            children.is_some(),
         ]
         .into_iter()
         .filter(|present| *present)
         .count();
         if forms != 1 {
             return Err(format!(
-                "a predicate has exactly one of `all`, `any`, `not`, `evidence`, `claim`, `input`, `first`, `before`, `after` or `since`, found {forms}"
+                "a predicate has exactly one of `all`, `any`, `not`, `evidence`, `claim`, `input`, `first`, `before`, `after`, `since` or `children`, found {forms}"
             ));
         }
         if is.is_some() && claim.is_none() {
@@ -440,6 +492,8 @@ impl TryFrom<WrittenPredicate> for Predicate {
             Predicate::After(form)
         } else if let Some(form) = since {
             Predicate::Since(form)
+        } else if let Some(form) = children {
+            Predicate::Children(form)
         } else {
             let claim = claim.expect("exactly one form is present");
             Predicate::Claim(ClaimTest {

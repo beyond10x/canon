@@ -25,14 +25,17 @@
 //!   one reason `{"requirement": "unsatisfiable"}`. Each case input whose test decides it, by the
 //!   same rule, is a reason too, `{"input": <id>, "value": <the case's value>}`, once per input in
 //!   input-id order, after the evidence reasons (story:case-inputs). Each order form that decides
-//!   it, by the same rule, is a reason last, with its value over the evidence history
+//!   it, by the same rule, is a reason after those, with its value over the evidence history
 //!   (story:evidence-order-predicate, story:evidence-order-after, story:evidence-order-since):
 //!   `{"after": <kind>, "then": <kind>, "result": <result>, "value": <value>}`, `{"before":
 //!   <kind>, "then": <kind>, "value": <value>}`, `{"first": <kind>, "result": <result>, "value":
 //!   <value>}` or `{"since": <kind>, "then": <kind>, "result": <result>, "value": <value>}`, with
 //!   `"subject": <artifact>` added when the form names one; every `after` first, then every
 //!   `before`, then every `first`, then every `since`, each by its fields in the order written here
-//!   (no subject first), each form once. Authority is not consulted.
+//!   (no subject first), each form once. Each form over the child cases that decides it, by the same
+//!   rule, is a reason after those (story:case-composition), `{"children": [<outcome>, ...],
+//!   "value": <value>}`, its outcomes as the IR lists them, each form once, in the order of those
+//!   lists. Authority is not consulted.
 //! - `blocked`, when the precondition is `true` and the authority denies a capability the action
 //!   requires: each denied capability is a reason, `{"capability": <id>, "decision": "denied"}`.
 //!   Asking again would not change a denial.
@@ -148,13 +151,16 @@ struct Named<'a> {
     /// Each order form that decides it, in the order found; `order.rs` orders them and names each
     /// once.
     orders: Vec<&'a Predicate>,
+    /// Each form over the child cases that decides it, by the outcomes it lists.
+    children: BTreeSet<&'a [String]>,
 }
 
 /// The reasons a precondition (not `true`) is unmet: each claim whose test decides it, with the
 /// claim's value, then each evidence match (kind and subject) that decides it, with whether a
 /// record it reads applies, then each input whose test decides it, with the case's value of it,
-/// then each order form that decides it, with its value; or, when no test, match or form decides
-/// it, `{"requirement": "unsatisfiable"}`.
+/// then each order form that decides it, with its value, then each form over the child cases that
+/// decides it, with its value; or, when no test, match or form decides it,
+/// `{"requirement": "unsatisfiable"}`.
 pub(super) fn unmet(
     precondition: &Predicate,
     claims: &BTreeMap<ClaimId, Truth>,
@@ -167,6 +173,7 @@ pub(super) fn unmet(
         && named.matches.is_empty()
         && named.inputs.is_empty()
         && named.orders.is_empty()
+        && named.children.is_empty()
     {
         return vec![reason([("requirement", "unsatisfiable")])];
     }
@@ -218,10 +225,12 @@ pub(super) fn unmet(
         ]))
     });
     let order_reasons = super::order::reasons(named.orders, evidence.history);
+    let children_reasons = super::composition::reasons(named.children, evidence.history);
     claim_reasons
         .chain(evidence_reasons)
         .chain(input_reasons)
         .chain(order_reasons)
+        .chain(children_reasons)
         .collect()
 }
 
@@ -230,8 +239,8 @@ pub(super) fn unmet(
 /// `wanted`, `node` should be `true`; otherwise `false`. Called only on a node that is not what is
 /// wanted.
 ///
-/// - A claim test, an evidence match, an input test or an order form that is not what is wanted is
-///   named.
+/// - A claim test, an evidence match, an input test, an order form or a form over the child cases
+///   that is not what is wanted is named.
 /// - A conjunction (`all` wanted true, `any` wanted false) is not what is wanted because of its
 ///   members that are the opposite of what is wanted, when there are any, and otherwise because
 ///   of its `unknown` members. A member that is as wanted never decides it.
@@ -275,6 +284,11 @@ fn deciding<'a>(
         Predicate::First(_) | Predicate::Before(_) | Predicate::After(_) | Predicate::Since(_) => {
             if value(node) != goal {
                 named.orders.push(node);
+            }
+        }
+        Predicate::Children(form) => {
+            if value(node) != goal {
+                named.children.insert(form.r#in.as_slice());
             }
         }
         Predicate::Not(inner) => deciding(inner, !wanted, claims, inputs, evidence, named),
@@ -372,6 +386,7 @@ mod tests {
             subject_revision: crate::model::Revision::new("r1"),
             observed_at: None,
             upstream_revisions: crate::model::Declarations::default(),
+            child_case: None,
         };
         let records = [record];
         let section = section(

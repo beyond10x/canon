@@ -131,15 +131,27 @@ fn predicate(predicate: &Predicate) -> Json {
                 ),
             ]),
         )]),
+        Predicate::Children(form) => obj([(
+            "children",
+            Json::Obj(vec![(
+                "in".to_owned(),
+                Json::Arr(
+                    form.r#in
+                        .iter()
+                        .map(|outcome| json::str(outcome.clone()))
+                        .collect(),
+                ),
+            )]),
+        )]),
     }
 }
 
 /// The evidence matches (kind, result) and the claim tests (claim, value) inside a predicate; an
 /// order form counts as a match of each kind it reads, `first` and the later kind of `after` and
-/// `since` with their result.
+/// `since` with their result, and a `children` form as a match of `case_outcome`.
 type Leaves = (Vec<(String, Option<String>)>, Vec<(String, Truth)>);
 
-/// Every evidence match, order form and claim test inside a predicate.
+/// Every evidence match, order form, `children` form and claim test inside a predicate.
 fn leaves(predicate: &Predicate) -> Leaves {
     let mut evidence = Vec::new();
     let mut claims = Vec::new();
@@ -169,6 +181,7 @@ fn leaves(predicate: &Predicate) -> Leaves {
                 Some(form.then.result.clone()),
             ));
         }
+        Predicate::Children(_) => evidence.push((model::CASE_OUTCOME.to_owned(), None)),
         _ => {}
     });
     (evidence, claims)

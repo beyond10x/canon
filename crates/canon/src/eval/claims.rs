@@ -184,6 +184,8 @@ impl Walk<'_> {
             | Predicate::Since(_) => {
                 super::order::value(predicate, self.evidence.history).unwrap_or(Truth::Unknown)
             }
+            // Every case_outcome record, likewise: a child's outcome is not invalidated.
+            Predicate::Children(form) => super::composition::value(form, self.evidence.history),
             Predicate::Claim(test) => {
                 let mut tested_in: Context = self.own(&test.claim);
                 tested_in.extend(context.iter().cloned());
@@ -231,6 +233,7 @@ pub(super) fn predicate(
         Predicate::First(_) | Predicate::Before(_) | Predicate::After(_) | Predicate::Since(_) => {
             super::order::value(predicate, evidence.history).unwrap_or(Truth::Unknown)
         }
+        Predicate::Children(form) => super::composition::value(form, evidence.history),
         Predicate::Claim(test) => tested(
             claims.get(&test.claim).copied().unwrap_or(Truth::Unknown),
             test.is,
@@ -341,6 +344,7 @@ mod tests {
             subject_revision: Revision::new("r1"),
             observed_at: None,
             upstream_revisions: crate::model::Declarations::default(),
+            child_case: None,
         }
     }
 

@@ -1344,6 +1344,14 @@ fn words(predicate: &Predicate) -> String {
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
+        Predicate::Children(form) => format!(
+            "every child case ended with one of {}",
+            form.r#in
+                .iter()
+                .map(|outcome| code(outcome))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
     }
 }
 

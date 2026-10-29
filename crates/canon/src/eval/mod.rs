@@ -58,6 +58,13 @@
 //!   `observed_at`; the predicate's reference in `protocol/1` gives every rule (CANON-ORDER-001,
 //!   CANON-ORDER-002, CANON-ORDER-004). No record is listed in `excluded_evidence` because of an
 //!   order form.
+//! - The form over the child cases, `{children: {in: [O, ...]}}` (story:case-composition), reads
+//!   every `case_outcome` record the evidence check accepted, as the order forms read the history,
+//!   one per child case: its `child_case` names the child and its `result` the child's outcome,
+//!   `open` while the child runs. It is `unknown` with no record, `false` when a record's outcome
+//!   is neither listed nor `open` (a child that ended outside the set), otherwise `unknown` while a
+//!   child is `open` and `true` when every child ended with a listed outcome (CANON-COMPOSE-001).
+//!   No record is listed in `excluded_evidence` because of it.
 //!
 //! `unknown` and `false` are never collapsed, and only `true` satisfies a positive requirement.
 //!
@@ -78,17 +85,22 @@
 //! identifier, listed once for it, else `duplicate-identifier`, and declared by the protocol, else
 //! `undeclared-dimension`, naming the producer and the dimension); then each evidence record in
 //! the order given: its format, its identifiers (id, kind, subject, subject revision, then each
-//! upstream artifact and revision in `upstream_revisions`, then its `producer` when given), its
+//! upstream artifact and revision in `upstream_revisions`, then its `producer` and its
+//! `child_case` when given), its
 //! `observed_at` when given (an instant, a fraction of one to nine digits allowed, else
 //! `invalid-instant`), its id
 //! (used once in the set), its kind (declared by the protocol) and each upstream artifact
 //! (declared by the protocol, else `undeclared-artifact`, naming the record and the artifact; named
-//! once, else `duplicate-identifier`). A record's subject and subject revision are checked here as
-//! identifiers only; the revision-binding stage reads them. Every refusal of a record names it
-//! (`` evidence `e2` format is `canon-evidence/2`, expected `canon-evidence/1` ``, `` evidence
-//! `e2` kind identifier `k k` is empty or … ``), and cites it ([`Refusal::evidence`]), here and
-//! in the revision-binding stage below, so a caller that read the records from files can name the
-//! file of each (`canon evaluate` does).
+//! once, else `duplicate-identifier`), then, for a `case_outcome` record, its child case (named,
+//! else `missing-child-case`) and its outcome (a `result`, else `missing-child-outcome`), and for a
+//! record of any other kind no child case (else `misplaced-child-case`); then, over the whole set,
+//! one `case_outcome` record per child case, whatever its revision (else `duplicate-child-case`,
+//! naming the least such child and its records in evidence-id order, citing each). A record's
+//! subject and subject revision are checked here as identifiers only; the revision-binding stage
+//! reads them. Every refusal of a record names it (`` evidence `e2` format is `canon-evidence/2`,
+//! expected `canon-evidence/1` ``, `` evidence `e2` kind identifier `k k` is empty or … ``), and
+//! cites it ([`Refusal::evidence`]), here and in the revision-binding stage below, so a caller
+//! that read the records from files can name the file of each (`canon evaluate` does).
 //!
 //! A case snapshot or evidence record that is not a document of its format is refused when it is
 //! read (`read_case`, `read_evidence`), before any of this, as `malformed-input`; a required key
@@ -166,8 +178,9 @@
 //!    before it left. Revision binding and freshness return the records they exclude from every
 //!    claim, with their reason; invalidation returns, for each claim, the records it keeps from
 //!    that claim alone;
-//! 4. evaluate every claim over the evidence left (`claims.rs`), and its order forms over every
-//!    record the evidence check accepted (`order.rs`), each in its own context: no
+//! 4. evaluate every claim over the evidence left (`claims.rs`), and its order forms and forms over
+//!    the child cases over every record the evidence check accepted (`order.rs`,
+//!    `composition.rs`), each in its own context: no
 //!    evidence match in its evaluation reads a record invalidated for it, including the matches of
 //!    every claim it tests, which are evaluated for that use without the records invalidated for
 //!    either; the value reported for a tested claim is its own. Each claim's
@@ -188,9 +201,9 @@
 //!    predicates with the one evaluator claims use (`claims::predicate`): discharge and
 //!    applicability predicates over the claim values, action preconditions and outcome
 //!    requirements over the claim values and the evidence left after step 3 (their order forms
-//!    over every record accepted), each with the case's input values, which every input test
-//!    reads. The invalidation stage keeps a record from claims only, so
-//!    these predicates' own evidence matches read it. An outcome that requires an explicit
+//!    and forms over the child cases over every record accepted), each with the case's input
+//!    values, which every input test reads. The invalidation stage keeps a record from claims
+//!    only, so these predicates' own evidence matches read it. An outcome that requires an explicit
 //!    decision is decided by the explicit decisions instead.
 //!
 //! Revision binding excludes a record bound to another revision as `revision_mismatch`, and
@@ -223,8 +236,10 @@
 //!   is not read by it), then each input test that decides it, `{"input": <id>, "value": <the
 //!   case's value>}`, then each order form that decides it, `{"after": <kind>, "then": <kind>,
 //!   "result": <result>, "value": <its value>}`, `{"before": <kind>, "then": <kind>, "value":
-//!   <its value>}` or `{"first": <kind>, "result": <result>, "value": <its value>}`, with
-//!   `"subject"` added when it names one, or
+//!   <its value>}`, `{"first": <kind>, "result": <result>, "value": <its value>}` or `{"since":
+//!   <kind>, "then": <kind>, "result": <result>, "value": <its value>}`, with `"subject"` added
+//!   when it names one, then each form over the child cases that decides it, `{"children":
+//!   [<outcome>, ...], "value": <its value>}`, or
 //!   `{"requirement": "unsatisfiable"}` when none does. `blocked` too when the precondition is
 //!   `true` and the authority decisions deny a capability the action requires, each a reason
 //!   `{"capability": <id>, "decision": "denied"}`. `approval-required` when the precondition is
@@ -281,6 +296,7 @@ mod authority;
 mod binding;
 mod case;
 mod claims;
+mod composition;
 mod decision;
 mod decisions;
 mod depth;
@@ -299,8 +315,9 @@ use std::fmt;
 
 use crate::ir::Ir;
 use crate::model::{
-    Case, ClaimDecision, ClaimId, DECISION_FORMAT, Decision, Declarations, EvidenceExclusion,
-    EvidenceId, EvidenceRecord, ExclusionReason, Predicate, is_identifier, one_line,
+    Case, ChildOutcomes, ClaimDecision, ClaimId, DECISION_FORMAT, Decision, Declarations,
+    EvidenceExclusion, EvidenceId, EvidenceRecord, ExclusionReason, Predicate, is_identifier,
+    one_line,
 };
 
 pub use case::{case_from_value, read_case};
@@ -487,6 +504,15 @@ pub(crate) fn order_reasons<'a>(
     history: &[EvidenceRecord],
 ) -> Vec<crate::model::Json> {
     order::reasons(forms, history)
+}
+
+/// The reason each `children` form among `forms` gives, as a blocked action names it, with its
+/// value over the `history` (`composition.rs`): each form once, in the order of its outcome list.
+pub(crate) fn children_reasons<'a>(
+    forms: impl IntoIterator<Item = &'a ChildOutcomes>,
+    history: &[EvidenceRecord],
+) -> Vec<crate::model::Json> {
+    composition::reasons(forms.into_iter().map(|form| form.r#in.as_slice()), history)
 }
 
 /// Moves the records one exclusion stage excluded out of `applicable` and into `excluded`. A stage
@@ -925,6 +951,7 @@ mod tests {
             subject_revision: crate::model::Revision::new("r1"),
             observed_at: None,
             upstream_revisions: crate::model::Declarations::default(),
+            child_case: None,
         }
     }
 

@@ -1,0 +1,42 @@
+format: protocol/1
+
+protocol:
+  id: audit
+  revision: 1
+  description: Audit a system and resolve its findings through child software.change cases, each worked by another party.
+
+artifacts:
+  findings:
+    description: The audit's findings; each change they call for is worked in a child case about them.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child case the audit opened, one record per child; open while the child runs.
+
+claims:
+  findings.resolved:
+    description: Every child case ended accepted or declined.
+    true_when:
+      children:
+        in: [declined, accepted]
+
+actions:
+  open_change:
+    description: Open a child software.change case about the findings, worked by another party.
+    requires:
+      - capability: case.open
+    case_open:
+      protocol: software.change
+      subject: findings
+
+  close:
+    description: Close the audit once every child case ended accepted or declined.
+    precondition:
+      children:
+        in: [accepted, declined]
+
+outcomes:
+  resolved:
+    description: Every finding was resolved through its child case.
+    requires:
+      claim: findings.resolved

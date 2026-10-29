@@ -111,7 +111,12 @@ pub enum Command {
     /// observations or a later record it is compared with. Evidence an evidence match
     /// demanding independence reads (`independent_on`) is there from a producer independent on
     /// exactly each demand, in every combination of demands met, and without a producer when
-    /// something that demands nothing reads it. A state space of more than 65536 states is refused.
+    /// something that demands nothing reads it. Evidence a `children` form reads (`case_outcome`)
+    /// is also there with earlier records at a superseded revision, each record the outcome of a
+    /// child case of its own, and with no place in the order, which the form does not read; an
+    /// action that opens a child case (`case_open`) counts as producing `case_outcome`; and a
+    /// protocol that reads `case_outcome` with both a `children` form and an order form is refused
+    /// (`ordered-child-outcomes`). A state space of more than 65536 states is refused.
     Check {
         /// The protocol document to check.
         #[arg(long)]

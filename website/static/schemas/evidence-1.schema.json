@@ -63,6 +63,10 @@
         "producer": {
           "description": "Who produced the record, recorded as given: Canon does not prove it. A record without one is of no evidence match that demands independence.",
           "$ref": "#/$defs/Identifier"
+        },
+        "child_case": {
+          "description": "The child case a `case_outcome` record is about (story:case-composition): one record per child case, its `result` the child's outcome, `open` while the child runs. Written only on a `case_outcome` record, which must name its child and give an outcome.",
+          "$ref": "#/$defs/Identifier"
         }
       },
       "required": [

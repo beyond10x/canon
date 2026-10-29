@@ -24,11 +24,11 @@ use super::Refusal;
 use crate::ir::{self, Ir};
 use crate::model::{
     self, Action, Age, Artifact, ArtifactId, CapabilityId, CapabilityRequirement, CaseInput,
-    CaseSection, Claim, ClaimId, ClaimTest, Declarations, EffectClass, EvidenceAfter, EvidenceKind,
-    EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceProduction, EvidenceSince, FirstResult,
-    IndependenceDimension, IndependenceDimensionId, InputId, InputTest, InputValue, LaterRecord,
-    Obligation, Outcome, OutcomeRequirement, Predicate, Protocol, ProtocolHeader, ProtocolId,
-    Truth, one_line,
+    CaseOpening, CaseSection, ChildOutcomes, Claim, ClaimId, ClaimTest, Declarations, EffectClass,
+    EvidenceAfter, EvidenceKind, EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceProduction,
+    EvidenceSince, FirstResult, IndependenceDimension, IndependenceDimensionId, InputId, InputTest,
+    InputValue, LaterRecord, Obligation, Outcome, OutcomeRequirement, Predicate, Protocol,
+    ProtocolHeader, ProtocolId, Truth, one_line,
 };
 
 /// A `malformed-input` refusal: `what` is not a document of its format, and why.
@@ -358,6 +358,14 @@ fn action(entry: &Json) -> Shape<Action> {
         may_produce,
         // Written only when declared; read as the JSON it is, and held to the dialect by compiling.
         arguments: field(entry, "arguments").cloned(),
+        // Written only when declared.
+        case_open: match field(entry, "case_open") {
+            None => None,
+            Some(opening) => Some(CaseOpening {
+                protocol: ProtocolId::new(text(opening, "protocol")?),
+                subject: ArtifactId::new(text(opening, "subject")?),
+            }),
+        },
     })
 }
 
@@ -446,8 +454,14 @@ fn predicate(value: &Json) -> Shape<Predicate> {
                 subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
             }))
         }
+        "children" => Ok(Predicate::Children(ChildOutcomes {
+            r#in: values(inner, "in")?
+                .into_iter()
+                .map(|value| value.as_str().to_owned())
+                .collect(),
+        })),
         _ => Err(
-            "a predicate is not one of all, any, not, evidence, claim, input, first, before, after or since"
+            "a predicate is not one of all, any, not, evidence, claim, input, first, before, after, since or children"
                 .to_owned(),
         ),
     }

@@ -42,7 +42,7 @@ pub(super) fn check(ir: &Ir, evidence: &[EvidenceRecord]) -> Result<(), Refusal>
     for record in evidence {
         check_record(ir, record, &mut seen).map_err(|refusal| refusal.citing(&record.id))?;
     }
-    Ok(())
+    super::composition::one_record_per_child(evidence)
 }
 
 /// One record of [`check`], refused without its citation, which [`check`] adds.
@@ -75,6 +75,9 @@ fn check_record<'a>(
     }
     if let Some(producer) = &record.producer {
         identifier(&format!("{named} producer identifier"), producer.as_str())?;
+    }
+    if let Some(child) = &record.child_case {
+        identifier(&format!("{named} child case identifier"), child.as_str())?;
     }
     if let Some(observed_at) = &record.observed_at
         && observed_at.seconds().is_none()
@@ -125,6 +128,28 @@ fn check_record<'a>(
                 ),
             ));
         }
+    }
+    if super::composition::is_case_outcome(record) {
+        if record.child_case.is_none() {
+            return Err(Refusal::new(
+                "missing-child-case",
+                format!("{named} is a case_outcome record and names no child case"),
+            ));
+        }
+        if record.result.is_none() {
+            return Err(Refusal::new(
+                "missing-child-outcome",
+                format!("{named} is a case_outcome record and gives no outcome"),
+            ));
+        }
+    } else if record.child_case.is_some() {
+        return Err(Refusal::new(
+            "misplaced-child-case",
+            format!(
+                "{named} names a child case, which only a case_outcome record does; it is of kind `{}`",
+                one_line(record.kind.as_str())
+            ),
+        ));
     }
     Ok(())
 }

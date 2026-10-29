@@ -7,18 +7,20 @@
 //!   are written in. The members of an `all` or `any` predicate are sorted by [`canonical_order`],
 //!   and an action's capability requirements, the evidence kinds it may produce, the claims an
 //!   invalidation rule invalidates, the values a case input declares, the values an input test
-//!   lists and the dimensions an evidence match demands independence on by identifier.
-//! - **No repetition.** Each of those eight lists holds every member once: in three-valued logic
+//!   lists and the dimensions an evidence match demands independence on by identifier, and the
+//!   outcomes a `children` form lists by code point.
+//! - **No repetition.** Each of those nine lists holds every member once: in three-valued logic
 //!   `all` and `any` are idempotent, and the two action lists, the invalidated claims, the two
-//!   lists of input values and the dimensions of `independent_on` are sets.
+//!   lists of input values, the dimensions of `independent_on` and the outcomes of `children` are
+//!   sets.
 //! - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
 //!   evidence match without a result has `"result": null`; a claim test without `is` has
 //!   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-//!   true; absent lists and sections are empty. The eight exceptions are an evidence kind's
+//!   true; absent lists and sections are empty. The nine exceptions are an evidence kind's
 //!   `max_age`, the `subject` of an evidence match or an order form, an evidence match's
-//!   `independent_on`, an obligation's `applicable_when`, an action's `arguments`, the
-//!   `invalidation` section, the `case`
-//!   section and the `independence_dimensions` section: each written only when it is declared (a
+//!   `independent_on`, an obligation's `applicable_when`, an action's `arguments`, an action's
+//!   `case_open`, the `invalidation` section, the `case` section and the
+//!   `independence_dimensions` section: each written only when it is declared (a
 //!   section only when it holds a rule, an input or a dimension), so the IR of a protocol that
 //!   declares none of them is the IR it was before they existed. The `independence_dimensions`
 //!   section is `{<id>: {"description": …}}`. The `case` section is
@@ -26,6 +28,8 @@
 //!   authored: `{"first": {"kind": …, "result": …}}`, `{"before": {"first": …, "then": …}}`,
 //!   `{"after": {"first": …, "then": {"kind": …, "result": …}}}` and
 //!   `{"since": {"last": …, "then": {"kind": …, "result": …}}}`.
+//!   The form over the child cases is `{"children": {"in": [...]}}`, and an action's `case_open`
+//!   is `{"protocol": …, "subject": …}`, as declared (story:case-composition).
 //!   An action's `arguments` is its JSON Schema as declared, the same JSON value, its object keys
 //!   sorted like every object's (story:action-arguments).
 //! - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
@@ -33,10 +37,11 @@
 //!   requires an explicit decision has the requirement `{"decision": <name>}`, as written; any
 //!   other requirement is its predicate.
 //! - **Resolved references.** Only a document the validator accepts compiles, so every claim and
-//!   evidence kind the IR references is declared in it, and so is every artifact an evidence match
-//!   or an order form names as its subject or an invalidation rule names as its upstream artifact,
-//!   every input an input test names, with every value it lists, and every dimension an evidence
-//!   match demands independence on.
+//!   evidence kind the IR references is declared in it (`case_outcome` wherever a `children` form
+//!   reads it), and so is every artifact an evidence match or an order form names as its subject,
+//!   an action opens a case about (`case_open`) or an invalidation rule names as its upstream
+//!   artifact, every input an input test names, with every value it lists, and every dimension an
+//!   evidence match demands independence on.
 //!
 //! The IR carries the protocol id and revision (design § 37) and nothing about where the document
 //! came from: no path, no working directory, no time. [`Ir::canonical_json`] is its one
@@ -45,20 +50,30 @@
 //! different bytes: a one-member `all` or `any` and its member, a nested `all` inside an `all` and
 //! the flattened list, `not` of `not` and what it negates, and maximum ages of the same length
 //! written in different units (`60m` and `1h`).
+//!
+//! [`check_openings`] takes a set of compiled protocols and refuses it when their actions'
+//! `case_open` openings form a cycle (`case-open-cycle`, D206): a protocol opens a case under
+//! another when one of its actions names that protocol in `case_open`, and a cycle is a path of
+//! openings back to where it began. The refusal names the first cycle a walk from the least
+//! protocol id on any cycle finds, in the order its openings go, back to that id
+//! (`protocols open cases under each other in a cycle: audit -> review -> audit`). An opening
+//! under a protocol outside the set closes no cycle; a chain of openings is accepted.
 
+mod composition;
 mod json;
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use crate::model::{
-    self, ActionId, Age, ArtifactId, CapabilityId, ClaimId, ClaimTest, EffectClass, EvidenceAfter,
-    EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceSince, FirstResult,
-    IndependenceDimensionId, InputId, InputTest, InputValue, InvalidationRuleId, ObligationId,
-    OutcomeId, OutcomeRequirement, Predicate, Protocol, ProtocolId, Truth,
+    self, ActionId, Age, ArtifactId, CapabilityId, CaseOpening, ChildOutcomes, ClaimId, ClaimTest,
+    EffectClass, EvidenceAfter, EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceSince,
+    FirstResult, IndependenceDimensionId, InputId, InputTest, InputValue, InvalidationRuleId,
+    ObligationId, OutcomeId, OutcomeRequirement, Predicate, Protocol, ProtocolId, Truth,
 };
 use crate::validate::{self, Problem};
 
+pub use composition::{OpeningCycle, check_openings};
 use json::Value;
 
 /// The format this module produces.
@@ -144,6 +159,9 @@ pub struct Action {
     /// The argument schema as declared; `None` when the action declares none (it takes no
     /// arguments; a runner accepts only `{}`), and `canon-ir/1` then writes no `arguments` key.
     pub arguments: Option<serde_json::Value>,
+    /// The child case the action opens, as declared; `None` when it opens none, and `canon-ir/1`
+    /// then writes no `case_open` key.
+    pub case_open: Option<CaseOpening>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -214,6 +232,7 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
                     .collect(),
             ),
             arguments: action.arguments.clone(),
+            case_open: action.case_open.clone(),
         }),
         outcomes: keyed(&protocol.outcomes, |outcome| Outcome {
             description: outcome.description.clone(),
@@ -271,6 +290,9 @@ pub(crate) fn normalize(predicate: &Predicate) -> Predicate {
             independent_on: matching.independent_on.clone().map(unique),
             ..matching.clone()
         }),
+        Predicate::Children(form) => Predicate::Children(ChildOutcomes {
+            r#in: unique(form.r#in.clone()),
+        }),
         Predicate::Claim(_)
         | Predicate::First(_)
         | Predicate::Before(_)
@@ -297,8 +319,8 @@ fn unique<T: Ord>(mut ids: Vec<T>) -> Vec<T> {
 /// The canonical order of predicates, which is the order of the members of every `all` and `any`
 /// in `canon-ir/1`. Text (identifiers and results) compares by Unicode code point.
 ///
-/// 1. Different forms compare by form, in the order `after`, `all`, `any`, `before`, `claim`,
-///    `evidence`, `first`, `input`, `not`, `since`.
+/// 1. Different forms compare by form, in the order `after`, `all`, `any`, `before`, `children`,
+///    `claim`, `evidence`, `first`, `input`, `not`, `since`.
 /// 2. Two `all`s, or two `any`s, compare their members pairwise in order; the first pair that
 ///    differs decides, and when one list runs out first, the shorter list comes first.
 /// 3. Two `not`s compare what they negate.
@@ -315,6 +337,8 @@ fn unique<T: Ord>(mut ids: Vec<T>) -> Vec<T> {
 ///    then `then`, then subject; two `after` forms by `first`, then the later kind, then the later
 ///    result, then subject; two `since` forms by `last`, then the later kind, then the later
 ///    result, then subject; no subject comes before any subject.
+/// 8. Two `children` forms compare the outcomes they list, in their own (code-point) order,
+///    pairwise as text; when one list runs out first, the shorter list comes first.
 fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
     fn form(predicate: &Predicate) -> u8 {
         match predicate {
@@ -322,12 +346,13 @@ fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
             Predicate::All(_) => 1,
             Predicate::Any(_) => 2,
             Predicate::Before(_) => 3,
-            Predicate::Claim(_) => 4,
-            Predicate::Evidence(_) => 5,
-            Predicate::First(_) => 6,
-            Predicate::Input(_) => 7,
-            Predicate::Not(_) => 8,
-            Predicate::Since(_) => 9,
+            Predicate::Children(_) => 4,
+            Predicate::Claim(_) => 5,
+            Predicate::Evidence(_) => 6,
+            Predicate::First(_) => 7,
+            Predicate::Input(_) => 8,
+            Predicate::Not(_) => 9,
+            Predicate::Since(_) => 10,
         }
     }
     fn tested(value: Truth) -> u8 {
@@ -444,6 +469,15 @@ fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
                     )
                 })
         }
+        (Predicate::Children(left), Predicate::Children(right)) => {
+            for (left, right) in left.r#in.iter().zip(&right.r#in) {
+                let order = text(left, right);
+                if order != Ordering::Equal {
+                    return order;
+                }
+            }
+            left.r#in.len().cmp(&right.r#in.len())
+        }
         _ => form(left).cmp(&form(right)),
     }
 }
@@ -551,6 +585,15 @@ impl Ir {
                     ];
                     if let Some(arguments) = &action.arguments {
                         fields.push(("arguments", Value::json(arguments)));
+                    }
+                    if let Some(opening) = &action.case_open {
+                        fields.push((
+                            "case_open",
+                            Value::object([
+                                ("protocol", Value::string(opening.protocol.as_str())),
+                                ("subject", Value::string(opening.subject.as_str())),
+                            ]),
+                        ));
                     }
                     Value::object(fields)
                 }),
@@ -753,6 +796,10 @@ fn predicate_value(predicate: &Predicate) -> Value {
                     ),
                 ),
             ]),
+        )]),
+        Predicate::Children(ChildOutcomes { r#in }) => Value::object([(
+            "children",
+            Value::object([("in", Value::Array(r#in.iter().map(Value::string).collect()))]),
         )]),
     }
 }

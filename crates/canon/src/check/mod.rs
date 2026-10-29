@@ -217,6 +217,27 @@
 //! `unproduced-evidence` and, in every position, for `authority-bypass`, as for the other order
 //! forms.
 //!
+//! # Child cases
+//!
+//! A `children` form (story:case-composition) reads every `case_outcome` record the evidence check
+//! accepts, about any artifact and at any revision, as the order forms read the history: each
+//! outcome it lists and `open` are classes of every `case_outcome` dimension, as an evidence
+//! match's result is, and each such dimension has a history dimension, as one an order form reads
+//! has, but no place in the order of first observations: the form does not read when a record was
+//! observed, so its records carry no `observed_at` and it adds no order dimension. Its value
+//! depends only on which of those outcomes, or another, some child has, among the current records
+//! the evidence matches read and the earlier records at a superseded revision they do not: so every
+//! value of every `children` form, jointly with the evidence matches over the same records, is
+//! reached by some state. Each `case_outcome` record of a state is the outcome of a child case of
+//! its own, named by the record's id, and a record of the class without a result carries an outcome
+//! no predicate names (`other`, primed until it is none), since a `case_outcome` record must give
+//! one; the state still writes it `` evidence `case_outcome` ``. A protocol with no `children` form
+//! checks as it did before the form existed. A protocol in which an order form reads `case_outcome`
+//! too is refused as `ordered-child-outcomes`: an earlier record the form needs could change what
+//! the order form reads. The kind counts for `unproduced-evidence` and, in every position, for
+//! `authority-bypass`, as for the order forms: with no record the form is `unknown`, and so is its
+//! negation.
+//!
 //! A state is evaluated as a case snapshot that lists each declared artifact, and the case itself,
 //! at one revision, gives each case input its value in the state and lists each producer its
 //! records name under `independence`, with one evidence record per present class and variant about
@@ -238,7 +259,10 @@
 //! - `unsatisfiable-precondition`: an action whose precondition is `true` in no state, that is,
 //!   neither `admissible` nor `approval-required` in any state.
 //! - `unproduced-evidence`: a predicate that reads, directly or through the claims it tests, an
-//!   evidence kind no action's `may_produce` lists. Every predicate is read: each claim's
+//!   evidence kind no action may produce: none lists it in `may_produce`, and, for `case_outcome`,
+//!   none opens a child case (`case_open`), whose outcome comes back as a `case_outcome` record.
+//!   An action that opens a child case may produce `case_outcome` for `authority-bypass` too.
+//!   Every predicate is read: each claim's
 //!   `true_when`, each obligation's `discharged_when`, each action's precondition and each outcome's
 //!   requirement, in that order, each section in identifier order; one finding per declaration and
 //!   kind, kinds in identifier order.
@@ -285,7 +309,9 @@
 //! refused as `predicate-too-deep`, and claims that test each other in a cycle as `claim-cycle`
 //! (the module docs of `eval`, "Depth"). Then, before the bound, the properties are checked
 //! against the protocol, as `properties.rs` says: `unsupported-format`, `protocol-mismatch`, `invalid-identifier`,
-//! `duplicate-identifier`, `undeclared-action`, `undeclared-outcome`, `undeclared-claim`. Text
+//! `duplicate-identifier`, `undeclared-action`, `undeclared-outcome`, `undeclared-claim`. Then a
+//! protocol in which a `children` form and an order form both read `case_outcome` is refused as
+//! `ordered-child-outcomes`, naming the protocol and the kind (above, "Child cases"). Text
 //! that is not a `canon-properties/1` document is refused by [`read_properties`] as
 //! `malformed-input`. An evaluation the evaluator refuses is refused with the evaluator's code.
 
@@ -518,6 +544,18 @@ pub fn check(ir: &Ir, properties: Option<&Properties>) -> Result<Report, Refusal
     if let Some(properties) = properties {
         properties::validate(ir, properties)?;
     }
+    if let Some(kind) = space::ordered_child_outcomes(ir) {
+        return Err(Refusal::new(
+            "ordered-child-outcomes",
+            format!(
+                "protocol `{}` revision {} reads evidence kind `{}` with a `children` form and with \
+                 an order form, which canon check does not cover together",
+                one_line(ir.protocol.id.as_str()),
+                ir.protocol.revision,
+                one_line(kind.as_str())
+            ),
+        ));
+    }
     let space = Space::new(ir);
     let size = match space.size() {
         Some(size) if size <= STATE_BOUND => size,
@@ -561,7 +599,7 @@ pub fn check(ir: &Ir, properties: Option<&Properties>) -> Result<Report, Refusal
     let produced: BTreeSet<&EvidenceKindId> = ir
         .actions
         .values()
-        .flat_map(|action| &action.may_produce)
+        .flat_map(|action| produces(ir, action))
         .collect();
     for (reader, predicate) in space::readers(ir) {
         for kind in space::kinds_read(ir, predicate) {
@@ -659,19 +697,29 @@ pub(crate) fn witness(
     candidates.min_by_key(|index| (space.weight(&states[*index]), space.render(&states[*index])))
 }
 
+/// The evidence kinds `action` may produce: each its `may_produce` lists and, when it opens a child
+/// case (story:case-composition), `case_outcome`, which carries the child's outcome back.
+fn produces<'a>(
+    ir: &'a Ir,
+    action: &'a crate::ir::Action,
+) -> impl Iterator<Item = &'a EvidenceKindId> {
+    let opened = action.case_open.as_ref().and(space::case_outcome(ir));
+    action.may_produce.iter().chain(opened)
+}
+
 /// The `authority-bypass` findings, in outcome order.
 fn bypasses(ir: &Ir, space: &Space<'_>, states: &[State], evaluated: &[Evaluated]) -> Vec<Finding> {
     let governed: BTreeSet<&EvidenceKindId> = ir
         .actions
         .values()
         .filter(|action| !action.requires.is_empty())
-        .flat_map(|action| &action.may_produce)
+        .flat_map(|action| produces(ir, action))
         .collect();
     let free: BTreeSet<&EvidenceKindId> = ir
         .actions
         .values()
         .filter(|action| action.requires.is_empty())
-        .flat_map(|action| &action.may_produce)
+        .flat_map(|action| produces(ir, action))
         .collect();
     let legitimate = |state: &State, at: usize| {
         let index = usize::try_from(space.index(state)).expect("the space is within the bound");

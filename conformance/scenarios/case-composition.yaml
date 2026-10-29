@@ -1,0 +1,436 @@
+format: canon-conformance/1
+id: CANON-COMPOSE-001
+covers: [CANON-COMPOSE-001]
+fixture: fixtures/investigation/case-composition.yaml
+# The fixture is an audit (Atlas ADR 0081's example). It declares the artifact findings and the
+# evidence kind case_outcome. Action open_change opens a child software.change case about the
+# findings (`case_open`) and requires the capability case.open, like any other action; Canon opens
+# nothing itself. Claim findings.resolved is the predicate over the children, `{children: {in:
+# [declined, accepted]}}`: TRUE once every child ended accepted or declined, FALSE once any child
+# ended outside that set, UNKNOWN while any child is open or when there is no child record. Action
+# close requires the same form; outcome resolved requires the claim. Each case_outcome record names
+# its child in child_case and the child's outcome as its result, one record per child.
+steps:
+  # Expectation 1. The action compiles with the protocol and subject it opens a case under, written
+  # `{"case_open": {"protocol": ..., "subject": ...}}`, only on the action that declares it. The
+  # form over the children compiles to `{"children": {"in": [...]}}`, its outcomes each once, in
+  # code-point order, whatever order they are written in.
+  - id: compile
+    compile: {}
+    expect:
+      canon-ir: |
+        {
+          "actions": {
+            "close": {
+              "description": "Close the audit once every child case ended accepted or declined.",
+              "effect": null,
+              "may_produce": [],
+              "precondition": {
+                "children": {
+                  "in": [
+                    "accepted",
+                    "declined"
+                  ]
+                }
+              },
+              "requires": []
+            },
+            "open_change": {
+              "case_open": {
+                "protocol": "software.change",
+                "subject": "findings"
+              },
+              "description": "Open a child software.change case about the findings, worked by another party.",
+              "effect": null,
+              "may_produce": [],
+              "precondition": {
+                "all": []
+              },
+              "requires": [
+                {
+                  "capability": "case.open"
+                }
+              ]
+            }
+          },
+          "artifacts": {
+            "findings": {
+              "description": "The audit's findings; each change they call for is worked in a child case about them."
+            }
+          },
+          "claims": {
+            "findings.resolved": {
+              "description": "Every child case ended accepted or declined.",
+              "true_when": {
+                "children": {
+                  "in": [
+                    "accepted",
+                    "declined"
+                  ]
+                }
+              }
+            }
+          },
+          "evidence_kinds": {
+            "case_outcome": {
+              "description": "The outcome of one child case the audit opened, one record per child; open while the child runs."
+            }
+          },
+          "format": "canon-ir/1",
+          "obligations": {},
+          "outcomes": {
+            "resolved": {
+              "description": "Every finding was resolved through its child case.",
+              "requires": {
+                "claim": {
+                  "id": "findings.resolved",
+                  "is": "true"
+                }
+              }
+            }
+          },
+          "protocol": {
+            "description": "Audit a system and resolve its findings through child software.change cases, each worked by another party.",
+            "id": "audit",
+            "revision": 1
+          }
+        }
+
+  # Expectation 2. One child accepted, one still open: UNKNOWN. The blocked action names the form
+  # over the children, its outcomes and its value. open_change needs the authority's decision on
+  # case.open, as any action that requires a capability does.
+  - id: one-child-open
+    evaluate:
+      case:
+        format: canon-case/1
+        id: AUD-7
+        protocol: audit
+        artifacts:
+          findings: {revision: f1}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: accepted
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-1
+        - format: canon-evidence/1
+          id: o2
+          kind: case_outcome
+          result: open
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-2
+    expect:
+      decision: |
+        {
+          "actions": {
+            "close": {
+              "reasons": [
+                {
+                  "children": [
+                    "accepted",
+                    "declined"
+                  ],
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "open_change": {
+              "reasons": [
+                {
+                  "capability": "case.open",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "claims": {
+            "findings.resolved": {
+              "value": "unknown"
+            }
+          },
+          "outcomes": {
+            "resolved": {
+              "reasons": [
+                {
+                  "claim": "findings.resolved",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 3. Every child ended accepted or declined: TRUE, and the audit may close.
+  - id: every-child-accepted-or-declined
+    evaluate:
+      case:
+        format: canon-case/1
+        id: AUD-7
+        protocol: audit
+        artifacts:
+          findings: {revision: f1}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: accepted
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-1
+        - format: canon-evidence/1
+          id: o2
+          kind: case_outcome
+          result: declined
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-2
+    expect:
+      decision: |
+        {
+          "actions": {
+            "close": {
+              "status": "admissible"
+            },
+            "open_change": {
+              "reasons": [
+                {
+                  "capability": "case.open",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "claims": {
+            "findings.resolved": {
+              "value": "true"
+            }
+          },
+          "outcomes": {
+            "resolved": {
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # Expectation 4. One child accepted, one abandoned, an outcome outside the set: FALSE.
+  - id: one-child-abandoned
+    evaluate:
+      case:
+        format: canon-case/1
+        id: AUD-7
+        protocol: audit
+        artifacts:
+          findings: {revision: f1}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: accepted
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-1
+        - format: canon-evidence/1
+          id: o2
+          kind: case_outcome
+          result: abandoned
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-2
+    expect:
+      decision: |
+        {
+          "actions": {
+            "close": {
+              "reasons": [
+                {
+                  "children": [
+                    "accepted",
+                    "declined"
+                  ],
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            },
+            "open_change": {
+              "reasons": [
+                {
+                  "capability": "case.open",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "claims": {
+            "findings.resolved": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "resolved": {
+              "reasons": [
+                {
+                  "claim": "findings.resolved",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 5. Two case_outcome records for one child, CHG-1, are refused; the refusal names
+  # the child (`crates/canon/src/eval/evidence.rs` holds that message).
+  - id: two-records-for-one-child
+    evaluate:
+      case:
+        format: canon-case/1
+        id: AUD-7
+        protocol: audit
+        artifacts:
+          findings: {revision: f1}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: open
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-1
+        - format: canon-evidence/1
+          id: o2
+          kind: case_outcome
+          result: accepted
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-1
+    expect:
+      refusal: duplicate-child-case
+
+  # The story's outcome, beyond the five expectations. A child that ended outside the set makes the
+  # claim FALSE although another child is still open: it can no longer become TRUE.
+  - id: one-child-abandoned-another-open
+    evaluate:
+      case:
+        format: canon-case/1
+        id: AUD-7
+        protocol: audit
+        artifacts:
+          findings: {revision: f1}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: open
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-1
+        - format: canon-evidence/1
+          id: o2
+          kind: case_outcome
+          result: abandoned
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-2
+    expect:
+      decision: |
+        {
+          "claims": {
+            "findings.resolved": {
+              "value": "false"
+            }
+          }
+        }
+
+  # No child record: UNKNOWN, Canon's rule that no applicable evidence is UNKNOWN, not TRUE for an
+  # empty set of children.
+  - id: no-child-record
+    evaluate:
+      case:
+        format: canon-case/1
+        id: AUD-7
+        protocol: audit
+        artifacts:
+          findings: {revision: f1}
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "close": {
+              "reasons": [
+                {
+                  "children": [
+                    "accepted",
+                    "declined"
+                  ],
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "open_change": {
+              "reasons": [
+                {
+                  "capability": "case.open",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "claims": {
+            "findings.resolved": {
+              "value": "unknown"
+            }
+          }
+        }
+
+  # A child's outcome is a fact about the child case: a record about an earlier revision of the
+  # findings still counts, and is not listed as excluded evidence. CHG-1 ended accepted while the
+  # findings were at f1; they are at f2 now, and CHG-2 ended declined there: TRUE.
+  - id: an-outcome-about-an-earlier-revision-counts
+    evaluate:
+      case:
+        format: canon-case/1
+        id: AUD-7
+        protocol: audit
+        artifacts:
+          findings: {revision: f2}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: accepted
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-1
+        - format: canon-evidence/1
+          id: o2
+          kind: case_outcome
+          result: declined
+          subject: findings
+          subject_revision: f2
+          child_case: CHG-2
+    expect:
+      decision: |
+        {
+          "claims": {
+            "findings.resolved": {
+              "value": "true"
+            }
+          },
+          "outcomes": {
+            "resolved": {
+              "status": "legitimate"
+            }
+          }
+        }
