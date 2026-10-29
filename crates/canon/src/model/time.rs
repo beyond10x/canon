@@ -1,23 +1,68 @@
 //! Reading [`Instant`] and [`Age`] text as seconds. Pure: no clock is read; an instant is only ever
 //! compared with another instant given as text.
+//!
+//! An instant is `YYYY-MM-DDTHH:MM:SSZ`, or the same with a fraction of one to nine digits after
+//! the seconds, `YYYY-MM-DDTHH:MM:SS.fffZ` (story:evidence-order-subsecond). It names the interval
+//! its last written digit spans: `12:00:00Z` is the second `[12:00:00, 12:00:01)`, `12:00:00.4Z`
+//! is `[12:00:00.4, 12:00:00.5)` and `12:00:00.400Z` is `[12:00:00.400, 12:00:00.401)`. No digit
+//! that was not written is invented ([`Instant::interval`]).
+//!
+//! The order forms read every instant of one evaluation at one resolution, the coarsest written
+//! among its records ([`Instant::digits`]), each as whole ticks of that resolution with the finer
+//! digits dropped ([`Instant::ticks`]): the interval at that resolution that contains the one the
+//! instant names. Two instants that differ in ticks name intervals that do not overlap.
 
 use super::ids::{Age, Instant};
 
+/// Nanoseconds in a second, the finest resolution an instant is written in (nine fraction digits).
+const NANOS: i128 = 1_000_000_000;
+
 impl Instant {
-    /// Seconds since `1970-01-01T00:00:00Z`, or `None` when the text is not exactly
-    /// `YYYY-MM-DDTHH:MM:SSZ` with a real calendar date (Gregorian, leap years included) and a time
-    /// from `00:00:00` to `23:59:59`.
+    /// Whole seconds since `1970-01-01T00:00:00Z`, the fraction ignored, or `None` when the text is
+    /// not an instant: exactly `YYYY-MM-DDTHH:MM:SSZ`, or with a fraction of one to nine digits
+    /// after a `.` (`YYYY-MM-DDTHH:MM:SS.fffZ`), with a real calendar date (Gregorian, leap years
+    /// included) and a time from `00:00:00` to `23:59:59`. An empty fraction, more than nine
+    /// digits and a `,` are not instants. Expiry (`max_age`) reads these whole seconds.
     pub fn seconds(&self) -> Option<i64> {
+        self.read().map(|(seconds, _, _)| seconds)
+    }
+
+    /// The interval the instant names, in nanoseconds since `1970-01-01T00:00:00Z`: from its start
+    /// (inclusive) to its end (exclusive), as wide as its last written digit spans, a second without
+    /// a fraction and `10^-n` of a second with `n` fraction digits. `None` when the text is not an
+    /// instant ([`Instant::seconds`]).
+    pub fn interval(&self) -> Option<(i128, i128)> {
+        let (seconds, nanos, digits) = self.read()?;
+        let start = i128::from(seconds) * NANOS + i128::from(nanos);
+        let width = 10_i128.pow(9 - digits);
+        Some((start, start + width))
+    }
+
+    /// The number of fraction digits written, `0` to `9` (`0` for whole seconds): the instant's
+    /// precision. `None` when the text is not an instant ([`Instant::seconds`]).
+    pub fn digits(&self) -> Option<u32> {
+        self.read().map(|(_, _, digits)| digits)
+    }
+
+    /// The instant read at the resolution of `digits` fraction digits: whole ticks of `10^-digits`
+    /// of a second since `1970-01-01T00:00:00Z`, the digits finer than that dropped. With `digits`
+    /// at most the instant's own [`Instant::digits`], the tick holds the interval the instant
+    /// names. `None` when the text is not an instant, or `digits` is more than 9.
+    pub fn ticks(&self, digits: u32) -> Option<i128> {
+        let (seconds, nanos, _) = self.read()?;
+        let per_second = 10_i128.checked_pow(digits).filter(|_| digits <= 9)?;
+        Some(i128::from(seconds) * per_second + i128::from(nanos) / 10_i128.pow(9 - digits))
+    }
+
+    /// The whole seconds, the fraction in nanoseconds and the number of fraction digits written.
+    fn read(&self) -> Option<(i64, u32, u32)> {
         let text = self.as_str().as_bytes();
-        if text.len() != 20
-            || [
-                (4, b'-'),
-                (7, b'-'),
-                (10, b'T'),
-                (13, b':'),
-                (16, b':'),
-                (19, b'Z'),
-            ]
+        let fraction = match text.get(19..)? {
+            [b'Z'] => &[][..],
+            [b'.', digits @ .., b'Z'] if (1..=9).contains(&digits.len()) => digits,
+            _ => return None,
+        };
+        if [(4, b'-'), (7, b'-'), (10, b'T'), (13, b':'), (16, b':')]
             .iter()
             .any(|&(at, byte)| text[at] != byte)
         {
@@ -40,7 +85,15 @@ impl Instant {
         {
             return None;
         }
-        Some(days_from_civil(year, month, day) * 86_400 + hour * 3_600 + minute * 60 + second)
+        let nanos = fraction.iter().try_fold(0u32, |value, &byte| {
+            byte.is_ascii_digit()
+                .then(|| value * 10 + u32::from(byte - b'0'))
+        })? * 10_u32.pow(9 - fraction.len() as u32);
+        Some((
+            days_from_civil(year, month, day) * 86_400 + hour * 3_600 + minute * 60 + second,
+            nanos,
+            fraction.len() as u32,
+        ))
     }
 }
 
@@ -135,7 +188,17 @@ mod tests {
             "2026-10-04",
             "2026-10-04T12:00:00",
             "2026-10-04T12:00:00+00:00",
-            "2026-10-04T12:00:00.5Z",
+            "2026-10-04T12:00:00.Z",
+            "2026-10-04T12:00:00.1234567890Z",
+            "2026-10-04T12:00:00,5Z",
+            "2026-10-04T12:00:00.5",
+            "2026-10-04T12:00:00.5z",
+            "2026-10-04T12:00:00.-5Z",
+            "2026-10-04T12:00:00.5aZ",
+            "2026-10-04T12:00:00..5Z",
+            "2026-10-04T12:00:00.5ZZ",
+            "2026-10-04T12:00:00Z.5",
+            "2026-10-04T12:00:60.5Z",
             "2026-10-04 12:00:00Z",
             "2026-10-04t12:00:00Z",
             "2026-13-01T00:00:00Z",
@@ -152,6 +215,102 @@ mod tests {
         ] {
             assert_eq!(instant(text), None, "{text:?}");
         }
+    }
+
+    /// A fraction of one to nine digits is read; the whole seconds ignore it.
+    #[test]
+    fn an_instant_with_a_fraction_reads_as_its_whole_seconds() {
+        assert_eq!(instant("2026-10-04T12:00:00.5Z"), Some(1_791_115_200));
+        assert_eq!(
+            instant("2026-10-04T12:00:00.999999999Z"),
+            Some(1_791_115_200)
+        );
+        assert_eq!(instant("1969-12-31T23:59:59.9Z"), Some(-1));
+        assert_eq!(instant("2026-10-04T12:00:01.000Z"), Some(1_791_115_201));
+    }
+
+    /// The interval an instant names spans its last written digit, in nanoseconds.
+    /// The precision is the number of fraction digits written; ticks drop the digits finer than
+    /// the resolution asked for, and the tick's interval holds the instant's.
+    #[test]
+    fn an_instant_reads_as_ticks_at_a_resolution() {
+        let second = 1_791_115_200_i128;
+        let digits = |text: &str| Instant::new(text).digits();
+        let ticks = |text: &str, at: u32| Instant::new(text).ticks(at);
+        assert_eq!(digits("2026-10-04T12:00:00Z"), Some(0));
+        assert_eq!(digits("2026-10-04T12:00:00.40Z"), Some(2));
+        assert_eq!(digits("2026-10-04T12:00:00.000000001Z"), Some(9));
+        assert_eq!(digits("2026-10-04T12:00:00,5Z"), None);
+        assert_eq!(ticks("2026-10-04T12:00:00.987Z", 0), Some(second));
+        assert_eq!(ticks("2026-10-04T12:00:00.987Z", 1), Some(second * 10 + 9));
+        assert_eq!(
+            ticks("2026-10-04T12:00:00.987Z", 3),
+            Some(second * 1000 + 987)
+        );
+        assert_eq!(ticks("2026-10-04T12:00:00.4Z", 2), Some(second * 100 + 40));
+        assert_eq!(
+            ticks("2026-10-04T12:00:00.000000001Z", 9),
+            Some(second * 1_000_000_000 + 1)
+        );
+        assert_eq!(ticks("1969-12-31T23:59:59.5Z", 0), Some(-1));
+        assert_eq!(ticks("1969-12-31T23:59:59.5Z", 1), Some(-5));
+        assert_eq!(ticks("2026-10-04T12:00:00Z", 10), None);
+        assert_eq!(ticks("2026-10-04T12:00:00.Z", 0), None);
+        for (text, at) in [
+            ("2026-10-04T12:00:00.987654321Z", 0),
+            ("2026-10-04T12:00:00.987654321Z", 4),
+            ("1969-12-31T23:59:59.25Z", 1),
+        ] {
+            let (start, end) = Instant::new(text).interval().expect("an instant");
+            let tick = ticks(text, at).expect("ticks");
+            let width = 10_i128.pow(9 - at);
+            assert!(
+                tick * width <= start && end <= (tick + 1) * width,
+                "{text} at {at}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_instant_names_the_interval_of_its_last_digit() {
+        let interval = |text: &str| Instant::new(text).interval();
+        let second = 1_791_115_200_i128 * 1_000_000_000;
+        assert_eq!(
+            interval("2026-10-04T12:00:00Z"),
+            Some((second, second + 1_000_000_000))
+        );
+        assert_eq!(
+            interval("2026-10-04T12:00:00.4Z"),
+            Some((second + 400_000_000, second + 500_000_000))
+        );
+        assert_eq!(
+            interval("2026-10-04T12:00:00.40Z"),
+            Some((second + 400_000_000, second + 410_000_000))
+        );
+        assert_eq!(
+            interval("2026-10-04T12:00:00.400Z"),
+            Some((second + 400_000_000, second + 401_000_000))
+        );
+        assert_eq!(
+            interval("2026-10-04T12:00:00.000000001Z"),
+            Some((second + 1, second + 2))
+        );
+        assert_eq!(
+            interval("2026-10-04T12:00:00.999999999Z"),
+            Some((second + 999_999_999, second + 1_000_000_000))
+        );
+        assert_eq!(
+            interval("1969-12-31T23:59:59.5Z"),
+            Some((-500_000_000, -400_000_000))
+        );
+        assert_eq!(
+            interval("9999-12-31T23:59:59.999999999Z"),
+            Some((
+                253_402_300_799 * 1_000_000_000 + 999_999_999,
+                253_402_300_800 * 1_000_000_000
+            ))
+        );
+        assert_eq!(interval("2026-10-04T12:00:00,5Z"), None);
     }
 
     #[test]

@@ -1,0 +1,52 @@
+format: protocol/1
+
+protocol:
+  id: subsecond-order
+  revision: 1
+  description: Decide from the order evidence was observed in, at the resolution its instants are written in.
+
+artifacts:
+  change:
+    description: The change under review.
+
+evidence_kinds:
+  tests_change:
+    description: A change to the tests of the change.
+  test_result:
+    description: A run of the tests against the change; its result is failed or passed.
+
+claims:
+  red.after.change:
+    description: A failed test result was recorded after the first change to the tests.
+    true_when:
+      after:
+        first: tests_change
+        then:
+          kind: test_result
+          result: failed
+
+  red.first:
+    description: The first test result recorded was a failure.
+    true_when:
+      first:
+        kind: test_result
+        result: failed
+
+  run.before.change:
+    description: The first test result was recorded before the first change to the tests.
+    true_when:
+      before:
+        first: test_result
+        then: tests_change
+
+outcomes:
+  shown:
+    description: The test was seen failing first, before its tests were changed.
+    requires:
+      all:
+        - claim: red.first
+        - claim: run.before.change
+  red.after:
+    description: The test was seen failing after its tests were changed.
+    requires:
+      claim: red.after.change

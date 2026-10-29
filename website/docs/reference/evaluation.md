@@ -85,7 +85,8 @@ identifier, listed once for it, else `duplicate-identifier`, and declared by the
 `undeclared-dimension`, naming the producer and the dimension); then each evidence record in
 the order given: its format, its identifiers (id, kind, subject, subject revision, then each
 upstream artifact and revision in `upstream_revisions`, then its `producer` when given), its
-`observed_at` when given (an instant, else `invalid-instant`), its id
+`observed_at` when given (an instant, a fraction of one to nine digits allowed, else
+`invalid-instant`), its id
 (used once in the set), its kind (declared by the protocol) and each upstream artifact
 (declared by the protocol, else `undeclared-artifact`, naming the record and the artifact; named
 once, else `duplicate-identifier`). A record's subject and subject revision are checked here as

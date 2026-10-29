@@ -53,7 +53,8 @@ fn property<'a>(root: &'a Value, property: &str) -> &'a Value {
 /// The `Age` pattern, evaluated by [`age_shape`].
 const AGE_PATTERN: &str = "^(0|[1-9][0-9]*)[smhd]$";
 /// The `Instant` pattern, evaluated by [`instant_shape`].
-const INSTANT_PATTERN: &str = "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$";
+const INSTANT_PATTERN: &str =
+    "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$";
 
 /// [`AGE_PATTERN`] by hand: `0`, or digits without a leading zero, then one of `s`, `m`, `h`, `d`.
 fn age_shape(text: &str) -> bool {
@@ -65,16 +66,23 @@ fn age_shape(text: &str) -> bool {
         && (digits == "0" || !digits.starts_with('0'))
 }
 
-/// [`INSTANT_PATTERN`] by hand: 20 ASCII bytes, `-`, `-`, `T`, `:`, `:`, `Z` at their places and
-/// a digit everywhere else.
+/// [`INSTANT_PATTERN`] by hand: 19 ASCII bytes, `-`, `-`, `T`, `:`, `:` at their places and a
+/// digit everywhere else, then `Z`, or `.`, one to nine digits and `Z`
+/// (story:evidence-order-subsecond).
 fn instant_shape(text: &str) -> bool {
     let bytes = text.as_bytes();
-    bytes.len() == 20
-        && bytes.iter().enumerate().all(|(at, &byte)| match at {
+    let fraction_ok = match bytes.get(19..) {
+        Some([b'Z']) => true,
+        Some([b'.', digits @ .., b'Z']) => {
+            (1..=9).contains(&digits.len()) && digits.iter().all(u8::is_ascii_digit)
+        }
+        _ => false,
+    };
+    fraction_ok
+        && bytes[..19].iter().enumerate().all(|(at, &byte)| match at {
             4 | 7 => byte == b'-',
             10 => byte == b'T',
             13 | 16 => byte == b':',
-            19 => byte == b'Z',
             _ => byte.is_ascii_digit(),
         })
 }
@@ -172,6 +180,11 @@ fn every_observed_at_the_published_evidence_schema_accepts_is_one_canon_accepts(
         "2026-10-04T12:00:00Z",
         "2026-10-04T12:00:00+02:00",
         "2026-10-04T12:00:00.5Z",
+        "2026-10-04T12:00:00.123456789Z",
+        "2026-10-04T12:00:00.Z",
+        "2026-10-04T12:00:00.1234567890Z",
+        "2026-10-04T12:00:00,5Z",
+        "2026-10-04T12:00:00.5aZ",
         "2026-10-04t12:00:00z",
         "2026-02-30T00:00:00Z",
         "2026-10-04",

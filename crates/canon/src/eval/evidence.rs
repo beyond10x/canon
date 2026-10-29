@@ -212,11 +212,23 @@ mod tests {
     #[test]
     fn observed_at_is_an_instant_when_given() {
         assert_eq!(checked("2026-10-04T12:00:00Z"), Ok(()));
+        assert_eq!(checked("2026-10-04T12:00:00.5Z"), Ok(()));
+        assert_eq!(checked("2026-10-04T12:00:00.123456789Z"), Ok(()));
+        for refused in [
+            "2026-10-04T12:00:00.Z",
+            "2026-10-04T12:00:00.1234567890Z",
+            "2026-10-04T12:00:00,5Z",
+        ] {
+            assert_eq!(
+                checked(refused).expect_err(refused).code(),
+                "invalid-instant"
+            );
+        }
         let refusal = checked("2026-10-04T12:00:00+02:00").expect_err("refused");
         assert_eq!(refusal.code(), "invalid-instant");
         assert_eq!(
             refusal.to_string(),
-            "evidence `e1` observed_at `2026-10-04T12:00:00+02:00` is not an instant in UTC written YYYY-MM-DDTHH:MM:SSZ"
+            "evidence `e1` observed_at `2026-10-04T12:00:00+02:00` is not an instant in UTC written YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DDTHH:MM:SS.fffZ (one to nine fraction digits)"
         );
         assert_eq!(
             checked("~").expect_err("null refused").code(),
