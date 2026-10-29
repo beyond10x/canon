@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:case-composition
 kind: story
-status: draft
+status: active
 title: 'Compose cases at run time: case.open and case_outcome evidence'
 refs:
 - provider: atlas
@@ -14,7 +14,6 @@ relations:
 - depends_on: story:evaluator-skeleton
 - depends_on: story:three-valued-claims
 - depends_on: story:invalidation-rules
-- depends_on: story:protocol-imports
 - depends_on: story:conformance-suite
 scope:
 - confidence: inferred
@@ -43,7 +42,10 @@ scope:
   path: website/static/schemas/
 - confidence: inferred
   path: website/status.yaml
-revision: 10
+revision: 16
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-29T20:43:34Z", actor: "human:timo", revision: 11, decided_on: {"recorded":{"review_outcome":1}}, executor: "agent:canon-ep-d221", correlation: "wave/2026-10-29-w3"}
+- {from: "proposed", to: "active", at: "2026-10-29T20:43:35Z", actor: "human:timo", revision: 12, decided_on: {"recorded":{"review_outcome":1}}, executor: "agent:canon-ep-d221", correlation: "wave/2026-10-29-w3"}
 ---
 ## Outcome
 
@@ -76,9 +78,8 @@ record (Canon's rule: no applicable evidence is `UNKNOWN`). ADR 0081's example: 
 
 ## Blocked on
 
-- decision-blocker:child-case-cycles — whether a case opening its own ancestor is refused by a
-  static check (§ 39.5's closed-IR rule) or elsewhere.
-- decision-blocker:commissions-per-case — whether one case may hold several commissions.
+Nothing. decision-blocker:child-case-cycles and decision-blocker:commissions-per-case are cleared
+(D206, D207, 2026-10-29); § Decisions says what each adds to this story.
 
 ## Scope
 
@@ -101,19 +102,15 @@ beside) and story:three-valued-claims (the claim evaluation it extends).
 
 depends_on story:invalidation-rules is an ordering edge, stated as one. Every story that changes
 `protocol/1` shares `ess/`, `model/`, `validate/` and `ir/`, so `aep plan artifact waves` runs them
-one per wave whatever the edges say. story:invalidation-rules is the last of the proposed chain
-(story:evidence-freshness → story:decision-outcomes → story:invalidation-rules) that
-story:semantic-diff is written against; this edge keeps that chain in its waves and puts the ADR
-0081/0083/0084 model stories after it, beside story:semantic-diff rather than in front of it.
+one per wave whatever the edges say.
 
-depends_on story:protocol-imports (2026-10-07, https://github.com/beyond10x/canon/issues/5). Order
-recorded for that issue: story:semantic-diff → story:case-inputs → story:protocol-imports →
-story:protocol-floor; story:ess-command-surface after story:semantic-diff and before
-story:protocol-imports; this story after story:protocol-imports. Both this story and
-story:protocol-imports change `protocol/1` (`ess/`, `model/`, `validate/`, `ir/`), so one waits for
-the other; story:protocol-imports is unblocked and this story has two open decision-blockers, so
-imports goes first. story:protocol-imports also lands the closed-IR rule of design § 39.5 that
-decision-blocker:child-case-cycles names as one answer.
+2026-10-29: the ordering edge to story:protocol-imports is taken back. It was chosen
+(2026-10-07, https://github.com/beyond10x/canon/issues/5) because this story then had two open
+decision-blockers and protocol-imports had none; both blockers are cleared (D206, D207) and the
+orchestrator put this story into wave 2026-10-29-w3 (D221). protocol-imports, still draft, now
+comes after this story and composes its `case.open` like every other declaration. The static
+self-reach check of D206 lands here; protocol-imports extends it to imported protocols when it
+inlines them.
 
 This story and story:protocol-floor share no source file, but both regenerate
 `website/docs/reference/` and `website/data/` and edit `website/status.yaml`, so `waves` keeps them
@@ -128,8 +125,25 @@ with one child `open`; TRUE with every child `accepted` or `declined`; FALSE wit
 `abandoned`; and two `case_outcome` records for one child are refused naming it.
 `crates/canon/tests/ess_model_matches.rs` passes.
 
+D206: `canon validate` refuses a protocol whose action opens a case under the protocol's own id,
+naming the action, in a scenario or test under `fixtures/investigation/invalid/`; the set check
+refuses two protocols that open each other, naming the cycle, and accepts a chain without one.
+
 ## Source
 
 Atlas ADR 0081 (accepted 2026-10-04) § Decision and § Open; canon
 `docs/design/canon-protocol-calculus-design.md` § 39.5; Atlas
 `docs/design/governed-autonomy/incident-response-walkthrough.md` § 2.6; Atlas ADR 0080.
+
+## Decisions
+
+- D206 (decision-blocker:child-case-cycles, option 1): a static compile-time check over the
+  protocols `case.open` names refuses a protocol that can reach itself (design § 39.5, closed IR).
+  `canon validate` refuses an action whose `case.open` names the protocol's own id, naming the
+  action; a pure library check over a set of protocols refuses a set in which the `case.open`
+  edges form a cycle, naming the cycle in protocol-id order from its least id. No run-time
+  check: `case.open` names a protocol and a subject, never an existing case id.
+- D207 (decision-blocker:commissions-per-case, option 1): one commission per case; a second party
+  works through a child case. Canon knows no commission and counts none; `case.open` is the one
+  primitive by which a case hands work to another party, and the reference page says so.
+- Approval: approval-record:wave-2026-10-29-w3 (D221).

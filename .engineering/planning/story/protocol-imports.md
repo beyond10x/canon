@@ -16,6 +16,7 @@ relations:
 - depends_on: story:case-inputs
 - depends_on: story:ess-command-surface
 - depends_on: story:conformance-suite
+- depends_on: story:case-composition
 scope:
 - confidence: inferred
   path: conformance/requirements.yaml
