@@ -25,7 +25,7 @@ use crate::ir::{self, Ir};
 use crate::model::{
     self, Action, Age, Artifact, ArtifactId, CapabilityId, CapabilityRequirement, CaseInput,
     CaseSection, Claim, ClaimId, ClaimTest, Declarations, EffectClass, EvidenceAfter, EvidenceKind,
-    EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceProduction, FirstResult,
+    EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceProduction, EvidenceSince, FirstResult,
     IndependenceDimension, IndependenceDimensionId, InputId, InputTest, InputValue, LaterRecord,
     Obligation, Outcome, OutcomeRequirement, Predicate, Protocol, ProtocolHeader, ProtocolId,
     Truth, one_line,
@@ -435,8 +435,19 @@ fn predicate(value: &Json) -> Shape<Predicate> {
                 subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
             }))
         }
+        "since" => {
+            let later = required(inner, "then")?;
+            Ok(Predicate::Since(EvidenceSince {
+                last: EvidenceKindId::new(text(inner, "last")?),
+                then: LaterRecord {
+                    kind: EvidenceKindId::new(text(later, "kind")?),
+                    result: text(later, "result")?,
+                },
+                subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
+            }))
+        }
         _ => Err(
-            "a predicate is not one of all, any, not, evidence, claim, input, first, before or after"
+            "a predicate is not one of all, any, not, evidence, claim, input, first, before, after or since"
                 .to_owned(),
         ),
     }

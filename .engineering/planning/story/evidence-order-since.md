@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:evidence-order-since
 kind: story
-status: active
+status: implemented
 title: 'Predicate over evidence order: a record with a result since the latest of a kind, at its revision'
 summary: 'since: {last: K1, then: {kind: K2, result: R}, subject?}, anchored on the latest record of K1 and reading candidates at its subject revision'
 relations:
@@ -10,10 +10,11 @@ relations:
 - serves: vision:O2
 - serves: vision:governed-autonomy
 - depends_on: story:evidence-order-subsecond
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-29T07:12:56Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-29T07:12:56Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-29T11:31:26Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":3}}}
 ---
 ## Outcome
 
@@ -108,3 +109,16 @@ before; `canon generate` writes what the space builds; `canon-docs` renders the 
 `canon check` tests show every value of `since` reached jointly with the other order forms; the
 golden check reports of protocols without `since` are unchanged; `ess_model_matches` and
 `task check` pass.
+
+## Delivered
+
+- `since: {last: K1, then: {kind: K2, result: R}, subject?}` in `protocol/1`, evaluated over the
+  latest records of `K1` at the one resolution per evaluation that story:evidence-order-subsecond
+  settled; reasons, IR, diff, validation, generate and the reference pages name it.
+- `canon check` adds a later-record dimension per compared result and a last-record dimension per
+  `last` kind, the last record placed in the order on its own (5 values for a two-kind `since`, 9
+  for a one-kind one). Protocols without `since` keep their space, counts and reports.
+- Adversary pass 1 found the first space unsound (every non-current record at `r0`, the last record
+  at a fixed offset from its dimension's rank); 5c6b5bc places it on its own, and the adversary's 7
+  cases pass.
+- The conformance fixture's space (210600 states) is over the 65536 bound and is refused honestly.

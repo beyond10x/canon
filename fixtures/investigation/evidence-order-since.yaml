@@ -1,0 +1,64 @@
+format: protocol/1
+
+protocol:
+  id: red-since-change
+  revision: 1
+  description: Decide whether the tests were seen failing at the revision they were last changed at, after that change.
+
+artifacts:
+  change:
+    description: The change under review; each revision of it may change its tests.
+
+evidence_kinds:
+  tests_change:
+    description: A change to the tests of an artifact, at a revision of it.
+  test_result:
+    description: A run of the tests against a revision of an artifact; its result is failed or passed.
+
+claims:
+  red.since.change:
+    description: A failed test result about the change, at the revision its tests were last changed at, was recorded after that change.
+    true_when:
+      since:
+        last: tests_change
+        then:
+          kind: test_result
+          result: failed
+        subject: change
+
+  red.since.run:
+    description: A failed test result, at the revision of the latest test result, was recorded after that result.
+    true_when:
+      since:
+        last: test_result
+        then:
+          kind: test_result
+          result: failed
+
+  passes:
+    description: The tests pass at the current revision.
+    true_when:
+      evidence:
+        kind: test_result
+        result: passed
+
+actions:
+  merge:
+    description: Merge the change once its tests pass and, since they last changed, were seen failing at that revision.
+    precondition:
+      all:
+        - since:
+            last: tests_change
+            then:
+              kind: test_result
+              result: failed
+            subject: change
+        - claim: passes
+
+outcomes:
+  done:
+    description: The tests were seen failing since they last changed, and pass now.
+    requires:
+      all:
+        - claim: red.since.change
+        - claim: passes

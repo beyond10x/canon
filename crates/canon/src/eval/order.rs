@@ -1,9 +1,10 @@
 //! The order forms of the predicate (story:evidence-order-predicate, CANON-ORDER-001,
-//! story:evidence-order-after, CANON-ORDER-002, and story:evidence-order-subsecond,
-//! CANON-ORDER-003): whether the first record of a kind has a result (`first`), whether the first
-//! record of one kind was observed strictly before the first record of another (`before`), and
-//! whether a record of one kind with a result was observed strictly after the first record of
-//! another (`after`).
+//! story:evidence-order-after, CANON-ORDER-002, story:evidence-order-subsecond, CANON-ORDER-003,
+//! and story:evidence-order-since, CANON-ORDER-004): whether the first record of a kind has a
+//! result (`first`), whether the first record of one kind was observed strictly before the first
+//! record of another (`before`), whether a record of one kind with a result was observed strictly
+//! after the first record of another (`after`), and whether a record of one kind with a result, at
+//! the subject revision of the latest record of another, was observed after that record (`since`).
 //!
 //! An order form reads the history: every record of its kind (about its `subject` when it names
 //! one, by the rule evidence matches read by, [`super::reads`]) that the evidence check accepted,
@@ -41,15 +42,27 @@
 //! that instant, and `false` when every one is earlier. With `K1` and `K2` the same kind, a record
 //! is not later than itself: the one record at the earliest instant does not follow itself.
 //!
+//! `{since: {last: K1, then: {kind: K2, result: R}}}` compares the anchors, the records of `K1`,
+//! with the candidates, the records of `K2` that have result `R`. The latest anchors are those no
+//! anchor is observed after. `unknown` with no anchor; `false` with an anchor and no candidate;
+//! otherwise `unknown` when an anchor or a candidate has no `observed_at`. Otherwise each latest
+//! anchor reads the candidates about its subject at its subject revision, other than itself:
+//! `true` when one is observed after it, `false` when every one is observed before it or there is
+//! none, and `unknown` otherwise. The form is `true` when every latest anchor gives `true`, `false`
+//! when every one gives `false`, and `unknown` otherwise. With `K1` and `K2` the same kind, a
+//! record is not later than itself, and no candidate is observed after the latest anchor, so the
+//! form is never `true`.
+//!
 //! A record bound to a revision of its subject that does not descend from the current one counts
-//! like any other: Canon does not know how revisions descend (story:revision-ordering).
+//! like any other: Canon does not know how revisions descend (story:revision-ordering). For the
+//! same reason, a `since` candidate at a revision descended from its anchor's does not count.
 
 use serde_json::{Map, Value};
 
 use super::claims::reads;
 use crate::model::{
-    ArtifactId, EvidenceAfter, EvidenceKindId, EvidenceOrder, EvidenceRecord, FirstResult,
-    Predicate, Truth,
+    ArtifactId, EvidenceAfter, EvidenceKindId, EvidenceOrder, EvidenceRecord, EvidenceSince,
+    FirstResult, Predicate, Truth,
 };
 
 /// The value of an order form over the `history`; `None` for any other form.
@@ -59,6 +72,7 @@ pub(crate) fn value(predicate: &Predicate, history: &[EvidenceRecord]) -> Option
         Predicate::First(form) => Some(first(form, history, &ticks())),
         Predicate::Before(form) => Some(before(form, history, &ticks())),
         Predicate::After(form) => Some(after(form, history, &ticks())),
+        Predicate::Since(form) => Some(since(form, history, &ticks())),
         _ => None,
     }
 }
@@ -193,8 +207,67 @@ fn after(form: &EvidenceAfter, history: &[EvidenceRecord], ticks: &[Option<i128>
     }
 }
 
+fn since(form: &EvidenceSince, history: &[EvidenceRecord], ticks: &[Option<i128>]) -> Truth {
+    let anchors = of(&form.last, form.subject.as_ref(), history);
+    if anchors.is_empty() {
+        return Truth::Unknown;
+    }
+    let candidates: Vec<usize> = of(&form.then.kind, form.subject.as_ref(), history)
+        .into_iter()
+        .filter(|&index| history[index].result.as_deref() == Some(form.then.result.as_str()))
+        .collect();
+    if candidates.is_empty() {
+        return Truth::False;
+    }
+    if anchors
+        .iter()
+        .chain(&candidates)
+        .any(|&index| ticks[index].is_none())
+    {
+        return Truth::Unknown;
+    }
+    let tick = |index: usize| ticks[index].expect("every compared record has a tick");
+    // The latest anchors: those at the latest tick of any anchor, so none is observed after them.
+    let latest = anchors
+        .iter()
+        .map(|&index| tick(index))
+        .max()
+        .expect("there is an anchor");
+    // What one latest anchor gives: over the candidates at its subject and subject revision,
+    // other than itself (a record is not later than itself). A candidate at the same tick is not
+    // ordered against it.
+    let from = |anchor: usize| {
+        let at_its_revision: Vec<i128> = candidates
+            .iter()
+            .filter(|&&index| {
+                index != anchor
+                    && history[index].subject == history[anchor].subject
+                    && history[index].subject_revision == history[anchor].subject_revision
+            })
+            .map(|&index| tick(index))
+            .collect();
+        if at_its_revision.iter().any(|at| *at > latest) {
+            Truth::True
+        } else if at_its_revision.iter().all(|at| *at < latest) {
+            Truth::False
+        } else {
+            Truth::Unknown
+        }
+    };
+    let mut given = anchors
+        .iter()
+        .filter(|&&index| tick(index) == latest)
+        .map(|&index| from(index));
+    let one = given.next().expect("an anchor is at the latest tick");
+    if one != Truth::Unknown && given.all(|other| other == one) {
+        one
+    } else {
+        Truth::Unknown
+    }
+}
+
 /// How the reasons order the order forms: every `after` first, then every `before`, then every
-/// `first`, each by its fields as text (no subject before any subject).
+/// `first`, then every `since`, each by its fields as text (no subject before any subject).
 type Key<'a> = (u8, &'a str, &'a str, &'a str, Option<&'a str>);
 
 fn key(predicate: &Predicate) -> Option<Key<'_>> {
@@ -220,13 +293,21 @@ fn key(predicate: &Predicate) -> Option<Key<'_>> {
             "",
             form.subject.as_ref().map(ArtifactId::as_str),
         )),
+        Predicate::Since(form) => Some((
+            3,
+            form.last.as_str(),
+            form.then.kind.as_str(),
+            form.then.result.as_str(),
+            form.subject.as_ref().map(ArtifactId::as_str),
+        )),
         _ => None,
     }
 }
 
 /// The reason each of `forms` gives, with its value over the `history`, each form once, `after`
-/// forms first, then `before` forms: `{"after": K1, "then": K2, "result": R, "value": <truth>}`,
-/// `{"before": K1, "then": K2, "value": <truth>}` or `{"first": K, "result": R, "value": <truth>}`,
+/// forms first, then `before`, then `first`, then `since` forms: `{"after": K1, "then": K2,
+/// "result": R, "value": <truth>}`, `{"before": K1, "then": K2, "value": <truth>}`, `{"first": K,
+/// "result": R, "value": <truth>}` or `{"since": K1, "then": K2, "result": R, "value": <truth>}`,
 /// with `"subject": A` added when the form names one. What is not an order form is skipped.
 pub(crate) fn reasons<'a>(
     forms: impl IntoIterator<Item = &'a Predicate>,
@@ -263,6 +344,14 @@ pub(crate) fn reasons<'a>(
                     Map::from_iter([
                         ("first".to_owned(), Value::from(form.kind.as_str())),
                         ("result".to_owned(), Value::from(form.result.as_str())),
+                    ]),
+                ),
+                Predicate::Since(form) => (
+                    form.subject.as_ref(),
+                    Map::from_iter([
+                        ("since".to_owned(), Value::from(form.last.as_str())),
+                        ("then".to_owned(), Value::from(form.then.kind.as_str())),
+                        ("result".to_owned(), Value::from(form.then.result.as_str())),
                     ]),
                 ),
                 _ => return None,
@@ -569,6 +658,233 @@ mod tests {
                 serde_json::json!({"after": "k", "then": "m", "result": "passed", "value": "false"}),
                 serde_json::json!({"before": "k", "then": "m", "value": "true"}),
                 serde_json::json!({"first": "k", "result": "failed", "value": "true"}),
+            ]
+        );
+    }
+
+    fn since_of(last: &str, then: &str, result: &str, subject: Option<&str>) -> Predicate {
+        Predicate::Since(EvidenceSince {
+            last: EvidenceKindId::new(last),
+            then: crate::model::LaterRecord {
+                kind: EvidenceKindId::new(then),
+                result: result.to_owned(),
+            },
+            subject: subject.map(ArtifactId::new),
+        })
+    }
+
+    /// `record` at subject revision `revision` instead of `r1`.
+    fn at_revision(mut record: EvidenceRecord, revision: &str) -> EvidenceRecord {
+        record.subject_revision = Revision::new(revision);
+        record
+    }
+
+    /// Every rule of `since` over two kinds (story:evidence-order-since): no anchor, no candidate,
+    /// an anchor or a candidate without an instant, and each latest anchor reading the candidates
+    /// at its subject revision only, after, before or at its instant; latest anchors that agree
+    /// and that do not.
+    #[test]
+    fn since_reads_the_candidates_at_the_revision_of_each_latest_anchor() {
+        use Truth::{False as F, True as T, Unknown as U};
+        let form = since_of("k", "m", "failed", None);
+        let k = |id, revision, at| at_revision(record(id, "k", None, "a", at), revision);
+        let red =
+            |id, revision, at| at_revision(record(id, "m", Some("failed"), "a", at), revision);
+        let green =
+            |id, revision, at| at_revision(record(id, "m", Some("passed"), "a", at), revision);
+        for (history, expected, why) in [
+            (vec![], U, "nothing"),
+            (vec![red("r", "h1", T2)], U, "no anchor"),
+            (vec![k("k", "h1", T1)], F, "no candidate"),
+            (
+                vec![k("k", "h1", None)],
+                F,
+                "no candidate, the anchor unplaced",
+            ),
+            (
+                vec![k("k", "h1", T1), green("g", "h1", T2)],
+                F,
+                "only another result",
+            ),
+            (
+                vec![k("k", "h1", T1), red("r", "h1", T2)],
+                T,
+                "after, at its revision",
+            ),
+            (vec![k("k", "h1", T1), red("r", "h1", T0)], F, "before"),
+            (
+                vec![k("k", "h1", T1), red("r", "h1", T1)],
+                U,
+                "at its instant",
+            ),
+            (
+                vec![k("k", "h1", T1), red("r", "h0", T2)],
+                F,
+                "after, at another revision",
+            ),
+            (
+                vec![k("k", "h1", T1), red("r", "h0", T2), red("s", "h1", T0)],
+                F,
+                "before at its revision, after at another",
+            ),
+            (
+                vec![k("k", "h1", T1), red("r", "h1", T0), red("s", "h1", T2)],
+                T,
+                "one before, one after",
+            ),
+            (
+                vec![k("j", "h1", T0), k("k", "h2", T1), red("r", "h1", T2)],
+                F,
+                "after an earlier anchor only",
+            ),
+            (
+                vec![k("k", "h1", T1), k("j", "h1", T0), red("r", "h1", T2)],
+                T,
+                "the latest anchor counts",
+            ),
+            (
+                vec![k("k", "h1", T1), k("j", "h2", T1), red("r", "h1", T2)],
+                U,
+                "two latest anchors that do not agree",
+            ),
+            (
+                vec![
+                    k("k", "h1", T1),
+                    k("j", "h2", T1),
+                    red("r", "h1", T2),
+                    red("s", "h2", T2),
+                ],
+                T,
+                "two latest anchors that agree",
+            ),
+            (
+                vec![k("k", "h1", T1), k("j", "h1", None), red("r", "h1", T2)],
+                U,
+                "an anchor unplaced",
+            ),
+            (
+                vec![k("k", "h1", T1), red("r", "h1", T2), red("s", "h0", None)],
+                U,
+                "a candidate unplaced, at another revision",
+            ),
+            (
+                vec![k("k", "h1", T1), red("r", "h1", T2), green("g", "h1", None)],
+                T,
+                "another result unplaced takes no part",
+            ),
+        ] {
+            assert_eq!(value(&form, &history), Some(expected), "{why}");
+        }
+    }
+
+    /// `since` over one kind: the latest record is one of its own anchors and is not later than
+    /// itself, so the form is `false` or `unknown`, never `true`.
+    #[test]
+    fn since_over_one_kind_is_never_true() {
+        use Truth::{False as F, Unknown as U};
+        let form = since_of("m", "m", "failed", None);
+        let red =
+            |id, revision, at| at_revision(record(id, "m", Some("failed"), "a", at), revision);
+        let green =
+            |id, revision, at| at_revision(record(id, "m", Some("passed"), "a", at), revision);
+        for (history, expected, why) in [
+            (vec![red("r", "h1", T1)], F, "one record"),
+            (
+                vec![red("r", "h1", T1), red("s", "h1", T2)],
+                F,
+                "the latest itself",
+            ),
+            (
+                vec![red("r", "h1", T1), red("s", "h1", T1)],
+                U,
+                "two at one instant",
+            ),
+            (
+                vec![red("r", "h1", T1), red("s", "h2", T1)],
+                F,
+                "two at one instant, at two revisions",
+            ),
+            (
+                vec![green("g", "h1", T1), red("r", "h1", T1)],
+                U,
+                "another result at the latest instant",
+            ),
+            (
+                vec![red("r", "h1", T1), green("g", "h1", T2)],
+                F,
+                "a pass last",
+            ),
+            (vec![green("g", "h1", T1)], F, "no record with the result"),
+            (vec![red("r", "h1", None)], U, "unplaced"),
+        ] {
+            assert_eq!(value(&form, &history), Some(expected), "{why}");
+        }
+        let mut rng = Rng(0x5EC0_4D5A_F7E2_0003);
+        for _ in 0..20_000 {
+            let history = random_history(&mut rng);
+            for subject in [None, Some("a")] {
+                for result in ["failed", "passed"] {
+                    for kind in ["k", "m"] {
+                        let form = since_of(kind, kind, result, subject);
+                        assert_ne!(
+                            value(&form, &history),
+                            Some(Truth::True),
+                            "{form:?} over {history:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// A `since` that names a subject reads only records about it, as anchors and as candidates;
+    /// without one, the latest anchor is about `b`, and only candidates about `b` count for it.
+    #[test]
+    fn a_subject_restricts_what_since_reads() {
+        let history = [
+            record("k", "k", None, "a", T1),
+            record("l", "k", None, "b", T2),
+            record("r", "m", Some("failed"), "a", T2),
+            record("s", "m", Some("failed"), "b", T0),
+        ];
+        assert_eq!(
+            value(&since_of("k", "m", "failed", Some("a")), &history),
+            Some(Truth::True)
+        );
+        assert_eq!(
+            value(&since_of("k", "m", "failed", Some("b")), &history),
+            Some(Truth::False)
+        );
+        assert_eq!(
+            value(&since_of("k", "m", "failed", None), &history),
+            Some(Truth::False)
+        );
+    }
+
+    /// `since` reasons come after every other, ordered by last kind, later kind, result and
+    /// subject, each once.
+    #[test]
+    fn since_reasons_come_last_and_name_each_form_once() {
+        let forms = [
+            since_of("k", "m", "failed", Some("a")),
+            first_of("k", "failed", None),
+            since_of("k", "m", "failed", None),
+            after_of("k", "m", "failed", None),
+            before_of("k", "m", None),
+            since_of("k", "m", "failed", None),
+        ];
+        let history = [
+            record("k", "k", Some("failed"), "a", T1),
+            record("r", "m", Some("failed"), "a", T2),
+        ];
+        assert_eq!(
+            reasons(&forms, &history),
+            [
+                serde_json::json!({"after": "k", "then": "m", "result": "failed", "value": "true"}),
+                serde_json::json!({"before": "k", "then": "m", "value": "true"}),
+                serde_json::json!({"first": "k", "result": "failed", "value": "true"}),
+                serde_json::json!({"since": "k", "then": "m", "result": "failed", "value": "true"}),
+                serde_json::json!({"since": "k", "then": "m", "result": "failed", "subject": "a", "value": "true"}),
             ]
         );
     }
@@ -946,6 +1262,19 @@ mod tests {
         forms
     }
 
+    /// Every `since` a history of two kinds can be asked about, over two subjects.
+    fn every_since() -> Vec<Predicate> {
+        let mut forms = Vec::new();
+        for subject in [None, Some("a")] {
+            for (one, other) in [("k", "m"), ("m", "k"), ("m", "m"), ("k", "k")] {
+                for result in ["failed", "passed"] {
+                    forms.push(since_of(one, other, result, subject));
+                }
+            }
+        }
+        forms
+    }
+
     /// A random history of up to five records of two kinds, about two subjects, with any result
     /// or none, at one of three whole seconds or without `observed_at`.
     fn random_history(rng: &mut Rng) -> Vec<EvidenceRecord> {
@@ -994,7 +1323,10 @@ mod tests {
     /// order that was `unknown` and never turns `true` into `false` or back.
     #[test]
     fn a_finer_instant_never_reverses_a_known_order() {
-        let forms = every_form();
+        let forms = every_form()
+            .into_iter()
+            .chain(every_since())
+            .collect::<Vec<_>>();
         let mut rng = Rng(0x5EC0_4D5A_F7E2_0002);
         let (mut settled, mut compared) = (0, 0);
         for _ in 0..20_000 {

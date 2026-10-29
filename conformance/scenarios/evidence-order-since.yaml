@@ -1,0 +1,853 @@
+format: canon-conformance/1
+id: CANON-ORDER-004
+covers: [CANON-ORDER-004]
+fixture: fixtures/investigation/evidence-order-since.yaml
+# The fixture declares one artifact, the change, and two evidence kinds, tests_change and
+# test_result. Claim red.since.change requires a failed test_result about the change, at the
+# revision of the latest tests_change about it, observed after that tests_change (`since`); claim
+# red.since.run a failed test_result at the revision of the latest test_result, observed after it
+# (`since` over one kind). Claim passes is an evidence match, which reads only records bound to
+# the change's current revision. Action merge requires passes and the same `since` as
+# red.since.change; outcome done requires red.since.change and passes. A record bound to an
+# earlier revision than the case's is excluded from the evidence match as revision_mismatch, while
+# `since` still reads it: it reads the history, and keeps of it the records at the revision of the
+# latest anchor.
+steps:
+  # The form compiles to `{"since": {...}}`, written as authored, a subject only when named, its
+  # `then` a map of kind and result. Among the members of an `all` or `any`, `since` comes after
+  # every other form: the forms compare in code-point order of their keys.
+  - id: compile
+    compile: {}
+    expect:
+      canon-ir: |
+        {
+          "actions": {
+            "merge": {
+              "description": "Merge the change once its tests pass and, since they last changed, were seen failing at that revision.",
+              "effect": null,
+              "may_produce": [],
+              "precondition": {
+                "all": [
+                  {
+                    "claim": {
+                      "id": "passes",
+                      "is": "true"
+                    }
+                  },
+                  {
+                    "since": {
+                      "last": "tests_change",
+                      "subject": "change",
+                      "then": {
+                        "kind": "test_result",
+                        "result": "failed"
+                      }
+                    }
+                  }
+                ]
+              },
+              "requires": []
+            }
+          },
+          "artifacts": {
+            "change": {
+              "description": "The change under review; each revision of it may change its tests."
+            }
+          },
+          "claims": {
+            "passes": {
+              "description": "The tests pass at the current revision.",
+              "true_when": {
+                "evidence": {
+                  "kind": "test_result",
+                  "result": "passed"
+                }
+              }
+            },
+            "red.since.change": {
+              "description": "A failed test result about the change, at the revision its tests were last changed at, was recorded after that change.",
+              "true_when": {
+                "since": {
+                  "last": "tests_change",
+                  "subject": "change",
+                  "then": {
+                    "kind": "test_result",
+                    "result": "failed"
+                  }
+                }
+              }
+            },
+            "red.since.run": {
+              "description": "A failed test result, at the revision of the latest test result, was recorded after that result.",
+              "true_when": {
+                "since": {
+                  "last": "test_result",
+                  "then": {
+                    "kind": "test_result",
+                    "result": "failed"
+                  }
+                }
+              }
+            }
+          },
+          "evidence_kinds": {
+            "test_result": {
+              "description": "A run of the tests against a revision of an artifact; its result is failed or passed."
+            },
+            "tests_change": {
+              "description": "A change to the tests of an artifact, at a revision of it."
+            }
+          },
+          "format": "canon-ir/1",
+          "obligations": {},
+          "outcomes": {
+            "done": {
+              "description": "The tests were seen failing since they last changed, and pass now.",
+              "requires": {
+                "all": [
+                  {
+                    "claim": {
+                      "id": "passes",
+                      "is": "true"
+                    }
+                  },
+                  {
+                    "claim": {
+                      "id": "red.since.change",
+                      "is": "true"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "protocol": {
+            "description": "Decide whether the tests were seen failing at the revision they were last changed at, after that change.",
+            "id": "red-since-change",
+            "revision": 1
+          }
+        }
+
+  # Expectation 1. The tests changed at h2, a run failed at h2 after that, and the change now
+  # passes at h3. The failed record is excluded from the evidence match as revision_mismatch;
+  # `since` reads it all the same: TRUE. red.since.run is FALSE: its latest test_result is the
+  # passing run at h3, and no failed run at h3 follows it.
+  - id: red-at-the-revision-of-the-change
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-since-change
+        artifacts:
+          change: {revision: h3}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: h2
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: h2
+          observed_at: 2026-10-01T10:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: h3
+          observed_at: 2026-10-01T11:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "status": "admissible"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.since.change": {
+              "value": "true"
+            },
+            "red.since.run": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # Expectation 2. The tests changed at h2; a run about h1 failed, observed after the change, and
+  # the change passes at h2. No failed run is at h2, the revision of the latest tests_change:
+  # FALSE, where `after` would take the late failed run as the red one. The blocked action names
+  # the order form that decides it, with its subject and value.
+  - id: a-failed-run-about-an-earlier-revision-observed-later
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-since-change
+        artifacts:
+          change: {revision: h2}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: h2
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: h1
+          observed_at: 2026-10-01T10:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: h2
+          observed_at: 2026-10-01T11:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "result": "failed",
+                  "since": "tests_change",
+                  "subject": "change",
+                  "then": "test_result",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.since.change": {
+              "value": "false"
+            },
+            "red.since.run": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.since.change",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 3. The tests changed at h2, failed at h2 and passed at h3; then they changed again
+  # at h4 and passed at h4 at once. The latest tests_change is at h4, and no failed run is at h4:
+  # FALSE. The earlier red run at h2 does not count for the tests as they are now.
+  - id: changed-again-and-passing-at-once
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-since-change
+        artifacts:
+          change: {revision: h4}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: h2
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: h2
+          observed_at: 2026-10-01T10:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: h3
+          observed_at: 2026-10-01T11:00:00Z
+        - format: canon-evidence/1
+          id: c2
+          kind: tests_change
+          subject: change
+          subject_revision: h4
+          observed_at: 2026-10-01T12:00:00Z
+        - format: canon-evidence/1
+          id: t3
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: h4
+          observed_at: 2026-10-01T13:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "result": "failed",
+                  "since": "tests_change",
+                  "subject": "change",
+                  "then": "test_result",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                },
+                {
+                  "evidence": "t2",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.since.change": {
+              "value": "false"
+            },
+            "red.since.run": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.since.change",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 4. As expectation 3, then a run at h4 failed after the second change: TRUE. The
+  # runs at h4 now disagree, so passes is UNKNOWN and is what blocks the action and the outcome.
+  - id: changed-again-then-red-at-that-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-since-change
+        artifacts:
+          change: {revision: h4}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: h2
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: h2
+          observed_at: 2026-10-01T10:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: h3
+          observed_at: 2026-10-01T11:00:00Z
+        - format: canon-evidence/1
+          id: c2
+          kind: tests_change
+          subject: change
+          subject_revision: h4
+          observed_at: 2026-10-01T12:00:00Z
+        - format: canon-evidence/1
+          id: t3
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: h4
+          observed_at: 2026-10-01T13:00:00Z
+        - format: canon-evidence/1
+          id: t4
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: h4
+          observed_at: 2026-10-01T14:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "claim": "passes",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                },
+                {
+                  "evidence": "t2",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "unknown"
+            },
+            "red.since.change": {
+              "value": "true"
+            },
+            "red.since.run": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "passes",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 5. A run at h2 failed at the instant of the change at h2. Equal instants are not
+  # ordered, so `since` is UNKNOWN, not TRUE.
+  - id: red-at-the-instant-of-the-change
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-since-change
+        artifacts:
+          change: {revision: h3}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: h2
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: h2
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: h3
+          observed_at: 2026-10-01T10:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "result": "failed",
+                  "since": "tests_change",
+                  "subject": "change",
+                  "then": "test_result",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.since.change": {
+              "value": "unknown"
+            },
+            "red.since.run": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.since.change",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 6, first half. A failed run and no tests_change: the record `since` is anchored on
+  # is not established, so it is UNKNOWN, not FALSE.
+  - id: no-tests-change
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-since-change
+        artifacts:
+          change: {revision: h3}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: h2
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: h3
+          observed_at: 2026-10-01T10:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "result": "failed",
+                  "since": "tests_change",
+                  "subject": "change",
+                  "then": "test_result",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.since.change": {
+              "value": "unknown"
+            },
+            "red.since.run": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.since.change",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 6, second half. A tests_change without observed_at: which tests_change is the
+  # latest, and what follows it, is not established: UNKNOWN, though a failed run at its revision
+  # has an instant.
+  - id: a-tests-change-without-observed-at
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-since-change
+        artifacts:
+          change: {revision: h3}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: h2
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: h2
+          observed_at: 2026-10-01T10:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: h3
+          observed_at: 2026-10-01T11:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "result": "failed",
+                  "since": "tests_change",
+                  "subject": "change",
+                  "then": "test_result",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.since.change": {
+              "value": "unknown"
+            },
+            "red.since.run": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.since.change",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 7. Two tests_change records at one instant, at h2 and at h3, so either may be the
+  # latest; a run failed after both, at h3 only. The anchor at h3 gives TRUE and the one at h2
+  # FALSE, so `since` is UNKNOWN.
+  - id: two-latest-changes-at-one-instant
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-since-change
+        artifacts:
+          change: {revision: h4}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: h2
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: c2
+          kind: tests_change
+          subject: change
+          subject_revision: h3
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: h3
+          observed_at: 2026-10-01T10:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: h4
+          observed_at: 2026-10-01T11:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "result": "failed",
+                  "since": "tests_change",
+                  "subject": "change",
+                  "then": "test_result",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "true"
+            },
+            "red.since.change": {
+              "value": "unknown"
+            },
+            "red.since.run": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.since.change",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 8. One kind: a run at h1 passed, and the last run, at h2, failed alone. Its latest
+  # test_result is that failed run, and a record is not later than itself: red.since.run is FALSE,
+  # where `after` over the first test_result would be TRUE. With no tests_change, red.since.change
+  # is UNKNOWN; passes is FALSE, which is what blocks the action and the outcome.
+  - id: one-kind-the-last-run-failed-alone
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-since-change
+        artifacts:
+          change: {revision: h2}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: h1
+          observed_at: 2026-10-01T09:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: h2
+          observed_at: 2026-10-01T10:00:00Z
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "claim": "passes",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "passes": {
+              "excluded_evidence": [
+                {
+                  "evidence": "t1",
+                  "reason": "revision_mismatch"
+                }
+              ],
+              "value": "false"
+            },
+            "red.since.change": {
+              "value": "unknown"
+            },
+            "red.since.run": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "passes",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }

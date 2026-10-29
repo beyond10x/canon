@@ -54,16 +54,18 @@ A claim's value is its `true_when` predicate's value over the evidence set:
   it lists and `false` otherwise. A case gives every input the protocol declares a value (the
   case check refuses one that does not), so an input test is never `unknown`: inputs are
   configuration fixed when the case opens, not evidence.
-- An order form, `{first: {kind: K, result: R}}`, `{before: {first: K1, then: K2}}` or
-  `{after: {first: K1, then: {kind: K2, result: R}}}`, reads the evidence history instead: every
-  record of its kinds (about its `subject` when it names one) the evidence check accepted, the
-  records the exclusion stages set aside included, ordered by `observed_at`. `first` is whether
-  the first record of `K` has result `R`; `before` whether the first record of `K1` was observed
-  strictly before the first of `K2`; `after` whether a record of `K2` with result `R` was
-  observed strictly after the first record of `K1`. Each is `unknown` while the order it reads
-  is not established, as with no record or a compared record without `observed_at`; the
-  predicate's reference in `protocol/1` gives every rule (CANON-ORDER-001, CANON-ORDER-002). No
-  record is listed in `excluded_evidence` because of an order form.
+- An order form, `{first: {kind: K, result: R}}`, `{before: {first: K1, then: K2}}`,
+  `{after: {first: K1, then: {kind: K2, result: R}}}` or `{since: {last: K1, then: {kind: K2, result: R}}}`, reads the evidence history instead: every record of its kinds (about its
+  `subject` when it names one) the evidence check accepted, the records the exclusion stages set
+  aside included, ordered by `observed_at`. `first` is whether the first record of `K` has
+  result `R`; `before` whether the first record of `K1` was observed strictly before the first
+  of `K2`; `after` whether a record of `K2` with result `R` was observed strictly after the
+  first record of `K1`; `since` whether a record of `K2` with result `R`, at the subject
+  revision of the latest record of `K1`, was observed after it. Each is `unknown` while the
+  order it reads is not established, as with no record or a compared record without
+  `observed_at`; the predicate's reference in `protocol/1` gives every rule (CANON-ORDER-001,
+  CANON-ORDER-002, CANON-ORDER-004). No record is listed in `excluded_evidence` because of an
+  order form.
 
 `unknown` and `false` are never collapsed, and only `true` satisfies a positive requirement.
 

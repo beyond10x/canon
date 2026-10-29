@@ -194,6 +194,13 @@
       "detail": "An observed_at may carry a fraction of one to nine digits, and first, before and after compare every instant of one evaluation at the coarsest precision written among its records, so records within one second are ordered when all are written finer and equal instants are not; expiry keeps whole seconds; scenario CANON-ORDER-003.",
       "href": "/docs/reference/documents",
       "area": "Language"
+    },
+    {
+      "label": "A record observed since the latest of a kind",
+      "status": "planned",
+      "detail": "The since order form tests whether a record of one kind with a given result, at the subject revision of the latest record of another kind (or of the same kind), was observed after it, read from the evidence history like the other order forms; scenario CANON-ORDER-004.",
+      "href": "/docs/reference/protocol",
+      "area": "Language"
     }
   ]
 }
