@@ -29,8 +29,9 @@
 //!   `{"input": <id>, "value": <the case's value>}` and an order form its reason with its value
 //!   (`actions.rs`). Claims come first, in claim-id order, then evidence matches, in kind order and
 //!   then subject order (no subject first), each kind and subject once, then inputs, then order
-//!   forms. A blocked outcome always states at least one reason: a requirement no test decides
-//!   against is one that cannot be met (it is blocked only by an empty `any`, or a `not` over an
+//!   forms, then forms over the child cases (`{"children": [<outcome>, ...], "value": <value>}`).
+//!   A blocked outcome always states at least one reason: a requirement no test decides against
+//!   is one that cannot be met (it is blocked only by an empty `any`, or a `not` over an
 //!   empty `all`), and gives `{"requirement": "unsatisfiable"}`. An outcome that requires an
 //!   explicit decision and has none applying states the one reason
 //!   `{"decision": <name>, "present": false}`: no decision was given, or each one given for it was

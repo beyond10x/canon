@@ -171,9 +171,10 @@
     },
     {
       "label": "Cases compose at run time",
-      "status": "decided",
-      "detail": "Child cases and their outcomes as evidence; Atlas ADR 0081.",
-      "area": "Design"
+      "status": "shipped",
+      "detail": "An action declares the child case it opens, by protocol and subject (case_open); each child's outcome comes back as one case_outcome record, and the children predicate is TRUE when every child ended with an outcome it lists, FALSE once one ended outside them, UNKNOWN while one is open or none is recorded. A case has one commission; a second party works through a child case. canon validate refuses an opening under the protocol's own id, and a check over a set of protocols refuses openings that form a cycle; Atlas ADR 0081, scenario CANON-COMPOSE-001.",
+      "href": "/docs/reference/protocol",
+      "area": "Language"
     },
     {
       "label": "Protocols express step order",

@@ -110,7 +110,8 @@ fn own(predicate: &Predicate) -> Option<Own<'_>> {
             | Predicate::First(_)
             | Predicate::Before(_)
             | Predicate::After(_)
-            | Predicate::Since(_) => {}
+            | Predicate::Since(_)
+            | Predicate::Children(_) => {}
         }
     }
     Some(own)

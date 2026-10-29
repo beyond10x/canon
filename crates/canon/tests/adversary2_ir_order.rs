@@ -231,12 +231,13 @@ fn documented_order(left: &Predicate, right: &Predicate) -> Ordering {
             Predicate::All(_) => 1,
             Predicate::Any(_) => 2,
             Predicate::Before(_) => 3,
-            Predicate::Claim(_) => 4,
-            Predicate::Evidence(_) => 5,
-            Predicate::First(_) => 6,
-            Predicate::Input(_) => 7,
-            Predicate::Not(_) => 8,
-            Predicate::Since(_) => 9,
+            Predicate::Children(_) => 4,
+            Predicate::Claim(_) => 5,
+            Predicate::Evidence(_) => 6,
+            Predicate::First(_) => 7,
+            Predicate::Input(_) => 8,
+            Predicate::Not(_) => 9,
+            Predicate::Since(_) => 10,
         }
     }
     fn tested(is: Truth) -> u8 {
@@ -314,6 +315,12 @@ fn documented_order(left: &Predicate, right: &Predicate) -> Ordering {
                 };
                 subject(&l.subject).cmp(&subject(&r.subject))
             }),
+        (Predicate::Children(l), Predicate::Children(r)) => {
+            let outcomes = |form: &b10x_canon::model::ChildOutcomes| -> Vec<Vec<u32>> {
+                form.r#in.iter().map(|o| code_points(o)).collect()
+            };
+            outcomes(l).cmp(&outcomes(r))
+        }
         _ => form(left).cmp(&form(right)),
     }
 }

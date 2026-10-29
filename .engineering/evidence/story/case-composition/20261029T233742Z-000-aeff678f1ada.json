@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-29T23:37:42Z",
+  "actor": "human:timo",
+  "artifact": "story:case-composition",
+  "kind": "story",
+  "revision": 16,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check steps at f33f990 (tree of wave merge b3fe055) with ess 0.77.0 on PATH: ess-gate 0, fmt 0, clippy 0, cargo test --workspace 0 (854 passed, 0 failed, 3 ignored), conform run --requirements 0 (18 passed, 19 implemented, 19 covered), adversary_action_arguments 0, docs-check 0; adversary pass 1 c0803f0 19 cases green after 443f0a2"
+  }
+}

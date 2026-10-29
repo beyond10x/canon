@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.9.0] - 2026-10-30
+
+Cases compose at run time: an action may open a child case, and a parent claim reads its
+children's outcomes (Atlas ADR 0081). Breaking for Rust consumers that match exhaustively over
+`Predicate` or build `Action` or `EvidenceRecord` values with struct literals. Install the CLI or
+depend on the libraries from Git tag `0.9.0`.
+
+- The ESS specification under `ess/` requires ESS 0.77.0; CI installs it.
+
+Opening a child case.
+
+- An action may declare `case_open: {protocol: P, subject: A}`: performing it opens a child case
+  under protocol `P` for artifact `A`. Its authority is declared like any other action's; Canon
+  opens nothing itself. `canon validate` refuses a malformed protocol id (`invalid-identifier`)
+  and an opening that names the protocol's own id, naming the action (`self-opened-case`,
+  fixture `fixtures/investigation/invalid/case-open-self.yaml`). `canon-ir/1` writes the opening
+  on its action; the IR of a protocol without one is unchanged.
+- `b10x_canon::ir::check_openings` checks a set of compiled protocols and refuses one whose
+  openings form a cycle (`OpeningCycle`), named from its least protocol id along the openings
+  back to it, for example `audit -> review -> audit`. A chain without a cycle passes. There is no
+  run-time check.
+- One commission per case: a child case is how work passes to another party; the reference says
+  so.
+
+Reading the children.
+
+- Evidence kind `case_outcome`: a record names its child in `child_case` and gives the child's
+  outcome as its result, `open` while the child runs. Refused: a `case_outcome` record without
+  `child_case` (`missing-child-case`) or a result (`missing-child-outcome`), `child_case` on any
+  other kind (`misplaced-child-case`), and two records for one child (`duplicate-child-case`,
+  naming the child and both records).
+- Predicate form `{children: {in: [O, ...]}}`: `true` once every child's outcome is in the set,
+  `false` once any child ended outside it, `unknown` while a child is `open` or when the case has
+  no child record. It reads every accepted `case_outcome` record, at any revision. `canon validate`
+  refuses an empty set (`empty-child-outcomes`), a repeated outcome (`duplicate-child-outcome`)
+  and `open` in the set (`open-child-outcome`). Requirement CANON-COMPOSE-001, scenario
+  `conformance/scenarios/case-composition.yaml`.
+- `canon diff` takes a change to a `children` form or to a `case_open` as `BREAKING`.
+- In `canon check`, an action with `case_open` counts as producing `case_outcome`; evidence a
+  `children` form reads gets a history dimension (earlier records at a superseded revision) and no
+  place in the order. A protocol that reads `case_outcome` with both a `children` form and an
+  order form is refused (`ordered-child-outcomes`). A protocol without either construct builds the
+  same space as before.
+- Breaking for Rust consumers: `Predicate` gains `Children(ChildOutcomes)`, `Action` gains
+  `case_open: Option<CaseOpening>` and `EvidenceRecord` gains `child_case: Option<CaseId>`.
+
 ## [0.8.0] - 2026-10-29
 
 Sub-second order and an order form that reads the latest record of a kind. Breaking for Rust

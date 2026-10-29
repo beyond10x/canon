@@ -90,6 +90,7 @@ has and what evidence it may produce (design § 10).
 | `effect` | [identifier](#identifiers) (`EffectClass`) | optional | — |
 | `may_produce` | list of [`EvidenceProduction`](#evidenceproduction) | optional | — |
 | `arguments` | any JSON value | optional | The JSON Schema, in Canon's argument-schema dialect, that the action's arguments satisfy. Absent: the action takes no arguments; a runner accepts only `{}`. Canon never validates arguments at run time: the runner that calls the action validates them against the schema, and `canon validate` holds the schema to the dialect (`action-arguments`). |
+| `case_open` | [`CaseOpening`](#caseopening) | optional | The child case the action opens (story:case-composition): a case governed by another protocol, about a declared artifact. Absent: the action opens no case. Canon opens nothing itself; whoever takes the action opens the child case. A case has one commission, and a second party works through a child case: this is the one primitive by which a case hands work to another party (D207). |
 
 ## `Outcome`
 
@@ -137,11 +138,11 @@ A predicate over evidence and claim values.
 The predicate language: a small, total, deterministic expression language (design § 39.2).
 
 A predicate is one of `all`, `any`, `not`, an evidence match by kind, optional result and
-optional subject, a test on a claim value, a test on a case input's value, or one of the four
-order forms over the evidence history. Written in source as a map with exactly one of the keys
-`all`, `any`, `not`, `evidence`, `claim`, `input`, `first`, `before`, `after` or `since`; a claim
-test may add `is`, which defaults to `true`, and an input test adds `in`, the values it is true
-for (`{input: severity, in: [high]}`).
+optional subject, a test on a claim value, a test on a case input's value, one of the four order
+forms over the evidence history, or the form over the case's child cases. Written in source as
+a map with exactly one of the keys `all`, `any`, `not`, `evidence`, `claim`, `input`, `first`,
+`before`, `after`, `since` or `children`; a claim test may add `is`, which defaults to `true`,
+and an input test adds `in`, the values it is true for (`{input: severity, in: [high]}`).
 
 The order forms read the evidence history: every record of their kind (about their `subject`
 when they name one) that the evidence check accepted, including the records the exclusion
@@ -184,6 +185,15 @@ not of the match, whatever its result: it neither establishes nor contradicts it
 excluded from it as `not_independent` (CANON-INDEPENDENCE-001). The order forms do not demand
 independence.
 
+`{children: {in: [O, ...]}}` (story:case-composition) asks whether every child case of the case
+ended with one of the outcomes `O`. It reads every `case_outcome` record the evidence check
+accepted, as the order forms read the history, one record per child case: its `child_case`
+names the child, its `result` the child's outcome, `open` while the child runs. `unknown` with no
+record; `false` when a record's outcome is neither listed nor `open`, a child that ended outside
+the set; otherwise `unknown` while a child is `open`, and `true` when every child ended with a
+listed outcome. A child's outcome is a fact about the child case, so a record about an earlier
+revision of its subject, an expired one and an invalidated one still count.
+
 | Key | Value | Meaning |
 |---|---|---|
 | `all` | list of [`Predicate`](#predicate) | True when every member is true; true when empty. |
@@ -198,6 +208,7 @@ independence.
 | `before` | [`EvidenceOrder`](#evidenceorder) | Whether the first record of one kind, in the evidence history, was observed strictly before the first record of another. |
 | `after` | [`EvidenceAfter`](#evidenceafter) | Whether a record of a kind with a result, in the evidence history, was observed strictly after the first record of a kind. |
 | `since` | [`EvidenceSince`](#evidencesince) | Whether a record of a kind with a result, at the subject revision of the latest record of a kind in the evidence history, was observed after that record. |
+| `children` | [`ChildOutcomes`](#childoutcomes) | Whether every child case of the case ended with one of the outcomes listed, over its `case_outcome` records (story:case-composition). |
 
 ## `CapabilityRequirement`
 
@@ -214,6 +225,19 @@ One evidence kind an action may produce.
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `evidence` | [identifier](#identifiers) (`EvidenceKindId`) | required | — |
+
+## `CaseOpening`
+
+What an action's `case_open` names: the protocol the child case is governed by and the
+artifact it is about, never an existing case. No run-time check keeps a case from opening one
+under its own protocol (D206): `canon validate` refuses an opening under the protocol's own id,
+and the library function `b10x_canon::ir::check_openings` refuses a set of protocols whose
+openings form a cycle, naming it in the order its openings go, from its least protocol id.
+
+| Key | Value | Required | Meaning |
+|---|---|---|---|
+| `protocol` | [identifier](#identifiers) (`ProtocolId`) | required | The protocol the child case is governed by. |
+| `subject` | [identifier](#identifiers) (`ArtifactId`) | required | The declared artifact the child case is about. |
 
 ## `OutcomeRequirement`
 
@@ -300,6 +324,19 @@ itself.
 | `last` | [identifier](#identifiers) (`EvidenceKindId`) | required | The evidence kind whose latest record the later one is to come after, at its revision. |
 | `then` | [`LaterRecord`](#laterrecord) | required | The record that is to come after it: its kind and its result. |
 | `subject` | [identifier](#identifiers) (`ArtifactId`) | optional | The declared artifact the records of both kinds are about; without it, records about any artifact. |
+
+## `ChildOutcomes`
+
+The form over the case's child cases, written `{children: {in: [<outcome>, ...]}}`: whether
+every child case ended with one of the outcomes listed. It reads every `case_outcome` record
+the evidence check accepted, as the order forms read the history: `unknown` with no record,
+`false` when a record's outcome is neither listed nor `open` (a child that ended outside the
+set), otherwise `unknown` when a child is still `open` and `true` when every child ended with
+a listed outcome.
+
+| Key | Value | Required | Meaning |
+|---|---|---|---|
+| `in` | list of text | required | The outcomes a child case may have ended with, written `in`: not empty, each once, never `open`. |
 
 ## `Truth`
 

@@ -17,8 +17,8 @@ use serde::Deserialize;
 
 use super::ids::{ClaimId, DecisionName, InputId, InputValue};
 use super::predicate::{
-    EvidenceAfter, EvidenceMatch, EvidenceOrder, EvidenceSince, FirstResult, Predicate, Truth,
-    WrittenPredicate,
+    ChildOutcomes, EvidenceAfter, EvidenceMatch, EvidenceOrder, EvidenceSince, FirstResult,
+    Predicate, Truth, WrittenPredicate,
 };
 
 /// What an outcome requires.
@@ -93,6 +93,8 @@ struct WrittenRequirement {
     after: Option<EvidenceAfter>,
     #[serde(default, deserialize_with = "super::present::form")]
     since: Option<EvidenceSince>,
+    #[serde(default, deserialize_with = "super::present::form")]
+    children: Option<ChildOutcomes>,
 }
 
 impl TryFrom<WrittenRequirement> for OutcomeRequirement {
@@ -113,6 +115,7 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             before,
             after,
             since,
+            children,
         } = written;
         let predicate = WrittenPredicate {
             all,
@@ -127,6 +130,7 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             before,
             after,
             since,
+            children,
         };
         let Some(decision) = decision else {
             // With no key at all, name `decision` among what a requirement may be written as.
@@ -143,11 +147,13 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
                 before: None,
                 after: None,
                 since: None,
+                children: None,
             } = predicate
             {
                 return Err(
                     "a requirement has exactly one of `all`, `any`, `not`, `evidence`, \
-                     `claim`, `input`, `first`, `before`, `after`, `since` or `decision`, found 0"
+                     `claim`, `input`, `first`, `before`, `after`, `since`, `children` or `decision`, \
+                     found 0"
                         .to_owned(),
                 );
             }
@@ -166,6 +172,7 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             before: None,
             after: None,
             since: None,
+            children: None,
         } = predicate
         else {
             return Err(

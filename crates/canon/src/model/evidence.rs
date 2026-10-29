@@ -4,7 +4,7 @@
 use serde::Deserialize;
 
 use super::Declarations;
-use super::ids::{ArtifactId, EvidenceId, EvidenceKindId, Instant, Principal, Revision};
+use super::ids::{ArtifactId, CaseId, EvidenceId, EvidenceKindId, Instant, Principal, Revision};
 
 /// The evidence record format this model reads.
 pub const EVIDENCE_FORMAT: &str = "canon-evidence/1";
@@ -45,4 +45,9 @@ pub struct EvidenceRecord {
     /// is of no evidence match that demands independence.
     #[serde(default, deserialize_with = "super::present::optional")]
     pub producer: Option<Principal>,
+    /// The child case a `case_outcome` record is about (story:case-composition): one record per
+    /// child case, its `result` the child's outcome, `open` while the child runs. Written only on a
+    /// `case_outcome` record, which must name its child and give an outcome.
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub child_case: Option<CaseId>,
 }

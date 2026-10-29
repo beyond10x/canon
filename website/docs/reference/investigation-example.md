@@ -268,7 +268,7 @@ and `canon evaluate --ir investigation.ir.json --case case.yaml --evidence evide
       "protocol": "investigation",
       "protocol_revision": 1,
       "semantics": {
-        "canon": "0.8.0",
+        "canon": "0.9.0",
         "format": "canon-decision/1"
       }
     }
@@ -292,6 +292,7 @@ The repository keeps broken copies of this protocol in [`fixtures/investigation/
 
 | Variant | Code | Problem |
 |---|---|---|
+| [`case-open-self.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/case-open-self.yaml) | `self-opened-case` | action `reaudit` opens a case under protocol `audit`, the protocol's own id |
 | [`duplicate-identifier.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/duplicate-identifier.yaml) | `duplicate-identifier` | action `inspect` is declared more than once |
 | [`input-duplicate-value.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/input-duplicate-value.yaml) | `duplicate-input-value` | input `severity` lists value `low` more than once |
 | [`input-empty-values.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/input-empty-values.yaml) | `empty-input-values` | input `urgency` declares no value |

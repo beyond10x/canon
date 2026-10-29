@@ -387,6 +387,7 @@ mod tests {
             subject_revision: Revision::new("r1"),
             observed_at: at.map(Instant::new),
             upstream_revisions: Declarations::default(),
+            child_case: None,
         }
     }
 

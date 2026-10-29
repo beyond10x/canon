@@ -41,7 +41,9 @@
 //!   order form reads with the `observed_at` its state gives it, when it gives one, a whole-second
 //!   instant written without a fraction; and a
 //!   record of a kind an evidence match demanding independence reads with its `producer`,
-//!   `producer-n`, when its profile is not the empty one;
+//!   `producer-n`, when its profile is not the empty one; and a `case_outcome` record with its
+//!   `child_case`, the record's own id, and an outcome no predicate names in place of no result
+//!   (`crate::check`, "Child cases");
 //! - `authority`, each decided capability, when the witness decides one;
 //! - `decisions`, each taken decision for every outcome that requires it, by the principal
 //!   `canon-generate` at case revision `r`, when the witness takes one;
@@ -78,7 +80,8 @@
 //!   so there is no scenario to write.
 //! - `unrepresentable`: a scenario does not read back as one that passes.
 //! - Every refusal [`crate::check::check`] makes, with its code: a space above the bound
-//!   (`state-space-bound`) and an evaluation the evaluator refuses.
+//!   (`state-space-bound`), a protocol that reads `case_outcome` with a `children` form and
+//!   an order form (`ordered-child-outcomes`) and an evaluation the evaluator refuses.
 
 #[cfg(test)]
 mod tests;
@@ -421,6 +424,9 @@ fn scenario(
             }
             if let Some(producer) = &record.producer {
                 line(10, &format!("producer: {}", quote(producer.as_str())));
+            }
+            if let Some(child) = &record.child_case {
+                line(10, &format!("child_case: {}", quote(child.as_str())));
             }
             if !record.upstream_revisions.is_empty() {
                 line(10, "upstream_revisions:");

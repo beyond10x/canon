@@ -1,0 +1,40 @@
+format: protocol/1
+
+protocol:
+  id: audit
+  revision: 1
+  description: Audit a system and resolve its findings through child cases; one action opens a child audit, under this protocol's own id.
+
+artifacts:
+  findings:
+    description: The audit's findings; each change they call for is worked in a child case about them.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child case the audit opened, one record per child; open while the child runs.
+
+claims:
+  findings.resolved:
+    description: Every child case ended accepted or declined.
+    true_when:
+      children:
+        in: [accepted, declined]
+
+actions:
+  open_change:
+    description: Open a child software.change case about the findings.
+    case_open:
+      protocol: software.change
+      subject: findings
+
+  reaudit:
+    description: Open a child audit about the findings, which could open a child audit in turn.
+    case_open:
+      protocol: audit
+      subject: findings
+
+outcomes:
+  resolved:
+    description: Every finding was resolved through its child case.
+    requires:
+      claim: findings.resolved

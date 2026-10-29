@@ -15,9 +15,9 @@ does not depend on the order the sections are written in:
 1. the format;
 2. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
    claims, obligations, actions, outcomes, invalidation rules, case inputs and independence
-   dimensions, in that section order, then the capabilities and effect classes actions name, in action order, then the
-   decisions outcomes require, in outcome order, then the values case inputs declare, in input
-   order;
+   dimensions, in that section order, then the capabilities and effect classes actions name and
+   the protocol each action's `case_open` names, in action order, then the decisions outcomes
+   require, in outcome order, then the values case inputs declare, in input order;
 3. duplicate identifiers, in the same section order;
 4. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
    or `d`, or that are but are too long to count in seconds (each with its own message), in the
@@ -43,19 +43,27 @@ does not depend on the order the sections are written in:
    than once, `duplicate-input-test-value`, once for every listing after its first, then an
    input it names that is not declared, `undeclared-input`, or a value it lists that its input
    does not declare, `undeclared-input-value`, each value once, in the order listed, every one
-   naming the declaration the test is written in and the input): those in claims first, then those
-   in obligations (each obligation's discharge predicate, followed by every evidence match and
-   every order form it holds, which a discharge predicate may not: it tests only claim values,
-   each kind an order form names once; then its applicability predicate, followed likewise by
-   every evidence match and order form it holds, `evidence-in-applicability`: it tests only
-   claim values and case inputs), then those in
-   actions, then those in outcomes, then those in invalidation rules (the upstream artifact,
-   then each claim the rule invalidates); within a section, in the order its declarations are
-   written, and within a declaration, in the order its references are written;
+   naming the declaration the test is written in and the input; for a `children` form, first
+   an empty `in` list, `empty-child-outcomes`, or an outcome it lists more than once,
+   `duplicate-child-outcome`, once for every listing after its first, then `open` listed,
+   `open-child-outcome`, once, then the evidence kind `case_outcome` when it is not declared,
+   `undeclared-evidence-kind`, every one naming the declaration the form is written in): those
+   in claims first, then those in obligations (each obligation's discharge predicate, followed
+   by every evidence match, order form and `children` form it holds, which a discharge
+   predicate may not: it tests only claim values, each kind an order form names once, the kind
+   `case_outcome` for a `children` form; then its applicability predicate, followed likewise by
+   every evidence match, order form and `children` form it holds, `evidence-in-applicability`:
+   it tests only claim values and case inputs), then those in actions (each action's
+   precondition, then each evidence kind it may produce, then the subject of the case it opens,
+   `undeclared-artifact`, then an opening under the protocol's own id, `self-opened-case`, both
+   naming the action), then those in outcomes, then those in invalidation rules (the upstream
+   artifact, then each claim the rule invalidates); within a section, in the order its
+   declarations are written, and within a declaration, in the order its references are
+   written;
 8. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
    claim it tests through any number of claim references (`inert-invalidation`), in the order
-   the rules and their claims are written. An order form is not an evidence match here: it reads
-   the history, which an invalidation rule does not change;
+   the rules and their claims are written. An order form or a `children` form is not an
+   evidence match here: it reads the history, which an invalidation rule does not change;
 9. cycles between claims.
 
 Within a section, entries come in the order they are written. Every message renders document
@@ -122,6 +130,10 @@ object in code-point order, and the walk keeps a stack of its own, never recursi
 | `duplicate-independent-on` | An evidence match lists a dimension in `independent_on` more than once. |
 | `undeclared-dimension` | An evidence match demands independence on a dimension that is not declared. |
 | `inert-invalidation` | An invalidation rule names a claim that reaches no evidence match, in its own predicate or in a claim it tests, so no record could be kept from it. |
+| `empty-child-outcomes` | A `children` form lists no outcome, so no child case could end with one of them. |
+| `duplicate-child-outcome` | A `children` form lists an outcome more than once. |
+| `open-child-outcome` | A `children` form lists `open`, which is a running child case's outcome, never a terminal one: the form is unknown while a child is open. |
+| `self-opened-case` | An action opens a child case under the protocol's own id: a case could then open cases under its own protocol without end (D206). |
 | `claim-cycle` | Claims whose predicates test each other in a cycle; the first claim is repeated at the end. |
 | `action-arguments` | An action's argument schema is outside the argument-schema dialect: `pointer` is the JSON Pointer of the offending keyword inside the schema (`""` for the schema itself) and `reason` why it is refused. |
 

@@ -83,6 +83,7 @@ mod tests {
             subject_revision: Revision::new(revision),
             observed_at: None,
             upstream_revisions: crate::model::Declarations::default(),
+            child_case: None,
         }
     }
 
