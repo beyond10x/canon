@@ -6,8 +6,9 @@
 # (canon-decisions/1) too (story:decision-outcomes), and the authority decisions it reads
 # (canon-authority/1, story:review-hardening-w7). story:case-inputs adds the case inputs a protocol
 # declares and a case gives values for, the input predicate and an obligation's applicability.
-# story:evidence-order-predicate adds the order forms `first` and `before` of the predicate, and
-# story:evidence-order-after the order form `after`.
+# story:evidence-order-predicate adds the order forms `first` and `before` of the predicate,
+# story:evidence-order-after the order form `after`, and story:evidence-order-since the order form
+# `since`.
 # story:evidence-independence adds the independence dimensions a protocol declares, the
 # independence an evidence match demands of its records, the producer an evidence record names and
 # the independence a case gives each producer. story:action-arguments adds the argument schema an
@@ -384,11 +385,12 @@ types:
     variants: ["true", "false", "unknown"]
 
   # Source text writes a predicate as a map with exactly one of the keys all, any, not, evidence,
-  # claim, input, first, before or after (crates/canon/src/model/predicate.rs); the typed model is
-  # this union.
+  # claim, input, first, before, after or since (crates/canon/src/model/predicate.rs); the typed
+  # model is this union.
   # read from: crates/canon/src/model/predicate.rs:89-110
   # read from: .engineering/planning/story/evidence-order-predicate.md:71-74
   # read from: .engineering/planning/story/evidence-order-after.md:70-75
+  # read from: .engineering/planning/story/evidence-order-since.md:33-38
   - name: canon.protocol.Predicate
     kind: union
     tag: kind
@@ -419,6 +421,10 @@ types:
       # read from: .engineering/planning/story/evidence-order-after.md:70-75
       # read from: crates/canon/src/model/predicate.rs:106-108
       after: canon.protocol.EvidenceAfter
+      # Whether a record of a kind with a result, at the subject revision of the latest record of
+      # another kind (or of the same one), was observed after it (story:evidence-order-since).
+      # read from: .engineering/planning/story/evidence-order-since.md:33-38
+      since: canon.protocol.EvidenceSince
 
   # read from: crates/canon/src/model/predicate.rs:178-195
   - name: canon.protocol.EvidenceMatch
@@ -539,9 +545,38 @@ types:
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
 
-  # What an `after` reads later than the first record of its `first` kind: a record of `kind` with
-  # `result`.
+  # An order form: whether a record of kind `then.kind` with result `then.result`, about the
+  # subject and subject revision of the latest record of kind `last`, was observed after that
+  # record (all about `subject` when named), read from the history as FirstResult is. The anchors
+  # are the records of `last`, the candidates the records of `then.kind` with the result, and the
+  # latest anchors those no anchor is observed after. No anchor is unknown; no candidate is false;
+  # an anchor or a candidate without observed_at is unknown. Otherwise each latest anchor gives
+  # true when a candidate at its subject and subject revision, other than itself, is observed
+  # after it, false when every such candidate is observed before it or there is none, and unknown
+  # otherwise; the form is true when every latest anchor gives true, false when every one gives
+  # false, and unknown otherwise. `last` and `then.kind` may be one kind; a record is not later
+  # than itself. What it means is CANON-ORDER-004
+  # (conformance/scenarios/evidence-order-since.yaml), not this file.
+  # read from: .engineering/planning/story/evidence-order-since.md:33-38
+  # read from: .engineering/planning/story/evidence-order-since.md:49-61
+  - name: canon.protocol.EvidenceSince
+    kind: struct
+    fields:
+      # read from: .engineering/planning/story/evidence-order-since.md:33-36
+      - name: last
+        type: canon.protocol.EvidenceKindId
+      # read from: .engineering/planning/story/evidence-order-since.md:33-38
+      - name: then
+        type: canon.protocol.LaterRecord
+      # A declared artifact: only records about it are read, of either kind.
+      # read from: .engineering/planning/story/evidence-order-since.md:33-36
+      - name: subject
+        type: Optional<canon.protocol.ArtifactId>
+
+  # What an `after` reads later than the first record of its `first` kind, and a `since` later than
+  # the latest record of its `last` kind: a record of `kind` with `result`.
   # read from: .engineering/planning/story/evidence-order-after.md:70-75
+  # read from: .engineering/planning/story/evidence-order-since.md:37-38
   # read from: crates/canon/src/model/predicate.rs:165-176
   - name: canon.protocol.LaterRecord
     kind: struct
