@@ -98,8 +98,9 @@ requirements:
   CANON-ORDER-003:
     status: implemented
     statement: >-
-      An observed_at with a fraction of one to nine digits MUST be read as the interval its last
-      written digit spans, and any other fraction MUST be refused as invalid-instant. An order form
-      MUST take a record as observed before another only when its interval ends at or before the
-      other's begins, and MUST NOT order records whose intervals overlap.
+      An observed_at with a fraction of one to nine digits MUST be read, and any other fraction MUST
+      be refused as invalid-instant. The order forms MUST compare every instant of an evaluation at
+      one resolution, the coarsest written among the records with an observed_at, each read by
+      dropping the finer digits; records whose instants differ there MUST be ordered as they
+      differ, and records whose instants are equal there MUST NOT be ordered.
     source: story:evidence-order-subsecond

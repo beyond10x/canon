@@ -459,12 +459,15 @@ types:
   # An order form: whether the first record of `kind` (about `subject` when named) has `result`.
   # It reads the history: every record of its kind the evidence check accepted, including those
   # the exclusion stages keep from evidence matches (revision_mismatch, expired, invalidated). The
-  # order key is a record's observed_at; a record without one leaves the order unknown. Of the
-  # records at the earliest instant, every one with the result is true, none is false, some is
-  # unknown; no record is unknown. What it means is CANON-ORDER-001
-  # (conformance/scenarios/evidence-order.yaml), not this file.
+  # order key is a record's observed_at, read at the evaluation's resolution (the coarsest
+  # precision written among the records with an observed_at, finer digits dropped); a record
+  # without one leaves the order unknown. Of the records at the earliest instant at the
+  # evaluation's resolution, every one with the result is true, none is false, some is unknown; no
+  # record is unknown. What it means is CANON-ORDER-001 (conformance/scenarios/evidence-order.yaml)
+  # and CANON-ORDER-003 (conformance/scenarios/evidence-order-subsecond.yaml), not this file.
   # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
   # read from: .engineering/planning/story/evidence-order-predicate.md:76-95
+  # read from: .engineering/planning/story/evidence-order-subsecond.md:40-66
   # read from: crates/canon/src/model/predicate.rs:112-126
   - name: canon.protocol.FirstResult
     kind: struct
@@ -487,11 +490,12 @@ types:
   # record of kind `then` (both about `subject` when named), read from the history as FirstResult
   # is. No record of either is unknown; one of `then` and none of `first` is false; one of `first`
   # and none of `then` is unknown; a record of either without observed_at is unknown; otherwise the
-  # earliest instants decide, an equal pair unknown. `first` and `then` are two different declared
-  # kinds.
+  # earliest instants at the evaluation's resolution decide, an equal pair unknown. `first` and
+  # `then` are two different declared kinds.
   # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
   # read from: .engineering/planning/story/evidence-order-predicate.md:97-104
   # read from: .engineering/planning/story/evidence-order-predicate.md:108-110
+  # read from: .engineering/planning/story/evidence-order-subsecond.md:40-66
   # read from: crates/canon/src/model/predicate.rs:128-144
   - name: canon.protocol.EvidenceOrder
     kind: struct
@@ -514,13 +518,15 @@ types:
   # strictly after the first record of kind `first` (all about `subject` when named), read from the
   # history as FirstResult is. No record of `first` is unknown; no record of `then.kind` with the
   # result is false; a record of `first`, or of `then.kind` with the result, without observed_at
-  # is unknown; otherwise one observed after the earliest instant of `first` is true, one only at
-  # that instant (other than the first record itself) is unknown, and none is false. A record of
-  # `then.kind` with another result takes no part. `first` and `then.kind` may be one kind; a
-  # record is not later than itself. What it means is CANON-ORDER-002
-  # (conformance/scenarios/evidence-order-after.yaml), not this file.
+  # is unknown; otherwise one observed after the earliest instant of `first` at the evaluation's
+  # resolution is true, one only at that instant (other than the first record itself) is unknown,
+  # and none is false. A record of `then.kind` with another result takes no part. `first` and
+  # `then.kind` may be one kind; a record is not later than itself. What it means is
+  # CANON-ORDER-002 (conformance/scenarios/evidence-order-after.yaml) and CANON-ORDER-003, not this
+  # file.
   # read from: .engineering/planning/story/evidence-order-after.md:70-75
   # read from: .engineering/planning/story/evidence-order-after.md:89-111
+  # read from: .engineering/planning/story/evidence-order-subsecond.md:40-66
   # read from: crates/canon/src/model/predicate.rs:146-163
   - name: canon.protocol.EvidenceAfter
     kind: struct
@@ -595,12 +601,14 @@ types:
   # the seconds, YYYY-MM-DDTHH:MM:SS.fffZ; uppercase T and Z, no leap second (2026-10-04T12:00:00Z,
   # 2026-10-04T12:00:00.400Z). An empty fraction, more than nine digits and a comma are not instants.
   # An instant names the interval its last written digit spans: 12:00:00Z is the second
-  # [12:00:00, 12:00:01), 12:00:00.4Z is [12:00:00.4, 12:00:00.5). Order forms compare these
-  # intervals; expiry reads the whole seconds and ignores the fraction. Evidence records when it was
-  # observed in this form, and the evaluation instant (`--at`) is given in it.
+  # [12:00:00, 12:00:01), 12:00:00.4Z is [12:00:00.4, 12:00:00.5). Order forms compare every
+  # instant of one evaluation at one resolution, the coarsest written among the records with an
+  # observed_at, each read by dropping the finer digits: instants that differ there are ordered,
+  # equal ones are not. Expiry reads the whole seconds and ignores the fraction. Evidence records
+  # when it was observed in this form, and the evaluation instant (`--at`) is given in it.
   # read from: docs/design/canon-protocol-calculus-design.md:505
   # read from: .engineering/planning/story/evidence-freshness.md:50-53
-  # read from: .engineering/planning/story/evidence-order-subsecond.md:30-60
+  # read from: .engineering/planning/story/evidence-order-subsecond.md:30-69
   # read from: crates/canon/src/model/ids.rs:177-185
   # read from: crates/canon/src/model/time.rs:1-33
   - name: canon.protocol.Instant
