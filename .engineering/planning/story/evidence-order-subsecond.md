@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:evidence-order-subsecond
 kind: story
-status: active
+status: implemented
 title: Order forms compare observed_at at the resolution it is written in
 summary: an instant may carry a fraction of a second; first, before and after order records within one second, and overlapping instants stay unordered
 relations:
@@ -10,10 +10,11 @@ relations:
 - serves: vision:O2
 - serves: vision:governed-autonomy
 - depends_on: story:evidence-order-after
-revision: 4
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-29T07:12:56Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-29T07:12:56Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-29T08:14:14Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":4}}}
 ---
 ## Outcome
 
@@ -98,3 +99,17 @@ whole seconds and ignores its fraction, as it reads `max_age` in whole seconds.
 6. `12:00:00.Z`, ten fraction digits and `12:00:00,5Z` refused as `invalid-instant`.
 
 Every existing conformance expectation and golden check report is unchanged; `task check` passes.
+
+## Delivered
+
+- An instant may carry a fraction of one to nine digits, in evidence and as the evaluation instant;
+  the `invalid-instant` refusal names both forms.
+- The order forms compare every instant at one resolution per evaluation, the coarsest written
+  among the records with an `observed_at` (`ticks` in `eval/order.rs`); the 0.7.0 rules apply over
+  those ticks, so whole-second evidence evaluates, checks and generates as before and the
+  `canon check` space is unchanged.
+- Expiry keeps whole seconds.
+- Adversary pass 1 found that comparing each pair at its own precision is not a weak order, which
+  made `canon check` report an outcome unreachable that mixed-precision evidence makes legitimate;
+  the settled rule replaced it, and the contracts of `first`, `before` and `after` now name the
+  resolution.
