@@ -555,6 +555,7 @@ fn every_value_of_every_order_form_is_reached_jointly_with_the_evidence_matches(
                     subject_revision: Revision::new(["r", "r0"][rng.below(2)]),
                     observed_at: at.map(crate::model::Instant::new),
                     upstream_revisions: Declarations::default(),
+                    child_case: None,
                 }
             })
             .collect();
@@ -754,6 +755,7 @@ fn every_combination_of_demands_met_is_reached_by_a_state() {
                 subject_revision: Revision::new(["r", "r0"][rng.below(2)]),
                 observed_at: None,
                 upstream_revisions: Declarations::default(),
+                child_case: None,
             })
             .collect();
         let values = claim_values_with(&ir, &records, independence.clone());
@@ -871,6 +873,7 @@ fn a_dimension_only_demanding_matches_read_has_no_record_without_a_producer() {
                 subject_revision: Revision::new("r"),
                 observed_at: None,
                 upstream_revisions: Declarations::default(),
+                child_case: None,
             })
             .collect();
         let values = claim_values_with(&ir, &records, independence.clone());
@@ -945,6 +948,7 @@ fn unreached_histories(
                 subject_revision: Revision::new(revisions[rng.below(revisions.len())]),
                 observed_at: instants[rng.below(4)].map(crate::model::Instant::new),
                 upstream_revisions: Declarations::default(),
+                child_case: None,
             })
             .collect();
         let values = claim_values(&ir, &records);

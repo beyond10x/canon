@@ -56,8 +56,8 @@ pub use ids::{
 };
 pub use parse::{FORMAT, ParseError, parse};
 pub use predicate::{
-    ClaimTest, EvidenceAfter, EvidenceMatch, EvidenceOrder, EvidenceSince, FirstResult, InputTest,
-    LaterRecord, Predicate, Truth,
+    CASE_OUTCOME, ChildOutcomes, ClaimTest, EvidenceAfter, EvidenceMatch, EvidenceOrder,
+    EvidenceSince, FirstResult, InputTest, LaterRecord, OPEN_OUTCOME, Predicate, Truth,
 };
 pub use properties::{
     PROPERTIES_FORMAT, Properties, Property, PropertyDependency, PropertyId, PropertySubject,
@@ -209,6 +209,29 @@ pub struct Action {
     /// schema, and `canon validate` holds the schema to the dialect (`action-arguments`).
     #[serde(default, deserialize_with = "present::optional_json")]
     pub arguments: Option<Json>,
+    /// The child case the action opens (story:case-composition): a case governed by another
+    /// protocol, about a declared artifact. Absent: the action opens no case. Canon opens nothing
+    /// itself; whoever takes the action opens the child case. A case has one commission, and a
+    /// second party works through a child case: this is the one primitive by which a case hands
+    /// work to another party (D207).
+    #[serde(default, deserialize_with = "present::optional")]
+    pub case_open: Option<CaseOpening>,
+}
+
+/// What an action's `case_open` names: the protocol the child case is governed by and the
+/// artifact it is about, never an existing case. No run-time check keeps a case from opening one
+/// under its own protocol (D206): `canon validate` refuses an opening under the protocol's own id,
+/// and the library function `b10x_canon::ir::check_openings` refuses a set of protocols whose
+/// openings form a cycle, naming it in the order its openings go, from its least protocol id.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CaseOpening {
+    /// The protocol the child case is governed by.
+    #[serde(deserialize_with = "present::required")]
+    pub protocol: ProtocolId,
+    /// The declared artifact the child case is about.
+    #[serde(deserialize_with = "present::required")]
+    pub subject: ArtifactId,
 }
 
 /// One capability an action requires authority for.

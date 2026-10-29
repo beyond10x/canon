@@ -38,6 +38,7 @@
 //! | evidence kind an action may produce removed | `BREAKING` |
 //! | action argument schema introduced or removed (absent, the action takes only `{}`) | `BREAKING` |
 //! | action argument schema narrowed, widened, rewritten or changed | by the rules in `diff/arguments.rs` |
+//! | case an action opens (`case_open`) introduced, removed or changed | `BREAKING` |
 //! | outcome added | `EXPANSION` |
 //! | outcome removed, or its requirement changed | `BREAKING` |
 //! | invalidation rule added, or a claim added to what it invalidates | `TIGHTENING` |
@@ -63,10 +64,12 @@
 //! under an `all` strengthens it, a member added under an `any` weakens it, `not` reverses the
 //! direction, and two evidence matches, claim tests or input tests imply each other only when they
 //! are equal, so an input test whose `in` list changed implies nothing it did not before. What it
-//! cannot show is classified as changed. An order form (`first`, `before`, `after`, `since`) is compared
-//! structurally only: a predicate whose order forms, taken as a set, differ between the revisions
-//! is changed (`BREAKING`), whatever members around them were added or removed; one whose order
-//! forms are the same is classified by implication, each form implying only an equal one.
+//! cannot show is classified as changed. An order form (`first`, `before`, `after`, `since`) and a
+//! `children` form are compared structurally only: a predicate whose such forms, taken as a set,
+//! differ between the revisions is changed (`BREAKING`), whatever members around them were added
+//! or removed; one whose such forms are the same is classified by implication, each form implying
+//! only an equal one. A `children` form whose outcome list grew is weaker, but, like an input
+//! test, a changed list is not ordered.
 //!
 //! The independence an evidence match demands (`independent_on`) is not compared by implication
 //! either: a match that demands more reads fewer records, which can leave records that disagree
@@ -116,7 +119,7 @@
 //! rules, case inputs and independence dimensions; within a section, by identifier; within a declaration, its description,
 //! then its fields in the order the IR declares them (an obligation's discharge predicate and
 //! applicability predicate; an action's precondition, capability requirements, effect, evidence
-//! it may produce and argument schema; a case input's values), each list in identifier order, removals before
+//! it may produce, argument schema and the case it opens; a case input's values), each list in identifier order, removals before
 //! additions. Every IR declaration is destructured whole, so a field added to one does not compile
 //! here until the classifier says what a change to it is.
 //!
@@ -133,8 +136,8 @@ use crate::ir::{
     Outcome,
 };
 use crate::model::{
-    Age, ArtifactId, ClaimId, EvidenceKindId, EvidenceMatch, IndependenceDimensionId, Predicate,
-    ProtocolId, Truth, one_line,
+    Age, ArtifactId, CaseOpening, ClaimId, EvidenceKindId, EvidenceMatch, IndependenceDimensionId,
+    Predicate, ProtocolId, Truth, one_line,
 };
 
 /// What a change does to legitimate work (design § 31).
@@ -394,8 +397,8 @@ fn compared(from: &Predicate, to: &Predicate) -> Option<(Category, &'static str)
     if from == to {
         return None;
     }
-    // Order forms are compared structurally only: a predicate whose order forms changed is
-    // `BREAKING`, whatever else it implies.
+    // Order forms and `children` forms are compared structurally only: a predicate whose such
+    // forms changed is `BREAKING`, whatever else it implies.
     if order_forms(from) != order_forms(to) {
         return Some((Category::Breaking, "changed"));
     }
@@ -413,10 +416,15 @@ fn compared(from: &Predicate, to: &Predicate) -> Option<(Category, &'static str)
     })
 }
 
-/// The order forms `predicate` holds, each once, in canonical-IR form: two predicates hold the same
-/// order forms exactly when these are equal.
+/// The order forms and `children` forms `predicate` holds, each once, in canonical-IR form: two
+/// predicates hold the same such forms exactly when these are equal.
 fn order_forms(predicate: &Predicate) -> Vec<&Predicate> {
     let mut forms = predicate.order_forms();
+    predicate.visit(&mut |node| {
+        if matches!(node, Predicate::Children(_)) {
+            forms.push(node);
+        }
+    });
     forms.sort_by_key(|form| format!("{form:?}"));
     forms.dedup();
     forms
@@ -459,7 +467,8 @@ fn demands(predicate: &Predicate) -> BTreeSet<Demand<'_>> {
             | Predicate::First(_)
             | Predicate::Before(_)
             | Predicate::After(_)
-            | Predicate::Since(_) => {}
+            | Predicate::Since(_)
+            | Predicate::Children(_) => {}
         }
     }
     let mut found = BTreeSet::new();
@@ -641,7 +650,8 @@ fn reads(predicate: &Predicate, reading: Reading, found: &mut Vec<(ClaimId, Read
         | Predicate::First(_)
         | Predicate::Before(_)
         | Predicate::After(_)
-        | Predicate::Since(_) => {}
+        | Predicate::Since(_)
+        | Predicate::Children(_) => {}
     }
 }
 
@@ -929,6 +939,7 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         effect: from_effect,
         may_produce: from_may_produce,
         arguments: from_arguments,
+        case_open: from_case_open,
     } = from;
     let Action {
         description: to_description,
@@ -937,6 +948,7 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         effect: to_effect,
         may_produce: to_may_produce,
         arguments: to_arguments,
+        case_open: to_case_open,
     } = to;
     changes.description(SECTION, id, from_description, to_description);
     changes.predicate(
@@ -982,6 +994,26 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         arguments::classify(from_arguments.as_ref(), to_arguments.as_ref())
     {
         changes.push(category, SECTION, id, what.to_owned());
+    }
+    if from_case_open != to_case_open {
+        let shown = |opening: &Option<CaseOpening>| match opening {
+            Some(opening) => format!(
+                "protocol `{}` about `{}`",
+                one_line(opening.protocol.as_str()),
+                one_line(opening.subject.as_str())
+            ),
+            None => "none".to_owned(),
+        };
+        changes.push(
+            Category::Breaking,
+            SECTION,
+            id,
+            format!(
+                "case it opens changed from {} to {}",
+                shown(from_case_open),
+                shown(to_case_open)
+            ),
+        );
     }
 }
 
@@ -1103,12 +1135,13 @@ impl Implication {
             // Their `in` lists are sorted and kept once in the IR, so equal sets are equal tests.
             // A test with more values is weaker, but a changed `in` list is not ordered.
             (Predicate::Input(left), Predicate::Input(right)) => left == right,
-            // Order forms are compared structurally; `compared` has already classified a change to
-            // one as `BREAKING`.
+            // Order forms and `children` forms are compared structurally; `compared` has already
+            // classified a change to one as `BREAKING`.
             (Predicate::First(left), Predicate::First(right)) => left == right,
             (Predicate::Before(left), Predicate::Before(right)) => left == right,
             (Predicate::After(left), Predicate::After(right)) => left == right,
             (Predicate::Since(left), Predicate::Since(right)) => left == right,
+            (Predicate::Children(left), Predicate::Children(right)) => left == right,
             // Two different kinds of leaf, or an `all`, `any` or `not` the rules above leave
             // undecided: not shown, so not implied.
             _ => false,

@@ -34,7 +34,9 @@
 //!   <kind>, "result": <result>, "value": <value>}` or `{"since": <kind>, "then": <kind>,
 //!   "result": <result>, "value": <value>}`, with `"subject"` when it names one; every `after`
 //!   first, then every `before`, then every `first`, then every `since`, each form once), then
-//!   each record an evidence match the claim reaches reads (as its
+//!   each form over the child cases it holds, `{"children": [<outcome>, ...], "value": <value>}`,
+//!   over the same history, each form once, in the order of its outcome list
+//!   (story:case-composition), then each record an evidence match the claim reaches reads (as its
 //!   `excluded_evidence` list counts them), written as below, then each evidence match it reaches
 //!   that reads no record of the evidence set, `{"kind": <kind>, "status": "absent"}`, with
 //!   `"subject": <artifact>` added when the match names one, in kind and then subject order (no
@@ -61,8 +63,9 @@
 //! the claims they test. It is `applied` under every claim it was not invalidated for, and in the
 //! `because` of an outcome, action or obligation, whose own evidence matches read it. A
 //! reason `{"claim": <id>, "value": <value>}` anywhere continues under `claims`. An order form's
-//! reason is written as the decision states it and lists no record: an order form reads the whole
-//! history, and its value is the reason. A member with nothing to explain is not written.
+//! reason, and a `children` form's, is written as the decision states it and lists no record: such
+//! a form reads the whole history, and its value is the reason. A member with nothing to explain
+//! is not written.
 //!
 //! Every list is in a fixed order — claim reasons by claim id, evidence records and evidence ids by
 //! evidence id, absent kinds by kind id, authority decisions by capability, explicit decisions by
@@ -77,7 +80,7 @@ use serde_json::{Map, Value, json};
 
 use crate::eval::{
     Authority, Decisions, EvidenceSets, Independence, Inputs as CaseInputs, Invalidated,
-    order_reasons, reads, unmet_reasons,
+    children_reasons, order_reasons, reads, unmet_reasons,
 };
 use crate::ir::Ir;
 use crate::model::{
@@ -488,6 +491,10 @@ fn claims(
                 let mut because = claim_reasons(&declared.true_when, values);
                 because.extend(input_reasons(&declared.true_when, inputs));
                 because.extend(order_reasons(declared.true_when.order_forms(), history));
+                because.extend(children_reasons(
+                    declared.true_when.children_forms(),
+                    history,
+                ));
                 because
             }
             None => Vec::new(),
