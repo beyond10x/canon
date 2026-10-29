@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:case-composition
 kind: story
-status: active
+status: implemented
 title: 'Compose cases at run time: case.open and case_outcome evidence'
 refs:
 - provider: atlas
@@ -42,10 +42,11 @@ scope:
   path: website/static/schemas/
 - confidence: inferred
   path: website/status.yaml
-revision: 16
+revision: 18
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-29T20:43:34Z", actor: "human:timo", revision: 11, decided_on: {"recorded":{"review_outcome":1}}, executor: "agent:canon-ep-d221", correlation: "wave/2026-10-29-w3"}
 - {from: "proposed", to: "active", at: "2026-10-29T20:43:35Z", actor: "human:timo", revision: 12, decided_on: {"recorded":{"review_outcome":1}}, executor: "agent:canon-ep-d221", correlation: "wave/2026-10-29-w3"}
+- {from: "active", to: "implemented", at: "2026-10-29T23:37:42Z", actor: "human:timo", revision: 18, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 ## Outcome
 
@@ -147,3 +148,36 @@ Atlas ADR 0081 (accepted 2026-10-04) § Decision and § Open; canon
   works through a child case. Canon knows no commission and counts none; `case.open` is the one
   primitive by which a case hands work to another party, and the reference page says so.
 - Approval: approval-record:wave-2026-10-29-w3 (D221).
+
+## Delivered
+
+Wave 2026-10-29-w3 (approval-record:wave-2026-10-29-w3, D221; D206, D207).
+
+- ESS first: bf2be9c specifies `case_open` (`CaseOpening`: protocol and subject) on
+  `canon.protocol.Action`, `child_case` on the evidence record and the `children` predicate form
+  (`ChildOutcomes`). Red on it: `ess_model_matches` 17 passed, 11 failed, naming
+  `case_open: Optional<CaseOpening>`; `canon conform run` failed `CANON-COMPOSE-001` at `compile`.
+- 953fc5f, 0f9c4a0: `case_open` validates and compiles into `canon-ir/1`; a `case_outcome` record
+  carries `child_case`, and two records for one child are refused (`duplicate-child-case`) naming
+  it. `children` reads every accepted `case_outcome` record at any revision; listing `open` in it is
+  refused (`open-child-outcome`). New validation codes `self-opened-case`, `empty-child-outcomes`,
+  `duplicate-child-outcome`, `open-child-outcome`; evidence codes `missing-child-case`,
+  `missing-child-outcome`, `misplaced-child-case`, `duplicate-child-case`.
+- D206: `canon validate` refuses a `case_open` naming the protocol's own id, naming the action
+  (`fixtures/investigation/invalid/case-open-self.yaml`). The library check over a set of
+  protocols refuses a `case_open` cycle and names it from its least protocol id along the
+  openings, back to that id (`audit -> review -> audit`); a chain without a cycle is accepted. No
+  run-time check. D207: one commission per case, stated in the reference.
+- Beyond § Scope: `canon diff` takes a change to a `children` form or a `case_open` as BREAKING
+  rather than leaving them unclassified; `canon check` counts a `case_open` action as producing
+  `case_outcome`, gives each `children` read a history dimension and no place in the order, and
+  refuses a protocol that reads `case_outcome` with both a `children` form and an order form
+  (`ordered-child-outcomes`).
+- Adversary pass 1 (c0803f0, 19 cases): one red, `check_adds_no_order_dimension_for_children_forms_alone`
+  (176256 states where 58752 do), fixed in 443f0a2; the `canon check` help drift fixed in f33f990.
+  Three mutants the unit suite let survive are killed by its cases.
+- Gate: `task check` on f33f990 (tree of the wave merge b3fe055) with ESS 0.77.0: ess-gate,
+  fmt, clippy, test (854 passed, 0 failed, 3 ignored before this story), conform (18 passed; 19
+  implemented, 19 covered), adversary_action_arguments, docs-check, each exit 0.
+- Left: the older `# read from:` citations into `model/mod.rs` and `model/ids.rs` pointed at the
+  wrong lines before this story and still do.
