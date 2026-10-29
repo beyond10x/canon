@@ -1,0 +1,590 @@
+format: canon-conformance/1
+id: CANON-ORDER-003
+covers: [CANON-ORDER-003]
+fixture: fixtures/investigation/evidence-order-subsecond.yaml
+# The fixture declares one artifact, the change, and two evidence kinds, tests_change and
+# test_result. Claim red.after.change requires a failed test_result observed after the first
+# tests_change (`after`); claim red.first that the first test_result failed (`first`); claim
+# run.before.change that the first test_result was observed before the first tests_change
+# (`before`). Every case gives the change at r1 and every record is bound to r1, so no record is
+# excluded and the claims section lists only values.
+#
+# An instant names the interval its last written digit spans: 12:00:00Z is the second
+# [12:00:00, 12:00:01), 12:00:00.5Z is [12:00:00.5, 12:00:00.6), 12:00:00.500Z is
+# [12:00:00.500, 12:00:00.501). A record is observed before another when its interval ends at or
+# before the other's begins; records whose intervals overlap are not ordered.
+steps:
+  - id: compile
+    compile: {}
+    expect:
+      canon-ir: |
+        {
+          "actions": {},
+          "artifacts": {
+            "change": {
+              "description": "The change under review."
+            }
+          },
+          "claims": {
+            "red.after.change": {
+              "description": "A failed test result was recorded after the first change to the tests.",
+              "true_when": {
+                "after": {
+                  "first": "tests_change",
+                  "then": {
+                    "kind": "test_result",
+                    "result": "failed"
+                  }
+                }
+              }
+            },
+            "red.first": {
+              "description": "The first test result recorded was a failure.",
+              "true_when": {
+                "first": {
+                  "kind": "test_result",
+                  "result": "failed"
+                }
+              }
+            },
+            "run.before.change": {
+              "description": "The first test result was recorded before the first change to the tests.",
+              "true_when": {
+                "before": {
+                  "first": "test_result",
+                  "then": "tests_change"
+                }
+              }
+            }
+          },
+          "evidence_kinds": {
+            "test_result": {
+              "description": "A run of the tests against the change; its result is failed or passed."
+            },
+            "tests_change": {
+              "description": "A change to the tests of the change."
+            }
+          },
+          "format": "canon-ir/1",
+          "obligations": {},
+          "outcomes": {
+            "red.after": {
+              "description": "The test was seen failing after its tests were changed.",
+              "requires": {
+                "claim": {
+                  "id": "red.after.change",
+                  "is": "true"
+                }
+              }
+            },
+            "shown": {
+              "description": "The test was seen failing first, before its tests were changed.",
+              "requires": {
+                "all": [
+                  {
+                    "claim": {
+                      "id": "red.first",
+                      "is": "true"
+                    }
+                  },
+                  {
+                    "claim": {
+                      "id": "run.before.change",
+                      "is": "true"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "protocol": {
+            "description": "Decide from the order evidence was observed in, at the resolution its instants are written in.",
+            "id": "subsecond-order",
+            "revision": 1
+          }
+        }
+
+  # Expectation 1. The tests changed at 12:00:00.100Z and a run failed at 12:00:00.500Z, within one
+  # second: the change ends at .101, before the run begins, so `after` is TRUE. The run is the only
+  # test_result and failed (`first` TRUE), and it was not observed before the change (`before`
+  # FALSE: the change was observed before it).
+  - id: a-run-after-the-change-within-a-second
+    evaluate:
+      case:
+        format: canon-case/1
+        id: SUB-1
+        protocol: subsecond-order
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.100Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.500Z
+    expect:
+      decision: |
+        {
+          "claims": {
+            "red.after.change": {
+              "value": "true"
+            },
+            "red.first": {
+              "value": "true"
+            },
+            "run.before.change": {
+              "value": "false"
+            }
+          }
+        }
+
+  # Expectation 2. The same records the other way round: the run failed at .100 and the tests
+  # changed at .500. The failed run was observed before the change: `after` is FALSE, and `before`
+  # TRUE.
+  - id: a-run-before-the-change-within-a-second
+    evaluate:
+      case:
+        format: canon-case/1
+        id: SUB-2
+        protocol: subsecond-order
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.100Z
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.500Z
+    expect:
+      decision: |
+        {
+          "claims": {
+            "red.after.change": {
+              "value": "false"
+            },
+            "red.first": {
+              "value": "true"
+            },
+            "run.before.change": {
+              "value": "true"
+            }
+          }
+        }
+
+  # Expectation 3. Both at 12:00:00.500Z: equal instants are not ordered, so `after` and `before`
+  # are UNKNOWN.
+  - id: equal-instants-are-not-ordered
+    evaluate:
+      case:
+        format: canon-case/1
+        id: SUB-3
+        protocol: subsecond-order
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.500Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.500Z
+    expect:
+      decision: |
+        {
+          "claims": {
+            "red.after.change": {
+              "value": "unknown"
+            },
+            "red.first": {
+              "value": "true"
+            },
+            "run.before.change": {
+              "value": "unknown"
+            }
+          }
+        }
+
+  # Expectation 3, written at two precisions: 12:00:00.4Z is [.4, .5) and 12:00:00.40Z is
+  # [.40, .41); they overlap and are not ordered. Canon does not invent the digits not written.
+  - id: one-instant-at-two-precisions-is-not-ordered
+    evaluate:
+      case:
+        format: canon-case/1
+        id: SUB-4
+        protocol: subsecond-order
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.4Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.40Z
+    expect:
+      decision: |
+        {
+          "claims": {
+            "red.after.change": {
+              "value": "unknown"
+            },
+            "red.first": {
+              "value": "true"
+            },
+            "run.before.change": {
+              "value": "unknown"
+            }
+          }
+        }
+
+  # Expectation 4. Mixed precision: the change at 12:00:00Z is the whole second [12:00:00,
+  # 12:00:01), and the run at 12:00:00.500Z lies within it. They overlap: UNKNOWN.
+  - id: mixed-precision-within-the-second-is-not-ordered
+    evaluate:
+      case:
+        format: canon-case/1
+        id: SUB-5
+        protocol: subsecond-order
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.500Z
+    expect:
+      decision: |
+        {
+          "claims": {
+            "red.after.change": {
+              "value": "unknown"
+            },
+            "red.first": {
+              "value": "true"
+            },
+            "run.before.change": {
+              "value": "unknown"
+            }
+          }
+        }
+
+  # Expectation 4. Mixed precision: the change at 12:00:00Z ends at 12:00:01, and the run at
+  # 12:00:01.200Z begins after that. They are ordered: `after` TRUE, `before` FALSE.
+  - id: mixed-precision-in-the-next-second-is-ordered
+    evaluate:
+      case:
+        format: canon-case/1
+        id: SUB-6
+        protocol: subsecond-order
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:01.200Z
+    expect:
+      decision: |
+        {
+          "claims": {
+            "red.after.change": {
+              "value": "true"
+            },
+            "red.first": {
+              "value": "true"
+            },
+            "run.before.change": {
+              "value": "false"
+            }
+          }
+        }
+
+  # Expectation 5. Within one second: a pass at .200, a failure at .300, the tests changed at .700.
+  # The pass is the only test_result no other is observed before, so `first` is FALSE; it was
+  # observed before the change, so `before` is TRUE. The failure was observed before the change,
+  # so `after` is FALSE.
+  - id: first-and-before-within-a-second-pass-first
+    evaluate:
+      case:
+        format: canon-case/1
+        id: SUB-7
+        protocol: subsecond-order
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.200Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.300Z
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.700Z
+    expect:
+      decision: |
+        {
+          "claims": {
+            "red.after.change": {
+              "value": "false"
+            },
+            "red.first": {
+              "value": "false"
+            },
+            "run.before.change": {
+              "value": "true"
+            }
+          }
+        }
+
+  # Expectation 5. The same second with the results swapped: the failure at .200 is first, so
+  # `first` is TRUE.
+  - id: first-and-before-within-a-second-failure-first
+    evaluate:
+      case:
+        format: canon-case/1
+        id: SUB-8
+        protocol: subsecond-order
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.200Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.300Z
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.700Z
+    expect:
+      decision: |
+        {
+          "claims": {
+            "red.after.change": {
+              "value": "false"
+            },
+            "red.first": {
+              "value": "true"
+            },
+            "run.before.change": {
+              "value": "true"
+            }
+          }
+        }
+
+  # Expectation 5, mixed precision: a failure at 12:00:00Z and a pass at 12:00:00.300Z overlap, so
+  # either may be first and `first` is UNKNOWN. The failure's second ends before the change at
+  # 12:00:01.500Z begins: `before` TRUE, and the failure is not after the change, `after` FALSE.
+  - id: first-at-mixed-precision-is-unknown
+    evaluate:
+      case:
+        format: canon-case/1
+        id: SUB-9
+        protocol: subsecond-order
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.300Z
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:01.500Z
+    expect:
+      decision: |
+        {
+          "claims": {
+            "red.after.change": {
+              "value": "false"
+            },
+            "red.first": {
+              "value": "unknown"
+            },
+            "run.before.change": {
+              "value": "true"
+            }
+          }
+        }
+
+  # Nine fraction digits are read, one nanosecond apart, and the evaluation instant may carry a
+  # fraction too.
+  - id: nine-digits-and-a-fractional-evaluation-instant
+    evaluate:
+      case:
+        format: canon-case/1
+        id: SUB-10
+        protocol: subsecond-order
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.000000001Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.000000002Z
+      at: 2026-10-01T12:00:00.5Z
+    expect:
+      decision: |
+        {
+          "claims": {
+            "red.after.change": {
+              "value": "true"
+            },
+            "red.first": {
+              "value": "true"
+            },
+            "run.before.change": {
+              "value": "false"
+            }
+          }
+        }
+
+  # Expectation 6. An empty fraction is not an instant.
+  - id: an-empty-fraction-is-refused
+    evaluate:
+      case:
+        format: canon-case/1
+        id: SUB-11
+        protocol: subsecond-order
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.Z
+    expect:
+      refusal: invalid-instant
+
+  # Expectation 6. Ten fraction digits are more than Canon reads.
+  - id: ten-fraction-digits-are-refused
+    evaluate:
+      case:
+        format: canon-case/1
+        id: SUB-12
+        protocol: subsecond-order
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.1234567890Z
+    expect:
+      refusal: invalid-instant
+
+  # Expectation 6. A comma does not separate the fraction.
+  - id: a-comma-is-refused
+    evaluate:
+      case:
+        format: canon-case/1
+        id: SUB-13
+        protocol: subsecond-order
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00,5Z
+    expect:
+      refusal: invalid-instant

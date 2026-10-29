@@ -591,11 +591,16 @@ types:
     kind: newtype
     of: String
 
-  # An instant written YYYY-MM-DDTHH:MM:SSZ in UTC, whole seconds, uppercase T and Z, no leap second
-  # (2026-10-04T12:00:00Z). Evidence records when it was observed in this form, and the evaluation
-  # instant (`--at`) is given in it.
+  # An instant written YYYY-MM-DDTHH:MM:SSZ in UTC, or with a fraction of one to nine digits after
+  # the seconds, YYYY-MM-DDTHH:MM:SS.fffZ; uppercase T and Z, no leap second (2026-10-04T12:00:00Z,
+  # 2026-10-04T12:00:00.400Z). An empty fraction, more than nine digits and a comma are not instants.
+  # An instant names the interval its last written digit spans: 12:00:00Z is the second
+  # [12:00:00, 12:00:01), 12:00:00.4Z is [12:00:00.4, 12:00:00.5). Order forms compare these
+  # intervals; expiry reads the whole seconds and ignores the fraction. Evidence records when it was
+  # observed in this form, and the evaluation instant (`--at`) is given in it.
   # read from: docs/design/canon-protocol-calculus-design.md:505
   # read from: .engineering/planning/story/evidence-freshness.md:50-53
+  # read from: .engineering/planning/story/evidence-order-subsecond.md:30-60
   - name: canon.protocol.Instant
     kind: newtype
     of: String

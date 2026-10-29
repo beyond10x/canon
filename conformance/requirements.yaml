@@ -95,3 +95,11 @@ requirements:
       records, MUST NOT take a record observed at the same instant as later, and MUST be UNKNOWN
       while the first record or the order of a record it compares is not established.
     source: story:evidence-order-after
+  CANON-ORDER-003:
+    status: implemented
+    statement: >-
+      An observed_at with a fraction of one to nine digits MUST be read as the interval its last
+      written digit spans, and any other fraction MUST be refused as invalid-instant. An order form
+      MUST take a record as observed before another only when its interval ends at or before the
+      other's begins, and MUST NOT order records whose intervals overlap.
+    source: story:evidence-order-subsecond
