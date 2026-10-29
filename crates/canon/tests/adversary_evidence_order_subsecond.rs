@@ -71,7 +71,10 @@ fn at(fraction: &str) -> String {
 fn the_fraction_is_read_exactly_at_its_edges() {
     let second = |text: &str| Instant::new(text).seconds();
     let interval = |text: &str| Instant::new(text).interval();
-    assert_eq!(second("2024-02-29T23:59:59.999999999Z"), Some(1_709_251_199));
+    assert_eq!(
+        second("2024-02-29T23:59:59.999999999Z"),
+        Some(1_709_251_199)
+    );
     assert_eq!(
         interval("2024-02-29T23:59:59.999999999Z"),
         Some((
@@ -138,16 +141,36 @@ fn intervals_order_at_their_boundaries() {
     use Truth::{False as F, True as T, Unknown as U};
     let next = "2026-10-01T12:00:01Z";
     for (k, m, expected, why) in [
-        (at(".9"), next.to_owned(), T, ".9 ends where the next second begins"),
+        (
+            at(".9"),
+            next.to_owned(),
+            T,
+            ".9 ends where the next second begins",
+        ),
         (next.to_owned(), at(".9"), F, "the next second after .9"),
         (at(".9"), at(".99"), U, ".99 within .9"),
         (at(".99"), at(".9"), U, ".9 around .99"),
         (at(".98"), at(".99"), T, "neighbouring hundredths"),
         (at(".999999999"), next.to_owned(), T, "the last nanosecond"),
-        (at(""), at(".999999999"), U, "the last nanosecond within the second"),
-        (at(".999999999"), at(""), U, "the second around its last nanosecond"),
+        (
+            at(""),
+            at(".999999999"),
+            U,
+            "the last nanosecond within the second",
+        ),
+        (
+            at(".999999999"),
+            at(""),
+            U,
+            "the second around its last nanosecond",
+        ),
         (at(".5"), at(".499999999"), F, "a nanosecond before .5"),
-        (at(".5"), at(".500000000"), U, "one instant at two precisions"),
+        (
+            at(".5"),
+            at(".500000000"),
+            U,
+            "one instant at two precisions",
+        ),
     ] {
         let evidence = [
             record("k", "k", None, Some(&k)),
@@ -167,7 +190,11 @@ fn after_over_one_kind_keeps_the_self_rule_with_fractions() {
     let green = |id: &str, time: &str| record(id, "m", Some("passed"), Some(time));
     for (evidence, expected, why) in [
         (vec![red("r", &at(".5"))], F, "one record"),
-        (vec![red("r", &at(".500000000"))], F, "one record, nine digits"),
+        (
+            vec![red("r", &at(".500000000"))],
+            F,
+            "one record, nine digits",
+        ),
         (
             vec![red("r", &at(".5")), red("s", &at(".50"))],
             U,
@@ -217,32 +244,59 @@ fn first_reads_every_record_that_may_be_first() {
     let green = |id: &str, time: &str| record(id, "m", Some("passed"), Some(time));
     for (evidence, expected, why) in [
         (
-            vec![red("r", &at("")), green("g", &at(".2")), red("s", &at(".5"))],
+            vec![
+                red("r", &at("")),
+                green("g", &at(".2")),
+                red("s", &at(".5")),
+            ],
             U,
             "the whole second and .2 may be first",
         ),
+        // story:evidence-order-subsecond, order settled at one resolution per evaluation: the
+        // whole-second record makes the evaluation compare seconds, so .2 and .5 tie with it and
+        // the pass may be first too. Was `true` under pairwise interval comparison.
         (
-            vec![red("r", &at("")), red("s", &at(".2")), green("g", &at(".5"))],
-            T,
-            ".5 comes after .2, so only failures may be first",
+            vec![
+                red("r", &at("")),
+                red("s", &at(".2")),
+                green("g", &at(".5")),
+            ],
+            U,
+            "the whole second makes .2 and .5 one instant, so the pass may be first",
         ),
         (
-            vec![green("g", &at("")), red("r", &at(".2")), green("h", &at(".5"))],
+            vec![
+                green("g", &at("")),
+                red("r", &at(".2")),
+                green("h", &at(".5")),
+            ],
             U,
             "a pass and a failure may be first",
         ),
         (
-            vec![red("r", &at(".2")), green("g", &at(".25")), red("s", &at(".3"))],
+            vec![
+                red("r", &at(".2")),
+                green("g", &at(".25")),
+                red("s", &at(".3")),
+            ],
             U,
             ".25 lies within .2",
         ),
         (
-            vec![green("g", &at(".1")), red("r", &at(".2")), red("s", &at(".2"))],
+            vec![
+                green("g", &at(".1")),
+                red("r", &at(".2")),
+                red("s", &at(".2")),
+            ],
             F,
             "a pass alone before two failures",
         ),
         (
-            vec![red("r", &at(".1")), green("g", &at(".2")), record("s", "m", Some("failed"), None)],
+            vec![
+                red("r", &at(".1")),
+                green("g", &at(".2")),
+                record("s", "m", Some("failed"), None),
+            ],
             U,
             "a record without an instant",
         ),
@@ -347,8 +401,8 @@ fn the_evaluation_instant_refuses_what_observed_at_refuses() {
             at: Some(refused),
             ..Supplied::default()
         };
-        let refusal = eval::evaluate_with(&compiled(ORDER), &case, &[], supplied)
-            .expect_err(refused);
+        let refusal =
+            eval::evaluate_with(&compiled(ORDER), &case, &[], supplied).expect_err(refused);
         assert_eq!(refusal.code(), "invalid-instant", "{refused:?}");
     }
 }
@@ -366,16 +420,26 @@ fn fractional_records_decide_alike_in_any_order() {
     let orders = [[0, 1, 2, 3], [3, 2, 1, 0], [1, 3, 0, 2], [2, 0, 3, 1]];
     for order in orders {
         let permuted: Vec<EvidenceRecord> = order.iter().map(|&i| records[i].clone()).collect();
-        assert_eq!(eval::render(&decide(&permuted, None)), rendered, "{order:?}");
+        assert_eq!(
+            eval::render(&decide(&permuted, None)),
+            rendered,
+            "{order:?}"
+        );
     }
 }
 
 /// `canon check` says every evidence set maps to a state that evaluates the same way, because a
 /// state orders the first observations of the dimensions as a weak order (earlier, later or at one
 /// instant). Intervals of mixed precision are not a weak order: `ka` at the whole second overlaps
-/// both `kb` at `.2` and `kc` at `.5`, while `kb` is before `kc`. The evaluator makes outcome
-/// `interval` legitimate on that evidence; no state of the check does, so the check reports it
-/// unreachable.
+/// both `kb` at `.2` and `kc` at `.5`, while `kb` is before `kc`. Outcome `interval` needs exactly
+/// that shape, so no state of the check reaches it and the check reports it unreachable; no
+/// evidence set may then make it legitimate.
+///
+/// story:evidence-order-subsecond, order settled at one resolution per evaluation: the evaluator
+/// now reads all three at the coarsest precision written, so the evidence above ties all three and
+/// leaves `bc` unknown. The property is unchanged and is held over every combination of
+/// precisions in the grid below instead of the one evidence set that broke it under pairwise
+/// interval comparison.
 #[test]
 fn check_reaches_what_mixed_precision_evidence_makes_legitimate() {
     let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
@@ -391,23 +455,38 @@ fn check_reaches_what_mixed_precision_evidence_makes_legitimate() {
         {claim: ab, is: unknown}, {claim: ac, is: unknown}]}}\n";
     let protocol = compiled(source);
     let case = eval::read_case(CASE).expect("a case");
-    let evidence = [
-        record("a1", "ka", Some("passed"), Some(&at(""))),
-        record("b1", "kb", None, Some(&at(".2"))),
-        record("c1", "kc", None, Some(&at(".5"))),
-    ];
-    let outcomes = eval::evaluate(&protocol, &case, &evidence)
-        .expect("decides")
-        .outcomes
-        .expect("outcomes");
-    assert_eq!(
-        outcomes["interval"]["status"], "legitimate",
-        "the evaluator: {outcomes:#}"
-    );
     let report = check(&protocol, None).expect("checks").to_string();
-    assert!(
-        !report.contains("unreachable-outcome: outcome `interval`"),
-        "check calls an outcome unreachable that the evaluator makes legitimate on \
-         {evidence:?}:\n{report}"
-    );
+    let unreachable = report.contains("unreachable-outcome: outcome `interval`");
+    assert!(unreachable, "the check reaches `interval`:\n{report}");
+    let next = "2026-10-01T12:00:01Z".to_owned();
+    let instants = [
+        at(""),
+        at(".2"),
+        at(".20"),
+        at(".25"),
+        at(".5"),
+        at(".50"),
+        at(".500000000"),
+        next,
+    ];
+    for a in &instants {
+        for b in &instants {
+            for c in &instants {
+                let evidence = [
+                    record("a1", "ka", Some("passed"), Some(a)),
+                    record("b1", "kb", None, Some(b)),
+                    record("c1", "kc", None, Some(c)),
+                ];
+                let outcomes = eval::evaluate(&protocol, &case, &evidence)
+                    .expect("decides")
+                    .outcomes
+                    .expect("outcomes");
+                assert_ne!(
+                    outcomes["interval"]["status"], "legitimate",
+                    "check calls an outcome unreachable that the evaluator makes legitimate on \
+                     {evidence:?}:\n{report}"
+                );
+            }
+        }
+    }
 }
