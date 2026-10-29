@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## [0.7.0] - 2026-10-29
+
+An order form that reads a later record. Install the CLI or depend on the libraries from Git tag
+`0.7.0`.
 
 - Add the order form `after` to `protocol/1` predicates:
   `{after: {first: K1, then: {kind: K2, result: R}, subject?: A}}`, whether a record of `K2` with
