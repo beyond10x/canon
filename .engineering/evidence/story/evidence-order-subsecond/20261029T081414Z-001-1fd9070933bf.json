@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-29T08:14:14Z",
+  "actor": "human:timo",
+  "artifact": "story:evidence-order-subsecond",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "adversary pass 1: adversary_evidence_order_subsecond 11 cases; one blocker (mixed precision not a weak order, check unsound) fixed by one resolution per evaluation, contract drift in FirstResult/EvidenceOrder/EvidenceAfter fixed; 11 passed at f6b1549"
+  }
+}

@@ -63,7 +63,7 @@
 //! under an `all` strengthens it, a member added under an `any` weakens it, `not` reverses the
 //! direction, and two evidence matches, claim tests or input tests imply each other only when they
 //! are equal, so an input test whose `in` list changed implies nothing it did not before. What it
-//! cannot show is classified as changed. An order form (`first`, `before`, `after`) is compared
+//! cannot show is classified as changed. An order form (`first`, `before`, `after`, `since`) is compared
 //! structurally only: a predicate whose order forms, taken as a set, differ between the revisions
 //! is changed (`BREAKING`), whatever members around them were added or removed; one whose order
 //! forms are the same is classified by implication, each form implying only an equal one.
@@ -458,7 +458,8 @@ fn demands(predicate: &Predicate) -> BTreeSet<Demand<'_>> {
             | Predicate::Input(_)
             | Predicate::First(_)
             | Predicate::Before(_)
-            | Predicate::After(_) => {}
+            | Predicate::After(_)
+            | Predicate::Since(_) => {}
         }
     }
     let mut found = BTreeSet::new();
@@ -639,7 +640,8 @@ fn reads(predicate: &Predicate, reading: Reading, found: &mut Vec<(ClaimId, Read
         | Predicate::Input(_)
         | Predicate::First(_)
         | Predicate::Before(_)
-        | Predicate::After(_) => {}
+        | Predicate::After(_)
+        | Predicate::Since(_) => {}
     }
 }
 
@@ -1106,6 +1108,7 @@ impl Implication {
             (Predicate::First(left), Predicate::First(right)) => left == right,
             (Predicate::Before(left), Predicate::Before(right)) => left == right,
             (Predicate::After(left), Predicate::After(right)) => left == right,
+            (Predicate::Since(left), Predicate::Since(right)) => left == right,
             // Two different kinds of leaf, or an `all`, `any` or `not` the rules above leave
             // undecided: not shown, so not implied.
             _ => false,
@@ -1458,5 +1461,60 @@ mod tests {
         assert!(implies(&after("red"), &after("red")));
         assert!(!implies(&after("red"), &after("green")));
         assert!(!implies(&after("red"), &evidence("m")));
+    }
+
+    /// A `since` is compared structurally like the other order forms (story:evidence-order-since):
+    /// a change to its last kind, later kind, result or subject, a change to an `after` over the
+    /// same kinds, or adding or removing one, is `BREAKING`; with the same order forms, a member
+    /// added under an `all` strengthens, reordering members changes nothing, and it implies only an
+    /// equal one.
+    #[test]
+    fn a_changed_since_form_is_breaking() {
+        let claim = |true_when: &str| {
+            ir(&format!(
+                "artifacts: {{a: {{}}}}\nevidence_kinds: {{k: {{}}, m: {{}}}}\nclaims: {{c: {{true_when: {true_when}}}}}\n"
+            ))
+        };
+        let red = "{since: {last: k, then: {kind: m, result: red}}}";
+        let both = format!("{{all: [{{evidence: {{kind: k}}}}, {red}]}}");
+        for to in [
+            "{since: {last: m, then: {kind: m, result: red}}}".to_owned(),
+            "{since: {last: k, then: {kind: k, result: red}}}".to_owned(),
+            "{since: {last: k, then: {kind: m, result: green}}}".to_owned(),
+            "{since: {last: k, then: {kind: m, result: red}, subject: a}}".to_owned(),
+            "{after: {first: k, then: {kind: m, result: red}}}".to_owned(),
+            format!("{{any: [{{before: {{first: k, then: m}}}}, {red}]}}"),
+            "{evidence: {kind: m, result: red}}".to_owned(),
+        ] {
+            assert_eq!(
+                lines(&claim(red), &claim(&to)),
+                ["BREAKING: claim `c` predicate changed"],
+                "{red} -> {to}"
+            );
+        }
+        assert_eq!(
+            lines(&claim(red), &claim(&both)),
+            ["TIGHTENING: claim `c` predicate strengthened"]
+        );
+        assert!(
+            lines(
+                &claim(&both),
+                &claim(&format!("{{all: [{red}, {{evidence: {{kind: k}}}}]}}"))
+            )
+            .is_empty()
+        );
+        let since = |result: &str| {
+            Predicate::Since(crate::model::EvidenceSince {
+                last: EvidenceKindId::new("k"),
+                then: crate::model::LaterRecord {
+                    kind: EvidenceKindId::new("m"),
+                    result: result.to_owned(),
+                },
+                subject: None,
+            })
+        };
+        assert!(implies(&since("red"), &since("red")));
+        assert!(!implies(&since("red"), &since("green")));
+        assert!(!implies(&since("red"), &evidence("m")));
     }
 }

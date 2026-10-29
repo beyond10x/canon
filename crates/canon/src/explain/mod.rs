@@ -30,10 +30,11 @@
 //!   <value>}`, then each case input it tests, `{"input": <id>, "value": <the case's value>}`, in
 //!   input-id order, then each order form it holds, named as an action's reasons name it, with its
 //!   value over the evidence history (`{"after": <kind>, "then": <kind>, "result": <result>,
-//!   "value": <value>}`, `{"before": <kind>, "then": <kind>, "value": <value>}` or `{"first":
-//!   <kind>, "result": <result>, "value": <value>}`, with `"subject"` when it names one; every
-//!   `after` first, then every `before`, each form once), then each record an evidence match the
-//!   claim reaches reads (as its
+//!   "value": <value>}`, `{"before": <kind>, "then": <kind>, "value": <value>}`, `{"first":
+//!   <kind>, "result": <result>, "value": <value>}` or `{"since": <kind>, "then": <kind>,
+//!   "result": <result>, "value": <value>}`, with `"subject"` when it names one; every `after`
+//!   first, then every `before`, then every `first`, then every `since`, each form once), then
+//!   each record an evidence match the claim reaches reads (as its
 //!   `excluded_evidence` list counts them), written as below, then each evidence match it reaches
 //!   that reads no record of the evidence set, `{"kind": <kind>, "status": "absent"}`, with
 //!   `"subject": <artifact>` added when the match names one, in kind and then subject order (no

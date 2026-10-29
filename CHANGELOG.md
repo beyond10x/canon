@@ -1,5 +1,81 @@
 # Changelog
 
+## [0.8.0] - 2026-10-29
+
+Sub-second order and an order form that reads the latest record of a kind. Breaking for Rust
+consumers that match exhaustively over `Predicate`. Install the CLI or depend on the libraries
+from Git tag `0.8.0`.
+
+- The ESS specification under `ess/` requires ESS 0.76.0; CI installs it.
+
+Order forms compare `observed_at` at the resolution it is written in.
+
+- An instant (`observed_at`, `--at`, a conformance step's `at`) may carry a fraction of one to nine
+  digits after the seconds: `YYYY-MM-DDTHH:MM:SS.fffZ`. An empty fraction (`12:00:00.Z`), more than
+  nine digits and a comma stay refused as `invalid-instant`, whose message now names both forms:
+  `… is not an instant in UTC written YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DDTHH:MM:SS.fffZ (one to nine
+  fraction digits)`.
+- `first`, `before` and `after` compare every instant of one evaluation at one resolution: the
+  coarsest precision written among the records with an `observed_at`. Each instant is read with
+  its finer digits dropped; different instants are ordered and equal ones are not, and the 0.7.0
+  rules apply to those instants as they did to seconds. Evidence all in milliseconds is ordered
+  within a second (`12:00:00.200Z` before `12:00:00.500Z`); one record at `12:00:05Z` makes the
+  evaluation compare seconds, so the same two records tie. One resolution keeps the order a weak
+  order, so `canon check`'s state space, which writes whole seconds, still reaches every value the
+  evaluator gives. Over whole seconds every value is the 0.7.0 value. Requirement CANON-ORDER-003,
+  scenario `conformance/scenarios/evidence-order-subsecond.yaml`.
+- Expiry (`max_age`) still counts whole seconds: it reads an instant's whole seconds and ignores
+  its fraction.
+- `Instant::digits` gives the number of fraction digits written and `Instant::ticks(digits)` the
+  instant at that resolution; `Instant::interval` gives the interval the last written digit spans,
+  in nanoseconds; `Instant::seconds` reads a fractional instant as its whole seconds.
+- The published `Instant` JSON Schema pattern admits the fraction:
+  `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$`.
+
+An order form that reads the latest record of a kind.
+
+- Add the order form `since` to `protocol/1` predicates:
+  `{since: {last: K1, then: {kind: K2, result: R}, subject?: A}}`. It tests whether a record of
+  `K2` with result `R` was observed after the latest record of `K1`, about that record's subject
+  and subject revision. `K1` and `K2` may be one kind. It reads the evidence history as the other
+  order forms do, at the same resolution:
+  - `unknown` with no record of `K1`;
+  - `false` with no record of `K2` with `R`;
+  - `unknown` when a compared record has no `observed_at`.
+
+  Otherwise each latest record of `K1` gives a value from the records of `K2` with `R` at its
+  subject and subject revision, other than itself:
+  - `true` when one is later;
+  - `false` when every one is earlier, or there is none;
+  - `unknown` otherwise.
+
+  The form is `true` or `false` when every latest record agrees, and `unknown` otherwise. A
+  `since` over one kind is never `true`. Requirement CANON-ORDER-004, scenario
+  `conformance/scenarios/evidence-order-since.yaml`.
+- `canon-ir/1` writes it as authored,
+  `{"since": {"last": …, "then": {"kind": …, "result": …}}}`, with `subject` when named. Among the
+  members of an `all` or `any`, `since` sorts after `not`, and two compare by last kind, later
+  kind, result and subject. The IR of a protocol without `since` is unchanged.
+- An evaluation's reasons list each `since` after every `after`, `before` and `first` reason:
+  `{"since": K1, "then": K2, "result": R, "value": …}`, with `"subject"` when named.
+- `canon validate` resolves both kinds and the subject, and refuses `since` in a discharge or
+  applicability predicate. `canon diff` compares it structurally, so a changed `since` is
+  `BREAKING`.
+- In `canon check`, a protocol with `since` gains:
+  - a later-record dimension for each result it compares, as for `after`;
+  - a last-record dimension for each dimension it reads as `last`: none, or a record at a
+    superseded revision placed in the order on its own, tied with or just after the dimension's
+    rank or a later record a `since` compares, with no result or, for a one-kind `since`, its
+    result (5 values for a two-kind `since`, 9 for a one-kind one).
+
+  It counts `since`'s kinds for `authority-bypass` in every position. A protocol without `since`
+  builds the same space, states and reports as before. A protocol whose space exceeds 65536
+  states is refused as before; the `since` conformance fixture is such a protocol (210600 states).
+- `canon generate` writes the last record at `r0`. The reference pages and the `protocol/1` JSON
+  Schema name the form.
+- Breaking for Rust consumers: `Predicate` gains the variant `Since(EvidenceSince)`, so an
+  exhaustive match over it no longer compiles.
+
 ## [0.7.0] - 2026-10-29
 
 An order form that reads a later record. Install the CLI or depend on the libraries from Git tag

@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-29T07:19:09Z",
+  "actor": "human:timo",
+  "artifact": "story:evidence-order-subsecond",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "red on 4fe2bfb: `canon conform run --requirements conformance/requirements.yaml` exits 1 with \"conform: 15 passed, 1 failed, 0 unreadable\" and \"requirements: 17 implemented, 16 covered, 0 planned\"; CANON-ORDER-003 fails at step a-run-after-the-change-within-a-second: evaluation refused: invalid-instant: evidence `c1` observed_at `2026-10-01T12:00:00.100Z` is not an instant in UTC written YYYY-MM-DDTHH:MM:SSZ",
+    "reference": "4fe2bfb"
+  }
+}

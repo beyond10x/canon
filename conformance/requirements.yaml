@@ -95,3 +95,20 @@ requirements:
       records, MUST NOT take a record observed at the same instant as later, and MUST be UNKNOWN
       while the first record or the order of a record it compares is not established.
     source: story:evidence-order-after
+  CANON-ORDER-003:
+    status: implemented
+    statement: >-
+      An observed_at with a fraction of one to nine digits MUST be read, and any other fraction MUST
+      be refused as invalid-instant. The order forms MUST compare every instant of an evaluation at
+      one resolution, the coarsest written among the records with an observed_at, each read by
+      dropping the finer digits; records whose instants differ there MUST be ordered as they
+      differ, and records whose instants are equal there MUST NOT be ordered.
+    source: story:evidence-order-subsecond
+  CANON-ORDER-004:
+    status: implemented
+    statement: >-
+      A predicate over a record observed since the latest record of a kind MUST read the history of
+      records, MUST count only records at the subject and subject revision of a latest record, MUST
+      NOT take a record observed at an overlapping instant as later, and MUST be UNKNOWN while the
+      latest record or the order of a record it compares is not established.
+    source: story:evidence-order-since

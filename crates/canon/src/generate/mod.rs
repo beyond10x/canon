@@ -36,8 +36,10 @@
 //!   `upstream_revisions`: each upstream artifact at `r0` when the record was observed before it
 //!   moved, at `r` otherwise; for a protocol with order forms, each record as the state space
 //!   builds it (`crate::check`): an earlier record about its artifact at `r0` (and, for a
-//!   protocol with an `after`, a later record of its result at `r0`), and a record of a kind an
-//!   order form reads with the `observed_at` its state gives it, when it gives one; and a
+//!   protocol with an `after` or a `since`, a later record of its result at `r0`, and for one with
+//!   a `since`, a last record of the kind it reads last at `r0`), and a record of a kind an
+//!   order form reads with the `observed_at` its state gives it, when it gives one, a whole-second
+//!   instant written without a fraction; and a
 //!   record of a kind an evidence match demanding independence reads with its `producer`,
 //!   `producer-n`, when its profile is not the empty one;
 //! - `authority`, each decided capability, when the witness decides one;

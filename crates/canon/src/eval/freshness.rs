@@ -1,12 +1,17 @@
 //! The freshness exclusion stage and the evaluation instant it reads (`--at`): evidence older than
 //! its kind allows at that instant no longer applies (design § 8, CANON-EVIDENCE-002).
 //!
-//! The instant is written as an [`crate::model::Instant`], `YYYY-MM-DDTHH:MM:SSZ` in UTC; any
-//! other text is refused as `invalid-instant`. A record is excluded as `expired` when its kind
-//! declares a `max_age`, the record gives its `observed_at`, an instant is given, and the instant
-//! is later than `observed_at` by more than the maximum age. A record exactly as old as its
-//! maximum age still applies; one observed after the instant is not expired. Without an instant,
-//! or without `observed_at`, nothing expires: the evaluator reads no clock.
+//! The instant is written as an [`crate::model::Instant`], `YYYY-MM-DDTHH:MM:SSZ` in UTC, or with
+//! a fraction of one to nine digits, `YYYY-MM-DDTHH:MM:SS.fffZ`; any other text is refused as
+//! `invalid-instant`. A record is excluded as `expired` when its kind declares a `max_age`, the
+//! record gives its `observed_at`, an instant is given, and the instant is later than `observed_at`
+//! by more than the maximum age. A record exactly as old as its maximum age still applies; one
+//! observed after the instant is not expired. Without an instant, or without `observed_at`,
+//! nothing expires: the evaluator reads no clock.
+//!
+//! Expiry counts whole seconds, as `max_age` is written in them: it reads the whole seconds of the
+//! instant and of `observed_at` and ignores a fraction (story:evidence-order-subsecond), so
+//! `12:00:00.9Z` and `12:00:00Z` are the same instant here. Only the order forms read a fraction.
 
 use std::collections::BTreeMap;
 
@@ -16,7 +21,7 @@ use crate::model::{
     Case, EvidenceExclusion, EvidenceRecord, ExclusionReason, Instant as Written, one_line,
 };
 
-/// The evaluation instant, in seconds since `1970-01-01T00:00:00Z`.
+/// The evaluation instant, in whole seconds since `1970-01-01T00:00:00Z`, its fraction ignored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct Instant(i64);
 
@@ -25,7 +30,7 @@ pub(super) fn invalid_instant(what: &str, text: &str) -> Refusal {
     Refusal::new(
         "invalid-instant",
         format!(
-            "{what} `{}` is not an instant in UTC written YYYY-MM-DDTHH:MM:SSZ",
+            "{what} `{}` is not an instant in UTC written YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DDTHH:MM:SS.fffZ (one to nine fraction digits)",
             one_line(text)
         ),
     )
@@ -153,6 +158,38 @@ mod tests {
         );
     }
 
+    /// Expiry counts whole seconds and ignores a fraction on either side
+    /// (story:evidence-order-subsecond): 0.9 s past the maximum age within the same second is not
+    /// past it, and a fractional evaluation instant reads as its whole second.
+    #[test]
+    fn expiry_reads_whole_seconds_and_ignores_the_fraction() {
+        let records = [
+            record("exactly", "fresh", Some("2026-10-04T11:00:00.000Z")),
+            record(
+                "later_in_the_second",
+                "fresh",
+                Some("2026-10-04T11:00:00.999Z"),
+            ),
+            record(
+                "a_second_older",
+                "fresh",
+                Some("2026-10-04T10:59:59.999999999Z"),
+            ),
+        ];
+        assert_eq!(
+            expired(Some("2026-10-04T12:00:00.900Z"), &records),
+            ["a_second_older"]
+        );
+        assert_eq!(
+            expired(Some("2026-10-04T12:00:00Z"), &records),
+            ["a_second_older"]
+        );
+        assert_eq!(
+            instant(Some("2026-10-04T12:00:00.999999999Z")),
+            Ok(Some(Instant(1_791_115_200)))
+        );
+    }
+
     /// A caller-built IR with a `max_age` the evaluator cannot read is refused, with or without an
     /// instant, naming the kind; it never leaves the record applying.
     #[test]
@@ -195,7 +232,7 @@ mod tests {
         assert_eq!(refusal.code(), "invalid-instant");
         assert_eq!(
             refusal.to_string(),
-            "the evaluation instant `2026-10-04 12:00` is not an instant in UTC written YYYY-MM-DDTHH:MM:SSZ"
+            "the evaluation instant `2026-10-04 12:00` is not an instant in UTC written YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DDTHH:MM:SS.fffZ (one to nine fraction digits)"
         );
     }
 }

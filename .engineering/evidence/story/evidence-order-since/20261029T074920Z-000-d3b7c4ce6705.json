@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-29T07:49:20Z",
+  "actor": "human:timo",
+  "artifact": "story:evidence-order-since",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "red on afc7932: `cargo test -p b10x-canon --test ess_model_matches` fails 3 of 28 tests (specification_and_model_are_equal: \"Predicate: ess/ variant `since: EvidenceSince` is not in the Rust model\" and \"ess/ struct `EvidenceSince` is not reached from the Rust model\"); `canon conform run --requirements conformance/requirements.yaml` exits 1 with \"conform: 16 passed, 1 failed, 0 unreadable\" and \"requirements: 18 implemented, 17 covered, 0 planned\"; CANON-ORDER-004 fails at step compile: fixture does not parse: not a protocol/1 document at line 22 column 7, and is reported uncovered",
+    "reference": "afc7932"
+  }
+}

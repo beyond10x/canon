@@ -6,8 +6,9 @@
 # (canon-decisions/1) too (story:decision-outcomes), and the authority decisions it reads
 # (canon-authority/1, story:review-hardening-w7). story:case-inputs adds the case inputs a protocol
 # declares and a case gives values for, the input predicate and an obligation's applicability.
-# story:evidence-order-predicate adds the order forms `first` and `before` of the predicate, and
-# story:evidence-order-after the order form `after`.
+# story:evidence-order-predicate adds the order forms `first` and `before` of the predicate,
+# story:evidence-order-after the order form `after`, and story:evidence-order-since the order form
+# `since`.
 # story:evidence-independence adds the independence dimensions a protocol declares, the
 # independence an evidence match demands of its records, the producer an evidence record names and
 # the independence a case gives each producer. story:action-arguments adds the argument schema an
@@ -344,16 +345,16 @@ types:
   # the value where there is one. canon-ir/1 writes it
   # `{"input": {"id": <id>, "in": [...]}}`, its values each once, in identifier order.
   # read from: .engineering/planning/story/case-inputs.md:77-81
-  # read from: crates/canon/src/model/predicate.rs:204-211
+  # read from: crates/canon/src/model/predicate.rs:242-249
   - name: canon.protocol.InputTest
     kind: struct
     fields:
       # read from: .engineering/planning/story/case-inputs.md:77
-      # read from: crates/canon/src/model/predicate.rs:208
+      # read from: crates/canon/src/model/predicate.rs:246
       - name: input
         type: canon.protocol.InputId
       # read from: .engineering/planning/story/case-inputs.md:77-78
-      # read from: crates/canon/src/model/predicate.rs:209-210
+      # read from: crates/canon/src/model/predicate.rs:247-248
       - name: in
         type: List<canon.protocol.InputValue>
 
@@ -378,56 +379,62 @@ types:
         type: Optional<String>
 
   # A three-valued truth value; unknown is not false.
-  # read from: crates/canon/src/model/predicate.rs:48-54
+  # read from: crates/canon/src/model/predicate.rs:60-66
   - name: canon.protocol.Truth
     kind: enum
     variants: ["true", "false", "unknown"]
 
   # Source text writes a predicate as a map with exactly one of the keys all, any, not, evidence,
-  # claim, input, first, before or after (crates/canon/src/model/predicate.rs); the typed model is
-  # this union.
-  # read from: crates/canon/src/model/predicate.rs:89-110
+  # claim, input, first, before, after or since (crates/canon/src/model/predicate.rs); the typed
+  # model is this union.
+  # read from: crates/canon/src/model/predicate.rs:101-125
   # read from: .engineering/planning/story/evidence-order-predicate.md:71-74
   # read from: .engineering/planning/story/evidence-order-after.md:70-75
+  # read from: .engineering/planning/story/evidence-order-since.md:33-38
   - name: canon.protocol.Predicate
     kind: union
     tag: kind
     variants:
-      # read from: crates/canon/src/model/predicate.rs:94
+      # read from: crates/canon/src/model/predicate.rs:106
       all: List<canon.protocol.Predicate>
-      # read from: crates/canon/src/model/predicate.rs:96
+      # read from: crates/canon/src/model/predicate.rs:108
       any: List<canon.protocol.Predicate>
-      # read from: crates/canon/src/model/predicate.rs:97
-      not: canon.protocol.Predicate
-      # read from: crates/canon/src/model/predicate.rs:98
-      evidence: canon.protocol.EvidenceMatch
       # read from: crates/canon/src/model/predicate.rs:109
+      not: canon.protocol.Predicate
+      # read from: crates/canon/src/model/predicate.rs:110
+      evidence: canon.protocol.EvidenceMatch
+      # read from: crates/canon/src/model/predicate.rs:124
       claim: canon.protocol.ClaimTest
       # read from: .engineering/planning/story/case-inputs.md:77-81
-      # read from: crates/canon/src/model/predicate.rs:99-100
+      # read from: crates/canon/src/model/predicate.rs:111-112
       input: canon.protocol.InputTest
       # Whether the first record of a kind has a result (story:evidence-order-predicate).
       # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
-      # read from: crates/canon/src/model/predicate.rs:101-102
+      # read from: crates/canon/src/model/predicate.rs:113-114
       first: canon.protocol.FirstResult
       # Whether the first record of one kind was observed strictly before the first of another.
       # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
-      # read from: crates/canon/src/model/predicate.rs:103-105
+      # read from: crates/canon/src/model/predicate.rs:115-117
       before: canon.protocol.EvidenceOrder
       # Whether a record of a kind with a result was observed strictly after the first record of
       # another kind, or of the same one (story:evidence-order-after).
       # read from: .engineering/planning/story/evidence-order-after.md:70-75
-      # read from: crates/canon/src/model/predicate.rs:106-108
+      # read from: crates/canon/src/model/predicate.rs:118-120
       after: canon.protocol.EvidenceAfter
+      # Whether a record of a kind with a result, at the subject revision of the latest record of
+      # another kind (or of the same one), was observed after it (story:evidence-order-since).
+      # read from: .engineering/planning/story/evidence-order-since.md:33-38
+      # read from: crates/canon/src/model/predicate.rs:121-123
+      since: canon.protocol.EvidenceSince
 
-  # read from: crates/canon/src/model/predicate.rs:178-195
+  # read from: crates/canon/src/model/predicate.rs:216-233
   - name: canon.protocol.EvidenceMatch
     kind: struct
     fields:
-      # read from: crates/canon/src/model/predicate.rs:186
+      # read from: crates/canon/src/model/predicate.rs:224
       - name: kind
         type: canon.protocol.EvidenceKindId
-      # read from: crates/canon/src/model/predicate.rs:188
+      # read from: crates/canon/src/model/predicate.rs:226
       - name: result
         type: Optional<String>
       # The declared artifact a record must be about to match. A match that names one is decided
@@ -437,7 +444,7 @@ types:
       # artifact, as before. It names an artifact the protocol declares.
       # read from: .engineering/planning/story/subject-bound-evidence-match.md:13-16
       # read from: .engineering/planning/story/subject-bound-evidence-match.md:26-28
-      # read from: crates/canon/src/model/predicate.rs:190
+      # read from: crates/canon/src/model/predicate.rs:228
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
       # The independence the match demands of its records (story:evidence-independence): a record
@@ -459,27 +466,30 @@ types:
   # An order form: whether the first record of `kind` (about `subject` when named) has `result`.
   # It reads the history: every record of its kind the evidence check accepted, including those
   # the exclusion stages keep from evidence matches (revision_mismatch, expired, invalidated). The
-  # order key is a record's observed_at; a record without one leaves the order unknown. Of the
-  # records at the earliest instant, every one with the result is true, none is false, some is
-  # unknown; no record is unknown. What it means is CANON-ORDER-001
-  # (conformance/scenarios/evidence-order.yaml), not this file.
+  # order key is a record's observed_at, read at the evaluation's resolution (the coarsest
+  # precision written among the records with an observed_at, finer digits dropped); a record
+  # without one leaves the order unknown. Of the records at the earliest instant at the
+  # evaluation's resolution, every one with the result is true, none is false, some is unknown; no
+  # record is unknown. What it means is CANON-ORDER-001 (conformance/scenarios/evidence-order.yaml)
+  # and CANON-ORDER-003 (conformance/scenarios/evidence-order-subsecond.yaml), not this file.
   # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
   # read from: .engineering/planning/story/evidence-order-predicate.md:76-95
-  # read from: crates/canon/src/model/predicate.rs:112-126
+  # read from: .engineering/planning/story/evidence-order-subsecond.md:40-66
+  # read from: crates/canon/src/model/predicate.rs:127-142
   - name: canon.protocol.FirstResult
     kind: struct
     fields:
       # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
-      # read from: crates/canon/src/model/predicate.rs:117-119
+      # read from: crates/canon/src/model/predicate.rs:133-135
       - name: kind
         type: canon.protocol.EvidenceKindId
       # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
-      # read from: crates/canon/src/model/predicate.rs:120-122
+      # read from: crates/canon/src/model/predicate.rs:136-138
       - name: result
         type: String
       # A declared artifact: only records about it are read.
       # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
-      # read from: crates/canon/src/model/predicate.rs:123-125
+      # read from: crates/canon/src/model/predicate.rs:139-141
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
 
@@ -487,26 +497,27 @@ types:
   # record of kind `then` (both about `subject` when named), read from the history as FirstResult
   # is. No record of either is unknown; one of `then` and none of `first` is false; one of `first`
   # and none of `then` is unknown; a record of either without observed_at is unknown; otherwise the
-  # earliest instants decide, an equal pair unknown. `first` and `then` are two different declared
-  # kinds.
+  # earliest instants at the evaluation's resolution decide, an equal pair unknown. `first` and
+  # `then` are two different declared kinds.
   # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
   # read from: .engineering/planning/story/evidence-order-predicate.md:97-104
   # read from: .engineering/planning/story/evidence-order-predicate.md:108-110
-  # read from: crates/canon/src/model/predicate.rs:128-144
+  # read from: .engineering/planning/story/evidence-order-subsecond.md:40-66
+  # read from: crates/canon/src/model/predicate.rs:144-161
   - name: canon.protocol.EvidenceOrder
     kind: struct
     fields:
       # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
-      # read from: crates/canon/src/model/predicate.rs:134-136
+      # read from: crates/canon/src/model/predicate.rs:151-153
       - name: first
         type: canon.protocol.EvidenceKindId
       # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
-      # read from: crates/canon/src/model/predicate.rs:137-139
+      # read from: crates/canon/src/model/predicate.rs:154-156
       - name: then
         type: canon.protocol.EvidenceKindId
       # A declared artifact: only records about it are read, of either kind.
       # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
-      # read from: crates/canon/src/model/predicate.rs:140-143
+      # read from: crates/canon/src/model/predicate.rs:157-160
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
 
@@ -514,56 +525,91 @@ types:
   # strictly after the first record of kind `first` (all about `subject` when named), read from the
   # history as FirstResult is. No record of `first` is unknown; no record of `then.kind` with the
   # result is false; a record of `first`, or of `then.kind` with the result, without observed_at
-  # is unknown; otherwise one observed after the earliest instant of `first` is true, one only at
-  # that instant (other than the first record itself) is unknown, and none is false. A record of
-  # `then.kind` with another result takes no part. `first` and `then.kind` may be one kind; a
-  # record is not later than itself. What it means is CANON-ORDER-002
-  # (conformance/scenarios/evidence-order-after.yaml), not this file.
+  # is unknown; otherwise one observed after the earliest instant of `first` at the evaluation's
+  # resolution is true, one only at that instant (other than the first record itself) is unknown,
+  # and none is false. A record of `then.kind` with another result takes no part. `first` and
+  # `then.kind` may be one kind; a record is not later than itself. What it means is
+  # CANON-ORDER-002 (conformance/scenarios/evidence-order-after.yaml) and CANON-ORDER-003, not this
+  # file.
   # read from: .engineering/planning/story/evidence-order-after.md:70-75
   # read from: .engineering/planning/story/evidence-order-after.md:89-111
-  # read from: crates/canon/src/model/predicate.rs:146-163
+  # read from: .engineering/planning/story/evidence-order-subsecond.md:40-66
+  # read from: crates/canon/src/model/predicate.rs:163-181
   - name: canon.protocol.EvidenceAfter
     kind: struct
     fields:
       # read from: .engineering/planning/story/evidence-order-after.md:70-72
-      # read from: crates/canon/src/model/predicate.rs:153-155
+      # read from: crates/canon/src/model/predicate.rs:171-173
       - name: first
         type: canon.protocol.EvidenceKindId
       # read from: .engineering/planning/story/evidence-order-after.md:70-72
-      # read from: crates/canon/src/model/predicate.rs:156-158
+      # read from: crates/canon/src/model/predicate.rs:174-176
       - name: then
         type: canon.protocol.LaterRecord
       # A declared artifact: only records about it are read, of either kind.
       # read from: .engineering/planning/story/evidence-order-after.md:70-72
-      # read from: crates/canon/src/model/predicate.rs:159-162
+      # read from: crates/canon/src/model/predicate.rs:177-180
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
 
-  # What an `after` reads later than the first record of its `first` kind: a record of `kind` with
-  # `result`.
+  # An order form: whether a record of kind `then.kind` with result `then.result`, about the
+  # subject and subject revision of the latest record of kind `last`, was observed after that
+  # record (all about `subject` when named), read from the history as FirstResult is. The anchors
+  # are the records of `last`, the candidates the records of `then.kind` with the result, and the
+  # latest anchors those no anchor is observed after. No anchor is unknown; no candidate is false;
+  # an anchor or a candidate without observed_at is unknown. Otherwise each latest anchor gives
+  # true when a candidate at its subject and subject revision, other than itself, is observed
+  # after it, false when every such candidate is observed before it or there is none, and unknown
+  # otherwise; the form is true when every latest anchor gives true, false when every one gives
+  # false, and unknown otherwise. `last` and `then.kind` may be one kind; a record is not later
+  # than itself. What it means is CANON-ORDER-004
+  # (conformance/scenarios/evidence-order-since.yaml), not this file.
+  # read from: .engineering/planning/story/evidence-order-since.md:33-38
+  # read from: .engineering/planning/story/evidence-order-since.md:49-61
+  # read from: crates/canon/src/model/predicate.rs:183-201
+  - name: canon.protocol.EvidenceSince
+    kind: struct
+    fields:
+      # read from: .engineering/planning/story/evidence-order-since.md:33-36
+      # read from: crates/canon/src/model/predicate.rs:191-193
+      - name: last
+        type: canon.protocol.EvidenceKindId
+      # read from: .engineering/planning/story/evidence-order-since.md:33-38
+      # read from: crates/canon/src/model/predicate.rs:194-196
+      - name: then
+        type: canon.protocol.LaterRecord
+      # A declared artifact: only records about it are read, of either kind.
+      # read from: .engineering/planning/story/evidence-order-since.md:33-36
+      # read from: crates/canon/src/model/predicate.rs:197-200
+      - name: subject
+        type: Optional<canon.protocol.ArtifactId>
+
+  # What an `after` reads later than the first record of its `first` kind, and a `since` later than
+  # the latest record of its `last` kind: a record of `kind` with `result`.
   # read from: .engineering/planning/story/evidence-order-after.md:70-75
-  # read from: crates/canon/src/model/predicate.rs:165-176
+  # read from: .engineering/planning/story/evidence-order-since.md:37-38
+  # read from: crates/canon/src/model/predicate.rs:203-214
   - name: canon.protocol.LaterRecord
     kind: struct
     fields:
       # read from: .engineering/planning/story/evidence-order-after.md:70-72
-      # read from: crates/canon/src/model/predicate.rs:170-172
+      # read from: crates/canon/src/model/predicate.rs:208-210
       - name: kind
         type: canon.protocol.EvidenceKindId
       # read from: .engineering/planning/story/evidence-order-after.md:70-72
-      # read from: crates/canon/src/model/predicate.rs:173-175
+      # read from: crates/canon/src/model/predicate.rs:211-213
       - name: result
         type: String
 
-  # Source text may leave `is` out; it then reads as true (crates/canon/src/model/predicate.rs:394).
-  # read from: crates/canon/src/model/predicate.rs:197-202
+  # Source text may leave `is` out; it then reads as true (crates/canon/src/model/predicate.rs:447).
+  # read from: crates/canon/src/model/predicate.rs:235-240
   - name: canon.protocol.ClaimTest
     kind: struct
     fields:
-      # read from: crates/canon/src/model/predicate.rs:200
+      # read from: crates/canon/src/model/predicate.rs:238
       - name: claim
         type: canon.protocol.ClaimId
-      # read from: crates/canon/src/model/predicate.rs:201
+      # read from: crates/canon/src/model/predicate.rs:239
       - name: is
         type: canon.protocol.Truth
 
@@ -591,11 +637,20 @@ types:
     kind: newtype
     of: String
 
-  # An instant written YYYY-MM-DDTHH:MM:SSZ in UTC, whole seconds, uppercase T and Z, no leap second
-  # (2026-10-04T12:00:00Z). Evidence records when it was observed in this form, and the evaluation
-  # instant (`--at`) is given in it.
+  # An instant written YYYY-MM-DDTHH:MM:SSZ in UTC, or with a fraction of one to nine digits after
+  # the seconds, YYYY-MM-DDTHH:MM:SS.fffZ; uppercase T and Z, no leap second (2026-10-04T12:00:00Z,
+  # 2026-10-04T12:00:00.400Z). An empty fraction, more than nine digits and a comma are not instants.
+  # An instant names the interval its last written digit spans: 12:00:00Z is the second
+  # [12:00:00, 12:00:01), 12:00:00.4Z is [12:00:00.4, 12:00:00.5). Order forms compare every
+  # instant of one evaluation at one resolution, the coarsest written among the records with an
+  # observed_at, each read by dropping the finer digits: instants that differ there are ordered,
+  # equal ones are not. Expiry reads the whole seconds and ignores the fraction. Evidence records
+  # when it was observed in this form, and the evaluation instant (`--at`) is given in it.
   # read from: docs/design/canon-protocol-calculus-design.md:505
   # read from: .engineering/planning/story/evidence-freshness.md:50-53
+  # read from: .engineering/planning/story/evidence-order-subsecond.md:30-69
+  # read from: crates/canon/src/model/ids.rs:177-186
+  # read from: crates/canon/src/model/time.rs:1-54
   - name: canon.protocol.Instant
     kind: newtype
     of: String

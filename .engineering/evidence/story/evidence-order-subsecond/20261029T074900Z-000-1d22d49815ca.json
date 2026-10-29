@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-29T07:49:00Z",
+  "actor": "human:timo",
+  "artifact": "story:evidence-order-subsecond",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "red on c18381f: `canon conform run --requirements conformance/requirements.yaml` exits 1 with \"conform: 15 passed, 1 failed, 0 unreadable\"; CANON-ORDER-003 fails at step a-whole-second-record-coarsens-the-evaluation: canon-decision/1 section `claims` differs from the expectation at line 4 (pairwise intervals order .200 before .500 although a whole-second record is in the set); and on 3ebc698 `cargo test -p b10x-canon --test adversary_evidence_order_subsecond` fails check_reaches_what_mixed_precision_evidence_makes_legitimate (10 passed, 1 failed)",
+    "reference": "c18381f"
+  }
+}

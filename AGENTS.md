@@ -68,7 +68,7 @@ its wire types; `crates/canon-expr/tests/model_matches.rs::every_wire_declaratio
 checks every field, field type and variant against the Rust model, with mutation controls.
 Native checked types deliberately continue Canon's parity-backed model convention; ESS structural
 Rust generation is available, and is not represented as a missing capability.
-`task ess-gate` runs both model parity guards. CI and the manifest select ESS 0.75.0.
+`task ess-gate` runs both model parity guards. CI and the manifest select ESS 0.76.0.
 
 Keep the Logos lexer and Pratt parser, checker/planner, exact-number implementation and pure
 evaluator separate. Catalog recipes and observation providers extend names, never parser
