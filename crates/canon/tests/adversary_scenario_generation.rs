@@ -116,6 +116,20 @@ const AFTER: &str = "format: protocol/1\n\
     outcomes: {done: {requires: {claim: red}}, \
     flaky: {requires: {all: [{claim: again}, {not: {claim: red}}]}}}\n";
 
+/// A protocol whose outcomes read `since` over two kinds, under `not` too, small
+/// enough to check: `fixtures/investigation/evidence-order-since.yaml` adds an evidence match on
+/// a result of the kind it compares, and its space is beyond the bound.
+const SINCE: &str = "format: protocol/1\n\
+    protocol: {id: p, revision: 1}\n\
+    artifacts: {change: {}}\n\
+    evidence_kinds: {tests_change: {}, test_result: {}}\n\
+    claims:\n  \
+      red: {true_when: {since: {last: tests_change, then: {kind: test_result, result: failed}}}}\n\
+    actions: {run: {may_produce: [{evidence: test_result}]}, \
+    merge: {precondition: {claim: red}, requires: [{capability: cap}]}}\n\
+    outcomes: {done: {requires: {claim: red}}, \
+    green: {requires: {not: {claim: red}}}}\n";
+
 #[test]
 fn every_generated_witness_passes_and_is_minimal_over_every_investigation_protocol() {
     let root = repository_root();
@@ -135,6 +149,7 @@ fn every_generated_witness_passes_and_is_minimal_over_every_investigation_protoc
         .collect();
     sources.push(("subject-bound.yaml".to_owned(), SUBJECT_BOUND.to_owned()));
     sources.push(("after.yaml".to_owned(), AFTER.to_owned()));
+    sources.push(("since.yaml".to_owned(), SINCE.to_owned()));
 
     let mut failures = Vec::new();
     let (mut scenarios_run, mut removals_run) = (0, 0);
@@ -147,9 +162,11 @@ fn every_generated_witness_passes_and_is_minimal_over_every_investigation_protoc
                 // invalidation-rules.yaml, from story:invalidation-rules, declares no outcome or
                 // action either). evidence-order-after.yaml reads its kinds bound to a subject and
                 // unbound at once, for CANON-ORDER-002's evaluate steps; `after.yaml` above is the
-                // one generated from.
+                // one generated from. evidence-order-since.yaml, for CANON-ORDER-004, likewise with
+                // `since.yaml`.
                 let expected = ((fixture.ends_with("state-space-bound/protocol.yaml")
-                    || fixture.ends_with("evidence-order-after.yaml"))
+                    || fixture.ends_with("evidence-order-after.yaml")
+                    || fixture.ends_with("evidence-order-since.yaml"))
                     && why.starts_with("state-space-bound"))
                     || (fixture.ends_with("unreachable-outcome/protocol.yaml")
                         && why.starts_with("unreachable-outcome"))

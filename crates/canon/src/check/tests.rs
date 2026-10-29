@@ -892,12 +892,40 @@ fn every_history_is_reached(
     results: &[Option<&str>],
     seed: u64,
 ) -> BTreeSet<Vec<crate::model::Truth>> {
+    let (reached, unreached) =
+        unreached_histories(source, kinds, artifacts, &["r", "r0"], results, seed);
+    if let Some((values, records)) = unreached.first() {
+        panic!(
+            "no state gives {values:?}, which {records:?} gives ({} histories unreached)",
+            unreached.len()
+        );
+    }
+    reached
+}
+
+/// [`every_history_is_reached`] over records at one of `revisions`, the first the current one:
+/// the combinations the states reach, and each random history whose combination no state gives,
+/// with that combination.
+#[allow(clippy::type_complexity)]
+fn unreached_histories(
+    source: &str,
+    kinds: &[&str],
+    artifacts: &[&str],
+    revisions: &[&str],
+    results: &[Option<&str>],
+    seed: u64,
+) -> (
+    BTreeSet<Vec<crate::model::Truth>>,
+    Vec<(Vec<crate::model::Truth>, Vec<crate::model::EvidenceRecord>)>,
+) {
     let ir = compiled(source);
     let space = Space::new(&ir);
     let size = space.size().expect("fits");
+    assert!(size <= STATE_BOUND, "{size} states: {}", space.dimensions());
     let reached: BTreeSet<Vec<crate::model::Truth>> = (0..size)
         .map(|index| claim_values(&ir, &space.evidence(&space.state(index))))
         .collect();
+    let mut unreached = Vec::new();
     let mut rng = Rng(seed);
     let instants = [
         Some("2026-10-01T09:00:00Z"),
@@ -914,18 +942,17 @@ fn every_history_is_reached(
                 kind: EvidenceKindId::new(kinds[rng.below(kinds.len())]),
                 result: results[rng.below(results.len())].map(str::to_owned),
                 subject: crate::model::ArtifactId::new(artifacts[rng.below(artifacts.len())]),
-                subject_revision: Revision::new(["r", "r0"][rng.below(2)]),
+                subject_revision: Revision::new(revisions[rng.below(revisions.len())]),
                 observed_at: instants[rng.below(4)].map(crate::model::Instant::new),
                 upstream_revisions: Declarations::default(),
             })
             .collect();
         let values = claim_values(&ir, &records);
-        assert!(
-            reached.contains(&values),
-            "no state gives {values:?}, which {records:?} gives"
-        );
+        if !reached.contains(&values) {
+            unreached.push((values, records));
+        }
     }
-    reached
+    (reached, unreached)
 }
 
 /// Whether claim `at` of the combinations takes each of `true`, `false` and `unknown`.
@@ -1018,6 +1045,189 @@ fn every_value_of_an_after_naming_a_subject_is_reached() {
         0x3C6E_F372_FE94_F82B,
     );
     assert!(takes_every_value(&reached, 0), "after_a");
+}
+
+/// Soundness of the space of `source` for `since` (story:evidence-order-since): over records at
+/// the current revision and two superseded ones, so that two latest anchors can be about different
+/// revisions, every combination of claim values a history gives is reached. Names each unreached
+/// combination with one history that gives it.
+fn every_since_history_is_reached(
+    source: &str,
+    kinds: &[&str],
+    artifacts: &[&str],
+    results: &[Option<&str>],
+    seed: u64,
+) -> BTreeSet<Vec<crate::model::Truth>> {
+    let (reached, unreached) =
+        unreached_histories(source, kinds, artifacts, &["r", "r0", "r1"], results, seed);
+    let mut distinct: BTreeMap<Vec<crate::model::Truth>, Vec<crate::model::EvidenceRecord>> =
+        BTreeMap::new();
+    for (values, records) in &unreached {
+        distinct
+            .entry(values.clone())
+            .or_insert_with(|| records.clone());
+    }
+    assert!(
+        distinct.is_empty(),
+        "{} histories unreached, {} combinations: {:#?}",
+        unreached.len(),
+        distinct.len(),
+        distinct
+            .iter()
+            .map(|(values, records)| {
+                let records: Vec<String> = records
+                    .iter()
+                    .map(|record| {
+                        format!(
+                            "{} {:?} {}@{} {:?}",
+                            record.kind.as_str(),
+                            record.result,
+                            record.subject.as_str(),
+                            record.subject_revision.as_str(),
+                            record.observed_at.as_ref().map(|at| at.as_str().to_owned()),
+                        )
+                    })
+                    .collect();
+                (values.clone(), records)
+            })
+            .collect::<Vec<_>>()
+    );
+    reached
+}
+
+/// Soundness of the space for a two-kind `since` with evidence matches over the same records:
+/// every combination of claim values a history gives is reached, and the `since` takes every value.
+#[test]
+fn every_value_of_since_is_reached_with_evidence_matches() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {k: {}, m: {}}\n\
+        claims:\n\
+        \x20\x20since_k_m: {true_when: {since: {last: k, then: {kind: m, result: fail}}}}\n\
+        \x20\x20fail_m: {true_when: {evidence: {kind: m, result: fail}}}\n\
+        \x20\x20some_k: {true_when: {evidence: {kind: k}}}\n\
+        actions: {act: {may_produce: [{evidence: k}, {evidence: m}]}}\n";
+    let reached = every_since_history_is_reached(
+        source,
+        &["k", "m"],
+        &["a"],
+        &[Some("fail"), Some("pass"), None],
+        0x2545_F491_4F6C_DD1D,
+    );
+    assert!(takes_every_value(&reached, 1), "since_k_m");
+}
+
+/// Soundness of the space for `since` jointly with `after`, `before` and `first` over the same
+/// kinds: every combination of claim values a history gives is reached.
+#[test]
+fn every_value_of_since_is_reached_jointly_with_the_other_forms() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {k: {}, m: {}}\n\
+        claims:\n\
+        \x20\x20since_k_m: {true_when: {since: {last: k, then: {kind: m, result: fail}}}}\n\
+        \x20\x20after_k_m: {true_when: {after: {first: k, then: {kind: m, result: fail}}}}\n\
+        \x20\x20before_k_m: {true_when: {before: {first: k, then: m}}}\n\
+        \x20\x20first_m: {true_when: {first: {kind: m, result: fail}}}\n\
+        actions: {act: {may_produce: [{evidence: k}, {evidence: m}]}}\n";
+    let reached = every_since_history_is_reached(
+        source,
+        &["k", "m"],
+        &["a"],
+        &[Some("fail"), Some("pass"), None],
+        0x9E37_79B9_7F4A_7C15,
+    );
+    assert!(takes_every_value(&reached, 3), "since_k_m");
+}
+
+/// Soundness of the space for a one-kind `since` jointly with `after`, `first` and an evidence
+/// match over its kind. Such a `since` is never `true`, by the story's values: a latest record of
+/// the kind is one of its own anchors, and no record of the kind is observed after it; it takes
+/// `false` and `unknown`.
+#[test]
+fn every_value_of_a_one_kind_since_is_reached_jointly_with_the_other_forms() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {m: {}}\n\
+        claims:\n\
+        \x20\x20since_m_m: {true_when: {since: {last: m, then: {kind: m, result: fail}}}}\n\
+        \x20\x20after_m_m: {true_when: {after: {first: m, then: {kind: m, result: fail}}}}\n\
+        \x20\x20first_m: {true_when: {first: {kind: m, result: fail}}}\n\
+        \x20\x20fail_m: {true_when: {evidence: {kind: m, result: fail}}}\n\
+        actions: {act: {may_produce: [{evidence: m}]}}\n";
+    let reached = every_since_history_is_reached(
+        source,
+        &["m"],
+        &["a"],
+        &[Some("fail"), Some("pass"), None],
+        0x6A09_E667_F3BC_C908,
+    );
+    use crate::model::Truth;
+    assert!(reached.iter().all(|values| values[3] != Truth::True));
+    assert!(reached.iter().any(|values| values[3] == Truth::False));
+    assert!(reached.iter().any(|values| values[3] == Truth::Unknown));
+}
+
+/// Soundness of the space for `since` when its result is no class of the dimension it compares,
+/// over two kinds and over one.
+#[test]
+fn every_value_of_since_is_reached_when_its_result_is_no_class() {
+    let two_kinds = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {k: {}, m: {}}\n\
+        claims:\n\
+        \x20\x20since_k_m: {true_when: {since: {last: k, then: {kind: m, result: pass}}}}\n\
+        \x20\x20fail_m: {true_when: {evidence: {kind: m, result: fail}}}\n\
+        actions: {act: {may_produce: [{evidence: k}, {evidence: m}]}}\n";
+    let reached = every_since_history_is_reached(
+        two_kinds,
+        &["k", "m"],
+        &["a"],
+        &[Some("fail"), Some("pass"), None],
+        0xBB67_AE85_84CA_A73B,
+    );
+    assert!(takes_every_value(&reached, 1), "since_k_m");
+    let one_kind = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {m: {}}\n\
+        claims:\n\
+        \x20\x20since_m_m: {true_when: {since: {last: m, then: {kind: m, result: pass}}}}\n\
+        \x20\x20fail_m: {true_when: {evidence: {kind: m, result: fail}}}\n\
+        actions: {act: {may_produce: [{evidence: m}]}}\n";
+    every_since_history_is_reached(
+        one_kind,
+        &["m"],
+        &["a"],
+        &[Some("fail"), Some("pass"), None],
+        0x510E_527F_ADE6_82D1,
+    );
+}
+
+/// Soundness of the space for a `since` that names a subject: records about another artifact take
+/// no part in it, while an evidence match reads them.
+#[test]
+fn every_value_of_a_since_naming_a_subject_is_reached() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}, b: {}}\n\
+        evidence_kinds: {k: {}, m: {}}\n\
+        claims:\n\
+        \x20\x20since_a: {true_when: {since: {last: k, then: {kind: m, result: fail}, subject: a}}}\n\
+        \x20\x20some_k: {true_when: {evidence: {kind: k}}}\n\
+        actions: {act: {may_produce: [{evidence: k}, {evidence: m}]}}\n";
+    let reached = every_since_history_is_reached(
+        source,
+        &["k", "m"],
+        &["a", "b"],
+        &[Some("fail"), Some("pass"), None],
+        0x3C6E_F372_FE94_F82B,
+    );
+    assert!(takes_every_value(&reached, 0), "since_a");
 }
 
 /// A protocol with an `after` writes its later records and the order they take part in, and builds

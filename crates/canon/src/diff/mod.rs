@@ -63,7 +63,7 @@
 //! under an `all` strengthens it, a member added under an `any` weakens it, `not` reverses the
 //! direction, and two evidence matches, claim tests or input tests imply each other only when they
 //! are equal, so an input test whose `in` list changed implies nothing it did not before. What it
-//! cannot show is classified as changed. An order form (`first`, `before`, `after`) is compared
+//! cannot show is classified as changed. An order form (`first`, `before`, `after`, `since`) is compared
 //! structurally only: a predicate whose order forms, taken as a set, differ between the revisions
 //! is changed (`BREAKING`), whatever members around them were added or removed; one whose order
 //! forms are the same is classified by implication, each form implying only an equal one.
@@ -458,7 +458,8 @@ fn demands(predicate: &Predicate) -> BTreeSet<Demand<'_>> {
             | Predicate::Input(_)
             | Predicate::First(_)
             | Predicate::Before(_)
-            | Predicate::After(_) => {}
+            | Predicate::After(_)
+            | Predicate::Since(_) => {}
         }
     }
     let mut found = BTreeSet::new();
@@ -639,7 +640,8 @@ fn reads(predicate: &Predicate, reading: Reading, found: &mut Vec<(ClaimId, Read
         | Predicate::Input(_)
         | Predicate::First(_)
         | Predicate::Before(_)
-        | Predicate::After(_) => {}
+        | Predicate::After(_)
+        | Predicate::Since(_) => {}
     }
 }
 
@@ -1106,6 +1108,7 @@ impl Implication {
             (Predicate::First(left), Predicate::First(right)) => left == right,
             (Predicate::Before(left), Predicate::Before(right)) => left == right,
             (Predicate::After(left), Predicate::After(right)) => left == right,
+            (Predicate::Since(left), Predicate::Since(right)) => left == right,
             // Two different kinds of leaf, or an `all`, `any` or `not` the rules above leave
             // undecided: not shown, so not implied.
             _ => false,

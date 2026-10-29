@@ -1,8 +1,10 @@
-//! The order forms of the predicate (story:evidence-order-predicate, CANON-ORDER-001, and
-//! story:evidence-order-after, CANON-ORDER-002): whether the first record of a kind has a result
-//! (`first`), whether the first record of one kind was observed strictly before the first record of
-//! another (`before`), and whether a record of one kind with a result was observed strictly after
-//! the first record of another (`after`).
+//! The order forms of the predicate (story:evidence-order-predicate, CANON-ORDER-001,
+//! story:evidence-order-after, CANON-ORDER-002, and story:evidence-order-since, CANON-ORDER-004):
+//! whether the first record of a kind has a result (`first`), whether the first record of one kind
+//! was observed strictly before the first record of another (`before`), whether a record of one
+//! kind with a result was observed strictly after the first record of another (`after`), and
+//! whether a record of one kind with a result, at the subject revision of the latest record of
+//! another, was observed after that record (`since`).
 //!
 //! An order form reads the history: every record of its kind (about its `subject` when it names
 //! one, by the rule evidence matches read by, [`super::reads`]) that the evidence check accepted,
@@ -39,15 +41,27 @@
 //! and `unknown` otherwise. With `K1` and `K2` the same kind, a record is not later than itself:
 //! one record of the kind with `R` and no other is `false`, not `unknown`.
 //!
+//! `{since: {last: K1, then: {kind: K2, result: R}}}` compares the anchors, the records of `K1`,
+//! with the candidates, the records of `K2` that have result `R`. The latest anchors are those no
+//! anchor is observed after. `unknown` with no anchor; `false` with an anchor and no candidate;
+//! otherwise `unknown` when an anchor or a candidate has no `observed_at`. Otherwise each latest
+//! anchor reads the candidates about its subject at its subject revision, other than itself:
+//! `true` when one is observed after it, `false` when every one is observed before it or there is
+//! none, and `unknown` otherwise. The form is `true` when every latest anchor gives `true`, `false`
+//! when every one gives `false`, and `unknown` otherwise. With `K1` and `K2` the same kind, a
+//! record is not later than itself, and no candidate is observed after the latest anchor, so the
+//! form is never `true`.
+//!
 //! A record bound to a revision of its subject that does not descend from the current one counts
-//! like any other: Canon does not know how revisions descend (story:revision-ordering).
+//! like any other: Canon does not know how revisions descend (story:revision-ordering). For the
+//! same reason, a `since` candidate at a revision descended from its anchor's does not count.
 
 use serde_json::{Map, Value};
 
 use super::claims::reads;
 use crate::model::{
-    ArtifactId, EvidenceAfter, EvidenceKindId, EvidenceOrder, EvidenceRecord, FirstResult,
-    Predicate, Truth,
+    ArtifactId, EvidenceAfter, EvidenceKindId, EvidenceOrder, EvidenceRecord, EvidenceSince,
+    FirstResult, Predicate, Truth,
 };
 
 /// The value of an order form over the `history`; `None` for any other form.
@@ -56,6 +70,7 @@ pub(crate) fn value(predicate: &Predicate, history: &[EvidenceRecord]) -> Option
         Predicate::First(form) => Some(first(form, history)),
         Predicate::Before(form) => Some(before(form, history)),
         Predicate::After(form) => Some(after(form, history)),
+        Predicate::Since(form) => Some(since(form, history)),
         _ => None,
     }
 }
@@ -205,8 +220,66 @@ fn after(form: &EvidenceAfter, history: &[EvidenceRecord]) -> Truth {
     }
 }
 
+fn since(form: &EvidenceSince, history: &[EvidenceRecord]) -> Truth {
+    let anchors = of(&form.last, form.subject.as_ref(), history);
+    if anchors.is_empty() {
+        return Truth::Unknown;
+    }
+    let candidates: Vec<&EvidenceRecord> = of(&form.then.kind, form.subject.as_ref(), history)
+        .into_iter()
+        .filter(|record| record.result.as_deref() == Some(form.then.result.as_str()))
+        .collect();
+    if candidates.is_empty() {
+        return Truth::False;
+    }
+    let Some(anchor_intervals) = intervals(&anchors) else {
+        return Truth::Unknown;
+    };
+    let Some(candidate_intervals) = intervals(&candidates) else {
+        return Truth::Unknown;
+    };
+    // What one anchor gives: over the candidates at its subject and subject revision, other than
+    // itself (a record is not later than itself).
+    let from = |anchor: &EvidenceRecord, at: Interval| {
+        let mut at_its_revision = candidates
+            .iter()
+            .zip(&candidate_intervals)
+            .filter(|(candidate, _)| {
+                !std::ptr::eq(**candidate, anchor)
+                    && candidate.subject == anchor.subject
+                    && candidate.subject_revision == anchor.subject_revision
+            })
+            .map(|(_, candidate_at)| *candidate_at);
+        if at_its_revision
+            .clone()
+            .any(|candidate_at| precedes(at, candidate_at))
+        {
+            Truth::True
+        } else if at_its_revision.all(|candidate_at| precedes(candidate_at, at)) {
+            Truth::False
+        } else {
+            Truth::Unknown
+        }
+    };
+    // The latest anchors: those no anchor is observed after. Intervals are a strict order, so
+    // there is at least one.
+    let mut given = anchors
+        .iter()
+        .zip(&anchor_intervals)
+        .filter(|(_, at)| !anchor_intervals.iter().any(|other| precedes(**at, *other)))
+        .map(|(anchor, at)| from(anchor, *at));
+    let Some(one) = given.next() else {
+        return Truth::Unknown;
+    };
+    if one != Truth::Unknown && given.all(|other| other == one) {
+        one
+    } else {
+        Truth::Unknown
+    }
+}
+
 /// How the reasons order the order forms: every `after` first, then every `before`, then every
-/// `first`, each by its fields as text (no subject before any subject).
+/// `first`, then every `since`, each by its fields as text (no subject before any subject).
 type Key<'a> = (u8, &'a str, &'a str, &'a str, Option<&'a str>);
 
 fn key(predicate: &Predicate) -> Option<Key<'_>> {
@@ -232,13 +305,21 @@ fn key(predicate: &Predicate) -> Option<Key<'_>> {
             "",
             form.subject.as_ref().map(ArtifactId::as_str),
         )),
+        Predicate::Since(form) => Some((
+            3,
+            form.last.as_str(),
+            form.then.kind.as_str(),
+            form.then.result.as_str(),
+            form.subject.as_ref().map(ArtifactId::as_str),
+        )),
         _ => None,
     }
 }
 
 /// The reason each of `forms` gives, with its value over the `history`, each form once, `after`
-/// forms first, then `before` forms: `{"after": K1, "then": K2, "result": R, "value": <truth>}`,
-/// `{"before": K1, "then": K2, "value": <truth>}` or `{"first": K, "result": R, "value": <truth>}`,
+/// forms first, then `before`, then `first`, then `since` forms: `{"after": K1, "then": K2,
+/// "result": R, "value": <truth>}`, `{"before": K1, "then": K2, "value": <truth>}`, `{"first": K,
+/// "result": R, "value": <truth>}` or `{"since": K1, "then": K2, "result": R, "value": <truth>}`,
 /// with `"subject": A` added when the form names one. What is not an order form is skipped.
 pub(crate) fn reasons<'a>(
     forms: impl IntoIterator<Item = &'a Predicate>,
@@ -275,6 +356,14 @@ pub(crate) fn reasons<'a>(
                     Map::from_iter([
                         ("first".to_owned(), Value::from(form.kind.as_str())),
                         ("result".to_owned(), Value::from(form.result.as_str())),
+                    ]),
+                ),
+                Predicate::Since(form) => (
+                    form.subject.as_ref(),
+                    Map::from_iter([
+                        ("since".to_owned(), Value::from(form.last.as_str())),
+                        ("then".to_owned(), Value::from(form.then.kind.as_str())),
+                        ("result".to_owned(), Value::from(form.then.result.as_str())),
                     ]),
                 ),
                 _ => return None,

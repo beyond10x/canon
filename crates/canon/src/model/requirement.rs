@@ -17,7 +17,8 @@ use serde::Deserialize;
 
 use super::ids::{ClaimId, DecisionName, InputId, InputValue};
 use super::predicate::{
-    EvidenceAfter, EvidenceMatch, EvidenceOrder, FirstResult, Predicate, Truth, WrittenPredicate,
+    EvidenceAfter, EvidenceMatch, EvidenceOrder, EvidenceSince, FirstResult, Predicate, Truth,
+    WrittenPredicate,
 };
 
 /// What an outcome requires.
@@ -90,6 +91,8 @@ struct WrittenRequirement {
     before: Option<EvidenceOrder>,
     #[serde(default, deserialize_with = "super::present::form")]
     after: Option<EvidenceAfter>,
+    #[serde(default, deserialize_with = "super::present::form")]
+    since: Option<EvidenceSince>,
 }
 
 impl TryFrom<WrittenRequirement> for OutcomeRequirement {
@@ -109,6 +112,7 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             first,
             before,
             after,
+            since,
         } = written;
         let predicate = WrittenPredicate {
             all,
@@ -122,6 +126,7 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             first,
             before,
             after,
+            since,
         };
         let Some(decision) = decision else {
             // With no key at all, name `decision` among what a requirement may be written as.
@@ -137,11 +142,12 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
                 first: None,
                 before: None,
                 after: None,
+                since: None,
             } = predicate
             {
                 return Err(
                     "a requirement has exactly one of `all`, `any`, `not`, `evidence`, \
-                     `claim`, `input`, `first`, `before`, `after` or `decision`, found 0"
+                     `claim`, `input`, `first`, `before`, `after`, `since` or `decision`, found 0"
                         .to_owned(),
                 );
             }
@@ -159,6 +165,7 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             first: None,
             before: None,
             after: None,
+            since: None,
         } = predicate
         else {
             return Err(
