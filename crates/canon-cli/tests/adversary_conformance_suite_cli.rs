@@ -91,7 +91,7 @@ fn the_real_registry_with_the_flag_is_the_plain_report_and_one_line() {
     assert_eq!(
         out(&checked),
         format!(
-            "{}requirements: 15 implemented, 15 covered, 0 planned\n",
+            "{}requirements: 16 implemented, 16 covered, 0 planned\n",
             out(&plain)
         )
     );
@@ -117,10 +117,11 @@ fn without_the_flag_no_check_runs() {
     );
 }
 
-/// The catalogue lists exactly the 15 requirements the story names, all implemented, and every
-/// one is covered by a scenario of the registry.
+/// The catalogue lists exactly the 15 requirements story:conformance-suite names and the one a
+/// later story adds (CANON-ORDER-002, story:evidence-order-after), all implemented, and every one
+/// is covered by a scenario of the registry.
 #[test]
-fn the_real_catalogue_is_the_fifteen_the_story_names() {
+fn the_real_catalogue_is_the_requirements_the_stories_name() {
     let root = repository_root();
     let catalogue: serde_yaml_ng::Value = serde_yaml_ng::from_str(
         &std::fs::read_to_string(root.join("conformance/requirements.yaml")).unwrap(),
@@ -152,6 +153,7 @@ fn the_real_catalogue_is_the_fifteen_the_story_names() {
         "CANON-OBLIGATION-001",
         "CANON-INPUT-001",
         "CANON-ORDER-001",
+        "CANON-ORDER-002",
     ];
     story.sort();
     assert_eq!(ids, story);

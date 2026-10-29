@@ -101,12 +101,14 @@ pub enum Command {
     /// declared property that fails, with a counterexample. A state is a set of evidence records,
     /// authority decisions and explicit decisions; a record an invalidation rule can keep from a
     /// claim is there in any combination of observed before and after each upstream artifact
-    /// moved, one record each. Evidence an order form reads (`first`, `before`) is also there with
-    /// earlier records at a superseded revision, or with no known instant, in every order of first
-    /// observations. Evidence an evidence match demanding independence reads (`independent_on`) is
-    /// there from a producer independent on exactly each demand, in every combination of demands
-    /// met, and without a producer when something that demands nothing reads it. A state space of
-    /// more than 65536 states is refused.
+    /// moved, one record each. Evidence an order form reads (`first`, `before`, `after`) is also
+    /// there with earlier records at a superseded revision, or with no known instant, in every order
+    /// of first observations, and evidence an `after` compares with its result also with a later
+    /// record of that result, placed anywhere in that order or at no known instant. Evidence an
+    /// evidence match demanding independence reads (`independent_on`) is there from a producer
+    /// independent on exactly each demand, in every combination of demands met, and without a
+    /// producer when something that demands nothing reads it. A state space of more than 65536
+    /// states is refused.
     Check {
         /// The protocol document to check.
         #[arg(long)]

@@ -101,6 +101,21 @@ const SUBJECT_BOUND: &str = "format: protocol/1\n\
     outcomes: {survived: {requires: {all: [{claim: bound}, {not: {claim: unbound}}]}}, \
     refuted: {requires: {claim: unbound}}, closed: {requires: {decision: close}}}\n";
 
+/// A protocol whose outcomes read `after` over two kinds and over one, under `not` too, small
+/// enough to check: `fixtures/investigation/evidence-order-after.yaml` reads the same kinds bound
+/// to a subject and unbound at once, and its space is beyond the bound.
+const AFTER: &str = "format: protocol/1\n\
+    protocol: {id: p, revision: 1}\n\
+    artifacts: {change: {}}\n\
+    evidence_kinds: {tests_change: {}, test_result: {}}\n\
+    claims:\n  \
+      red: {true_when: {after: {first: tests_change, then: {kind: test_result, result: failed}}}}\n  \
+      again: {true_when: {after: {first: test_result, then: {kind: test_result, result: failed}}}}\n\
+    actions: {run: {may_produce: [{evidence: test_result}]}, \
+    merge: {precondition: {claim: red}, requires: [{capability: cap}]}}\n\
+    outcomes: {done: {requires: {claim: red}}, \
+    flaky: {requires: {all: [{claim: again}, {not: {claim: red}}]}}}\n";
+
 #[test]
 fn every_generated_witness_passes_and_is_minimal_over_every_investigation_protocol() {
     let root = repository_root();
@@ -119,6 +134,7 @@ fn every_generated_witness_passes_and_is_minimal_over_every_investigation_protoc
         })
         .collect();
     sources.push(("subject-bound.yaml".to_owned(), SUBJECT_BOUND.to_owned()));
+    sources.push(("after.yaml".to_owned(), AFTER.to_owned()));
 
     let mut failures = Vec::new();
     let (mut scenarios_run, mut removals_run) = (0, 0);
@@ -129,8 +145,11 @@ fn every_generated_witness_passes_and_is_minimal_over_every_investigation_protoc
                 // The two fixtures written to be refused, and the ones with nothing to witness
                 // (coordinator decision 3, adversary pass 1: refused as `nothing-to-witness`;
                 // invalidation-rules.yaml, from story:invalidation-rules, declares no outcome or
-                // action either).
-                let expected = (fixture.ends_with("state-space-bound/protocol.yaml")
+                // action either). evidence-order-after.yaml reads its kinds bound to a subject and
+                // unbound at once, for CANON-ORDER-002's evaluate steps; `after.yaml` above is the
+                // one generated from.
+                let expected = ((fixture.ends_with("state-space-bound/protocol.yaml")
+                    || fixture.ends_with("evidence-order-after.yaml"))
                     && why.starts_with("state-space-bound"))
                     || (fixture.ends_with("unreachable-outcome/protocol.yaml")
                         && why.starts_with("unreachable-outcome"))

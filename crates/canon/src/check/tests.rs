@@ -880,3 +880,277 @@ fn a_dimension_only_demanding_matches_read_has_no_record_without_a_producer() {
         );
     }
 }
+
+/// Soundness of the space of `source` for order forms over random histories: every combination of
+/// claim values that records of `kinds`, about one of `artifacts`, at the current or a superseded
+/// revision, with one of `results`, at one of three instants or none, give is the combination of
+/// some state. Returns the combinations the states reach.
+fn every_history_is_reached(
+    source: &str,
+    kinds: &[&str],
+    artifacts: &[&str],
+    results: &[Option<&str>],
+    seed: u64,
+) -> BTreeSet<Vec<crate::model::Truth>> {
+    let ir = compiled(source);
+    let space = Space::new(&ir);
+    let size = space.size().expect("fits");
+    let reached: BTreeSet<Vec<crate::model::Truth>> = (0..size)
+        .map(|index| claim_values(&ir, &space.evidence(&space.state(index))))
+        .collect();
+    let mut rng = Rng(seed);
+    let instants = [
+        Some("2026-10-01T09:00:00Z"),
+        Some("2026-10-01T09:00:01Z"),
+        Some("2026-10-01T09:00:02Z"),
+        None,
+    ];
+    for _ in 0..20_000 {
+        let records: Vec<crate::model::EvidenceRecord> = (0..rng.below(6))
+            .map(|n| crate::model::EvidenceRecord {
+                format: crate::model::EVIDENCE_FORMAT.to_owned(),
+                producer: None,
+                id: crate::model::EvidenceId::new(format!("h{n}")),
+                kind: EvidenceKindId::new(kinds[rng.below(kinds.len())]),
+                result: results[rng.below(results.len())].map(str::to_owned),
+                subject: crate::model::ArtifactId::new(artifacts[rng.below(artifacts.len())]),
+                subject_revision: Revision::new(["r", "r0"][rng.below(2)]),
+                observed_at: instants[rng.below(4)].map(crate::model::Instant::new),
+                upstream_revisions: Declarations::default(),
+            })
+            .collect();
+        let values = claim_values(&ir, &records);
+        assert!(
+            reached.contains(&values),
+            "no state gives {values:?}, which {records:?} gives"
+        );
+    }
+    reached
+}
+
+/// Whether claim `at` of the combinations takes each of `true`, `false` and `unknown`.
+fn takes_every_value(reached: &BTreeSet<Vec<crate::model::Truth>>, at: usize) -> bool {
+    use crate::model::Truth;
+    [Truth::True, Truth::False, Truth::Unknown]
+        .iter()
+        .all(|value| reached.iter().any(|values| values[at] == *value))
+}
+
+/// Soundness of the space for `after` (story:evidence-order-after) when its result is a class of
+/// the dimension it compares: over two kinds and one kind, jointly with `first` and `before` over
+/// the same kinds and evidence matches over the same records, every combination of claim values a
+/// history gives is reached, and each `after` takes every value.
+#[test]
+fn every_value_of_after_is_reached_jointly_with_the_other_forms() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {k: {}, m: {}}\n\
+        claims:\n\
+        \x20\x20after_k_m: {true_when: {after: {first: k, then: {kind: m, result: fail}}}}\n\
+        \x20\x20after_m_m: {true_when: {after: {first: m, then: {kind: m, result: fail}}}}\n\
+        \x20\x20before_k_m: {true_when: {before: {first: k, then: m}}}\n\
+        \x20\x20fail_m: {true_when: {evidence: {kind: m, result: fail}}}\n\
+        \x20\x20first_m: {true_when: {first: {kind: m, result: fail}}}\n\
+        \x20\x20some_k: {true_when: {evidence: {kind: k}}}\n\
+        actions: {act: {may_produce: [{evidence: k}, {evidence: m}]}}\n";
+    let space_of = compiled(source);
+    let space = Space::new(&space_of);
+    assert_eq!(
+        space.dimensions(),
+        "evidence kind `k` 2, evidence kind `m` 4, history of evidence kind `k` 3, history of \
+         evidence kind `m` 5, later evidence kind `m` result `fail` 4, order of first \
+         observations and later records 13"
+    );
+    let reached = every_history_is_reached(
+        source,
+        &["k", "m"],
+        &["a"],
+        &[Some("fail"), Some("pass"), None],
+        0x51A2_7C3B_9D4E_6F80,
+    );
+    assert!(takes_every_value(&reached, 0), "after_k_m");
+    assert!(takes_every_value(&reached, 1), "after_m_m");
+}
+
+/// Soundness of the space for `after` when no evidence match or `first` reads its result: the
+/// later record alone stands for every record of the result, over two kinds and one.
+#[test]
+fn every_value_of_after_is_reached_when_its_result_is_no_class() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {k: {}, m: {}}\n\
+        claims:\n\
+        \x20\x20after_k_m: {true_when: {after: {first: k, then: {kind: m, result: pass}}}}\n\
+        \x20\x20after_m_m: {true_when: {after: {first: m, then: {kind: m, result: pass}}}}\n\
+        \x20\x20fail_m: {true_when: {evidence: {kind: m, result: fail}}}\n\
+        \x20\x20first_m: {true_when: {first: {kind: m, result: fail}}}\n\
+        actions: {act: {may_produce: [{evidence: k}, {evidence: m}]}}\n";
+    let reached = every_history_is_reached(
+        source,
+        &["k", "m"],
+        &["a"],
+        &[Some("fail"), Some("pass"), None],
+        0x0F1E_2D3C_4B5A_6978,
+    );
+    assert!(takes_every_value(&reached, 0), "after_k_m");
+    assert!(takes_every_value(&reached, 1), "after_m_m");
+}
+
+/// Soundness of the space for an `after` that names a subject: records about another artifact
+/// take no part in it, while an evidence match reads them.
+#[test]
+fn every_value_of_an_after_naming_a_subject_is_reached() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}, b: {}}\n\
+        evidence_kinds: {k: {}, m: {}}\n\
+        claims:\n\
+        \x20\x20after_a: {true_when: {after: {first: k, then: {kind: m, result: fail}, subject: a}}}\n\
+        \x20\x20fail_m: {true_when: {evidence: {kind: m, result: fail}}}\n\
+        actions: {act: {may_produce: [{evidence: k}, {evidence: m}]}}\n";
+    let reached = every_history_is_reached(
+        source,
+        &["k", "m"],
+        &["a", "b"],
+        &[Some("fail"), Some("pass"), None],
+        0x3C6E_F372_FE94_F82B,
+    );
+    assert!(takes_every_value(&reached, 0), "after_a");
+}
+
+/// A protocol with an `after` writes its later records and the order they take part in, and builds
+/// them: a later record at the superseded revision with its result at its rank's instant, current
+/// records after earlier ones thirty seconds past their rank's instant, and the current records of
+/// the result at the rank's instant when they are observed first. A protocol without one is
+/// unchanged (see [`a_state_writes_and_builds_its_history`]).
+#[test]
+fn a_state_writes_and_builds_its_later_records() {
+    let ir = compiled(
+        "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}}\n\
+         evidence_kinds: {t: {}, d: {}}\n\
+         claims: {c: {true_when: {after: {first: d, then: {kind: t, result: failed}}}}, \
+         r: {true_when: {first: {kind: t, result: failed}}}}\n",
+    );
+    let space = Space::new(&ir);
+    let find = |wanted: &str| {
+        (0..space.size().expect("fits"))
+            .map(|index| space.state(index))
+            .find(|state| space.render(state) == wanted)
+            .unwrap_or_else(|| panic!("no state renders {wanted}"))
+    };
+    let built = |state: &State| -> Vec<(String, Option<String>, String, Option<String>)> {
+        space
+            .evidence(state)
+            .into_iter()
+            .map(|record| {
+                (
+                    record.kind.as_str().to_owned(),
+                    record.result,
+                    record.subject_revision.as_str().to_owned(),
+                    record.observed_at.map(|at| at.as_str().to_owned()),
+                )
+            })
+            .collect()
+    };
+    let record = |kind: &str, result: Option<&str>, revision: &str, at: Option<&str>| {
+        (
+            kind.to_owned(),
+            result.map(str::to_owned),
+            revision.to_owned(),
+            at.map(str::to_owned),
+        )
+    };
+    let later = find(
+        "{evidence `d`, evidence `t` result `failed` later, order `d` < `t` result `failed` later}",
+    );
+    assert_eq!(
+        built(&later),
+        [
+            record("d", None, "r", Some("2000-01-01T00:00:00Z")),
+            record("t", Some("failed"), "r0", Some("2000-01-01T00:01:00Z")),
+        ]
+    );
+    assert_eq!(space.weight(&later), 2);
+    let behind =
+        find("{evidence `d`, evidence `t` result `failed`, evidence `t` earlier, order `t` < `d`}");
+    assert_eq!(
+        built(&behind),
+        [
+            record("d", None, "r", Some("2000-01-01T00:01:00Z")),
+            record("t", Some("failed"), "r", Some("2000-01-01T00:00:30Z")),
+            record("t", None, "r0", Some("2000-01-01T00:00:00Z")),
+        ]
+    );
+    let first = find(
+        "{evidence `d`, evidence `t` result `failed`, evidence `t` result `failed` observed \
+         first, order `d` = `t`}",
+    );
+    assert_eq!(
+        built(&first),
+        [
+            record("d", None, "r", Some("2000-01-01T00:00:00Z")),
+            record("t", Some("failed"), "r", Some("2000-01-01T00:00:00Z")),
+        ]
+    );
+    let unknown =
+        find("{evidence `t` result `failed`, evidence `t` earlier, observed at no known instant}");
+    assert_eq!(
+        built(&unknown),
+        [
+            record("t", Some("failed"), "r", Some("2000-01-01T00:00:00Z")),
+            record("t", None, "r0", None),
+        ]
+    );
+    let unplaced = find("{evidence `t` result `failed` later, observed at no known instant}");
+    assert_eq!(built(&unplaced), [record("t", Some("failed"), "r0", None)]);
+    // Erasing `t` empties its dimension, its history and its later record, which stand first.
+    let erased = space.erase(&later, &BTreeSet::from([1]));
+    assert_eq!(space.render(&erased), "{evidence `d`}");
+    assert_eq!(
+        space.dimensions(),
+        "evidence kind `d` 2, evidence kind `t` 4, history of evidence kind `d` 3, history of \
+         evidence kind `t` 5, later evidence kind `t` result `failed` 4, order of first \
+         observations and later records 13"
+    );
+}
+
+/// `canon check` over an `after`: an outcome that needs a failed run after the tests changed and
+/// no such run at once is unreachable, while one that needs either is reached. The `after` counts
+/// for `authority-bypass` under a `not` too: `run` comes only from an action that requires
+/// authority, so `not_red` is examined, and it holds on a change whose instant is unknown and no
+/// run, which taking the change away blocks. `red` needs a run, so it rests on authority.
+#[test]
+fn after_is_checked_over_later_records_and_counts_for_authority_bypass() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {change: {}, run: {}}\n\
+        claims:\n\
+        \x20\x20red_after: {true_when: {after: {first: change, then: {kind: run, result: failed}}}}\n\
+        \x20\x20only_before: {true_when: {not: {after: {first: change, then: {kind: run, result: failed}}}}}\n\
+        actions:\n\
+        \x20\x20edit: {may_produce: [{evidence: change}]}\n\
+        \x20\x20test: {requires: [{capability: ci}], may_produce: [{evidence: run}]}\n\
+        outcomes:\n\
+        \x20\x20both: {requires: {all: [{claim: red_after}, {claim: only_before}]}}\n\
+        \x20\x20red: {requires: {claim: red_after}}\n\
+        \x20\x20not_red: {requires: {claim: only_before}}\n";
+    let report = check(&compiled(source), None).expect("checked");
+    assert_eq!(
+        report.to_string(),
+        "unreachable-outcome: outcome `both` is legitimate in no state\n\
+         authority-bypass: outcome `not_red` is legitimate without authority in state \
+         {evidence `change` earlier, observed at no known instant}\n\
+         checked: protocol `p` revision 1: 4212 states, 0 properties, 2 findings\n"
+    );
+    let ir = compiled(source);
+    let space = Space::new(&ir);
+    assert_eq!(
+        space.dimensions(),
+        "evidence kind `change` 2, evidence kind `run` 2, capability `ci` 3, history of evidence \
+         kind `change` 3, history of evidence kind `run` 3, later evidence kind `run` result \
+         `failed` 3, order of first observations and later records 13"
+    );
+}

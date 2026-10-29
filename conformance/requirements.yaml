@@ -88,3 +88,10 @@ requirements:
       A predicate over evidence order MUST read the history of records, including those bound to a
       superseded revision, and MUST be UNKNOWN while the order is not established.
     source: story:evidence-order-predicate
+  CANON-ORDER-002:
+    status: implemented
+    statement: >-
+      A predicate over a record observed after the first record of a kind MUST read the history of
+      records, MUST NOT take a record observed at the same instant as later, and MUST be UNKNOWN
+      while the first record or the order of a record it compares is not established.
+    source: story:evidence-order-after

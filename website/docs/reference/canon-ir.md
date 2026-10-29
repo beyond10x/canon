@@ -32,7 +32,8 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   declares none of them is the IR it was before they existed. The `independence_dimensions`
   section is `{<id>: {"description": …}}`. The `case` section is
   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
-  authored: `{"first": {"kind": …, "result": …}}` and `{"before": {"first": …, "then": …}}`.
+  authored: `{"first": {"kind": …, "result": …}}`, `{"before": {"first": …, "then": …}}` and
+  `{"after": {"first": …, "then": {"kind": …, "result": …}}}`.
   An action's `arguments` is its JSON Schema as declared, the same JSON value, its object keys
   sorted like every object's (story:action-arguments).
 - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way

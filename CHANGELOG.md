@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- Add the order form `after` to `protocol/1` predicates:
+  `{after: {first: K1, then: {kind: K2, result: R}, subject?: A}}`, whether a record of `K2` with
+  result `R` was observed strictly after the first record of `K1` (`K1` and `K2` may be one kind).
+  It reads the evidence history as `first` and `before` do, records the exclusion stages keep from
+  evidence matches included. `unknown` with no record of `K1`; `false` with no record of `K2` with
+  `R`; otherwise `unknown` when a compared record has no `observed_at`, `true` when a record of `K2`
+  with `R` is later than the first instant of `K1`, `unknown` when one is at that instant and none
+  later (a record is not later than itself), `false` otherwise. Records of `K2` with another result
+  take no part. Requirement CANON-ORDER-002, scenario
+  `conformance/scenarios/evidence-order-after.yaml`.
+- `canon-ir/1` writes it as authored, `{"after": {"first": …, "then": {"kind": …, "result": …}}}`
+  with `subject` when named; among the members of an `all` or `any`, `after` sorts first, and two
+  compare by first kind, later kind, result and subject. The IR of a protocol without `after` is
+  unchanged.
+- An evaluation's reasons list each `after` before the other order forms:
+  `{"after": K1, "then": K2, "result": R, "value": …}`, with `"subject"` when named.
+- `canon validate` resolves both kinds and the subject, and refuses `after` in a discharge or
+  applicability predicate; `canon diff` compares it structurally like `first` and `before`.
+- `canon check` gives a protocol with `after` a later-record dimension per compared result and
+  dimension, places later records in the order with the first observations, and counts `after`'s
+  kinds for `authority-bypass` in every position. A protocol without `after` checks as before.
 - `ess/ess-inputs.yaml` and CI pin ess 0.75.0 (was 0.60.0); the ESS gate tests name the new pin.
 
 ## [0.6.0] - 2026-10-15

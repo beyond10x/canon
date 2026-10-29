@@ -178,7 +178,7 @@ impl Walk<'_> {
                 )
             }
             // The history, whatever is invalidated for the claim: order is not invalidated.
-            Predicate::First(_) | Predicate::Before(_) => {
+            Predicate::First(_) | Predicate::Before(_) | Predicate::After(_) => {
                 super::order::value(predicate, self.evidence.history).unwrap_or(Truth::Unknown)
             }
             Predicate::Claim(test) => {
@@ -225,7 +225,7 @@ pub(super) fn predicate(
                 .iter()
                 .filter(|record| evidence.of_match(matching, record)),
         ),
-        Predicate::First(_) | Predicate::Before(_) => {
+        Predicate::First(_) | Predicate::Before(_) | Predicate::After(_) => {
             super::order::value(predicate, evidence.history).unwrap_or(Truth::Unknown)
         }
         Predicate::Claim(test) => tested(

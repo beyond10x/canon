@@ -89,13 +89,14 @@
 //!
 //! # Order forms
 //!
-//! A protocol with no order form (`first`, `before`) has exactly the dimensions above, and its
-//! records carry no observation instant: it checks as it did before order forms existed. An order
-//! form reads every record of its kind the evidence check accepts, including those the exclusion
-//! stages keep from evidence matches, ordered by `observed_at` (`crate::eval`, `order.rs`). Its
-//! value depends only on the records first observed in each evidence dimension it reads (their
-//! classes, and how the first observations of the dimensions are ordered, ties included) and on
-//! whether some record has no known instant. So the space gains, for those dimensions only:
+//! A protocol with no order form (`first`, `before`, `after`) has exactly the dimensions above,
+//! and its records carry no observation instant: it checks as it did before order forms existed.
+//! An order form reads every record of its kind the evidence check accepts, including those the
+//! exclusion stages keep from evidence matches, ordered by `observed_at` (`crate::eval`,
+//! `order.rs`). The value of `first` and `before` depends only on the records first observed in
+//! each evidence dimension they read (their classes, and how the first observations of the
+//! dimensions are ordered, ties included) and on whether some record has no known instant. So the
+//! space gains, for those dimensions only:
 //!
 //! - its kinds of record: an order form reads evidence dimensions by the rule evidence matches
 //!   do, so a `subject` it names makes a bound dimension, and a `first` adds its result to the
@@ -137,6 +138,41 @@
 //! in every position, not only a positive one: with no record an order form is `unknown` and so is
 //! its negation, so a record helps `not` it and a claim test `is: false` over it hold too. A kind
 //! with an earlier record is present in a state.
+//!
+//! An `after` (story:evidence-order-after) reads the first observation of its first kind like the
+//! other order forms, but every record of its later kind with its result, not only the first: its
+//! value turns on whether one of them is later than, at or earlier than that first observation.
+//! Its kinds have history dimensions as above, and its result is not added to the classes; a
+//! protocol without an `after` has none of what follows and checks as it did before `after`
+//! existed. A protocol with one gains:
+//!
+//! - a later-record dimension for each evidence dimension an `after`'s `then` reads and each
+//!   result an `after` compares its records with, after the history dimensions, in dimension and
+//!   then result order. Value 0 adds nothing; value 1 adds one record of the result about the
+//!   dimension's artifact at `r0`, observed at its own place in the order; value 2 adds it with no
+//!   `observed_at`. When the result is one of the dimension's classes, value 3 adds nothing and
+//!   observes the dimension's current records of the result first, at its rank's instant, in
+//!   place of the earlier record of that class: a record of the result can be a current one
+//!   observed with the first observations, neither earlier nor later than them;
+//! - a place for each later record in the order dimension, which orders the history dimensions
+//!   and the later records together (13 values for two history dimensions and one later record);
+//! - current records of a dimension with earlier records thirty seconds after its rank's instant,
+//!   after its first observations and before the next rank's, not after every rank: an `after`
+//!   reads where they are; and, with an unknown order, current records at the rank's instant beside
+//!   the earlier record without a result and without an instant, which then always stands in: a
+//!   record of another result with no known instant leaves `first` and `before` unknown while an
+//!   `after` still compares the records it reads.
+//!
+//! So every value of every `after`, jointly with the other order forms and the evidence matches
+//! over the same records, is reached by some state. A later record or observing current records
+//! first weighs one. A state writes a later record `` evidence `k` result `r` later `` (`` later,
+//! observed at no known instant `` without an instant), current records observed first ``
+//! evidence `k` result `r` observed first ``, an unknown order always `` evidence `k` earlier,
+//! observed at no known instant ``, and names a later record in the order `` `k` result `r` later
+//! ``. The bound refusal names `` later evidence kind `k` result `r` 3 `` and `` order of first
+//! observations and later records 13 ``. Erasing a dimension erases its later records too, and
+//! they stand first with it. The kinds an `after` reads count for `unproduced-evidence` and, in
+//! every position, for `authority-bypass`, as for the other order forms.
 //!
 //! A state is evaluated as a case snapshot that lists each declared artifact, and the case itself,
 //! at one revision, gives each case input its value in the state and lists each producer its
