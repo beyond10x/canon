@@ -440,6 +440,19 @@
           "required": [
             "after"
           ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "since": {
+              "description": "Whether a record of a kind with a result, at the subject revision of the latest record of a kind in the evidence history, was observed after that record.",
+              "$ref": "#/$defs/EvidenceSince"
+            }
+          },
+          "required": [
+            "since"
+          ]
         }
       ]
     },
@@ -606,6 +619,29 @@
         "then"
       ]
     },
+    "EvidenceSince": {
+      "description": "An order form: whether a record of `then.kind` with result `then.result`, about the subject and subject revision of the latest record of kind `last`, was observed after that record, all about `subject` when it names one. It reads every record of the two kinds the evidence check accepted, excluded or not. `last` and `then.kind` may be one kind: a record is not later than itself.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "last": {
+          "description": "The evidence kind whose latest record the later one is to come after, at its revision.",
+          "$ref": "#/$defs/Identifier"
+        },
+        "then": {
+          "description": "The record that is to come after it: its kind and its result.",
+          "$ref": "#/$defs/LaterRecord"
+        },
+        "subject": {
+          "description": "The declared artifact the records of both kinds are about; without it, records about any artifact.",
+          "$ref": "#/$defs/Identifier"
+        }
+      },
+      "required": [
+        "last",
+        "then"
+      ]
+    },
     "Truth": {
       "description": "A three-valued truth value. `Unknown` is not `False`.",
       "oneOf": [
@@ -622,7 +658,7 @@
       ]
     },
     "LaterRecord": {
-      "description": "What an `after` form reads later than the first record of its `first` kind: a record of `kind` with `result`.",
+      "description": "What an `after` form reads later than the first record of its `first` kind, and a `since` form later than the latest record of its `last` kind: a record of `kind` with `result`.",
       "type": "object",
       "additionalProperties": false,
       "properties": {

@@ -35,10 +35,10 @@ does not depend on the order the sections are written in:
    `empty-independent-on`, or a dimension it lists more than once, `duplicate-independent-on`,
    once for every listing after its first, then each dimension it lists that is not declared,
    `undeclared-dimension`, once, in the order listed, every one naming the declaration the
-   match is written in; for an order form, each kind it names, `first` before `then`, then its
-   subject, then a `before` whose `first` and `then` name one kind, `self-ordered-evidence`,
-   naming it (an `after` may name one kind as both: a later record of a kind follows the
-   first record of that kind);
+   match is written in; for an order form, each kind it names, `first` (or `last`) before
+   `then`, then its subject, then a `before` whose `first` and `then` name one kind,
+   `self-ordered-evidence`, naming it (an `after` or a `since` may name one kind as both: a
+   record of a kind may follow the first, or the latest, record of that kind);
    for an input test, first an empty `in` list, `empty-input-test`, or a value it lists more
    than once, `duplicate-input-test-value`, once for every listing after its first, then an
    input it names that is not declared, `undeclared-input`, or a value it lists that its input

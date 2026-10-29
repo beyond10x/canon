@@ -137,11 +137,11 @@ A predicate over evidence and claim values.
 The predicate language: a small, total, deterministic expression language (design § 39.2).
 
 A predicate is one of `all`, `any`, `not`, an evidence match by kind, optional result and
-optional subject, a test on a claim value, a test on a case input's value, or one of the three
+optional subject, a test on a claim value, a test on a case input's value, or one of the four
 order forms over the evidence history. Written in source as a map with exactly one of the keys
-`all`, `any`, `not`, `evidence`, `claim`, `input`, `first`, `before` or `after`; a claim test
-may add `is`, which defaults to `true`, and an input test adds `in`, the values it is true for
-(`{input: severity, in: [high]}`).
+`all`, `any`, `not`, `evidence`, `claim`, `input`, `first`, `before`, `after` or `since`; a claim
+test may add `is`, which defaults to `true`, and an input test adds `in`, the values it is true
+for (`{input: severity, in: [high]}`).
 
 The order forms read the evidence history: every record of their kind (about their `subject`
 when they name one) that the evidence check accepted, including the records the exclusion
@@ -167,6 +167,15 @@ record itself: a record is not later than itself), and `false` when none comes a
 record of `K2` with another result takes no part. `K1` and `K2` may be one kind. A known limit:
 a record bound to any earlier revision counts, whether or not the current revision descends
 from it, since Canon does not know how revisions descend (story:revision-ordering).
+`{since: {last: K1, then: {kind: K2, result: R}}}` asks whether a record of `K2` with result `R`,
+at the subject and subject revision of the latest record of `K1`, was observed after that
+record: `unknown` with no record of `K1`, `false` with no record of `K2` with `R`, `unknown`
+when a record of `K1`, or of `K2` with `R`, has no `observed_at`; otherwise each latest record
+of `K1` (one no record of `K1` is observed after) gives `true` when a record of `K2` with `R` at
+its subject and subject revision, other than itself, is observed after it, `false` when every
+such record is observed before it or there is none, and `unknown` otherwise, and the form is
+`true` when every latest record gives `true`, `false` when every one gives `false`, and
+`unknown` otherwise. A record at a revision descended from the latest record's does not count.
 
 An evidence match may demand independence: `{evidence: {kind: K, result: R, independent_on: [D, ...]}}` reads a record only when it names a `producer` and the case's `independence` map
 lists that producer on every dimension `D` (dimensions the protocol declares under
@@ -188,6 +197,7 @@ independence.
 | `first` | [`FirstResult`](#firstresult) | Whether the first record of a kind, in the evidence history, has a result. |
 | `before` | [`EvidenceOrder`](#evidenceorder) | Whether the first record of one kind, in the evidence history, was observed strictly before the first record of another. |
 | `after` | [`EvidenceAfter`](#evidenceafter) | Whether a record of a kind with a result, in the evidence history, was observed strictly after the first record of a kind. |
+| `since` | [`EvidenceSince`](#evidencesince) | Whether a record of a kind with a result, at the subject revision of the latest record of a kind in the evidence history, was observed after that record. |
 
 ## `CapabilityRequirement`
 
@@ -277,6 +287,20 @@ kind: a record is not later than itself.
 | `then` | [`LaterRecord`](#laterrecord) | required | The record that is to come after it: its kind and its result. |
 | `subject` | [identifier](#identifiers) (`ArtifactId`) | optional | The declared artifact the records of both kinds are about; without it, records about any artifact. |
 
+## `EvidenceSince`
+
+An order form: whether a record of `then.kind` with result `then.result`, about the subject and
+subject revision of the latest record of kind `last`, was observed after that record, all about
+`subject` when it names one. It reads every record of the two kinds the evidence check
+accepted, excluded or not. `last` and `then.kind` may be one kind: a record is not later than
+itself.
+
+| Key | Value | Required | Meaning |
+|---|---|---|---|
+| `last` | [identifier](#identifiers) (`EvidenceKindId`) | required | The evidence kind whose latest record the later one is to come after, at its revision. |
+| `then` | [`LaterRecord`](#laterrecord) | required | The record that is to come after it: its kind and its result. |
+| `subject` | [identifier](#identifiers) (`ArtifactId`) | optional | The declared artifact the records of both kinds are about; without it, records about any artifact. |
+
 ## `Truth`
 
 A three-valued truth value. `Unknown` is not `False`.
@@ -291,8 +315,8 @@ Written `true`, `false` or `unknown`. A YAML boolean `true` or `false` is read a
 
 ## `LaterRecord`
 
-What an `after` form reads later than the first record of its `first` kind: a record of `kind`
-with `result`.
+What an `after` form reads later than the first record of its `first` kind, and a `since` form
+later than the latest record of its `last` kind: a record of `kind` with `result`.
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|
