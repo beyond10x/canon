@@ -601,6 +601,8 @@ types:
   # read from: docs/design/canon-protocol-calculus-design.md:505
   # read from: .engineering/planning/story/evidence-freshness.md:50-53
   # read from: .engineering/planning/story/evidence-order-subsecond.md:30-60
+  # read from: crates/canon/src/model/ids.rs:177-185
+  # read from: crates/canon/src/model/time.rs:1-33
   - name: canon.protocol.Instant
     kind: newtype
     of: String
