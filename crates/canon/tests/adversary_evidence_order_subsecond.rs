@@ -239,7 +239,7 @@ fn after_over_one_kind_keeps_the_self_rule_with_fractions() {
 /// before, including a coarse record overlapping finer ones that are ordered among themselves.
 #[test]
 fn first_reads_every_record_that_may_be_first() {
-    use Truth::{False as F, True as T, Unknown as U};
+    use Truth::{False as F, Unknown as U};
     let red = |id: &str, time: &str| record(id, "m", Some("failed"), Some(time));
     let green = |id: &str, time: &str| record(id, "m", Some("passed"), Some(time));
     for (evidence, expected, why) in [
