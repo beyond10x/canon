@@ -45,14 +45,16 @@
 //!   it lists and `false` otherwise. A case gives every input the protocol declares a value (the
 //!   case check refuses one that does not), so an input test is never `unknown`: inputs are
 //!   configuration fixed when the case opens, not evidence.
-//! - An order form, `{first: {kind: K, result: R}}` or `{before: {first: K1, then: K2}}`, reads the
-//!   evidence history instead: every record of its kind (about its `subject` when it names one)
-//!   the evidence check accepted, the records the exclusion stages set aside included, ordered by
-//!   `observed_at`. `first` is whether the first record of `K` has result `R`; `before` whether the
-//!   first record of `K1` was observed strictly before the first of `K2`. Each is `unknown` while
-//!   the order is not established: no record, or a record without `observed_at`; the predicate's
-//!   reference in `protocol/1` gives every rule (CANON-ORDER-001). No record is listed in
-//!   `excluded_evidence` because of an order form.
+//! - An order form, `{first: {kind: K, result: R}}`, `{before: {first: K1, then: K2}}` or
+//!   `{after: {first: K1, then: {kind: K2, result: R}}}`, reads the evidence history instead: every
+//!   record of its kinds (about its `subject` when it names one) the evidence check accepted, the
+//!   records the exclusion stages set aside included, ordered by `observed_at`. `first` is whether
+//!   the first record of `K` has result `R`; `before` whether the first record of `K1` was observed
+//!   strictly before the first of `K2`; `after` whether a record of `K2` with result `R` was
+//!   observed strictly after the first record of `K1`. Each is `unknown` while the order it reads
+//!   is not established, as with no record or a compared record without `observed_at`; the
+//!   predicate's reference in `protocol/1` gives every rule (CANON-ORDER-001, CANON-ORDER-002). No
+//!   record is listed in `excluded_evidence` because of an order form.
 //!
 //! `unknown` and `false` are never collapsed, and only `true` satisfies a positive requirement.
 //!
@@ -215,8 +217,9 @@
 //!   or `{"evidence": <kind>, "present": <whether a record the match reads applies>}`, with
 //!   `"subject": <artifact>` added when the match names one (a record about another artifact
 //!   is not read by it), then each input test that decides it, `{"input": <id>, "value": <the
-//!   case's value>}`, then each order form that decides it, `{"before": <kind>, "then": <kind>,
-//!   "value": <its value>}` or `{"first": <kind>, "result": <result>, "value": <its value>}`, with
+//!   case's value>}`, then each order form that decides it, `{"after": <kind>, "then": <kind>,
+//!   "result": <result>, "value": <its value>}`, `{"before": <kind>, "then": <kind>, "value":
+//!   <its value>}` or `{"first": <kind>, "result": <result>, "value": <its value>}`, with
 //!   `"subject"` added when it names one, or
 //!   `{"requirement": "unsatisfiable"}` when none does. `blocked` too when the precondition is
 //!   `true` and the authority decisions deny a capability the action requires, each a reason
