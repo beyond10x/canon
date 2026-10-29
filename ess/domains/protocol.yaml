@@ -12,7 +12,9 @@
 # story:evidence-independence adds the independence dimensions a protocol declares, the
 # independence an evidence match demands of its records, the producer an evidence record names and
 # the independence a case gives each producer. story:action-arguments adds the argument schema an
-# action declares.
+# action declares. story:case-composition adds the child case an action opens (`case_open`), the
+# child case a case_outcome evidence record names and the predicate form `children` over the
+# outcomes of a case's child cases.
 # crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
 domain: canon.protocol
 
@@ -178,6 +180,41 @@ types:
       # read from: .engineering/planning/story/action-arguments.md:36-72
       - name: arguments
         type: Optional<Json>
+      # The child case the action opens (story:case-composition, the action case.open of Atlas
+      # ADR 0081): a case governed by the protocol `protocol`, about the declared artifact
+      # `subject`. Absent: the action opens no case, and canon-ir/1 has no `case_open` key for it,
+      # so the IR of every earlier protocol is unchanged. Canon opens nothing itself: the action is
+      # admitted or blocked like any other, its authority requirements are its `requires`, like
+      # those of any other action, and whoever takes it opens the child case. A case has one
+      # commission, and a second party works through a child case: `case_open` is the one
+      # primitive by which a case hands work to another party; Canon knows no commission and
+      # counts none (D207). canon validate refuses a protocol id that is not an identifier
+      # (invalid-identifier), a subject the protocol does not declare (undeclared-artifact) and an
+      # opening under the protocol's own id (self-opened-case), each naming the action (D206).
+      # read from: .engineering/planning/story/case-composition.md:54-57
+      # read from: .engineering/planning/story/case-composition.md:140-148
+      - name: case_open
+        type: Optional<canon.protocol.CaseOpening>
+
+  # What an action's `case_open` names: the protocol a child case is governed by and the artifact
+  # it is about, never an existing case, so no run-time check guards against a case opening its
+  # ancestor (D206). A protocol whose openings reach it again is refused statically instead: canon
+  # validate refuses an opening under the protocol's own id, and a check over a set of compiled
+  # protocols refuses a set whose openings form a cycle, naming the cycle in protocol-id order
+  # from its least id, and accepts a set without one.
+  # read from: .engineering/planning/story/case-composition.md:54-57
+  # read from: .engineering/planning/story/case-composition.md:140-145
+  - name: canon.protocol.CaseOpening
+    kind: struct
+    fields:
+      # The protocol the child case is governed by: an identifier.
+      # read from: .engineering/planning/story/case-composition.md:54-57
+      - name: protocol
+        type: canon.protocol.ProtocolId
+      # The artifact the child case is about: one the protocol declares.
+      # read from: .engineering/planning/story/case-composition.md:54-57
+      - name: subject
+        type: canon.protocol.ArtifactId
 
   # read from: crates/canon/src/model/mod.rs:110-114
   - name: canon.protocol.CapabilityRequirement
@@ -385,12 +422,13 @@ types:
     variants: ["true", "false", "unknown"]
 
   # Source text writes a predicate as a map with exactly one of the keys all, any, not, evidence,
-  # claim, input, first, before, after or since (crates/canon/src/model/predicate.rs); the typed
-  # model is this union.
+  # claim, input, first, before, after, since or children (crates/canon/src/model/predicate.rs);
+  # the typed model is this union.
   # read from: crates/canon/src/model/predicate.rs:101-125
   # read from: .engineering/planning/story/evidence-order-predicate.md:71-74
   # read from: .engineering/planning/story/evidence-order-after.md:70-75
   # read from: .engineering/planning/story/evidence-order-since.md:33-38
+  # read from: .engineering/planning/story/case-composition.md:64-67
   - name: canon.protocol.Predicate
     kind: union
     tag: kind
@@ -426,6 +464,10 @@ types:
       # read from: .engineering/planning/story/evidence-order-since.md:33-38
       # read from: crates/canon/src/model/predicate.rs:121-123
       since: canon.protocol.EvidenceSince
+      # Whether every child case of the case ended with one of the outcomes listed
+      # (story:case-composition).
+      # read from: .engineering/planning/story/case-composition.md:64-67
+      children: canon.protocol.ChildOutcomes
 
   # read from: crates/canon/src/model/predicate.rs:216-233
   - name: canon.protocol.EvidenceMatch
@@ -601,6 +643,32 @@ types:
       - name: result
         type: String
 
+  # A predicate over the case's child cases, written `{children: {in: [<outcome>, ...]}}`
+  # (story:case-composition): whether every child case ended with one of the outcomes listed. It
+  # reads every case_outcome record the evidence check accepted, one per child case: its
+  # child_case names the child, its result the child's outcome, `open` while the child runs,
+  # otherwise its terminal outcome (accepted, declined, inconclusive, abandoned, ...). It reads
+  # them as the order forms read the history, at whatever revision of their subject, expired or
+  # invalidated: a child's outcome is a fact about the child case, which a later revision of the
+  # parent's artifact does not undo, and a child left out would let the parent conclude without
+  # it. No record is unknown, since no applicable evidence is unknown; a record whose outcome is
+  # neither listed nor `open`, a child that ended outside the set, is false; otherwise any child
+  # still `open` is unknown, and every child ended with a listed outcome is true. canon validate
+  # refuses an empty list (empty-child-outcomes), an outcome listed twice
+  # (duplicate-child-outcome) and `open` listed (open-child-outcome), each naming the declaration
+  # the form is written in and the outcome where there is one, and a protocol that writes the form
+  # and does not declare the evidence kind case_outcome (undeclared-evidence-kind). A set:
+  # canon-ir/1 writes `{"children": {"in": [...]}}`, each outcome once, in code-point order. What
+  # it means is CANON-COMPOSE-001 (conformance/scenarios/case-composition.yaml), not this file.
+  # read from: .engineering/planning/story/case-composition.md:58-67
+  - name: canon.protocol.ChildOutcomes
+    kind: struct
+    fields:
+      # The outcomes a child case may have ended with: not empty, each once, never `open`.
+      # read from: .engineering/planning/story/case-composition.md:64-67
+      - name: in
+        type: List<String>
+
   # Source text may leave `is` out; it then reads as true (crates/canon/src/model/predicate.rs:447).
   # read from: crates/canon/src/model/predicate.rs:235-240
   - name: canon.protocol.ClaimTest
@@ -725,6 +793,18 @@ types:
       # read from: .engineering/planning/story/evidence-independence.md:74-75
       - name: producer
         type: Optional<canon.protocol.Principal>
+      # The child case a case_outcome record is about (story:case-composition): one record per
+      # child case, carrying the child's id here and its outcome as the result, `open` while the
+      # child runs. AEP supplies the records from the parent-child links it stores. Written only on
+      # a case_outcome record, so no earlier record changes: the evaluator refuses it on a record
+      # of another kind (misplaced-child-case), a case_outcome record without it
+      # (missing-child-case) or without a result (missing-child-outcome), and one that is not an
+      # identifier (invalid-identifier), each naming the record; and two case_outcome records for
+      # one child, whatever their revisions (duplicate-child-case), naming the child and its
+      # records.
+      # read from: .engineering/planning/story/case-composition.md:58-62
+      - name: child_case
+        type: Optional<canon.protocol.CaseId>
 
   # One explicit decision of a canon-decisions/1 document. `canon evaluate --decisions` names that
   # document: a YAML (or JSON) list of these entries, the way canon-authority/1 is a list of
