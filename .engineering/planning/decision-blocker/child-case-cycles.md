@@ -2,14 +2,16 @@
 format: aep.planning-md/3
 id: decision-blocker:child-case-cycles
 kind: decision-blocker
-status: open
+status: cleared
 title: Nobody has decided how Canon keeps a case from opening its own ancestor
 refs:
 - provider: atlas
   reference: adr:0081
 relations:
 - blocks: story:case-composition
-revision: 1
+revision: 3
+transitions:
+- {from: "open", to: "cleared", at: "2026-10-29T12:58:53Z", actor: "human:timo", revision: 3}
 ---
 ## Question
 
@@ -35,3 +37,13 @@ scenario names.
 ## Source
 
 Atlas ADR 0081 § Open.
+
+## Decision
+
+Option 1: a static compile-time check over the protocols `case.open` names, refusing a protocol that can reach itself (the closed-IR rule of `docs/design/canon-protocol-calculus-design.md` § 39.5).
+
+Reason: it is deterministic and needs no case graph at run time. A run-time check is added only if `case.open` can ever name an existing case id.
+
+Decided by the orchestrator under the grant, 2026-10-29, D206 (inside the open point of Atlas ADR 0081 § Open).
+
+`story:case-composition` is unblocked on this point.
