@@ -345,16 +345,16 @@ types:
   # the value where there is one. canon-ir/1 writes it
   # `{"input": {"id": <id>, "in": [...]}}`, its values each once, in identifier order.
   # read from: .engineering/planning/story/case-inputs.md:77-81
-  # read from: crates/canon/src/model/predicate.rs:210-217
+  # read from: crates/canon/src/model/predicate.rs:242-249
   - name: canon.protocol.InputTest
     kind: struct
     fields:
       # read from: .engineering/planning/story/case-inputs.md:77
-      # read from: crates/canon/src/model/predicate.rs:214
+      # read from: crates/canon/src/model/predicate.rs:246
       - name: input
         type: canon.protocol.InputId
       # read from: .engineering/planning/story/case-inputs.md:77-78
-      # read from: crates/canon/src/model/predicate.rs:215-216
+      # read from: crates/canon/src/model/predicate.rs:247-248
       - name: in
         type: List<canon.protocol.InputValue>
 
@@ -379,7 +379,7 @@ types:
         type: Optional<String>
 
   # A three-valued truth value; unknown is not false.
-  # read from: crates/canon/src/model/predicate.rs:51-57
+  # read from: crates/canon/src/model/predicate.rs:60-66
   - name: canon.protocol.Truth
     kind: enum
     variants: ["true", "false", "unknown"]
@@ -387,7 +387,7 @@ types:
   # Source text writes a predicate as a map with exactly one of the keys all, any, not, evidence,
   # claim, input, first, before, after or since (crates/canon/src/model/predicate.rs); the typed
   # model is this union.
-  # read from: crates/canon/src/model/predicate.rs:92-113
+  # read from: crates/canon/src/model/predicate.rs:101-125
   # read from: .engineering/planning/story/evidence-order-predicate.md:71-74
   # read from: .engineering/planning/story/evidence-order-after.md:70-75
   # read from: .engineering/planning/story/evidence-order-since.md:33-38
@@ -395,45 +395,46 @@ types:
     kind: union
     tag: kind
     variants:
-      # read from: crates/canon/src/model/predicate.rs:97
+      # read from: crates/canon/src/model/predicate.rs:106
       all: List<canon.protocol.Predicate>
-      # read from: crates/canon/src/model/predicate.rs:99
+      # read from: crates/canon/src/model/predicate.rs:108
       any: List<canon.protocol.Predicate>
-      # read from: crates/canon/src/model/predicate.rs:100
+      # read from: crates/canon/src/model/predicate.rs:109
       not: canon.protocol.Predicate
-      # read from: crates/canon/src/model/predicate.rs:101
+      # read from: crates/canon/src/model/predicate.rs:110
       evidence: canon.protocol.EvidenceMatch
-      # read from: crates/canon/src/model/predicate.rs:112
+      # read from: crates/canon/src/model/predicate.rs:124
       claim: canon.protocol.ClaimTest
       # read from: .engineering/planning/story/case-inputs.md:77-81
-      # read from: crates/canon/src/model/predicate.rs:102-103
+      # read from: crates/canon/src/model/predicate.rs:111-112
       input: canon.protocol.InputTest
       # Whether the first record of a kind has a result (story:evidence-order-predicate).
       # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
-      # read from: crates/canon/src/model/predicate.rs:104-105
+      # read from: crates/canon/src/model/predicate.rs:113-114
       first: canon.protocol.FirstResult
       # Whether the first record of one kind was observed strictly before the first of another.
       # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
-      # read from: crates/canon/src/model/predicate.rs:106-108
+      # read from: crates/canon/src/model/predicate.rs:115-117
       before: canon.protocol.EvidenceOrder
       # Whether a record of a kind with a result was observed strictly after the first record of
       # another kind, or of the same one (story:evidence-order-after).
       # read from: .engineering/planning/story/evidence-order-after.md:70-75
-      # read from: crates/canon/src/model/predicate.rs:109-111
+      # read from: crates/canon/src/model/predicate.rs:118-120
       after: canon.protocol.EvidenceAfter
       # Whether a record of a kind with a result, at the subject revision of the latest record of
       # another kind (or of the same one), was observed after it (story:evidence-order-since).
       # read from: .engineering/planning/story/evidence-order-since.md:33-38
+      # read from: crates/canon/src/model/predicate.rs:121-123
       since: canon.protocol.EvidenceSince
 
-  # read from: crates/canon/src/model/predicate.rs:184-201
+  # read from: crates/canon/src/model/predicate.rs:216-233
   - name: canon.protocol.EvidenceMatch
     kind: struct
     fields:
-      # read from: crates/canon/src/model/predicate.rs:192
+      # read from: crates/canon/src/model/predicate.rs:224
       - name: kind
         type: canon.protocol.EvidenceKindId
-      # read from: crates/canon/src/model/predicate.rs:194
+      # read from: crates/canon/src/model/predicate.rs:226
       - name: result
         type: Optional<String>
       # The declared artifact a record must be about to match. A match that names one is decided
@@ -443,7 +444,7 @@ types:
       # artifact, as before. It names an artifact the protocol declares.
       # read from: .engineering/planning/story/subject-bound-evidence-match.md:13-16
       # read from: .engineering/planning/story/subject-bound-evidence-match.md:26-28
-      # read from: crates/canon/src/model/predicate.rs:196
+      # read from: crates/canon/src/model/predicate.rs:228
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
       # The independence the match demands of its records (story:evidence-independence): a record
@@ -474,21 +475,21 @@ types:
   # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
   # read from: .engineering/planning/story/evidence-order-predicate.md:76-95
   # read from: .engineering/planning/story/evidence-order-subsecond.md:40-66
-  # read from: crates/canon/src/model/predicate.rs:115-130
+  # read from: crates/canon/src/model/predicate.rs:127-142
   - name: canon.protocol.FirstResult
     kind: struct
     fields:
       # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
-      # read from: crates/canon/src/model/predicate.rs:121-123
+      # read from: crates/canon/src/model/predicate.rs:133-135
       - name: kind
         type: canon.protocol.EvidenceKindId
       # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
-      # read from: crates/canon/src/model/predicate.rs:124-126
+      # read from: crates/canon/src/model/predicate.rs:136-138
       - name: result
         type: String
       # A declared artifact: only records about it are read.
       # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
-      # read from: crates/canon/src/model/predicate.rs:127-129
+      # read from: crates/canon/src/model/predicate.rs:139-141
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
 
@@ -502,21 +503,21 @@ types:
   # read from: .engineering/planning/story/evidence-order-predicate.md:97-104
   # read from: .engineering/planning/story/evidence-order-predicate.md:108-110
   # read from: .engineering/planning/story/evidence-order-subsecond.md:40-66
-  # read from: crates/canon/src/model/predicate.rs:132-149
+  # read from: crates/canon/src/model/predicate.rs:144-161
   - name: canon.protocol.EvidenceOrder
     kind: struct
     fields:
       # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
-      # read from: crates/canon/src/model/predicate.rs:139-141
+      # read from: crates/canon/src/model/predicate.rs:151-153
       - name: first
         type: canon.protocol.EvidenceKindId
       # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
-      # read from: crates/canon/src/model/predicate.rs:142-144
+      # read from: crates/canon/src/model/predicate.rs:154-156
       - name: then
         type: canon.protocol.EvidenceKindId
       # A declared artifact: only records about it are read, of either kind.
       # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
-      # read from: crates/canon/src/model/predicate.rs:145-148
+      # read from: crates/canon/src/model/predicate.rs:157-160
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
 
@@ -533,21 +534,21 @@ types:
   # read from: .engineering/planning/story/evidence-order-after.md:70-75
   # read from: .engineering/planning/story/evidence-order-after.md:89-111
   # read from: .engineering/planning/story/evidence-order-subsecond.md:40-66
-  # read from: crates/canon/src/model/predicate.rs:151-169
+  # read from: crates/canon/src/model/predicate.rs:163-181
   - name: canon.protocol.EvidenceAfter
     kind: struct
     fields:
       # read from: .engineering/planning/story/evidence-order-after.md:70-72
-      # read from: crates/canon/src/model/predicate.rs:159-161
+      # read from: crates/canon/src/model/predicate.rs:171-173
       - name: first
         type: canon.protocol.EvidenceKindId
       # read from: .engineering/planning/story/evidence-order-after.md:70-72
-      # read from: crates/canon/src/model/predicate.rs:162-164
+      # read from: crates/canon/src/model/predicate.rs:174-176
       - name: then
         type: canon.protocol.LaterRecord
       # A declared artifact: only records about it are read, of either kind.
       # read from: .engineering/planning/story/evidence-order-after.md:70-72
-      # read from: crates/canon/src/model/predicate.rs:165-168
+      # read from: crates/canon/src/model/predicate.rs:177-180
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
 
@@ -565,17 +566,21 @@ types:
   # (conformance/scenarios/evidence-order-since.yaml), not this file.
   # read from: .engineering/planning/story/evidence-order-since.md:33-38
   # read from: .engineering/planning/story/evidence-order-since.md:49-61
+  # read from: crates/canon/src/model/predicate.rs:183-201
   - name: canon.protocol.EvidenceSince
     kind: struct
     fields:
       # read from: .engineering/planning/story/evidence-order-since.md:33-36
+      # read from: crates/canon/src/model/predicate.rs:191-193
       - name: last
         type: canon.protocol.EvidenceKindId
       # read from: .engineering/planning/story/evidence-order-since.md:33-38
+      # read from: crates/canon/src/model/predicate.rs:194-196
       - name: then
         type: canon.protocol.LaterRecord
       # A declared artifact: only records about it are read, of either kind.
       # read from: .engineering/planning/story/evidence-order-since.md:33-36
+      # read from: crates/canon/src/model/predicate.rs:197-200
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
 
@@ -583,28 +588,28 @@ types:
   # the latest record of its `last` kind: a record of `kind` with `result`.
   # read from: .engineering/planning/story/evidence-order-after.md:70-75
   # read from: .engineering/planning/story/evidence-order-since.md:37-38
-  # read from: crates/canon/src/model/predicate.rs:171-182
+  # read from: crates/canon/src/model/predicate.rs:203-214
   - name: canon.protocol.LaterRecord
     kind: struct
     fields:
       # read from: .engineering/planning/story/evidence-order-after.md:70-72
-      # read from: crates/canon/src/model/predicate.rs:176-178
+      # read from: crates/canon/src/model/predicate.rs:208-210
       - name: kind
         type: canon.protocol.EvidenceKindId
       # read from: .engineering/planning/story/evidence-order-after.md:70-72
-      # read from: crates/canon/src/model/predicate.rs:179-181
+      # read from: crates/canon/src/model/predicate.rs:211-213
       - name: result
         type: String
 
-  # Source text may leave `is` out; it then reads as true (crates/canon/src/model/predicate.rs:394).
-  # read from: crates/canon/src/model/predicate.rs:203-208
+  # Source text may leave `is` out; it then reads as true (crates/canon/src/model/predicate.rs:447).
+  # read from: crates/canon/src/model/predicate.rs:235-240
   - name: canon.protocol.ClaimTest
     kind: struct
     fields:
-      # read from: crates/canon/src/model/predicate.rs:206
+      # read from: crates/canon/src/model/predicate.rs:238
       - name: claim
         type: canon.protocol.ClaimId
-      # read from: crates/canon/src/model/predicate.rs:207
+      # read from: crates/canon/src/model/predicate.rs:239
       - name: is
         type: canon.protocol.Truth
 
