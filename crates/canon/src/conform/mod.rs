@@ -1394,7 +1394,7 @@ mod tests {
         assert_eq!(
             evaluate_verdict(&format!("{base}      at: yesterday\n"), &expect),
             failed(
-                "evaluation refused: invalid-instant: the evaluation instant `yesterday` is not an instant in UTC written YYYY-MM-DDTHH:MM:SSZ"
+                "evaluation refused: invalid-instant: the evaluation instant `yesterday` is not an instant in UTC written YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DDTHH:MM:SS.fffZ (one to nine fraction digits)"
             )
         );
         assert_eq!(

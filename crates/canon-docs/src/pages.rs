@@ -796,7 +796,7 @@ const TEXT_FORMATS: &[(&str, &str, &str)] = &[
     ),
     (
         "Instant",
-        "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+        "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$",
         "Calendar validity is checked by Canon, not by the pattern: the date must exist (leap \
          years included) and the time be at most 23:59:59.",
     ),

@@ -89,8 +89,9 @@ pub enum Command {
         /// a decision is legitimate only with one taken at the case snapshot's revision.
         #[arg(long)]
         decisions: Option<PathBuf>,
-        /// The evaluation instant, in UTC as `YYYY-MM-DDTHH:MM:SSZ`. Evidence older than its kind's
-        /// `max_age` at this instant does not apply; without it, no evidence expires.
+        /// The evaluation instant, in UTC as `YYYY-MM-DDTHH:MM:SSZ`, or `YYYY-MM-DDTHH:MM:SS.fffZ`
+        /// with one to nine fraction digits. Evidence older than its kind's `max_age` at this
+        /// instant, counted in whole seconds, does not apply; without it, no evidence expires.
         #[arg(long)]
         at: Option<String>,
     },

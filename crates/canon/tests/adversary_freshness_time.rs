@@ -1,7 +1,8 @@
 //! Adversary cases for story:evidence-freshness against `Instant::seconds` and `Age::seconds`.
 //!
 //! Driven from the doc comments in `crates/canon/src/model/time.rs` and `model/ids.rs`: an instant
-//! is exactly `YYYY-MM-DDTHH:MM:SSZ` with a real Gregorian date (leap years included), from
+//! is exactly `YYYY-MM-DDTHH:MM:SSZ`, or with a fraction of one to nine digits after the seconds
+//! (story:evidence-order-subsecond), with a real Gregorian date (leap years included), from
 //! `00:00:00` to `23:59:59`; an age is a whole number without a leading zero followed by one of
 //! `s`, `m`, `h`, `d`, refused when too long to count in seconds. `days_from_civil` claims years 0
 //! to 9999.
@@ -65,13 +66,22 @@ fn the_range_ends_read_as_their_known_epoch_seconds() {
     assert_eq!(instant("9999-12-31T23:59:59Z"), Some(253_402_300_799));
     assert_eq!(instant("1970-01-01T23:59:59Z"), Some(86_399));
     assert_eq!(instant("2000-02-29T00:00:00Z"), Some(951_782_400));
+    // A fraction is read and ignored by the whole seconds (story:evidence-order-subsecond).
+    assert_eq!(instant("2026-10-04T12:00:00.000Z"), Some(1_791_115_200));
+    assert_eq!(
+        instant("9999-12-31T23:59:59.999999999Z"),
+        Some(253_402_300_799)
+    );
     for refused in [
         "2100-02-29T00:00:00Z",
         "2016-12-31T23:59:60Z",
         "2026-10-04T12:00:00z",
         "2026-10-04T12:00:00-00:00",
-        "2026-10-04T12:00:00.000Z",
         "2026-10-04T12:00:00,5Z",
+        "2026-10-04T12:00:00.Z",
+        "2026-10-04T12:00:00.0000000000Z",
+        "2026-10-04T12:00:00.000z",
+        "2026-10-04T12:00:00.\u{0665}Z",
         "10000-01-01T00:00:00Z",
         "-001-01-01T00:00:00Z",
         "2026-10-04T12:00:00Z\n",

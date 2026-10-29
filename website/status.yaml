@@ -131,3 +131,8 @@ items:
     story: story:evidence-order-after
     detail: The after order form tests whether a record of one kind with a given result was observed strictly after the first record of another kind, or of the same kind, read from the evidence history like first and before; scenario CANON-ORDER-002.
     href: /docs/reference/protocol
+  - label: Order within a second
+    area: Language
+    story: story:evidence-order-subsecond
+    detail: An observed_at may carry a fraction of one to nine digits, and first, before and after order records by the interval each instant names, so records within one second are ordered and overlapping ones are not; expiry keeps whole seconds; scenario CANON-ORDER-003.
+    href: /docs/reference/documents

@@ -175,9 +175,12 @@ identifier!(
     EffectClass
 );
 identifier!(
-    /// An instant written `YYYY-MM-DDTHH:MM:SSZ` in UTC, whole seconds, uppercase `T` and `Z`, no
-    /// leap second (`2026-10-04T12:00:00Z`): when evidence was observed, and the evaluation
-    /// instant.
+    /// An instant written `YYYY-MM-DDTHH:MM:SSZ` in UTC, or with a fraction of one to nine digits
+    /// after the seconds, `YYYY-MM-DDTHH:MM:SS.fffZ`; uppercase `T` and `Z`, no leap second
+    /// (`2026-10-04T12:00:00Z`, `2026-10-04T12:00:00.400Z`): when evidence was observed, and the
+    /// evaluation instant. It names the interval its last written digit spans (`12:00:00Z` the
+    /// whole second, `12:00:00.4Z` a tenth of it); order forms compare those intervals, and expiry
+    /// reads the whole seconds and ignores the fraction.
     Instant
 );
 identifier!(

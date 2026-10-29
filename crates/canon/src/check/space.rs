@@ -1280,7 +1280,9 @@ fn listed(profile: &Profile<'_>) -> String {
         .join(", ")
 }
 
-/// The instant of rank `rank` in a checked state: whole minutes from `2000-01-01T00:00:00Z`.
+/// The instant of rank `rank` in a checked state: whole minutes from `2000-01-01T00:00:00Z`,
+/// written without a fraction. The one-second intervals of two ranks, and of [`half_past`], never
+/// overlap, so they are ordered as written (story:evidence-order-subsecond).
 fn instant(rank: u32) -> Instant {
     Instant::new(format!("2000-01-01T{:02}:{:02}:00Z", rank / 60, rank % 60))
 }

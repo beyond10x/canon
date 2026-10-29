@@ -9,26 +9,35 @@
 //! whatever the exclusion stages decide. A record excluded as `revision_mismatch` or `expired`, or
 //! invalidated for the claim being evaluated, is read: the exclusion stages say what holds of the
 //! current revisions now, while order is a fact about what was observed and when. A record's place
-//! in the order is its `observed_at`, compared in whole seconds; a record without one has no known
-//! place. No record is listed in a claim's `excluded_evidence` because of an order form.
+//! in the order is the interval its `observed_at` names, at the resolution it is written in
+//! (story:evidence-order-subsecond, CANON-ORDER-003): `12:00:00Z` is the second
+//! `[12:00:00, 12:00:01)` and `12:00:00.4Z` is `[12:00:00.4, 12:00:00.5)`. A record is observed
+//! before another when its interval ends at or before the other's begins; two records whose
+//! intervals overlap are not ordered: equal instants, `12:00:00.4Z` beside `12:00:00.40Z`, and
+//! `12:00:00Z` beside `12:00:00.4Z`. Over whole seconds this is the order of the seconds, with
+//! records in one second unordered. A record without `observed_at` has no known place. No record
+//! is listed in a claim's `excluded_evidence` because of an order form.
 //!
 //! `{first: {kind: K, result: R}}`: `unknown` with no record, and with a record that has no
-//! `observed_at`; otherwise, of the records at the earliest instant, `true` when every one has
-//! result `R`, `false` when none has it and `unknown` when some have it and some do not.
+//! `observed_at`; otherwise, of the records that may be first (those no record of the kind is
+//! observed before), `true` when every one has result `R`, `false` when none has it and `unknown`
+//! when some have it and some do not.
 //!
 //! `{before: {first: K1, then: K2}}`: `unknown` with no record of either kind; `false` with a
 //! record of `K2` and none of `K1`, since a record of `K1` that comes later comes after it;
 //! `unknown` with a record of `K1` and none of `K2`; with records of both, `unknown` when one of
-//! them has no `observed_at`, and otherwise `true`, `false` or `unknown` as the earliest instant
-//! of `K1` is earlier than, later than or equal to that of `K2`.
+//! them has no `observed_at`, and otherwise `true` when some record of `K1` is observed before
+//! every record of `K2`, `false` when some record of `K2` is observed before every record of `K1`,
+//! and `unknown` when neither is.
 //!
-//! `{after: {first: K1, then: {kind: K2, result: R}}}` compares the first record of `K1` with the
-//! records of `K2` that have result `R`; records of `K2` with another result, or none, take no part.
-//! `unknown` with no record of `K1`; `false` with a record of `K1` and no record of `K2` with `R`;
-//! otherwise `unknown` when a compared record has no `observed_at`, `true` when a record of `K2`
-//! with `R` is later than the earliest instant of `K1`, `unknown` when none is later but one is at
-//! that instant, and `false` when every one is earlier. With `K1` and `K2` the same kind, a record
-//! is not later than itself: the one record at the earliest instant does not follow itself.
+//! `{after: {first: K1, then: {kind: K2, result: R}}}` compares the records of `K1` with the
+//! candidates, the records of `K2` that have result `R`; records of `K2` with another result, or
+//! none, take no part. `unknown` with no record of `K1`; `false` with a record of `K1` and no
+//! candidate; otherwise `unknown` when a compared record has no `observed_at`, `true` when some
+//! candidate is observed after some record of `K1` (the first record of `K1` is no later than that
+//! one), `false` when every candidate is observed before every record of `K1` other than itself,
+//! and `unknown` otherwise. With `K1` and `K2` the same kind, a record is not later than itself:
+//! one record of the kind with `R` and no other is `false`, not `unknown`.
 //!
 //! A record bound to a revision of its subject that does not descend from the current one counts
 //! like any other: Canon does not know how revisions descend (story:revision-ordering).
@@ -63,22 +72,46 @@ fn of<'r>(
         .collect()
 }
 
-/// Where a record stands in the order: its `observed_at` in seconds, or `None` when it has none.
-/// The evidence check has refused an `observed_at` that is not an instant; one in a set a caller
-/// builds is treated as missing.
-fn instant(record: &EvidenceRecord) -> Option<i64> {
-    record.observed_at.as_ref()?.seconds()
+/// The interval a record's `observed_at` names, in nanoseconds, from its start (inclusive) to its
+/// end (exclusive) ([`crate::model::Instant::interval`]).
+type Interval = (i128, i128);
+
+/// Where a record stands in the order: the interval its `observed_at` names, or `None` when it has
+/// none. The evidence check has refused an `observed_at` that is not an instant; one in a set a
+/// caller builds is treated as missing.
+fn interval(record: &EvidenceRecord) -> Option<Interval> {
+    record.observed_at.as_ref()?.interval()
 }
 
-/// The earliest instant of `records`, or `None` when one of them has no known place. `records` is
-/// not empty.
-fn earliest(records: &[&EvidenceRecord]) -> Option<i64> {
-    records
+/// The intervals of `records`, in their order, or `None` when one of them has no known place.
+fn intervals(records: &[&EvidenceRecord]) -> Option<Vec<Interval>> {
+    records.iter().map(|record| interval(record)).collect()
+}
+
+/// Whether a record at `earlier` is observed before one at `later`: its interval ends at or
+/// before the other's begins. Overlapping intervals, equal ones included, are not ordered, and an
+/// interval is never before itself.
+fn precedes(earlier: Interval, later: Interval) -> bool {
+    earlier.1 <= later.0
+}
+
+/// The earliest end of `intervals`, which is not empty: a record ending there is observed before
+/// every record beginning at or after it.
+fn earliest_end(intervals: &[Interval]) -> i128 {
+    intervals
         .iter()
-        .map(|record| instant(record))
-        .collect::<Option<Vec<i64>>>()?
-        .into_iter()
+        .map(|interval| interval.1)
         .min()
+        .unwrap_or(i128::MAX)
+}
+
+/// The earliest start of `intervals`, which is not empty.
+fn earliest_start(intervals: &[Interval]) -> i128 {
+    intervals
+        .iter()
+        .map(|interval| interval.0)
+        .min()
+        .unwrap_or(i128::MAX)
 }
 
 fn first(form: &FirstResult, history: &[EvidenceRecord]) -> Truth {
@@ -86,13 +119,17 @@ fn first(form: &FirstResult, history: &[EvidenceRecord]) -> Truth {
     if records.is_empty() {
         return Truth::Unknown;
     }
-    let Some(at) = earliest(&records) else {
+    let Some(placed) = intervals(&records) else {
         return Truth::Unknown;
     };
+    // A record may be first when no record of the kind is observed before it, that is when it
+    // begins before every record of the kind ends.
+    let end = earliest_end(&placed);
     let (with, without) = records
         .iter()
-        .filter(|record| instant(record) == Some(at))
-        .fold((0usize, 0usize), |(with, without), record| {
+        .zip(&placed)
+        .filter(|(_, interval)| interval.0 < end)
+        .fold((0usize, 0usize), |(with, without), (record, _)| {
             if record.result.as_deref() == Some(form.result.as_str()) {
                 (with + 1, without)
             } else {
@@ -112,9 +149,15 @@ fn before(form: &EvidenceOrder, history: &[EvidenceRecord]) -> Truth {
     match (firsts.is_empty(), thens.is_empty()) {
         (true, true) | (false, true) => Truth::Unknown,
         (true, false) => Truth::False,
-        (false, false) => match (earliest(&firsts), earliest(&thens)) {
-            (Some(first), Some(then)) if first < then => Truth::True,
-            (Some(first), Some(then)) if first > then => Truth::False,
+        (false, false) => match (intervals(&firsts), intervals(&thens)) {
+            // Some record of `first` is observed before every record of `then`.
+            (Some(first), Some(then)) if earliest_end(&first) <= earliest_start(&then) => {
+                Truth::True
+            }
+            // Some record of `then` is observed before every record of `first`.
+            (Some(first), Some(then)) if earliest_end(&then) <= earliest_start(&first) => {
+                Truth::False
+            }
             _ => Truth::Unknown,
         },
     }
@@ -132,34 +175,33 @@ fn after(form: &EvidenceAfter, history: &[EvidenceRecord]) -> Truth {
     if laters.is_empty() {
         return Truth::False;
     }
-    let Some(at) = earliest(&firsts) else {
+    let Some(first_intervals) = intervals(&firsts) else {
         return Truth::Unknown;
     };
-    let Some(instants) = laters
-        .iter()
-        .map(|record| instant(record))
-        .collect::<Option<Vec<i64>>>()
-    else {
+    let Some(later_intervals) = intervals(&laters) else {
         return Truth::Unknown;
     };
-    if instants.iter().any(|instant| *instant > at) {
+    // Some candidate is observed after some record of the first kind, and so after the first one.
+    let end = earliest_end(&first_intervals);
+    if later_intervals.iter().any(|later| end <= later.0) {
         return Truth::True;
     }
-    // A record at the earliest instant is not ordered against the first record, unless it is the
-    // first record itself, alone at that instant: a record is not later than itself.
-    let at_first: Vec<&EvidenceRecord> = firsts
-        .into_iter()
-        .filter(|record| instant(record) == Some(at))
-        .collect();
-    let itself = |record: &EvidenceRecord| matches!(at_first.as_slice(), [only] if std::ptr::eq(*only, record));
+    // Every candidate is observed before every record of the first kind other than itself: a
+    // record is not later than itself.
+    let before_every_other = |candidate: &EvidenceRecord, at: Interval| {
+        firsts
+            .iter()
+            .zip(&first_intervals)
+            .all(|(first, first_at)| std::ptr::eq(*first, candidate) || precedes(at, *first_at))
+    };
     if laters
         .iter()
-        .zip(&instants)
-        .any(|(record, instant)| *instant == at && !itself(record))
+        .zip(&later_intervals)
+        .all(|(candidate, at)| before_every_other(candidate, *at))
     {
-        Truth::Unknown
-    } else {
         Truth::False
+    } else {
+        Truth::Unknown
     }
 }
 
@@ -540,6 +582,435 @@ mod tests {
                 serde_json::json!({"before": "k", "then": "m", "value": "true"}),
                 serde_json::json!({"first": "k", "result": "failed", "value": "true"}),
             ]
+        );
+    }
+
+    /// Instants with a fraction order by the intervals they name (story:evidence-order-subsecond):
+    /// records within one second are ordered when their intervals do not overlap, and equal
+    /// instants, one instant at two precisions and a whole second beside a fraction within it are
+    /// not ordered.
+    #[test]
+    fn sub_second_instants_order_by_the_intervals_they_name() {
+        use Truth::{False as F, True as T, Unknown as U};
+        let at = |time: &'static str| Some(time);
+        let k = |id, time| record(id, "k", None, "a", time);
+        let red = |id, time| record(id, "m", Some("failed"), "a", time);
+        let green = |id, time| record(id, "m", Some("passed"), "a", time);
+        let after = after_of("k", "m", "failed", None);
+        let again = after_of("m", "m", "failed", None);
+        let before = before_of("k", "m", None);
+        let first = first_of("m", "failed", None);
+        let cases = [
+            (
+                &after,
+                vec![
+                    k("k", at("2026-10-01T12:00:00.100Z")),
+                    red("r", at("2026-10-01T12:00:00.500Z")),
+                ],
+                T,
+                "after: 0.4 s later",
+            ),
+            (
+                &after,
+                vec![
+                    k("k", at("2026-10-01T12:00:00.500Z")),
+                    red("r", at("2026-10-01T12:00:00.100Z")),
+                ],
+                F,
+                "after: 0.4 s earlier",
+            ),
+            (
+                &after,
+                vec![
+                    k("k", at("2026-10-01T12:00:00.500Z")),
+                    red("r", at("2026-10-01T12:00:00.500Z")),
+                ],
+                U,
+                "after: equal",
+            ),
+            (
+                &after,
+                vec![
+                    k("k", at("2026-10-01T12:00:00.4Z")),
+                    red("r", at("2026-10-01T12:00:00.40Z")),
+                ],
+                U,
+                "after: one instant at two precisions",
+            ),
+            (
+                &after,
+                vec![
+                    k("k", at("2026-10-01T12:00:00Z")),
+                    red("r", at("2026-10-01T12:00:00.500Z")),
+                ],
+                U,
+                "after: a fraction within the whole second",
+            ),
+            (
+                &after,
+                vec![
+                    k("k", at("2026-10-01T12:00:00.500Z")),
+                    red("r", at("2026-10-01T12:00:00Z")),
+                ],
+                U,
+                "after: the whole second around the fraction",
+            ),
+            (
+                &after,
+                vec![
+                    k("k", at("2026-10-01T12:00:00Z")),
+                    red("r", at("2026-10-01T12:00:01.200Z")),
+                ],
+                T,
+                "after: the next second",
+            ),
+            (
+                &after,
+                vec![
+                    k("k", at("2026-10-01T12:00:00.4Z")),
+                    red("r", at("2026-10-01T12:00:00.5Z")),
+                ],
+                T,
+                "after: the interval ends where the other begins",
+            ),
+            (
+                &after,
+                vec![
+                    k("k", at("2026-10-01T12:00:00Z")),
+                    k("j", at("2026-10-01T12:00:00.100Z")),
+                    red("r", at("2026-10-01T12:00:00.500Z")),
+                ],
+                T,
+                "after: later than one record of the first kind, though not the whole second",
+            ),
+            (
+                &again,
+                vec![red("r", at("2026-10-01T12:00:00.5Z"))],
+                F,
+                "one kind: one record",
+            ),
+            (
+                &again,
+                vec![
+                    red("r", at("2026-10-01T12:00:00.5Z")),
+                    red("s", at("2026-10-01T12:00:00.6Z")),
+                ],
+                T,
+                "one kind: a second record later in the second",
+            ),
+            (
+                &again,
+                vec![
+                    red("r", at("2026-10-01T12:00:00Z")),
+                    red("s", at("2026-10-01T12:00:00.6Z")),
+                ],
+                U,
+                "one kind: a record within the whole second of another",
+            ),
+            (
+                &again,
+                vec![
+                    red("r", at("2026-10-01T12:00:00.1Z")),
+                    green("g", at("2026-10-01T12:00:00.2Z")),
+                ],
+                F,
+                "one kind: only a pass later",
+            ),
+            (
+                &before,
+                vec![
+                    k("k", at("2026-10-01T12:00:00.100Z")),
+                    red("r", at("2026-10-01T12:00:00.500Z")),
+                ],
+                T,
+                "before: earlier in the second",
+            ),
+            (
+                &before,
+                vec![
+                    k("k", at("2026-10-01T12:00:00.500Z")),
+                    red("r", at("2026-10-01T12:00:00.100Z")),
+                ],
+                F,
+                "before: later in the second",
+            ),
+            (
+                &before,
+                vec![
+                    k("k", at("2026-10-01T12:00:00Z")),
+                    red("r", at("2026-10-01T12:00:00.100Z")),
+                ],
+                U,
+                "before: mixed precision",
+            ),
+            (
+                &before,
+                vec![
+                    k("k", at("2026-10-01T12:00:00Z")),
+                    k("j", at("2026-10-01T12:00:00.050Z")),
+                    red("r", at("2026-10-01T12:00:00.100Z")),
+                ],
+                T,
+                "before: one record of the first kind before every one of the second",
+            ),
+            (
+                &first,
+                vec![
+                    red("r", at("2026-10-01T12:00:00.2Z")),
+                    green("g", at("2026-10-01T12:00:00.3Z")),
+                ],
+                T,
+                "first: the failure earlier in the second",
+            ),
+            (
+                &first,
+                vec![
+                    green("g", at("2026-10-01T12:00:00.2Z")),
+                    red("r", at("2026-10-01T12:00:00.3Z")),
+                ],
+                F,
+                "first: the pass earlier in the second",
+            ),
+            (
+                &first,
+                vec![
+                    red("r", at("2026-10-01T12:00:00Z")),
+                    green("g", at("2026-10-01T12:00:00.3Z")),
+                ],
+                U,
+                "first: either may be first",
+            ),
+            (
+                &first,
+                vec![
+                    red("r", at("2026-10-01T12:00:00Z")),
+                    red("s", at("2026-10-01T12:00:00.3Z")),
+                    green("g", at("2026-10-01T12:00:01.5Z")),
+                ],
+                T,
+                "first: both that may be first fail",
+            ),
+        ];
+        for (form, history, expected, why) in cases {
+            assert_eq!(value(form, &history), Some(expected), "{why}");
+        }
+    }
+
+    /// xorshift64*, a fixed seed: the same histories on every run.
+    struct Rng(u64);
+
+    impl Rng {
+        fn below(&mut self, n: usize) -> usize {
+            self.0 ^= self.0 >> 12;
+            self.0 ^= self.0 << 25;
+            self.0 ^= self.0 >> 27;
+            (self.0.wrapping_mul(0x2545_F491_4F6C_DD1D) % n as u64) as usize
+        }
+    }
+
+    /// The order forms of Canon 0.7.0, over whole seconds, as the oracle the interval rules must
+    /// agree with on every whole-second history.
+    mod whole_seconds {
+        use super::super::of;
+        use crate::model::{EvidenceRecord, Predicate, Truth};
+
+        fn at(record: &EvidenceRecord) -> Option<i64> {
+            record.observed_at.as_ref()?.seconds()
+        }
+
+        fn earliest(records: &[&EvidenceRecord]) -> Option<i64> {
+            records
+                .iter()
+                .map(|record| at(record))
+                .collect::<Option<Vec<i64>>>()?
+                .into_iter()
+                .min()
+        }
+
+        pub(super) fn value(predicate: &Predicate, history: &[EvidenceRecord]) -> Truth {
+            match predicate {
+                Predicate::First(form) => {
+                    let records = of(&form.kind, form.subject.as_ref(), history);
+                    let Some(first) = (!records.is_empty()).then(|| earliest(&records)).flatten()
+                    else {
+                        return Truth::Unknown;
+                    };
+                    let results: Vec<bool> = records
+                        .iter()
+                        .filter(|record| at(record) == Some(first))
+                        .map(|record| record.result.as_deref() == Some(form.result.as_str()))
+                        .collect();
+                    if results.iter().all(|with| *with) {
+                        Truth::True
+                    } else if results.iter().all(|with| !with) {
+                        Truth::False
+                    } else {
+                        Truth::Unknown
+                    }
+                }
+                Predicate::Before(form) => {
+                    let firsts = of(&form.first, form.subject.as_ref(), history);
+                    let thens = of(&form.then, form.subject.as_ref(), history);
+                    match (firsts.is_empty(), thens.is_empty()) {
+                        (_, true) => Truth::Unknown,
+                        (true, false) => Truth::False,
+                        (false, false) => match (earliest(&firsts), earliest(&thens)) {
+                            (Some(first), Some(then)) if first < then => Truth::True,
+                            (Some(first), Some(then)) if first > then => Truth::False,
+                            _ => Truth::Unknown,
+                        },
+                    }
+                }
+                Predicate::After(form) => {
+                    let firsts = of(&form.first, form.subject.as_ref(), history);
+                    if firsts.is_empty() {
+                        return Truth::Unknown;
+                    }
+                    let laters: Vec<&EvidenceRecord> =
+                        of(&form.then.kind, form.subject.as_ref(), history)
+                            .into_iter()
+                            .filter(|record| {
+                                record.result.as_deref() == Some(form.then.result.as_str())
+                            })
+                            .collect();
+                    if laters.is_empty() {
+                        return Truth::False;
+                    }
+                    let Some(first) = earliest(&firsts) else {
+                        return Truth::Unknown;
+                    };
+                    let Some(instants) = laters
+                        .iter()
+                        .map(|record| at(record))
+                        .collect::<Option<Vec<i64>>>()
+                    else {
+                        return Truth::Unknown;
+                    };
+                    if instants.iter().any(|instant| *instant > first) {
+                        return Truth::True;
+                    }
+                    let at_first: Vec<&EvidenceRecord> = firsts
+                        .into_iter()
+                        .filter(|record| at(record) == Some(first))
+                        .collect();
+                    let itself = |record: &EvidenceRecord| matches!(at_first.as_slice(), [only] if std::ptr::eq(*only, record));
+                    if laters
+                        .iter()
+                        .zip(&instants)
+                        .any(|(record, instant)| *instant == first && !itself(record))
+                    {
+                        Truth::Unknown
+                    } else {
+                        Truth::False
+                    }
+                }
+                _ => unreachable!("only order forms are compared"),
+            }
+        }
+    }
+
+    /// Every order form a history of two kinds can be asked about, over two subjects.
+    fn every_form() -> Vec<Predicate> {
+        let mut forms = Vec::new();
+        for subject in [None, Some("a")] {
+            for (one, other) in [("k", "m"), ("m", "k"), ("m", "m"), ("k", "k")] {
+                forms.push(before_of(one, other, subject));
+                for result in ["failed", "passed"] {
+                    forms.push(after_of(one, other, result, subject));
+                }
+            }
+            for kind in ["k", "m"] {
+                for result in ["failed", "passed"] {
+                    forms.push(first_of(kind, result, subject));
+                }
+            }
+        }
+        forms
+    }
+
+    /// A random history of up to five records of two kinds, about two subjects, with any result
+    /// or none, at one of three whole seconds or without `observed_at`.
+    fn random_history(rng: &mut Rng) -> Vec<EvidenceRecord> {
+        const SECONDS: [Option<&str>; 4] = [
+            Some("2026-10-01T09:00:00Z"),
+            Some("2026-10-01T09:00:01Z"),
+            Some("2026-10-01T09:00:02Z"),
+            None,
+        ];
+        (0..rng.below(6))
+            .map(|index| {
+                let at = SECONDS[if rng.below(8) == 0 { 3 } else { rng.below(3) }];
+                record(
+                    &format!("e{index}"),
+                    ["k", "m"][rng.below(2)],
+                    [Some("failed"), Some("passed"), None][rng.below(3)],
+                    ["a", "b"][rng.below(2)],
+                    at,
+                )
+            })
+            .collect()
+    }
+
+    /// Over whole seconds, every order form has the value Canon 0.7.0 gave it.
+    #[test]
+    fn over_whole_seconds_every_value_is_the_one_before_fractions() {
+        let forms = every_form();
+        let mut rng = Rng(0x5EC0_4D5A_F7E2_0001);
+        let mut seen = std::collections::BTreeSet::new();
+        for _ in 0..20_000 {
+            let history = random_history(&mut rng);
+            for form in &forms {
+                let expected = whole_seconds::value(form, &history);
+                assert_eq!(
+                    value(form, &history),
+                    Some(expected),
+                    "{form:?} over {history:?}"
+                );
+                seen.insert(expected.to_string());
+            }
+        }
+        assert_eq!(seen.len(), 3, "every value is reached: {seen:?}");
+    }
+
+    /// Writing more digits only narrows an instant to a part of its interval, so it can settle an
+    /// order that was `unknown` and never turns `true` into `false` or back.
+    #[test]
+    fn a_finer_instant_never_reverses_a_known_order() {
+        let forms = every_form();
+        let mut rng = Rng(0x5EC0_4D5A_F7E2_0002);
+        let (mut settled, mut compared) = (0, 0);
+        for _ in 0..20_000 {
+            let coarse = random_history(&mut rng);
+            let fine: Vec<EvidenceRecord> = coarse
+                .iter()
+                .map(|record| {
+                    let mut fine = record.clone();
+                    if let Some(at) = &record.observed_at
+                        && rng.below(2) == 0
+                    {
+                        let digits: String = (0..1 + rng.below(9))
+                            .map(|_| char::from(b'0' + rng.below(10) as u8))
+                            .collect();
+                        let text = at.as_str().strip_suffix('Z').expect("an instant");
+                        fine.observed_at = Some(Instant::new(format!("{text}.{digits}Z")));
+                    }
+                    fine
+                })
+                .collect();
+            for form in &forms {
+                let before = value(form, &coarse).expect("an order form");
+                let after = value(form, &fine).expect("an order form");
+                if before != Truth::Unknown {
+                    compared += 1;
+                    assert_eq!(after, before, "{form:?}: {coarse:?} refined to {fine:?}");
+                } else if after != Truth::Unknown {
+                    settled += 1;
+                }
+            }
+        }
+        assert!(
+            compared > 0 && settled > 0,
+            "{compared} compared, {settled} settled"
         );
     }
 }

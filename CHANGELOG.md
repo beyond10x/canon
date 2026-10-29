@@ -1,5 +1,31 @@
 # Changelog
 
+## [Unreleased]
+
+Order forms compare `observed_at` at the resolution it is written in.
+
+- An instant (`observed_at`, `--at`, a conformance step's `at`) may carry a fraction of one to nine
+  digits after the seconds: `YYYY-MM-DDTHH:MM:SS.fffZ`. An empty fraction (`12:00:00.Z`), more than
+  nine digits and a comma stay refused as `invalid-instant`, whose message now names both forms:
+  `… is not an instant in UTC written YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DDTHH:MM:SS.fffZ (one to nine
+  fraction digits)`.
+- An instant names the interval its last written digit spans: `12:00:00Z` the second
+  `[12:00:00, 12:00:01)`, `12:00:00.4Z` `[12:00:00.4, 12:00:00.5)`. A record is observed before
+  another when its interval ends at or before the other's begins; overlapping intervals (equal
+  instants, `12:00:00.4Z` beside `12:00:00.40Z`, `12:00:00Z` beside `12:00:00.4Z`) are not ordered.
+  `first`, `before` and `after` read the order so: `first` over the records no record of the kind
+  is observed before; `before` `true` when some record of `K1` is observed before every record of
+  `K2`, `false` the other way round; `after` `true` when a candidate is observed after some record
+  of `K1`, `false` when every candidate is observed before every record of `K1` other than itself.
+  Over whole seconds every value is the 0.7.0 value. Requirement CANON-ORDER-003, scenario
+  `conformance/scenarios/evidence-order-subsecond.yaml`.
+- Expiry (`max_age`) still counts whole seconds: it reads an instant's whole seconds and ignores
+  its fraction.
+- `Instant::interval` gives the interval in nanoseconds; `Instant::seconds` reads a fractional
+  instant as its whole seconds.
+- The published `Instant` JSON Schema pattern admits the fraction:
+  `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$`.
+
 ## [0.7.0] - 2026-10-29
 
 An order form that reads a later record. Install the CLI or depend on the libraries from Git tag

@@ -93,7 +93,10 @@
 //! and its records carry no observation instant: it checks as it did before order forms existed.
 //! An order form reads every record of its kind the evidence check accepts, including those the
 //! exclusion stages keep from evidence matches, ordered by `observed_at` (`crate::eval`,
-//! `order.rs`). The value of `first` and `before` depends only on the records first observed in
+//! `order.rs`). A state places records at whole-second instants, a minute or half a minute apart:
+//! the one-second intervals they name never overlap, so the order the instants are written in is
+//! the order the evaluator reads, and records placed at one instant are the ties
+//! (story:evidence-order-subsecond). The value of `first` and `before` depends only on the records first observed in
 //! each evidence dimension they read (their classes, and how the first observations of the
 //! dimensions are ordered, ties included) and on whether some record has no known instant. So the
 //! space gains, for those dimensions only:
