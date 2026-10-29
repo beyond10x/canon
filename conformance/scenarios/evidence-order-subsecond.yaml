@@ -11,8 +11,11 @@ fixture: fixtures/investigation/evidence-order-subsecond.yaml
 #
 # An instant names the interval its last written digit spans: 12:00:00Z is the second
 # [12:00:00, 12:00:01), 12:00:00.5Z is [12:00:00.5, 12:00:00.6), 12:00:00.500Z is
-# [12:00:00.500, 12:00:00.501). A record is observed before another when its interval ends at or
-# before the other's begins; records whose intervals overlap are not ordered.
+# [12:00:00.500, 12:00:00.501). One evaluation compares every instant at one resolution, the
+# coarsest written among its records with an observed_at, reading each by dropping the finer
+# digits: instants that differ there are ordered, equal ones are not. Evidence written all in
+# milliseconds orders within a second; one record in whole seconds makes the whole evaluation
+# compare in whole seconds.
 steps:
   - id: compile
     compile: {}
@@ -105,7 +108,8 @@ steps:
         }
 
   # Expectation 1. The tests changed at 12:00:00.100Z and a run failed at 12:00:00.500Z, within one
-  # second: the change ends at .101, before the run begins, so `after` is TRUE. The run is the only
+  # second. All the evidence is written in milliseconds, so the evaluation compares milliseconds:
+  # .100 is before .500, and `after` is TRUE. The run is the only
   # test_result and failed (`first` TRUE), and it was not observed before the change (`before`
   # FALSE: the change was observed before it).
   - id: a-run-after-the-change-within-a-second
@@ -227,8 +231,8 @@ steps:
           }
         }
 
-  # Expectation 3, written at two precisions: 12:00:00.4Z is [.4, .5) and 12:00:00.40Z is
-  # [.40, .41); they overlap and are not ordered. Canon does not invent the digits not written.
+  # Expectation 3, written at two precisions: the coarsest is tenths, at which 12:00:00.4Z and
+  # 12:00:00.40Z both read .4, equal and not ordered. Canon does not invent the digits not written.
   - id: one-instant-at-two-precisions-is-not-ordered
     evaluate:
       case:
@@ -267,8 +271,8 @@ steps:
           }
         }
 
-  # Expectation 4. Mixed precision: the change at 12:00:00Z is the whole second [12:00:00,
-  # 12:00:01), and the run at 12:00:00.500Z lies within it. They overlap: UNKNOWN.
+  # Expectation 4. Mixed precision: the change at 12:00:00Z makes the evaluation compare whole
+  # seconds, at which the run at 12:00:00.500Z reads 12:00:00 too. Equal: UNKNOWN.
   - id: mixed-precision-within-the-second-is-not-ordered
     evaluate:
       case:
@@ -307,8 +311,8 @@ steps:
           }
         }
 
-  # Expectation 4. Mixed precision: the change at 12:00:00Z ends at 12:00:01, and the run at
-  # 12:00:01.200Z begins after that. They are ordered: `after` TRUE, `before` FALSE.
+  # Expectation 4. Mixed precision: at whole seconds the change reads 12:00:00 and the run at
+  # 12:00:01.200Z reads 12:00:01. They are ordered: `after` TRUE, `before` FALSE.
   - id: mixed-precision-in-the-next-second-is-ordered
     evaluate:
       case:
@@ -443,9 +447,10 @@ steps:
           }
         }
 
-  # Expectation 5, mixed precision: a failure at 12:00:00Z and a pass at 12:00:00.300Z overlap, so
-  # either may be first and `first` is UNKNOWN. The failure's second ends before the change at
-  # 12:00:01.500Z begins: `before` TRUE, and the failure is not after the change, `after` FALSE.
+  # Expectation 5, mixed precision: the failure at 12:00:00Z makes the evaluation compare whole
+  # seconds, at which it and the pass at 12:00:00.300Z both read 12:00:00, so either may be first
+  # and `first` is UNKNOWN. The change at 12:00:01.500Z reads 12:00:01: `before` TRUE, and the
+  # failure is not after the change, `after` FALSE.
   - id: first-at-mixed-precision-is-unknown
     evaluate:
       case:
@@ -487,6 +492,102 @@ steps:
             },
             "run.before.change": {
               "value": "true"
+            }
+          }
+        }
+
+  # One whole-second record anywhere in the evidence makes the evaluation compare whole seconds: a
+  # pass at 12:00:05Z coarsens the change at .200 and the failure at .500, both in 12:00:00, to
+  # unordered, so `after` and `before` are UNKNOWN (story:evidence-order-subsecond, adversary pass 1:
+  # one resolution per evaluation keeps the order a weak order).
+  - id: a-whole-second-record-coarsens-the-evaluation
+    evaluate:
+      case:
+        format: canon-case/1
+        id: SUB-14
+        protocol: subsecond-order
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.200Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.500Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:05Z
+    expect:
+      decision: |
+        {
+          "claims": {
+            "red.after.change": {
+              "value": "unknown"
+            },
+            "red.first": {
+              "value": "true"
+            },
+            "run.before.change": {
+              "value": "unknown"
+            }
+          }
+        }
+
+  # The same evidence written all in milliseconds orders within the second: the change at .200 is
+  # before the failure at .500, so `after` is TRUE and `before` FALSE.
+  - id: millisecond-evidence-orders-within-a-second
+    evaluate:
+      case:
+        format: canon-case/1
+        id: SUB-15
+        protocol: subsecond-order
+        artifacts:
+          change: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: c1
+          kind: tests_change
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.200Z
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:00.500Z
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: r1
+          observed_at: 2026-10-01T12:00:05.000Z
+    expect:
+      decision: |
+        {
+          "claims": {
+            "red.after.change": {
+              "value": "true"
+            },
+            "red.first": {
+              "value": "true"
+            },
+            "run.before.change": {
+              "value": "false"
             }
           }
         }

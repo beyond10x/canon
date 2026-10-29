@@ -191,7 +191,7 @@
     {
       "label": "Order within a second",
       "status": "planned",
-      "detail": "An observed_at may carry a fraction of one to nine digits, and first, before and after order records by the interval each instant names, so records within one second are ordered and overlapping ones are not; expiry keeps whole seconds; scenario CANON-ORDER-003.",
+      "detail": "An observed_at may carry a fraction of one to nine digits, and first, before and after compare every instant of one evaluation at the coarsest precision written among its records, so records within one second are ordered when all are written finer and equal instants are not; expiry keeps whole seconds; scenario CANON-ORDER-003.",
       "href": "/docs/reference/documents",
       "area": "Language"
     }

@@ -10,7 +10,10 @@
 //! The order forms read the evidence history: every record of their kind (about their `subject`
 //! when they name one) that the evidence check accepted, including the records the exclusion
 //! stages keep from evidence matches (`revision_mismatch`, `expired`, `invalidated`). A record's
-//! place in the order is its `observed_at`; a record without one has no known place.
+//! place in the order is its `observed_at`; a record without one has no known place. An evaluation
+//! compares every instant at one resolution, the coarsest precision written among the records
+//! with an `observed_at`: each is read with its finer digits dropped, and two records read at one
+//! instant are not ordered. Instant below means the instant at the evaluation's resolution.
 //! `{first: {kind: K, result: R}}` asks whether the first record of `K` has result `R`: `unknown`
 //! with no record or with a record without `observed_at`; otherwise, of the records at the
 //! earliest instant, `true` when every one has `R`, `false` when none has, `unknown` when they
@@ -122,7 +125,8 @@ pub enum Predicate {
 }
 
 /// An order form: whether the first record of `kind`, about `subject` when it names one, has
-/// `result`. It reads every record of the kind the evidence check accepted, excluded or not.
+/// `result`: the records at the earliest instant at the evaluation's resolution. It reads every
+/// record of the kind the evidence check accepted, excluded or not.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FirstResult {
@@ -138,8 +142,9 @@ pub struct FirstResult {
 }
 
 /// An order form: whether the first record of kind `first` was observed strictly before the first
-/// record of kind `then`, both about `subject` when it names one. It reads every record of the two
-/// kinds the evidence check accepted, excluded or not.
+/// record of kind `then`, both about `subject` when it names one: the earliest instants of the two
+/// kinds at the evaluation's resolution, an equal pair not ordered. It reads every record of the
+/// two kinds the evidence check accepted, excluded or not.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EvidenceOrder {
@@ -156,9 +161,10 @@ pub struct EvidenceOrder {
 }
 
 /// An order form: whether some record of `then.kind` with result `then.result` was observed
-/// strictly after the first record of kind `first`, all about `subject` when it names one. It reads
-/// every record of the two kinds the evidence check accepted, excluded or not. `first` and
-/// `then.kind` may be one kind: a record is not later than itself.
+/// strictly after the first record of kind `first`, all about `subject` when it names one: after
+/// the earliest instant of `first` at the evaluation's resolution. It reads every record of the
+/// two kinds the evidence check accepted, excluded or not. `first` and `then.kind` may be one
+/// kind: a record is not later than itself.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EvidenceAfter {

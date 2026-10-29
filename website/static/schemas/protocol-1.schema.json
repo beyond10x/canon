@@ -538,7 +538,7 @@
       ]
     },
     "FirstResult": {
-      "description": "An order form: whether the first record of `kind`, about `subject` when it names one, has `result`. It reads every record of the kind the evidence check accepted, excluded or not.",
+      "description": "An order form: whether the first record of `kind`, about `subject` when it names one, has `result`: the records at the earliest instant at the evaluation's resolution. It reads every record of the kind the evidence check accepted, excluded or not.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -561,7 +561,7 @@
       ]
     },
     "EvidenceOrder": {
-      "description": "An order form: whether the first record of kind `first` was observed strictly before the first record of kind `then`, both about `subject` when it names one. It reads every record of the two kinds the evidence check accepted, excluded or not.",
+      "description": "An order form: whether the first record of kind `first` was observed strictly before the first record of kind `then`, both about `subject` when it names one: the earliest instants of the two kinds at the evaluation's resolution, an equal pair not ordered. It reads every record of the two kinds the evidence check accepted, excluded or not.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -584,7 +584,7 @@
       ]
     },
     "EvidenceAfter": {
-      "description": "An order form: whether some record of `then.kind` with result `then.result` was observed strictly after the first record of kind `first`, all about `subject` when it names one. It reads every record of the two kinds the evidence check accepted, excluded or not. `first` and `then.kind` may be one kind: a record is not later than itself.",
+      "description": "An order form: whether some record of `then.kind` with result `then.result` was observed strictly after the first record of kind `first`, all about `subject` when it names one: after the earliest instant of `first` at the evaluation's resolution. It reads every record of the two kinds the evidence check accepted, excluded or not. `first` and `then.kind` may be one kind: a record is not later than itself.",
       "type": "object",
       "additionalProperties": false,
       "properties": {

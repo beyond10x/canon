@@ -9,20 +9,20 @@ Order forms compare `observed_at` at the resolution it is written in.
   nine digits and a comma stay refused as `invalid-instant`, whose message now names both forms:
   `… is not an instant in UTC written YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DDTHH:MM:SS.fffZ (one to nine
   fraction digits)`.
-- An instant names the interval its last written digit spans: `12:00:00Z` the second
-  `[12:00:00, 12:00:01)`, `12:00:00.4Z` `[12:00:00.4, 12:00:00.5)`. A record is observed before
-  another when its interval ends at or before the other's begins; overlapping intervals (equal
-  instants, `12:00:00.4Z` beside `12:00:00.40Z`, `12:00:00Z` beside `12:00:00.4Z`) are not ordered.
-  `first`, `before` and `after` read the order so: `first` over the records no record of the kind
-  is observed before; `before` `true` when some record of `K1` is observed before every record of
-  `K2`, `false` the other way round; `after` `true` when a candidate is observed after some record
-  of `K1`, `false` when every candidate is observed before every record of `K1` other than itself.
-  Over whole seconds every value is the 0.7.0 value. Requirement CANON-ORDER-003, scenario
-  `conformance/scenarios/evidence-order-subsecond.yaml`.
+- `first`, `before` and `after` compare every instant of one evaluation at one resolution: the
+  coarsest precision written among the records with an `observed_at`. Each instant is read with
+  its finer digits dropped; different instants are ordered and equal ones are not, and the 0.7.0
+  rules apply to those instants as they did to seconds. Evidence all in milliseconds is ordered
+  within a second (`12:00:00.200Z` before `12:00:00.500Z`); one record at `12:00:05Z` makes the
+  evaluation compare seconds, so the same two records tie. One resolution keeps the order a weak
+  order, so `canon check`'s state space, which writes whole seconds, still reaches every value the
+  evaluator gives. Over whole seconds every value is the 0.7.0 value. Requirement CANON-ORDER-003,
+  scenario `conformance/scenarios/evidence-order-subsecond.yaml`.
 - Expiry (`max_age`) still counts whole seconds: it reads an instant's whole seconds and ignores
   its fraction.
-- `Instant::interval` gives the interval in nanoseconds; `Instant::seconds` reads a fractional
-  instant as its whole seconds.
+- `Instant::digits` gives the number of fraction digits written and `Instant::ticks(digits)` the
+  instant at that resolution; `Instant::interval` gives the interval the last written digit spans,
+  in nanoseconds; `Instant::seconds` reads a fractional instant as its whole seconds.
 - The published `Instant` JSON Schema pattern admits the fraction:
   `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$`.
 
