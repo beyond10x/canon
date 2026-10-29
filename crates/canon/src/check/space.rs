@@ -605,7 +605,6 @@ impl<'a> Space<'a> {
     /// history dimension, one of its later-record dimensions or its last-record dimension adds.
     pub(super) fn holds(&self, state: &State, at: usize) -> bool {
         let first_later = self.first_later();
-        let first_last = self.first_last();
         state[at] != 0
             || self
                 .history(state, at)
@@ -613,18 +612,24 @@ impl<'a> Space<'a> {
             || self.later.iter().enumerate().any(|(index, later)| {
                 later.at == at && matches!(state[first_later + index], LATER | LATER_UNPLACED)
             })
-            || self
-                .last
-                .iter()
-                .enumerate()
-                .any(|(index, last)| last.at == at && state[first_last + index] != NO_LAST)
+            || self.holds_last(state, at)
+    }
+
+    /// Whether the last-record dimension of a record of the evidence dimension at `at` adds it in
+    /// `state`.
+    fn holds_last(&self, state: &State, at: usize) -> bool {
+        let first_last = self.first_last();
+        self.last
+            .iter()
+            .enumerate()
+            .any(|(index, last)| last.at == at && state[first_last + index] != NO_LAST)
     }
 
     /// The things in the order with a known instant in `state`, each as its position (the
     /// `ordered` dimensions, then the `later` records) and its rank: the dimensions an order form
     /// reads with a current record and no history (or, in a protocol with an `after`, an unknown
-    /// order), those with an earlier record observed at an instant, and the later records placed
-    /// in the order.
+    /// order), those with an earlier record observed at an instant or a last record, which is observed
+    /// relative to its dimension's rank, and the later records placed in the order.
     fn placed(&self, state: &State) -> Vec<(usize, u32)> {
         let ranks = self.ranks(state);
         let first_later = self.first_later();
@@ -635,7 +640,7 @@ impl<'a> Space<'a> {
                 None => false,
                 Some(_) => true,
             };
-            placed.then_some(item)
+            (placed || self.holds_last(state, *at)).then_some(item)
         });
         let later = (0..self.later.len())
             .filter(|index| state[first_later + index] == LATER)

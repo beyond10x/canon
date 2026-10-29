@@ -1462,4 +1462,59 @@ mod tests {
         assert!(!implies(&after("red"), &after("green")));
         assert!(!implies(&after("red"), &evidence("m")));
     }
+
+    /// A `since` is compared structurally like the other order forms (story:evidence-order-since):
+    /// a change to its last kind, later kind, result or subject, a change to an `after` over the
+    /// same kinds, or adding or removing one, is `BREAKING`; with the same order forms, a member
+    /// added under an `all` strengthens, reordering members changes nothing, and it implies only an
+    /// equal one.
+    #[test]
+    fn a_changed_since_form_is_breaking() {
+        let claim = |true_when: &str| {
+            ir(&format!(
+                "artifacts: {{a: {{}}}}\nevidence_kinds: {{k: {{}}, m: {{}}}}\nclaims: {{c: {{true_when: {true_when}}}}}\n"
+            ))
+        };
+        let red = "{since: {last: k, then: {kind: m, result: red}}}";
+        let both = format!("{{all: [{{evidence: {{kind: k}}}}, {red}]}}");
+        for to in [
+            "{since: {last: m, then: {kind: m, result: red}}}".to_owned(),
+            "{since: {last: k, then: {kind: k, result: red}}}".to_owned(),
+            "{since: {last: k, then: {kind: m, result: green}}}".to_owned(),
+            "{since: {last: k, then: {kind: m, result: red}, subject: a}}".to_owned(),
+            "{after: {first: k, then: {kind: m, result: red}}}".to_owned(),
+            format!("{{any: [{{before: {{first: k, then: m}}}}, {red}]}}"),
+            "{evidence: {kind: m, result: red}}".to_owned(),
+        ] {
+            assert_eq!(
+                lines(&claim(red), &claim(&to)),
+                ["BREAKING: claim `c` predicate changed"],
+                "{red} -> {to}"
+            );
+        }
+        assert_eq!(
+            lines(&claim(red), &claim(&both)),
+            ["TIGHTENING: claim `c` predicate strengthened"]
+        );
+        assert!(
+            lines(
+                &claim(&both),
+                &claim(&format!("{{all: [{red}, {{evidence: {{kind: k}}}}]}}"))
+            )
+            .is_empty()
+        );
+        let since = |result: &str| {
+            Predicate::Since(crate::model::EvidenceSince {
+                last: EvidenceKindId::new("k"),
+                then: crate::model::LaterRecord {
+                    kind: EvidenceKindId::new("m"),
+                    result: result.to_owned(),
+                },
+                subject: None,
+            })
+        };
+        assert!(implies(&since("red"), &since("red")));
+        assert!(!implies(&since("red"), &since("green")));
+        assert!(!implies(&since("red"), &evidence("m")));
+    }
 }

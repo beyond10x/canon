@@ -1318,6 +1318,83 @@ mod tests {
         );
     }
 
+    /// A `since` resolves its last kind, then its later kind, each once, then its subject, as an
+    /// `after` does (story:evidence-order-since); one kind as both is valid, and in a discharge or
+    /// applicability predicate it is refused with its path, each kind once.
+    #[test]
+    fn a_since_form_resolves_its_kinds_and_subject() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            artifacts: {a: {}}\nevidence_kinds: {k: {}, m: {}}\n\
+            claims: {c: {true_when: {any: [\
+            {since: {last: y, then: {kind: z, result: r}, subject: w}}, \
+            {since: {last: z, then: {kind: z, result: r}}}, \
+            {since: {last: k, then: {kind: k, result: r}, subject: a}}]}}}\n\
+            obligations: {o: {discharged_when: {since: {last: k, then: {kind: m, result: r}}}, \
+            applicable_when: {not: {since: {last: m, then: {kind: m, result: r}}}}}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "undeclared-evidence-kind: claim `c` references evidence kind `y`, which is not declared",
+                "undeclared-evidence-kind: claim `c` references evidence kind `z`, which is not declared",
+                "undeclared-artifact: claim `c` references artifact `w`, which is not declared",
+                "undeclared-evidence-kind: claim `c` references evidence kind `z`, which is not declared",
+                "evidence-in-discharge: obligation `o` tests evidence kind `k` at `discharged_when.since`; a discharge predicate tests only claim values",
+                "evidence-in-discharge: obligation `o` tests evidence kind `m` at `discharged_when.since`; a discharge predicate tests only claim values",
+                "evidence-in-applicability: obligation `o` tests evidence kind `m` at `applicable_when.not.since`; an applicability predicate tests only claim values and case inputs",
+            ]
+        );
+    }
+
+    /// `since` is a map with required keys `last` and `then`, its `then` a map with required keys
+    /// `kind` and `result`; an unknown key, a null and a second form beside it do not parse.
+    #[test]
+    fn a_since_form_is_written_with_its_required_keys() {
+        for written in [
+            "{since: {last: k}}",
+            "{since: {then: {kind: m, result: r}}}",
+            "{since: {last: k, then: m}}",
+            "{since: {last: k, then: {kind: m}}}",
+            "{since: {last: k, then: {result: r}}}",
+            "{since: {last: k, then: {kind: m, result: ~}}}",
+            "{since: {last: k, then: {kind: m, result: r, subject: a}}}",
+            "{since: {first: k, then: {kind: m, result: r}}}",
+            "{since: {last: k, then: {kind: m, result: r}, result: r}}",
+            "{since: {last: k, then: {kind: m, result: r}, subject: ~}}",
+            "{since: {last: ~, then: {kind: m, result: r}}}",
+            "{since: ~}",
+            "{since: {last: k, then: {kind: m, result: r}}, after: {first: k, then: {kind: m, result: r}}}",
+        ] {
+            let source = format!(
+                "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nevidence_kinds: {{k: {{}}, m: {{}}}}\nclaims: {{c: {{true_when: {written}}}}}\n"
+            );
+            assert!(crate::model::parse(&source).is_err(), "{written} parses");
+            let source = format!(
+                "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nevidence_kinds: {{k: {{}}, m: {{}}}}\nclaims: {{c: {{true_when: {{all: []}}}}}}\noutcomes: {{o: {{requires: {written}}}}}\n"
+            );
+            assert!(
+                crate::model::parse(&source).is_err(),
+                "{written} parses as a requirement"
+            );
+        }
+        let parsed = crate::model::parse(
+            "format: protocol/1\nprotocol: {id: p, revision: 1}\nevidence_kinds: {k: {}, m: {}}\n\
+             outcomes: {o: {requires: {since: {last: k, then: {kind: m, result: r}}}}}\n",
+        )
+        .expect("parses");
+        let (_, outcome) = parsed.outcomes.iter().next().expect("o");
+        assert_eq!(
+            outcome.requires,
+            Predicate::Since(crate::model::EvidenceSince {
+                last: EvidenceKindId::new("k"),
+                then: crate::model::LaterRecord {
+                    kind: EvidenceKindId::new("m"),
+                    result: "r".to_owned(),
+                },
+                subject: None,
+            })
+        );
+    }
+
     /// The order forms are maps with required keys: `kind` and `result`, or `first` and `then`;
     /// an unknown key, a null and a second form beside one do not parse.
     #[test]

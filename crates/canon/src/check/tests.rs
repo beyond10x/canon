@@ -1230,6 +1230,104 @@ fn every_value_of_a_since_naming_a_subject_is_reached() {
     assert!(takes_every_value(&reached, 0), "since_a");
 }
 
+/// A protocol with a `since` writes the last record of the kind it reads as `last` and builds it: at
+/// the superseded revision, forty-five seconds past its dimension's rank's instant, after the
+/// dimension's current records, or at the instant of those records; its dimension then takes its
+/// place in the order, so the state says where the last record stands against a later record.
+/// Erasing the kind takes the last record with it.
+#[test]
+fn a_state_writes_and_builds_its_last_records() {
+    use crate::model::Truth;
+    let ir = compiled(
+        "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}}\n\
+         evidence_kinds: {t: {}, d: {}}\n\
+         claims: {c: {true_when: {since: {last: d, then: {kind: t, result: failed}}}}}\n",
+    );
+    let space = Space::new(&ir);
+    assert_eq!(
+        space.dimensions(),
+        "evidence kind `d` 2, evidence kind `t` 2, history of evidence kind `d` 3, history of \
+         evidence kind `t` 3, later evidence kind `t` result `failed` 3, last evidence kind `d` 3, \
+         order of first observations and later records 13"
+    );
+    let find = |wanted: &str| {
+        (0..space.size().expect("fits"))
+            .map(|index| space.state(index))
+            .find(|state| space.render(state) == wanted)
+            .unwrap_or_else(|| panic!("no state renders {wanted}"))
+    };
+    let built = |state: &State| -> Vec<(String, Option<String>, String, Option<String>)> {
+        space
+            .evidence(state)
+            .into_iter()
+            .map(|record| {
+                (
+                    record.kind.as_str().to_owned(),
+                    record.result,
+                    record.subject_revision.as_str().to_owned(),
+                    record.observed_at.map(|at| at.as_str().to_owned()),
+                )
+            })
+            .collect()
+    };
+    let record = |kind: &str, result: Option<&str>, revision: &str, at: &str| {
+        (
+            kind.to_owned(),
+            result.map(str::to_owned),
+            revision.to_owned(),
+            Some(at.to_owned()),
+        )
+    };
+    let red_after = find(
+        "{evidence `t` result `failed` later, evidence `d` earlier, observed last, order `d` < \
+         `t` result `failed` later}",
+    );
+    assert_eq!(
+        built(&red_after),
+        [
+            record("t", Some("failed"), "r0", "2000-01-01T00:01:00Z"),
+            record("d", None, "r0", "2000-01-01T00:00:45Z"),
+        ]
+    );
+    assert_eq!(
+        claim_values(&ir, &space.evidence(&red_after)),
+        [Truth::True]
+    );
+    assert_eq!(space.weight(&red_after), 2);
+    let red_before = find(
+        "{evidence `t` result `failed` later, evidence `d` earlier, observed last, order `t` \
+         result `failed` later < `d`}",
+    );
+    assert_eq!(
+        built(&red_before),
+        [
+            record("t", Some("failed"), "r0", "2000-01-01T00:00:00Z"),
+            record("d", None, "r0", "2000-01-01T00:01:45Z"),
+        ]
+    );
+    assert_eq!(
+        claim_values(&ir, &space.evidence(&red_before)),
+        [Truth::False]
+    );
+    let with_current = find(
+        "{evidence `d`, evidence `d` earlier, evidence `d` earlier, observed last together with \
+         the current records}",
+    );
+    assert_eq!(
+        built(&with_current),
+        [
+            record("d", None, "r", "2000-01-01T00:00:30Z"),
+            record("d", None, "r0", "2000-01-01T00:00:00Z"),
+            record("d", None, "r0", "2000-01-01T00:00:30Z"),
+        ]
+    );
+    let erased = space.erase(&red_after, &BTreeSet::from([0]));
+    assert_eq!(
+        space.render(&erased),
+        "{evidence `t` result `failed` later}"
+    );
+}
+
 /// A protocol with an `after` writes its later records and the order they take part in, and builds
 /// them: a later record at the superseded revision with its result at its rank's instant, current
 /// records after earlier ones thirty seconds past their rank's instant, and the current records of
@@ -1362,5 +1460,35 @@ fn after_is_checked_over_later_records_and_counts_for_authority_bypass() {
         "evidence kind `change` 2, evidence kind `run` 2, capability `ci` 3, history of evidence \
          kind `change` 3, history of evidence kind `run` 3, later evidence kind `run` result \
          `failed` 3, order of first observations and later records 13"
+    );
+}
+
+/// `canon check` over a `since` (story:evidence-order-since): an outcome that needs a failed run
+/// since the last change and no such run at once is unreachable, while one that needs either is
+/// reached. `clean` holds on a change and no run, which needs no authority; `red` needs a run,
+/// which only an action that requires authority produces.
+#[test]
+fn since_is_checked_over_last_records_and_counts_for_authority_bypass() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {change: {}, run: {}}\n\
+        claims:\n\
+        \x20\x20red_since: {true_when: {since: {last: change, then: {kind: run, result: failed}}}}\n\
+        \x20\x20not_red: {true_when: {not: {since: {last: change, then: {kind: run, result: failed}}}}}\n\
+        actions:\n\
+        \x20\x20edit: {may_produce: [{evidence: change}]}\n\
+        \x20\x20test: {requires: [{capability: ci}], may_produce: [{evidence: run}]}\n\
+        outcomes:\n\
+        \x20\x20both: {requires: {all: [{claim: red_since}, {claim: not_red}]}}\n\
+        \x20\x20red: {requires: {claim: red_since}}\n\
+        \x20\x20clean: {requires: {claim: not_red}}\n";
+    let report = check(&compiled(source), None).expect("checked");
+    assert_eq!(
+        report.to_string(),
+        "unreachable-outcome: outcome `both` is legitimate in no state\n\
+         authority-bypass: outcome `clean` is legitimate without authority in state \
+         {evidence `change` earlier, observed at no known instant}\n\
+         checked: protocol `p` revision 1: 12636 states, 0 properties, 2 findings\n"
     );
 }
