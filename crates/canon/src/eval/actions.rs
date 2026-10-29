@@ -26,12 +26,13 @@
 //!   same rule, is a reason too, `{"input": <id>, "value": <the case's value>}`, once per input in
 //!   input-id order, after the evidence reasons (story:case-inputs). Each order form that decides
 //!   it, by the same rule, is a reason last, with its value over the evidence history
-//!   (story:evidence-order-predicate, story:evidence-order-after): `{"after": <kind>, "then":
-//!   <kind>, "result": <result>, "value": <value>}`, `{"before": <kind>, "then": <kind>,
-//!   "value": <value>}` or `{"first": <kind>, "result": <result>, "value": <value>}`, with
+//!   (story:evidence-order-predicate, story:evidence-order-after, story:evidence-order-since):
+//!   `{"after": <kind>, "then": <kind>, "result": <result>, "value": <value>}`, `{"before":
+//!   <kind>, "then": <kind>, "value": <value>}`, `{"first": <kind>, "result": <result>, "value":
+//!   <value>}` or `{"since": <kind>, "then": <kind>, "result": <result>, "value": <value>}`, with
 //!   `"subject": <artifact>` added when the form names one; every `after` first, then every
-//!   `before`, then every `first`, each by its fields in the order written here (no subject first),
-//!   each form once. Authority is not consulted.
+//!   `before`, then every `first`, then every `since`, each by its fields in the order written here
+//!   (no subject first), each form once. Authority is not consulted.
 //! - `blocked`, when the precondition is `true` and the authority denies a capability the action
 //!   requires: each denied capability is a reason, `{"capability": <id>, "decision": "denied"}`.
 //!   Asking again would not change a denial.

@@ -59,9 +59,9 @@ const CURRENT: u32 = 0;
 
 /// The history dimension's value that leaves the order unknown: no record of the dimension has an
 /// `observed_at`, and when it has no current record, one earlier record without a result stands in.
-/// In a protocol with an `after` form, the earlier record without a result and without an
-/// `observed_at` stands in whatever the current records are, and they are observed at the rank's
-/// instant.
+/// In a protocol with an `after` or a `since` form, the earlier record without a result and
+/// without an `observed_at` stands in whatever the current records are, and they are observed at
+/// the rank's instant.
 const UNPLACED: u32 = 1;
 
 /// A later-record dimension's value that adds no record.
@@ -105,8 +105,9 @@ struct Last<'a> {
     result: Option<&'a str>,
 }
 
-/// A result an `after` form compares the records of an evidence dimension its `then` reads with
-/// (story:evidence-order-after): each has a later-record dimension and a place in the order.
+/// A result an `after` or a `since` form compares the records of an evidence dimension its `then`
+/// reads with (story:evidence-order-after, story:evidence-order-since): each has a later-record
+/// dimension and a place in the order.
 #[derive(Clone, Copy)]
 struct Later<'a> {
     /// The position of the evidence dimension in `kinds`.
@@ -262,9 +263,10 @@ impl<'a> Kind<'a> {
 
 /// The dimensions, in order: the evidence dimensions, each capability, each decision name, each
 /// case input, then, only when an order form reads evidence, the history dimension of each
-/// evidence dimension an order form reads, the later-record dimension of each result an `after`
-/// compares the records of a dimension with and, when there are two or more of those histories and
-/// later records together, the order dimension.
+/// evidence dimension an order form reads, the later-record dimension of each result an `after` or
+/// a `since` compares the records of a dimension with, the last-record dimension of each evidence
+/// dimension a `since` reads as its `last` kind and, when there are two or more of those histories
+/// and later records together, the order dimension.
 pub(crate) struct Space<'a> {
     kinds: Vec<Kind<'a>>,
     capabilities: Vec<&'a CapabilityId>,
@@ -276,10 +278,10 @@ pub(crate) struct Space<'a> {
     /// The position in `kinds` of each evidence dimension an order form reads, in dimension order:
     /// each has a history dimension.
     ordered: Vec<usize>,
-    /// Each result an `after` compares the records of an evidence dimension with, in dimension and
-    /// then result order: each has a later-record dimension and a place in the order, after the
-    /// `ordered` dimensions. Empty when the protocol has no `after`, which then checks as it did
-    /// before `after` existed.
+    /// Each result an `after` or a `since` compares the records of an evidence dimension with, in
+    /// dimension and then result order: each has a later-record dimension and a place in the
+    /// order, after the `ordered` dimensions. Empty when the protocol has neither, which then
+    /// checks as it did before `after` existed.
     later: Vec<Later<'a>>,
     /// Each record of an evidence dimension a `since` reads as `last`, in dimension and then
     /// result order: each has a last-record dimension, after the later-record dimensions, and is
@@ -482,8 +484,8 @@ impl<'a> Space<'a> {
         self.ordered.len() + self.later.len()
     }
 
-    /// Whether the protocol has an `after` form reading evidence, which observes records as
-    /// [`UNPLACED`] and [`Space::evidence`] say for such a protocol.
+    /// Whether the protocol has an `after` or a `since` form reading evidence, which observes
+    /// records as [`UNPLACED`] and [`Space::evidence`] say for such a protocol.
     fn after(&self) -> bool {
         !self.later.is_empty()
     }
@@ -627,9 +629,10 @@ impl<'a> Space<'a> {
 
     /// The things in the order with a known instant in `state`, each as its position (the
     /// `ordered` dimensions, then the `later` records) and its rank: the dimensions an order form
-    /// reads with a current record and no history (or, in a protocol with an `after`, an unknown
-    /// order), those with an earlier record observed at an instant or a last record, which is observed
-    /// relative to its dimension's rank, and the later records placed in the order.
+    /// reads with a current record and no history (or, in a protocol with an `after` or a `since`,
+    /// an unknown order), those with an earlier record observed at an instant or a last record,
+    /// which is observed relative to its dimension's rank, and the later records placed in the
+    /// order.
     fn placed(&self, state: &State) -> Vec<(usize, u32)> {
         let ranks = self.ranks(state);
         let first_later = self.first_later();
@@ -1025,10 +1028,11 @@ impl<'a> Space<'a> {
     /// it from every evidence match, and records no upstream revision. Earlier records come after
     /// the current ones, in dimension and then class order.
     ///
-    /// In a protocol with an `after` form (story:evidence-order-after), a dimension with earlier
-    /// records has its current records thirty seconds after its rank's instant instead, before the
-    /// next rank's, and those of a class [`CURRENT_FIRST`] names at its rank's instant, in place of
-    /// the earlier record of the class; with [`UNPLACED`], its current records are at its rank's
+    /// In a protocol with an `after` or a `since` form (story:evidence-order-after,
+    /// story:evidence-order-since), a dimension with earlier records has its current records
+    /// thirty seconds after its rank's instant instead, before the next rank's, and those of a
+    /// class [`CURRENT_FIRST`] names at its rank's instant, in place of the earlier record of the
+    /// class; with [`UNPLACED`], its current records are at its rank's
     /// instant and the earlier record without a result and without `observed_at` is always there.
     /// Each later record comes last, in later-record order: one record of its result about its
     /// dimension's artifact at [`EARLIER`], at the instant of its own rank with [`LATER`] and

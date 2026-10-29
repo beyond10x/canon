@@ -89,8 +89,9 @@
 //!
 //! # Order forms
 //!
-//! A protocol with no order form (`first`, `before`, `after`) has exactly the dimensions above,
-//! and its records carry no observation instant: it checks as it did before order forms existed.
+//! A protocol with no order form (`first`, `before`, `after`, `since`) has exactly the dimensions
+//! above, and its records carry no observation instant: it checks as it did before order forms
+//! existed.
 //! An order form reads every record of its kind the evidence check accepts, including those the
 //! exclusion stages keep from evidence matches, ordered by `observed_at` (`crate::eval`,
 //! `order.rs`). A state places records at whole-second instants, a minute or half a minute apart,
@@ -176,6 +177,29 @@
 //! ``. The bound refusal names `` later evidence kind `k` result `r` 3 `` and `` order of first
 //! observations and later records 13 ``. Erasing a dimension erases its later records too, and
 //! they stand first with it. The kinds an `after` reads count for `unproduced-evidence` and, in
+//! every position, for `authority-bypass`, as for the other order forms.
+//!
+//! A `since` (story:evidence-order-since) compares the records of its `then` kind with its result
+//! against the latest record of its `last` kind, at that record's subject revision. Its `then`
+//! kind and result gain a later-record dimension and its kinds history dimensions, as for an
+//! `after`; a protocol without a `since` has none of what follows. A protocol with one gains:
+//!
+//! - a last-record dimension for each evidence dimension a `since` reads as its `last` kind,
+//!   after the later-record dimensions and before the order dimension, of 3 values. Value 0 adds
+//!   nothing; value 1 adds one record of the kind about the dimension's artifact at `r0`, observed
+//!   at the instant of the dimension's current records; value 2 adds it forty-five seconds after
+//!   its rank's instant, after every current record of that rank. A last record is not placed in
+//!   the order on its own: it takes the dimension's rank, so the order keeps the values it has
+//!   without it. When the dimension is also the `then` kind of a `since`, the last record carries
+//!   that result, so a record of one kind is both the latest and a candidate;
+//! - a dimension that holds only a last record takes its place in the order like one with records.
+//!
+//! So every value of every `since`, jointly with the other order forms and the evidence matches
+//! over the same records, is reached by some state within the bound. A last record weighs one. A
+//! state writes it after the later records, `` evidence `k` earlier, observed last together with
+//! the current records `` or `` evidence `k` earlier, observed last ``, with `` result `r` `` when
+//! it carries one. The bound refusal names `` last evidence kind `k` 3 ``. Erasing a dimension
+//! erases its last record too. The kinds a `since` reads count for `unproduced-evidence` and, in
 //! every position, for `authority-bypass`, as for the other order forms.
 //!
 //! A state is evaluated as a case snapshot that lists each declared artifact, and the case itself,

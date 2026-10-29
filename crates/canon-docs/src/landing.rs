@@ -135,8 +135,8 @@ fn predicate(predicate: &Predicate) -> Json {
 }
 
 /// The evidence matches (kind, result) and the claim tests (claim, value) inside a predicate; an
-/// order form counts as a match of each kind it reads, `first` and the later kind of `after` with
-/// their result.
+/// order form counts as a match of each kind it reads, `first` and the later kind of `after` and
+/// `since` with their result.
 type Leaves = (Vec<(String, Option<String>)>, Vec<(String, Truth)>);
 
 /// Every evidence match, order form and claim test inside a predicate.

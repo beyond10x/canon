@@ -1230,8 +1230,8 @@ fn every_value_of_a_since_naming_a_subject_is_reached() {
     assert!(takes_every_value(&reached, 0), "since_a");
 }
 
-/// A protocol with a `since` writes the last record of the kind it reads as `last` and builds it: at
-/// the superseded revision, forty-five seconds past its dimension's rank's instant, after the
+/// A protocol with a `since` writes the last record of the kind it reads as `last` and builds it:
+/// at the superseded revision, forty-five seconds past its dimension's rank's instant, after the
 /// dimension's current records, or at the instant of those records; its dimension then takes its
 /// place in the order, so the state says where the last record stands against a later record.
 /// Erasing the kind takes the last record with it.
