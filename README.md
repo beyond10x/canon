@@ -19,7 +19,7 @@ acquisition; Canon remains independent of that domain.
 
 ## Status
 
-Source release **0.7.0**. `b10x-canon` implements protocol parsing, validation,
+Source release **0.8.0**. `b10x-canon` implements protocol parsing, validation,
 compilation, evaluation and semantic diff, with case inputs, predicates over evidence order, evidence requirements that demand an independent producer, one argument schema per action and a normative requirements catalogue its conformance suite is checked against; `canon-cli` exposes those operations. `b10x-canon-expr` is the
 generic assertion library. See the [current status](https://beyond10x.github.io/canon/docs/status/where-this-stands)
 and [release notes](CHANGELOG.md).
@@ -27,10 +27,10 @@ and [release notes](CHANGELOG.md).
 ## Install
 
 ```console
-cargo install --locked --git https://github.com/beyond10x/canon --tag 0.7.0 canon-cli
+cargo install --locked --git https://github.com/beyond10x/canon --tag 0.8.0 canon-cli
 ```
 
-The library crates `b10x-canon` and `b10x-canon-expr` can likewise be pinned to Git tag `0.7.0`.
+The library crates `b10x-canon` and `b10x-canon-expr` can likewise be pinned to Git tag `0.8.0`.
 This release provides source archives; it does not publish binaries or crates to crates.io.
 
 ## Build

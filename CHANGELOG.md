@@ -1,6 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## [0.8.0] - 2026-10-29
+
+Sub-second order and an order form that reads the latest record of a kind. Breaking for Rust
+consumers that match exhaustively over `Predicate`. Install the CLI or depend on the libraries
+from Git tag `0.8.0`.
+
+- The ESS specification under `ess/` requires ESS 0.76.0; CI installs it.
 
 Order forms compare `observed_at` at the resolution it is written in.
 
