@@ -39,7 +39,7 @@ scope:
   path: fixtures/investigation/invalid/supplied-by-self.yaml
 - confidence: inferred
   path: fixtures/investigation/supplied-evidence/
-revision: 21
+revision: 22
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 18, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 19, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
@@ -231,3 +231,22 @@ binding to the vision revision in the receiving case. Four protocols receive the
 
 The unit builds its fixture for the choice between A and B of the section above from this case:
 a supplied record whose `upstream_revisions` names an artifact only the supplier declares.
+
+## Decided on 2026-11-21: option B for the copied record
+
+Option B of § "A copied record is not always readable unchanged": a record whose kind declares
+`supplied_by` may name, in `upstream_revisions`, artifacts the reading protocol does not declare.
+They are carried and not checked or used in the reading case. A record of a kind without
+`supplied_by` is refused as `undeclared-artifact` as today.
+
+Decided by the wave coordinator. The operator did not choose; the coordinator had reported option
+A as its default on 2026-11-20 and changed it for two reasons. The runner can copy the record byte
+for byte, so a copy can be compared with the original, which option A gives up. And the operator
+said on 2026-11-21 to put the SDC prototype's needs first, and the session working on it stated
+that this story should end the stripping of `upstream_revisions` in its copy step. That session's
+statement is information; the decision is the coordinator's and is reversible until the unit
+merges.
+
+This changes § Outcome 4: `canon evaluate` changes in this one refusal and in nothing else. The
+unit adds it as expectation 11 of the named test and as a step of `CANON-SUPPLY-001`, and reports
+whether `canon diff` can still class a changed `supplied_by` as `NO SEMANTIC CHANGE`.
