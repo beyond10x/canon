@@ -8,10 +8,10 @@
 //! A protocol document declares a protocol id and revision, the case inputs a case gives values for
 //! (`case: inputs:`), artifacts, evidence kinds, claims with their predicates, obligations with
 //! when they apply, actions, outcomes, invalidation rules and the independence dimensions its
-//! evidence matches may demand. Every declaration
-//! section is a map keyed by identifier; [`Declarations`] keeps the entries in source order and
-//! keeps repeated keys, so the validator can report a duplicate identifier instead of the parser
-//! silently dropping one.
+//! evidence matches may demand, and the protocols it imports, each pinned to a revision and a
+//! digest. Every declaration section is a map keyed by identifier; [`Declarations`] keeps the
+//! entries in source order and keeps repeated keys, so the validator can report a duplicate
+//! identifier instead of the parser silently dropping one.
 
 // `ids` declares the `identifier!` macro, which a module can use only when declared after it.
 #[macro_use]
@@ -95,6 +95,11 @@ pub struct Protocol {
     /// id; a protocol without the section declares none.
     #[serde(default, deserialize_with = "present::defaulted")]
     pub independence_dimensions: Declarations<IndependenceDimensionId, IndependenceDimension>,
+    /// The protocols this protocol imports, keyed by protocol id (story:protocol-imports), each
+    /// pinned to a revision and a digest. A protocol without the section imports nothing; one with
+    /// it compiles only composed with the documents it imports (`b10x_canon::ir::compose`).
+    #[serde(default, deserialize_with = "present::defaulted")]
+    pub imports: Declarations<ProtocolId, Import>,
 }
 
 /// One independence dimension: a relation between who produced a record and the case's work,
@@ -143,6 +148,24 @@ pub struct ProtocolHeader {
     pub revision: u64,
     #[serde(default, deserialize_with = "present::optional")]
     pub description: Option<String>,
+}
+
+/// One protocol a protocol imports: exactly the revision it reads and the digest of that
+/// revision's compiled `canon-ir/1`, and the imported declarations the importing protocol may
+/// redeclare.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Import {
+    /// The revision of the imported protocol the import reads.
+    pub revision: u64,
+    /// `sha256:` and the 64 lowercase hexadecimal digits of the SHA-256 of the imported protocol's
+    /// `canon-ir/1` bytes, compiled with its own imports (`b10x_canon::ir::digest`).
+    #[serde(deserialize_with = "present::required")]
+    pub digest: String,
+    /// The identifiers, of any declaration section, of the imported declarations the importing
+    /// protocol may redeclare; a redeclaration replaces the imported declaration.
+    #[serde(default, deserialize_with = "present::defaulted")]
+    pub refines: Vec<String>,
 }
 
 /// A thing whose revisions evidence is bound to.

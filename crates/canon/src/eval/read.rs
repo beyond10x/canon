@@ -283,6 +283,8 @@ fn protocol(value: &Json) -> Shape<Protocol> {
         } else {
             Declarations::default()
         },
+        // canon-ir/1 holds no import: imports are composed away before a protocol compiles.
+        imports: Declarations::default(),
     })
 }
 

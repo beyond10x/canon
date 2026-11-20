@@ -70,3 +70,32 @@ openings back to where it began. The refusal names the first cycle a walk from t
 protocol id on any cycle finds, in the order its openings go, back to that id
 (`protocols open cases under each other in a cycle: audit -> review -> audit`). An opening
 under a protocol outside the set closes no cycle; a chain of openings is accepted.
+
+A protocol that imports others (`imports:`, story:protocol-imports) compiles only composed with
+the documents it imports, directly or through another import: `compose` turns the root and
+those documents into one `protocol/1` document without imports, and `compile` compiles that
+like any other. Compiled alone, such a protocol is refused, each import `missing-import`. The
+composition is a pure function of the documents passed to it, whatever their order, and reads
+nothing else. Every imported declaration is inlined under its own identifier, a declaration two
+imports share once, and a redeclaration the import lists under `refines` replaces the imported
+declaration; the IR names the root's id and revision only and holds no import, so it is the IR
+of one document holding the same declarations inline, byte for byte. Each import pins the
+revision of the document it reads and its `digest`: `sha256:` and the SHA-256, in lowercase
+hexadecimal, of that document's `canon-ir/1` bytes, compiled with its own imports.
+
+`compose` refuses, in this order, stopping after the first step that finds a problem: a
+protocol supplied twice, the root's id included (`duplicate-import-document`); a malformed
+`imports` section (an import id or a `refines` entry that is not an identifier, an import id
+listed twice, a digest of another form: `invalid-identifier`, `duplicate-identifier`,
+`invalid-import-digest`); an import no supplied document is (`missing-import`) and a supplied
+document no import names (`unused-import`); an import cycle (`import-cycle`, naming it from
+the first protocol on it a walk from the root meets, back to that protocol), before any pin is
+read, since no pin of a cycle can be right; then each document, every import before the
+documents that import it: a pinned revision (`import-revision-mismatch`) or digest
+(`import-digest-mismatch`, printing both digests) the supplied document does not have, a
+`refines` entry its import does not declare (`undeclared-refinement`), an identifier two imports
+declare differently in one section that the document does not redeclare
+(`conflicting-imports`), and a redeclaration its import does not list under `refines`
+(`unrefined-redeclaration`). A problem of an imported document itself is wrapped in
+`invalid-import`, naming it. The composed root is validated like any document, so an imported
+action that opens a case under the root's id is `self-opened-case`.

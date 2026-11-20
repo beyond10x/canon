@@ -2,7 +2,8 @@
 
 //! `canon`: a thin command-line shell over the Canon library. It reads files and prints results;
 //! every semantic decision is the library's. This file holds the subcommands and their dispatch,
-//! and `validate` and `compile`; every other subcommand is in its own file.
+//! the reading of a protocol and the documents it imports, and `validate` and `compile`; every
+//! other subcommand is in its own file.
 
 mod check;
 mod conform;
@@ -10,7 +11,7 @@ mod diff;
 mod evaluate;
 mod generate;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::Parser;
@@ -33,8 +34,8 @@ fn main() -> ExitCode {
         }
     };
     match cli.command {
-        Command::Validate { path } => validate_command(&path),
-        Command::Compile { path } => compile_command(&path),
+        Command::Validate { path, import } => validate_command(&path, &import),
+        Command::Compile { path, import } => compile_command(&path, &import),
         Command::Conform {
             command:
                 ConformCommand::Run {
@@ -58,7 +59,11 @@ fn main() -> ExitCode {
             at.as_deref(),
         ),
         Command::Diff { from, to } => diff::run(&from, &to),
-        Command::Check { path, properties } => check::run(&path, properties.as_deref()),
+        Command::Check {
+            path,
+            properties,
+            import,
+        } => check::run(&path, properties.as_deref(), &import),
         Command::Generate { path, out } => generate::run(&path, &out),
     }
 }
@@ -99,6 +104,35 @@ fn read_protocol(path: &Path) -> Result<model::Protocol, ExitCode> {
     })
 }
 
+/// Reads and parses every document passed with `--import`, in path order, so the order of the flags
+/// changes nothing: a document that cannot be read exits 2, one that does not parse exits 1,
+/// naming its path.
+fn read_imports(paths: &[PathBuf]) -> Result<Vec<model::Protocol>, ExitCode> {
+    let mut sorted: Vec<&PathBuf> = paths.iter().collect();
+    sorted.sort();
+    sorted
+        .into_iter()
+        .map(|path| {
+            let source = read_text(path).map_err(|error| unreadable(path, error))?;
+            model::parse(&source).map_err(|error| {
+                eprintln!(
+                    "error[parse]: {}: {error}",
+                    model::one_line(&path.display().to_string())
+                );
+                ExitCode::from(REJECTED)
+            })
+        })
+        .collect()
+}
+
+/// Reads the protocol at `path` and the documents it imports, and composes them into one
+/// document (`ir::compose`), reporting why when it cannot.
+fn read_composed(path: &Path, imports: &[PathBuf]) -> Result<model::Protocol, ExitCode> {
+    let protocol = read_protocol(path)?;
+    let imported = read_imports(imports)?;
+    ir::compose(&protocol, &imported).map_err(|problems| report(&problems))
+}
+
 fn report(problems: &[validate::Problem]) -> ExitCode {
     for problem in problems {
         eprintln!("error[{}]: {problem}", problem.code());
@@ -106,8 +140,8 @@ fn report(problems: &[validate::Problem]) -> ExitCode {
     ExitCode::from(REJECTED)
 }
 
-fn compile_command(path: &Path) -> ExitCode {
-    let protocol = match read_protocol(path) {
+fn compile_command(path: &Path, imports: &[PathBuf]) -> ExitCode {
+    let protocol = match read_composed(path, imports) {
         Ok(protocol) => protocol,
         Err(code) => return code,
     };
@@ -120,8 +154,8 @@ fn compile_command(path: &Path) -> ExitCode {
     }
 }
 
-fn validate_command(path: &Path) -> ExitCode {
-    let protocol = match read_protocol(path) {
+fn validate_command(path: &Path, imports: &[PathBuf]) -> ExitCode {
+    let protocol = match read_composed(path, imports) {
         Ok(protocol) => protocol,
         Err(code) => return code,
     };

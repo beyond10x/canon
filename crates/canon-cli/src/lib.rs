@@ -55,17 +55,27 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Parse and validate a `protocol/1` document.
+    /// Parse and validate a `protocol/1` document, composed with the documents it imports.
     Validate {
         /// The protocol document to validate.
         #[arg(long)]
         path: PathBuf,
+        /// A `protocol/1` document the protocol imports, directly or through another import.
+        /// Repeat it once per document, in any order; each import is checked against its pinned
+        /// revision and digest. Without it, a protocol with imports is refused.
+        #[arg(long)]
+        import: Vec<PathBuf>,
     },
-    /// Compile a valid `protocol/1` document into `canon-ir/1` and print it.
+    /// Compile a valid `protocol/1` document, composed with the documents it imports, into one
+    /// closed `canon-ir/1` and print it.
     Compile {
         /// The protocol document to compile.
         #[arg(long)]
         path: PathBuf,
+        /// A `protocol/1` document the protocol imports, directly or through another import.
+        /// Repeat it once per document, in any order: the order changes no byte of the IR.
+        #[arg(long)]
+        import: Vec<PathBuf>,
     },
     /// Evaluate a case under a compiled protocol from an evidence set: every claim, and each
     /// declared obligation, action and outcome. Print the `canon-decision/1` document.
@@ -126,6 +136,10 @@ pub enum Command {
         /// action's or outcome's status is independent of a claim. Each is checked in every state.
         #[arg(long)]
         properties: Option<PathBuf>,
+        /// A `protocol/1` document the protocol imports, directly or through another import.
+        /// Repeat it once per document, in any order; the protocol is checked composed with them.
+        #[arg(long)]
+        import: Vec<PathBuf>,
     },
     /// Generate `canon-conformance/1` scenarios into an empty directory: one minimal witness per
     /// declared outcome and per action blocked in some state, over the state space `canon check`
@@ -134,8 +148,8 @@ pub enum Command {
     /// protocol path that resolves outside the working directory, an outcome no state reaches, a
     /// protocol that yields no scenario, an outcome or action identifier holding a character a file
     /// name cannot hold (`/ \ : * ? " < > |` or a control character), two scenario file names
-    /// equal up to letter case or Unicode normalisation, and a non-empty `--out`. On failure,
-    /// nothing this run created is left.
+    /// equal up to letter case or Unicode normalisation, a protocol with imports (a scenario names
+    /// one fixture), and a non-empty `--out`. On failure, nothing this run created is left.
     Generate {
         /// The protocol document, as a relative path without `..` components.
         #[arg(long)]

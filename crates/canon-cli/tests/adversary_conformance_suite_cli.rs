@@ -91,7 +91,7 @@ fn the_real_registry_with_the_flag_is_the_plain_report_and_one_line() {
     assert_eq!(
         out(&checked),
         format!(
-            "{}requirements: 20 implemented, 20 covered, 0 planned\n",
+            "{}requirements: 21 implemented, 21 covered, 0 planned\n",
             out(&plain)
         )
     );
@@ -120,8 +120,9 @@ fn without_the_flag_no_check_runs() {
 /// The catalogue lists exactly the 15 requirements story:conformance-suite names and the ones
 /// later stories add (CANON-ORDER-002, story:evidence-order-after; CANON-ORDER-003,
 /// story:evidence-order-subsecond; CANON-ORDER-004, story:evidence-order-since; CANON-COMPOSE-001,
-/// story:case-composition; CANON-SCOPE-001, story:capability-scope), all implemented, and every
-/// one is covered by a scenario of the registry.
+/// story:case-composition; CANON-SCOPE-001, story:capability-scope; CANON-IMPORT-001,
+/// story:protocol-imports), all implemented, and every one is covered by a scenario of the
+/// registry.
 #[test]
 fn the_real_catalogue_is_the_requirements_the_stories_name() {
     let root = repository_root();
@@ -159,6 +160,7 @@ fn the_real_catalogue_is_the_requirements_the_stories_name() {
         "CANON-ORDER-003",
         "CANON-ORDER-004",
         "CANON-COMPOSE-001",
+        "CANON-IMPORT-001",
         "CANON-SCOPE-001",
     ];
     story.sort();

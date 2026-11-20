@@ -163,7 +163,9 @@ fn every_generated_witness_passes_and_is_minimal_over_every_investigation_protoc
                 // action either). evidence-order-after.yaml reads its kinds bound to a subject and
                 // unbound at once, for CANON-ORDER-002's evaluate steps; `after.yaml` above is the
                 // one generated from. evidence-order-since.yaml, for CANON-ORDER-004, likewise with
-                // `since.yaml`.
+                // `since.yaml`. The documents of fixtures/investigation/imports/ that import others
+                // (story:protocol-imports) compile only with the documents they import, which
+                // generation does not take; `canon generate` refuses them before compiling.
                 let expected = ((fixture.ends_with("state-space-bound/protocol.yaml")
                     || fixture.ends_with("evidence-order-after.yaml")
                     || fixture.ends_with("evidence-order-since.yaml"))
@@ -172,7 +174,9 @@ fn every_generated_witness_passes_and_is_minimal_over_every_investigation_protoc
                         && why.starts_with("unreachable-outcome"))
                     || ((fixture.ends_with("subject-bound-evidence-match.yaml")
                         || fixture.ends_with("invalidation-rules.yaml"))
-                        && why.starts_with("nothing-to-witness"));
+                        && why.starts_with("nothing-to-witness"))
+                    || (fixture.starts_with("fixtures/investigation/imports/")
+                        && why.starts_with("compile: [MissingImport"));
                 if !expected {
                     failures.push(format!("{fixture}: refused: {why}"));
                 }

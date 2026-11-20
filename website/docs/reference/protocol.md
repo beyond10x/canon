@@ -28,6 +28,7 @@ A `protocol/1` source document as written.
 | `invalidation` | map from [identifier](#identifiers) (`InvalidationRuleId`) to [`InvalidationRule`](#invalidationrule) | optional | The invalidation rules, keyed by rule id; a protocol without the section declares none. |
 | `case` | [`CaseSection`](#casesection) | optional | What a case governed by the protocol gives when it opens: its case inputs. A protocol without the section declares no input. |
 | `independence_dimensions` | map from [identifier](#identifiers) (`IndependenceDimensionId`) to [`IndependenceDimension`](#independencedimension) | optional | The independence dimensions the protocol's evidence matches may demand, keyed by dimension id; a protocol without the section declares none. |
+| `imports` | map from [identifier](#identifiers) (`ProtocolId`) to [`Import`](#import) | optional | The protocols this protocol imports, keyed by protocol id (story:protocol-imports), each pinned to a revision and a digest. A protocol without the section imports nothing; one with it compiles only composed with the documents it imports (`b10x_canon::ir::compose`). |
 
 ## `ProtocolHeader`
 
@@ -130,6 +131,18 @@ which the trusted context resolves for each producer and Canon reads from the ca
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `description` | text | optional | — |
+
+## `Import`
+
+One protocol a protocol imports: exactly the revision it reads and the digest of that
+revision's compiled `canon-ir/1`, and the imported declarations the importing protocol may
+redeclare.
+
+| Key | Value | Required | Meaning |
+|---|---|---|---|
+| `revision` | integer, 0 or more | required | The revision of the imported protocol the import reads. |
+| `digest` | text | required | `sha256:` and the 64 lowercase hexadecimal digits of the SHA-256 of the imported protocol's `canon-ir/1` bytes, compiled with its own imports (`b10x_canon::ir::digest`). |
+| `refines` | list of text | optional | The identifiers, of any declaration section, of the imported declarations the importing protocol may redeclare; a redeclaration replaces the imported declaration. |
 
 ## `Predicate`
 
