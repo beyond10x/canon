@@ -202,6 +202,20 @@
       "detail": "The since order form tests whether a record of one kind with a given result, at the subject revision of the latest record of another kind (or of the same kind), was observed after it, read from the evidence history like the other order forms; scenario CANON-ORDER-004.",
       "href": "/docs/reference/protocol",
       "area": "Language"
+    },
+    {
+      "label": "ESS specification of the command surface",
+      "status": "decided",
+      "detail": "Every canon subcommand is an ESS command and every flag an input, in the domain canon.cli; a test fails when the clap definition and ess/ differ in either direction.",
+      "href": "/docs/reference/cli",
+      "area": "Language"
+    },
+    {
+      "label": "Scoped capabilities",
+      "status": "decided",
+      "detail": "Capability requirements and authority decisions carry a scope; default deny, coverage from the wildcard outwards, denied over require_approval over granted; scenario CANON-SCOPE-001.",
+      "href": "/docs/reference/evaluation#sections",
+      "area": "Evaluation"
     }
   ]
 }
