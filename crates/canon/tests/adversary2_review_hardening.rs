@@ -122,5 +122,3 @@ fn a_diamond_within_the_bound_is_evaluated() {
     );
     eprintln!("diamond of {claims}: {:?}", started.elapsed());
 }
-
-// claims_kept_apart_by_invalidation_rules_are_evaluated_in_time_linear_in_the_chain and its helper invalidated_chain moved to story:invalidation-evaluation-cost.
