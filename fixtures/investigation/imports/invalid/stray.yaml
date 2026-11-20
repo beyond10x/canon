@@ -1,0 +1,12 @@
+format: protocol/1
+
+# A protocol no import names: supplied with root.yaml and its imports, it is refused as
+# unused-import.
+
+protocol:
+  id: investigation.stray
+  revision: 1
+
+artifacts:
+  notes:
+    description: Notes no investigation imports.

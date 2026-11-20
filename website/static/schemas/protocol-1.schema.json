@@ -121,6 +121,16 @@
           "additionalProperties": {
             "$ref": "#/$defs/IndependenceDimension"
           }
+        },
+        "imports": {
+          "description": "The protocols this protocol imports, keyed by protocol id (story:protocol-imports), each pinned to a revision and a digest. A protocol without the section imports nothing; one with it compiles only composed with the documents it imports (`b10x_canon::ir::compose`).",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Import"
+          }
         }
       },
       "required": [
@@ -311,6 +321,33 @@
           "type": "string"
         }
       }
+    },
+    "Import": {
+      "description": "One protocol a protocol imports: exactly the revision it reads and the digest of that revision's compiled `canon-ir/1`, and the imported declarations the importing protocol may redeclare.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "description": "The revision of the imported protocol the import reads.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "digest": {
+          "description": "`sha256:` and the 64 lowercase hexadecimal digits of the SHA-256 of the imported protocol's `canon-ir/1` bytes, compiled with its own imports (`b10x_canon::ir::digest`).",
+          "type": "string"
+        },
+        "refines": {
+          "description": "The identifiers, of any declaration section, of the imported declarations the importing protocol may redeclare; a redeclaration replaces the imported declaration.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "revision",
+        "digest"
+      ]
     },
     "Predicate": {
       "description": "A predicate over evidence and claim values.",

@@ -1,0 +1,101 @@
+format: protocol/1
+
+# root.yaml with its imports written inline: the declarations of review.yaml, falsification.yaml
+# and evidence.yaml, which both of them import, once each, and peer.approved as root.yaml refines
+# it. `canon compile` of this document prints the bytes `canon compile` of root.yaml with its
+# imports prints.
+
+protocol:
+  id: investigation
+  revision: 3
+  description: Decide whether an explanation is supported, and publish the finding once every obligation that applies to the case is discharged.
+
+case:
+  inputs:
+    severity:
+      description: How severe the case is; the finding of a severe case is reviewed by a peer before it is published.
+      values: [low, high]
+
+artifacts:
+  explanation:
+    description: The explanation under investigation.
+
+evidence_kinds:
+  observation:
+    description: An observation bearing on the explanation; its result is consistent or inconsistent.
+  falsification_attempt:
+    description: An attempt to refute the explanation.
+  peer_review:
+    description: A peer's review of the finding; its result is approved or rejected.
+
+claims:
+  explanation.supported:
+    description: Observation is consistent with the explanation.
+    true_when:
+      evidence:
+        kind: observation
+        result: consistent
+  falsification.attempted:
+    description: An attempt to refute the explanation is on record.
+    true_when:
+      evidence:
+        kind: falsification_attempt
+  peer.approved:
+    description: A peer approved the finding.
+    true_when:
+      evidence:
+        kind: peer_review
+        result: approved
+  case.severe:
+    description: The case is severe.
+    true_when:
+      input: severity
+      in: [high]
+
+obligations:
+  falsification.recorded:
+    description: Record an attempt to refute an explanation observation supports.
+    applicable_when:
+      claim: explanation.supported
+    discharged_when:
+      claim: falsification.attempted
+  peer.review:
+    description: Have a peer review the finding of a severe case.
+    applicable_when:
+      claim: case.severe
+    discharged_when:
+      claim: peer.approved
+
+actions:
+  inspect:
+    description: Look for observations bearing on the explanation.
+    may_produce:
+      - evidence: observation
+  attempt_falsification:
+    description: Try to refute the explanation.
+    may_produce:
+      - evidence: falsification_attempt
+  request_review:
+    description: Ask a peer to review a finding observation supports.
+    precondition:
+      claim: explanation.supported
+    may_produce:
+      - evidence: peer_review
+
+outcomes:
+  explanation.refuted:
+    description: Observation is inconsistent with the explanation.
+    requires:
+      evidence:
+        kind: observation
+        result: inconsistent
+  finding.published:
+    description: The finding is published, with every obligation that applies to the case discharged.
+    requires:
+      all:
+        - claim: explanation.supported
+        - claim: falsification.attempted
+        - any:
+            - not:
+                claim: case.severe
+            - claim: peer.approved

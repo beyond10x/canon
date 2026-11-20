@@ -69,10 +69,10 @@ pub(crate) fn run(scenarios: &Path, requirements: Option<&Path>) -> ExitCode {
     }
 }
 
-/// Reads a fixture a scenario names. The library has already refused a path that leaves the
-/// working directory as written; this is the second check, against the filesystem: the path is
-/// resolved (every symbolic link followed) and refused, unread, unless the result lies below the
-/// resolved working directory. The resolved path is the one read.
+/// Reads a fixture, or an import, a scenario names. The library has already refused a path that
+/// leaves the working directory as written; this is the second check, against the filesystem: the
+/// path is resolved (every symbolic link followed) and refused, unread, unless the result lies
+/// below the resolved working directory. The resolved path is the one read.
 fn read_fixture(
     working_directory: &std::io::Result<PathBuf>,
     fixture: &str,

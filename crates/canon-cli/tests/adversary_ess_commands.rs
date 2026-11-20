@@ -173,12 +173,12 @@ fn an_input_only_in_ess_is_named() {
         named(commands, "canon.cli.Validate")["input"]
             .as_sequence_mut()
             .expect("Validate has inputs")
-            .push(command("name: import\ntype: Optional<String>\n"));
+            .push(command("name: include\ntype: Optional<String>\n"));
     });
     assert!(
         !passed
             && output.contains("canon.cli.Validate")
-            && output.contains("input `import` is not a flag"),
+            && output.contains("input `include` is not a flag"),
         "{output}"
     );
 }

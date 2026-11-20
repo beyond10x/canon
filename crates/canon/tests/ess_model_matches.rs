@@ -95,7 +95,7 @@ const DOCUMENTS: &[&str] = &[
 /// 0.52.0 refuses an invariant on a struct type no view publishes (ESS-SYNTH-013), and this
 /// specification has no views. Each is read as if its owner stated `<field> >= 0`, so its Rust
 /// type must be `u64`. Remove an entry once `ess/` can state the bound itself.
-const NON_NEGATIVE: &[(&str, &str)] = &[("Decision", "protocol_revision")];
+const NON_NEGATIVE: &[(&str, &str)] = &[("Decision", "protocol_revision"), ("Import", "revision")];
 
 /// The tree under test, read at run time: a test binary reused from a shared target directory
 /// would otherwise check the tree it was built from.

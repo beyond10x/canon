@@ -1,0 +1,269 @@
+format: canon-conformance/1
+id: CANON-IMPORT-001
+covers: [CANON-IMPORT-001]
+fixture: fixtures/investigation/imports/root.yaml
+# Protocol imports (story:protocol-imports). The fixture is the protocol `investigation`, which
+# imports `investigation.review` and `investigation.falsification`, pinning each to its revision
+# and to the digest of its compiled canon-ir/1; both import `investigation.evidence`. The root
+# refines the claim `peer.approved` of `investigation.review` and reads its case input `severity`.
+# The scenario names every imported document; the compile step expects the one closed canon-ir/1
+# of the composition, which names the root's id and revision only, holds the shared part's
+# declarations once and no import, and is the IR fixtures/investigation/imports/flattened.yaml,
+# the same declarations written inline, compiles to.
+imports:
+  - fixtures/investigation/imports/review.yaml
+  - fixtures/investigation/imports/falsification.yaml
+  - fixtures/investigation/imports/evidence.yaml
+steps:
+  - id: compile
+    compile: {}
+    expect:
+      canon-ir: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "description": "Try to refute the explanation.",
+              "effect": null,
+              "may_produce": [
+                {
+                  "evidence": "falsification_attempt"
+                }
+              ],
+              "precondition": {
+                "all": []
+              },
+              "requires": []
+            },
+            "inspect": {
+              "description": "Look for observations bearing on the explanation.",
+              "effect": null,
+              "may_produce": [
+                {
+                  "evidence": "observation"
+                }
+              ],
+              "precondition": {
+                "all": []
+              },
+              "requires": []
+            },
+            "request_review": {
+              "description": "Ask a peer to review a finding observation supports.",
+              "effect": null,
+              "may_produce": [
+                {
+                  "evidence": "peer_review"
+                }
+              ],
+              "precondition": {
+                "claim": {
+                  "id": "explanation.supported",
+                  "is": "true"
+                }
+              },
+              "requires": []
+            }
+          },
+          "artifacts": {
+            "explanation": {
+              "description": "The explanation under investigation."
+            }
+          },
+          "case": {
+            "inputs": {
+              "severity": {
+                "description": "How severe the case is; the finding of a severe case is reviewed by a peer before it is published.",
+                "values": [
+                  "high",
+                  "low"
+                ]
+              }
+            }
+          },
+          "claims": {
+            "case.severe": {
+              "description": "The case is severe.",
+              "true_when": {
+                "input": {
+                  "id": "severity",
+                  "in": [
+                    "high"
+                  ]
+                }
+              }
+            },
+            "explanation.supported": {
+              "description": "Observation is consistent with the explanation.",
+              "true_when": {
+                "evidence": {
+                  "kind": "observation",
+                  "result": "consistent"
+                }
+              }
+            },
+            "falsification.attempted": {
+              "description": "An attempt to refute the explanation is on record.",
+              "true_when": {
+                "evidence": {
+                  "kind": "falsification_attempt",
+                  "result": null
+                }
+              }
+            },
+            "peer.approved": {
+              "description": "A peer approved the finding.",
+              "true_when": {
+                "evidence": {
+                  "kind": "peer_review",
+                  "result": "approved"
+                }
+              }
+            }
+          },
+          "evidence_kinds": {
+            "falsification_attempt": {
+              "description": "An attempt to refute the explanation."
+            },
+            "observation": {
+              "description": "An observation bearing on the explanation; its result is consistent or inconsistent."
+            },
+            "peer_review": {
+              "description": "A peer's review of the finding; its result is approved or rejected."
+            }
+          },
+          "format": "canon-ir/1",
+          "obligations": {
+            "falsification.recorded": {
+              "applicable_when": {
+                "claim": {
+                  "id": "explanation.supported",
+                  "is": "true"
+                }
+              },
+              "description": "Record an attempt to refute an explanation observation supports.",
+              "discharged_when": {
+                "claim": {
+                  "id": "falsification.attempted",
+                  "is": "true"
+                }
+              }
+            },
+            "peer.review": {
+              "applicable_when": {
+                "claim": {
+                  "id": "case.severe",
+                  "is": "true"
+                }
+              },
+              "description": "Have a peer review the finding of a severe case.",
+              "discharged_when": {
+                "claim": {
+                  "id": "peer.approved",
+                  "is": "true"
+                }
+              }
+            }
+          },
+          "outcomes": {
+            "explanation.refuted": {
+              "description": "Observation is inconsistent with the explanation.",
+              "requires": {
+                "evidence": {
+                  "kind": "observation",
+                  "result": "inconsistent"
+                }
+              }
+            },
+            "finding.published": {
+              "description": "The finding is published, with every obligation that applies to the case discharged.",
+              "requires": {
+                "all": [
+                  {
+                    "any": [
+                      {
+                        "claim": {
+                          "id": "peer.approved",
+                          "is": "true"
+                        }
+                      },
+                      {
+                        "not": {
+                          "claim": {
+                            "id": "case.severe",
+                            "is": "true"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "claim": {
+                      "id": "explanation.supported",
+                      "is": "true"
+                    }
+                  },
+                  {
+                    "claim": {
+                      "id": "falsification.attempted",
+                      "is": "true"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "protocol": {
+            "description": "Decide whether an explanation is supported, and publish the finding once every obligation that applies to the case is discharged.",
+            "id": "investigation",
+            "revision": 3
+          }
+        }
+  # A severe case whose explanation observation supports. The root claim `case.severe` reads the
+  # imported input and is TRUE; the imported obligation `falsification.recorded` applies, since
+  # the imported claim `explanation.supported` is TRUE, and the root's `peer.review` applies to a
+  # severe case; both are open.
+  - id: severe-supported
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-31
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+        inputs:
+          severity: high
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: observation
+          result: consistent
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "claims": {
+            "case.severe": {
+              "value": "true"
+            },
+            "explanation.supported": {
+              "value": "true"
+            },
+            "falsification.attempted": {
+              "value": "unknown"
+            },
+            "peer.approved": {
+              "value": "unknown"
+            }
+          },
+          "obligations": [
+            {
+              "id": "falsification.recorded",
+              "status": "open"
+            },
+            {
+              "id": "peer.review",
+              "status": "open"
+            }
+          ]
+        }

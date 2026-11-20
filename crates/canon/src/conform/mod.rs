@@ -10,6 +10,7 @@
 //! id: CANON-CLAIM-001                       # the scenario id, unique within the registry
 //! covers: [CANON-CLAIM-001, CANON-CLAIM-002] # the CANON-* requirements it covers; may be empty
 //! fixture: fixtures/investigation/protocol.yaml
+//! imports: [fixtures/investigation/library.yaml] # optional: the documents the fixture imports
 //! steps:
 //!   - id: compile                           # the step id, unique within the scenario
 //!     compile: {}
@@ -37,6 +38,16 @@
 //!   that check but resolves outside the working directory through a symbolic link is refused
 //!   too, unread: the scenario is reported `unreadable` with `fixture `<path>` resolves outside
 //!   the working directory`.
+//! - `imports` lists the `protocol/1` documents the fixture imports, directly or through another
+//!   import (story:protocol-imports), each a path held to the same two checks as `fixture`: one
+//!   that is empty, absolute or has a `..` component is refused and the scenario does not parse
+//!   (`import `<path>` is not a relative path without `..` components`); one that resolves
+//!   outside the working directory is refused unread, and the scenario is reported `unreadable`
+//!   with `import `<path>` resolves outside the working directory`. Every step compiles the
+//!   fixture composed with them (`ir::compose`), in any order; an import that cannot be read fails
+//!   the step as `import `<path>` is unreadable: <why>`, one that does not parse as `import
+//!   `<path>` does not parse: <kind and position>`, and a composition that is refused as
+//!   `fixture does not compile: <code>: <why>; …`. Absent, the fixture imports nothing.
 //! - `covers` entries are `CANON-` followed by an identifier, each listed once.
 //! - `steps` is an ordered, non-empty list. Each step is exactly one of `compile` or `evaluate`,
 //!   with exactly one expectation of the matching kind: a compile step expects `canon-ir`, an
@@ -187,6 +198,8 @@ pub struct Scenario {
     pub id: String,
     pub covers: Vec<String>,
     pub fixture: String,
+    /// The documents the fixture imports, as paths like `fixture`, in the order listed.
+    pub imports: Vec<String>,
     pub steps: Vec<Step>,
 }
 
@@ -275,6 +288,8 @@ struct RawScenario {
     covers: Vec<String>,
     #[serde(deserialize_with = "required")]
     fixture: String,
+    #[serde(default, deserialize_with = "optional")]
+    imports: Option<Vec<String>>,
     #[serde(deserialize_with = "required")]
     steps: Vec<RawStep>,
 }
@@ -372,6 +387,15 @@ pub fn parse(source: &str) -> Result<Scenario, ScenarioError> {
             model::one_line(&raw.fixture)
         ));
     }
+    let imports = raw.imports.unwrap_or_default();
+    for import in &imports {
+        if import.is_empty() || !is_confined(import) {
+            return refuse(format!(
+                "import `{}` is not a relative path without `..` components",
+                model::one_line(import)
+            ));
+        }
+    }
     if raw.steps.is_empty() {
         return refuse("steps is empty".to_owned());
     }
@@ -397,6 +421,7 @@ pub fn parse(source: &str) -> Result<Scenario, ScenarioError> {
         id: raw.id,
         covers: raw.covers,
         fixture: raw.fixture,
+        imports,
         steps,
     })
 }
@@ -487,13 +512,26 @@ pub enum Verdict {
 }
 
 /// Runs a scenario's steps in order, stopping at the first that fails. `fixture` is the text of
-/// the scenario's fixture, or why it could not be read.
+/// the scenario's fixture, or why it could not be read. The scenario's fixture is compiled with no
+/// imported document; [`run_with_imports`] passes them.
 pub fn run(scenario: &Scenario, fixture: Result<&str, &str>) -> Verdict {
+    run_with_imports(scenario, fixture, &[])
+}
+
+/// Runs a scenario as [`run`] does, composing the fixture with `imports`: for each path the
+/// scenario lists under `imports`, in order, its text or why it could not be read.
+pub fn run_with_imports(
+    scenario: &Scenario,
+    fixture: Result<&str, &str>,
+    imports: &[Result<String, String>],
+) -> Verdict {
     for step in &scenario.steps {
         let failure = match &step.kind {
-            StepKind::Compile { expected_ir } => compile_step(scenario, fixture, expected_ir),
+            StepKind::Compile { expected_ir } => {
+                compile_step(scenario, fixture, imports, expected_ir)
+            }
             StepKind::Evaluate { inputs, expected } => {
-                evaluate_step(scenario, fixture, inputs, expected)
+                evaluate_step(scenario, fixture, imports, inputs, expected)
             }
         };
         if let Some(reason) = failure {
@@ -506,8 +544,12 @@ pub fn run(scenario: &Scenario, fixture: Result<&str, &str>) -> Verdict {
     Verdict::Passed
 }
 
-/// The fixture's compiled protocol, or why the step that needs it fails.
-fn compiled_fixture(scenario: &Scenario, fixture: Result<&str, &str>) -> Result<ir::Ir, String> {
+/// The fixture's compiled protocol, composed with its imports, or why the step that needs it fails.
+fn compiled_fixture(
+    scenario: &Scenario,
+    fixture: Result<&str, &str>,
+    imports: &[Result<String, String>],
+) -> Result<ir::Ir, String> {
     let source = fixture.map_err(|why| {
         format!(
             "fixture `{}` is unreadable: {}",
@@ -517,21 +559,38 @@ fn compiled_fixture(scenario: &Scenario, fixture: Result<&str, &str>) -> Result<
     })?;
     let protocol = model::parse(source)
         .map_err(|_| format!("fixture does not parse: {}", fixture_parse_failure(source)))?;
-    ir::compile(&protocol).map_err(|problems| {
-        let problems: Vec<String> = problems
-            .iter()
-            .map(|problem| format!("{}: {problem}", problem.code()))
-            .collect();
-        format!("fixture does not compile: {}", problems.join("; "))
-    })
+    let mut imported = Vec::with_capacity(imports.len());
+    for (path, text) in scenario.imports.iter().zip(imports) {
+        let path = model::one_line(path);
+        let text = text
+            .as_deref()
+            .map_err(|why| format!("import `{path}` is unreadable: {}", model::one_line(why)))?;
+        let document = model::parse(text).map_err(|_| {
+            format!(
+                "import `{path}` does not parse: {}",
+                fixture_parse_failure(text)
+            )
+        })?;
+        imported.push(document);
+    }
+    ir::compose(&protocol, &imported)
+        .and_then(|composed| ir::compile(&composed))
+        .map_err(|problems| {
+            let problems: Vec<String> = problems
+                .iter()
+                .map(|problem| format!("{}: {problem}", problem.code()))
+                .collect();
+            format!("fixture does not compile: {}", problems.join("; "))
+        })
 }
 
 fn compile_step(
     scenario: &Scenario,
     fixture: Result<&str, &str>,
+    imports: &[Result<String, String>],
     expected_ir: &str,
 ) -> Option<String> {
-    let compiled = match compiled_fixture(scenario, fixture) {
+    let compiled = match compiled_fixture(scenario, fixture, imports) {
         Ok(compiled) => compiled.canonical_json(),
         Err(why) => return Some(why),
     };
@@ -542,10 +601,11 @@ fn compile_step(
 fn evaluate_step(
     scenario: &Scenario,
     fixture: Result<&str, &str>,
+    imports: &[Result<String, String>],
     inputs: &EvaluateInputs,
     expected: &EvaluateExpectation,
 ) -> Option<String> {
-    let compiled = match compiled_fixture(scenario, fixture) {
+    let compiled = match compiled_fixture(scenario, fixture, imports) {
         Ok(compiled) => compiled,
         Err(why) => return Some(why),
     };
@@ -869,9 +929,10 @@ pub enum FixtureError {
 }
 
 /// Runs every scenario of a registry, in the order given (the caller passes files in sorted
-/// file-name order). `read_fixture` returns a fixture's text, or why it returned none; it is the
-/// caller's, so this function reads nothing itself. A file whose scenario id an earlier file
-/// already used, or whose fixture resolves outside the working directory, is reported unreadable.
+/// file-name order). `read_fixture` returns the text of a fixture or of an import a scenario lists,
+/// or why it returned none; it is the caller's, so this function reads nothing itself. A file whose
+/// scenario id an earlier file already used, or whose fixture or one of whose imports resolves
+/// outside the working directory, is reported unreadable.
 pub fn run_registry<F>(files: &[ScenarioFile], read_fixture: F) -> Report
 where
     F: FnMut(&str) -> Result<String, FixtureError>,
@@ -903,7 +964,7 @@ where
     let mut ran = Vec::new();
     let mut report = Report::default();
     let mut seen: BTreeMap<String, &str> = BTreeMap::new();
-    for file in files {
+    'files: for file in files {
         let scenario = match &file.text {
             Err(why) => {
                 report.unreadable(&file.path, &model::one_line(why));
@@ -929,12 +990,9 @@ where
             continue;
         }
         seen.insert(scenario.id.clone(), &file.path);
-        let (verdict, compiled) = match read_fixture(&scenario.fixture) {
-            Ok(text) => (
-                run(&scenario, Ok(&text)),
-                compiled_fixture(&scenario, Ok(&text)).ok(),
-            ),
-            Err(FixtureError::Unreadable(why)) => (run(&scenario, Err(&why)), None),
+        let fixture = match read_fixture(&scenario.fixture) {
+            Ok(text) => Ok(text),
+            Err(FixtureError::Unreadable(why)) => Err(why),
             Err(FixtureError::Outside) => {
                 report.unreadable(
                     &file.path,
@@ -945,6 +1003,29 @@ where
                 );
                 continue;
             }
+        };
+        let mut imports = Vec::with_capacity(scenario.imports.len());
+        for import in &scenario.imports {
+            match read_fixture(import) {
+                Ok(text) => imports.push(Ok(text)),
+                Err(FixtureError::Unreadable(why)) => imports.push(Err(why)),
+                Err(FixtureError::Outside) => {
+                    report.unreadable(
+                        &file.path,
+                        &format!(
+                            "import `{}` resolves outside the working directory",
+                            model::one_line(import)
+                        ),
+                    );
+                    continue 'files;
+                }
+            }
+        }
+        let fixture = fixture.as_deref().map_err(String::as_str);
+        let verdict = run_with_imports(&scenario, fixture, &imports);
+        let compiled = match fixture {
+            Ok(text) => compiled_fixture(&scenario, Ok(text), &imports).ok(),
+            Err(_) => None,
         };
         report.scenario(&scenario.id, &verdict);
         ran.push(requirements::Ran {
@@ -1590,6 +1671,82 @@ mod tests {
              conform: 0 passed, 0 failed, 1 unreadable\n"
         );
         assert!(!report.all_passed());
+    }
+
+    /// A scenario's imports are held to both checks `fixture` is (story:protocol-imports): an
+    /// empty, absolute or `..` path does not parse and is never read; one the reader finds outside
+    /// the working directory reports the scenario unreadable; one that cannot be read or does not
+    /// parse fails the step, naming it.
+    #[test]
+    fn imports_are_confined_like_the_fixture() {
+        let with_imports = |imports: &str| {
+            format!(
+                "format: canon-conformance/1\nid: S\ncovers: []\nfixture: p.yaml\nimports: {imports}\nsteps:\n  - id: c\n    compile: {{}}\n    expect: {{canon-ir: x}}\n"
+            )
+        };
+        for escaping in [
+            "''",
+            "../lib.yaml",
+            "/lib.yaml",
+            "'C:lib.yaml'",
+            "'dir\\..\\lib.yaml'",
+        ] {
+            let report = run_registry(
+                &[ScenarioFile {
+                    path: "dir/a.yaml".to_owned(),
+                    text: Ok(with_imports(&format!("[{escaping}]"))),
+                }],
+                |path| panic!("read {path}"),
+            );
+            assert!(
+                report
+                    .render()
+                    .starts_with("unreadable: dir/a.yaml: import `"),
+                "{escaping}: {}",
+                report.render()
+            );
+            assert!(
+                report
+                    .render()
+                    .contains("` is not a relative path without `..` components\n"),
+                "{escaping}: {}",
+                report.render()
+            );
+        }
+
+        let outside = run_registry(
+            &[ScenarioFile {
+                path: "dir/a.yaml".to_owned(),
+                text: Ok(with_imports("[lib.yaml]")),
+            }],
+            |path| match path {
+                "p.yaml" => Ok(PROTOCOL.to_owned()),
+                _ => Err(FixtureError::Outside),
+            },
+        );
+        assert_eq!(
+            outside.render(),
+            "unreadable: dir/a.yaml: import `lib.yaml` resolves outside the working directory\n\
+             conform: 0 passed, 0 failed, 1 unreadable\n"
+        );
+
+        let scenario = parse(&with_imports("[lib.yaml]")).expect("parses");
+        let reason = |imports: &[Result<String, String>]| match run_with_imports(
+            &scenario,
+            Ok(PROTOCOL),
+            imports,
+        ) {
+            Verdict::Failed { reason, .. } => reason,
+            Verdict::Passed => panic!("passed"),
+        };
+        assert_eq!(
+            reason(&[Err("gone".to_owned())]),
+            "import `lib.yaml` is unreadable: gone"
+        );
+        assert_eq!(
+            reason(&[Ok("format: [".to_owned())]),
+            "import `lib.yaml` does not parse: not well-formed YAML at line 2 column 1"
+        );
     }
 
     #[test]

@@ -13,27 +13,35 @@ Validation resolves every reference and reports every problem it finds, in a sta
 does not depend on the order the sections are written in:
 
 1. the format;
-2. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
+2. the imports section (story:protocol-imports): each import id that is not an identifier,
+   followed by each of its `refines` entries that is not one (`invalid-identifier`), then each
+   import id listed again (`duplicate-identifier`), then each digest not written `sha256:` and
+   64 lowercase hexadecimal digits (`invalid-import-digest`), each naming the import, then each
+   import, once, as `missing-import`: a document with imports is valid only composed with the
+   documents it imports (`b10x_canon::ir::compose`), which leaves it without imports. Every
+   other problem is the composed document's, whose declarations may come from any document of
+   the composition;
+3. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
    claims, obligations, actions, outcomes, invalidation rules, case inputs and independence
    dimensions, in that section order, then the capabilities actions name, each followed by the
    keys and values of its scope in the order written, the effect classes actions name and the
    protocol each action's `case_open` names, in action order, then the decisions outcomes
    require, in outcome order, then the values case inputs declare, in input order;
-3. duplicate identifiers, in the same section order;
-4. capability requirements whose scope names a key more than once (`duplicate-scope-key`,
+4. duplicate identifiers, in the same section order;
+5. capability requirements whose scope names a key more than once (`duplicate-scope-key`,
    naming the action, the capability and the key, once for every naming after its first), in
    the order the actions and their requirements are written;
-5. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
+6. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
    or `d`, or that are but are too long to count in seconds (each with its own message), in the
    order the evidence kinds are written;
-6. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
+7. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
    more than once (`duplicate-input-value`, naming the input and the value, once for every
    listing after its first), in the order the inputs are written;
-7. action argument schemas outside the argument-schema dialect (`action-arguments`; the dialect,
+8. action argument schemas outside the argument-schema dialect (`action-arguments`; the dialect,
    and the order within one schema, are stated with it), each naming the action, the JSON
    Pointer of the keyword inside the schema and why it is refused, one per offending keyword,
    in the order the actions are written;
-8. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
+9. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
    the artifact an evidence match names as its subject, which is reported after the kind it is
    written beside, then the evidence match's `independent_on`: an empty list,
    `empty-independent-on`, or a dimension it lists more than once, `duplicate-independent-on`,
@@ -64,11 +72,11 @@ does not depend on the order the sections are written in:
    artifact, then each claim the rule invalidates); within a section, in the order its
    declarations are written, and within a declaration, in the order its references are
    written;
-9. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
-   claim it tests through any number of claim references (`inert-invalidation`), in the order
-   the rules and their claims are written. An order form or a `children` form is not an
-   evidence match here: it reads the history, which an invalidation rule does not change;
-10. cycles between claims.
+10. invalidation rules that name a claim reaching no evidence match, in its own predicate or
+    in a claim it tests through any number of claim references (`inert-invalidation`), in the
+    order the rules and their claims are written. An order form or a `children` form is not an
+    evidence match here: it reads the history, which an invalidation rule does not change;
+11. cycles between claims.
 
 Within a section, entries come in the order they are written. Every message renders document
 text on one line. The same document always yields the same problems in the same order.
@@ -141,5 +149,16 @@ object in code-point order, and the walk keeps a stack of its own, never recursi
 | `self-opened-case` | An action opens a child case under the protocol's own id: a case could then open cases under its own protocol without end (D206). |
 | `claim-cycle` | Claims whose predicates test each other in a cycle; the first claim is repeated at the end. |
 | `action-arguments` | An action's argument schema is outside the argument-schema dialect: `pointer` is the JSON Pointer of the offending keyword inside the schema (`""` for the schema itself) and `reason` why it is refused. |
+| `invalid-import-digest` | An import pins a digest not written `sha256:` followed by 64 lowercase hexadecimal digits. |
+| `missing-import` | A protocol imports one that no supplied document is: a protocol with imports compiles only with every document it imports, directly or through another import. |
+| `unused-import` | A document supplied to a composition that neither the root nor any document it imports imports. |
+| `duplicate-import-document` | Two documents supplied to one composition, the root included, are of one protocol. |
+| `import-cycle` | Protocols that import each other in a cycle, from the first a walk from the root meets; the first protocol is repeated at the end. |
+| `import-revision-mismatch` | The supplied document of an import is another revision than the import pins. |
+| `import-digest-mismatch` | The supplied document of an import, compiled with its own imports, has another digest than the import pins. |
+| `undeclared-refinement` | An import lists under `refines` an identifier it does not declare, itself or through its own imports. |
+| `conflicting-imports` | Two imports declare one identifier in one section differently, and the importing document does not redeclare it. Two declarations with the same `canon-ir/1` entry are one. |
+| `unrefined-redeclaration` | A document redeclares an identifier an import declares in the same section, and that import does not list it under `refines`. |
+| `invalid-import` | An imported document is not valid itself: `problem` says why. |
 
 A document that is not well-formed YAML, or not shaped like `protocol/1`, fails earlier, while parsing; the command line reports it as `parse`.

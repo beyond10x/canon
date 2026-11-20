@@ -19,6 +19,7 @@ format: canon-conformance/1
 id: CANON-CLAIM-001                       # the scenario id, unique within the registry
 covers: [CANON-CLAIM-001, CANON-CLAIM-002] # the CANON-* requirements it covers; may be empty
 fixture: fixtures/investigation/protocol.yaml
+imports: [fixtures/investigation/library.yaml] # optional: the documents the fixture imports
 steps:
   - id: compile                           # the step id, unique within the scenario
     compile: {}
@@ -45,6 +46,15 @@ steps:
   component, split on `/` or `\`, is refused: the scenario does not parse. A path that passes
   that check but resolves outside the working directory through a symbolic link is refused
   too, unread: the scenario is reported `unreadable` with `fixture `&lt;path&gt;` resolves outside the working directory`.
+- `imports` lists the `protocol/1` documents the fixture imports, directly or through another
+  import (story:protocol-imports), each a path held to the same two checks as `fixture`: one
+  that is empty, absolute or has a `..` component is refused and the scenario does not parse
+  (`import `&lt;path&gt;` is not a relative path without `..` components`); one that resolves
+  outside the working directory is refused unread, and the scenario is reported `unreadable`
+  with `import `&lt;path&gt;` resolves outside the working directory`. Every step compiles the
+  fixture composed with them (`ir::compose`), in any order; an import that cannot be read fails
+  the step as `import `&lt;path&gt;` is unreadable: <why>`, one that does not parse as `import `&lt;path&gt;` does not parse: <kind and position>`, and a composition that is refused as
+  `fixture does not compile: <code>: <why>; …`. Absent, the fixture imports nothing.
 - `covers` entries are `CANON-` followed by an identifier, each listed once.
 - `steps` is an ordered, non-empty list. Each step is exactly one of `compile` or `evaluate`,
   with exactly one expectation of the matching kind: a compile step expects `canon-ir`, an

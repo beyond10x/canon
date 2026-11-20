@@ -1,0 +1,48 @@
+format: protocol/1
+
+protocol:
+  id: investigation
+  revision: 3
+  description: Decide whether an explanation is supported, and publish the finding once every obligation that applies to the case is discharged.
+
+imports:
+  investigation.falsification:
+    revision: 1
+    digest: sha256:1a2cc72944b479e53776adc362125e87607f587ce05b3d1cee4d95186ba0ab68
+  investigation.review:
+    revision: 2
+    digest: sha256:c6d83c4df1df604739d517d82d470b8d399f29a42d59cdd0789c9f71176ee060
+    refines: [peer.approved]
+
+claims:
+  peer.approved:
+    description: A peer approved the finding.
+    true_when:
+      evidence:
+        kind: peer_review
+        result: approved
+  case.severe:
+    description: The case is severe.
+    true_when:
+      input: severity
+      in: [high]
+
+obligations:
+  peer.review:
+    description: Have a peer review the finding of a severe case.
+    applicable_when:
+      claim: case.severe
+    discharged_when:
+      claim: peer.approved
+
+outcomes:
+  finding.published:
+    description: The finding is published, with every obligation that applies to the case discharged.
+    requires:
+      all:
+        - claim: explanation.supported
+        - claim: falsification.attempted
+        - any:
+            - not:
+                claim: case.severe
+            - claim: peer.approved

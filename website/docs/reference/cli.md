@@ -13,31 +13,35 @@ Generated from the clap definition of the `canon` command line in [`crates/canon
 
 | Command | What it does |
 |---|---|
-| [`canon validate`](#canon-validate) | Parse and validate a `protocol/1` document |
-| [`canon compile`](#canon-compile) | Compile a valid `protocol/1` document into `canon-ir/1` and print it |
+| [`canon validate`](#canon-validate) | Parse and validate a `protocol/1` document, composed with the documents it imports |
+| [`canon compile`](#canon-compile) | Compile a valid `protocol/1` document, composed with the documents it imports, into one closed `canon-ir/1` and print it |
 | [`canon evaluate`](#canon-evaluate) | Evaluate a case under a compiled protocol from an evidence set: every claim, and each declared obligation, action and outcome. Print the `canon-decision/1` document |
 | [`canon check`](#canon-check) | Check a `protocol/1` document over its whole finite state space: report outcomes no state reaches, actions whose precondition holds in no state, claims, obligations, preconditions and outcome requirements that read evidence no action produces, outcomes that rest on evidence an authority-requiring action may produce yet hold without any authority decision, and each declared property that fails, with a counterexample. A state is a set of evidence records, authority decisions and explicit decisions; a record an invalidation rule can keep from a claim is there in any combination of observed before and after each upstream artifact moved, one record each. Evidence an order form reads (`first`, `before`, `after`, `since`) is also there with earlier records at a superseded revision, or with no known instant, in every order of first observations; evidence an `after` or a `since` compares with its result also with a later record of that result, placed anywhere in that order or at no known instant; and evidence a `since` reads as its last kind also with a last record at a superseded revision, placed in that order on its own, with or just after its own first observations or a later record it is compared with. Evidence an evidence match demanding independence reads (`independent_on`) is there from a producer independent on exactly each demand, in every combination of demands met, and without a producer when something that demands nothing reads it. Evidence a `children` form reads (`case_outcome`) is also there with earlier records at a superseded revision, each record the outcome of a child case of its own, and with no place in the order, which the form does not read; an action that opens a child case (`case_open`) counts as producing `case_outcome`; and a protocol that reads `case_outcome` with both a `children` form and an order form is refused (`ordered-child-outcomes`). A state space of more than 65536 states is refused |
-| [`canon generate`](#canon-generate) | Generate `canon-conformance/1` scenarios into an empty directory: one minimal witness per declared outcome and per action blocked in some state, over the state space `canon check` enumerates. Each names the protocol path, as given, as its fixture, so `canon conform run` runs them from the working directory `canon generate` ran in. Refused, writing nothing: a protocol path that resolves outside the working directory, an outcome no state reaches, a protocol that yields no scenario, an outcome or action identifier holding a character a file name cannot hold (`/ \ : * ? " < > \|` or a control character), two scenario file names equal up to letter case or Unicode normalisation, and a non-empty `--out`. On failure, nothing this run created is left |
+| [`canon generate`](#canon-generate) | Generate `canon-conformance/1` scenarios into an empty directory: one minimal witness per declared outcome and per action blocked in some state, over the state space `canon check` enumerates. Each names the protocol path, as given, as its fixture, so `canon conform run` runs them from the working directory `canon generate` ran in. Refused, writing nothing: a protocol path that resolves outside the working directory, an outcome no state reaches, a protocol that yields no scenario, an outcome or action identifier holding a character a file name cannot hold (`/ \ : * ? " < > \|` or a control character), two scenario file names equal up to letter case or Unicode normalisation, a protocol with imports (a scenario names one fixture), and a non-empty `--out`. On failure, nothing this run created is left |
 | [`canon diff`](#canon-diff) | The semantic difference between two compiled revisions of one protocol: every change, each classified as `TIGHTENING`, `RELAXATION`, `BREAKING`, `EXPANSION` or `NO SEMANTIC CHANGE` and naming the identifiers it touches. Two revisions of different protocols are refused |
 | [`canon conform`](#canon-conform) | Conformance scenarios |
 | [`canon conform run`](#canon-conform-run) | Run every `canon-conformance/1` scenario of a registry directory and report each |
 
 ## `canon validate`
 
-Parse and validate a `protocol/1` document
+Parse and validate a `protocol/1` document, composed with the documents it imports
 
 | Option | Required | Default | Meaning |
 |---|---|---|---|
 | `--path <PATH>` | yes | none | The protocol document to validate |
+| `--import <IMPORT>` | no | none | A `protocol/1` document the protocol imports, directly or through another import. Repeat it once per document, in any order; each import is checked against its pinned revision and digest. Without it, a protocol with imports is refused |
 
 ```text
-Parse and validate a `protocol/1` document
+Parse and validate a `protocol/1` document, composed with the documents it imports
 
-Usage: canon validate --path <PATH>
+Usage: canon validate [OPTIONS] --path <PATH>
 
 Options:
       --path <PATH>
           The protocol document to validate
+
+      --import <IMPORT>
+          A `protocol/1` document the protocol imports, directly or through another import. Repeat it once per document, in any order; each import is checked against its pinned revision and digest. Without it, a protocol with imports is refused
 
   -h, --help
           Print help
@@ -45,20 +49,24 @@ Options:
 
 ## `canon compile`
 
-Compile a valid `protocol/1` document into `canon-ir/1` and print it
+Compile a valid `protocol/1` document, composed with the documents it imports, into one closed `canon-ir/1` and print it
 
 | Option | Required | Default | Meaning |
 |---|---|---|---|
 | `--path <PATH>` | yes | none | The protocol document to compile |
+| `--import <IMPORT>` | no | none | A `protocol/1` document the protocol imports, directly or through another import. Repeat it once per document, in any order: the order changes no byte of the IR |
 
 ```text
-Compile a valid `protocol/1` document into `canon-ir/1` and print it
+Compile a valid `protocol/1` document, composed with the documents it imports, into one closed `canon-ir/1` and print it
 
-Usage: canon compile --path <PATH>
+Usage: canon compile [OPTIONS] --path <PATH>
 
 Options:
       --path <PATH>
           The protocol document to compile
+
+      --import <IMPORT>
+          A `protocol/1` document the protocol imports, directly or through another import. Repeat it once per document, in any order: the order changes no byte of the IR
 
   -h, --help
           Print help
@@ -113,6 +121,7 @@ Check a `protocol/1` document over its whole finite state space: report outcomes
 |---|---|---|---|
 | `--path <PATH>` | yes | none | The protocol document to check |
 | `--properties <PROPERTIES>` | no | none | A `canon-properties/1` document: properties declared beside the protocol, each saying an action's or outcome's status is independent of a claim. Each is checked in every state |
+| `--import <IMPORT>` | no | none | A `protocol/1` document the protocol imports, directly or through another import. Repeat it once per document, in any order; the protocol is checked composed with them |
 
 ```text
 Check a `protocol/1` document over its whole finite state space: report outcomes no state reaches, actions whose precondition holds in no state, claims, obligations, preconditions and outcome requirements that read evidence no action produces, outcomes that rest on evidence an authority-requiring action may produce yet hold without any authority decision, and each declared property that fails, with a counterexample. A state is a set of evidence records, authority decisions and explicit decisions; a record an invalidation rule can keep from a claim is there in any combination of observed before and after each upstream artifact moved, one record each. Evidence an order form reads (`first`, `before`, `after`, `since`) is also there with earlier records at a superseded revision, or with no known instant, in every order of first observations; evidence an `after` or a `since` compares with its result also with a later record of that result, placed anywhere in that order or at no known instant; and evidence a `since` reads as its last kind also with a last record at a superseded revision, placed in that order on its own, with or just after its own first observations or a later record it is compared with. Evidence an evidence match demanding independence reads (`independent_on`) is there from a producer independent on exactly each demand, in every combination of demands met, and without a producer when something that demands nothing reads it. Evidence a `children` form reads (`case_outcome`) is also there with earlier records at a superseded revision, each record the outcome of a child case of its own, and with no place in the order, which the form does not read; an action that opens a child case (`case_open`) counts as producing `case_outcome`; and a protocol that reads `case_outcome` with both a `children` form and an order form is refused (`ordered-child-outcomes`). A state space of more than 65536 states is refused
@@ -126,13 +135,16 @@ Options:
       --properties <PROPERTIES>
           A `canon-properties/1` document: properties declared beside the protocol, each saying an action's or outcome's status is independent of a claim. Each is checked in every state
 
+      --import <IMPORT>
+          A `protocol/1` document the protocol imports, directly or through another import. Repeat it once per document, in any order; the protocol is checked composed with them
+
   -h, --help
           Print help
 ```
 
 ## `canon generate`
 
-Generate `canon-conformance/1` scenarios into an empty directory: one minimal witness per declared outcome and per action blocked in some state, over the state space `canon check` enumerates. Each names the protocol path, as given, as its fixture, so `canon conform run` runs them from the working directory `canon generate` ran in. Refused, writing nothing: a protocol path that resolves outside the working directory, an outcome no state reaches, a protocol that yields no scenario, an outcome or action identifier holding a character a file name cannot hold (`/ \ : * ? " < > \|` or a control character), two scenario file names equal up to letter case or Unicode normalisation, and a non-empty `--out`. On failure, nothing this run created is left
+Generate `canon-conformance/1` scenarios into an empty directory: one minimal witness per declared outcome and per action blocked in some state, over the state space `canon check` enumerates. Each names the protocol path, as given, as its fixture, so `canon conform run` runs them from the working directory `canon generate` ran in. Refused, writing nothing: a protocol path that resolves outside the working directory, an outcome no state reaches, a protocol that yields no scenario, an outcome or action identifier holding a character a file name cannot hold (`/ \ : * ? " < > \|` or a control character), two scenario file names equal up to letter case or Unicode normalisation, a protocol with imports (a scenario names one fixture), and a non-empty `--out`. On failure, nothing this run created is left
 
 | Option | Required | Default | Meaning |
 |---|---|---|---|
@@ -140,7 +152,7 @@ Generate `canon-conformance/1` scenarios into an empty directory: one minimal wi
 | `--out <OUT>` | yes | none | The directory to write the scenarios to: absent or empty. When absent it is created, with any missing parents; an existing one, or a symbolic link to one, is written into as it is |
 
 ```text
-Generate `canon-conformance/1` scenarios into an empty directory: one minimal witness per declared outcome and per action blocked in some state, over the state space `canon check` enumerates. Each names the protocol path, as given, as its fixture, so `canon conform run` runs them from the working directory `canon generate` ran in. Refused, writing nothing: a protocol path that resolves outside the working directory, an outcome no state reaches, a protocol that yields no scenario, an outcome or action identifier holding a character a file name cannot hold (`/ \ : * ? " < > |` or a control character), two scenario file names equal up to letter case or Unicode normalisation, and a non-empty `--out`. On failure, nothing this run created is left
+Generate `canon-conformance/1` scenarios into an empty directory: one minimal witness per declared outcome and per action blocked in some state, over the state space `canon check` enumerates. Each names the protocol path, as given, as its fixture, so `canon conform run` runs them from the working directory `canon generate` ran in. Refused, writing nothing: a protocol path that resolves outside the working directory, an outcome no state reaches, a protocol that yields no scenario, an outcome or action identifier holding a character a file name cannot hold (`/ \ : * ? " < > |` or a control character), two scenario file names equal up to letter case or Unicode normalisation, a protocol with imports (a scenario names one fixture), and a non-empty `--out`. On failure, nothing this run created is left
 
 Usage: canon generate --path <PATH> --out <OUT>
 

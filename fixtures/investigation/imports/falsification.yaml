@@ -1,0 +1,36 @@
+format: protocol/1
+
+protocol:
+  id: investigation.falsification
+  revision: 1
+  description: An attempt to refute an explanation observation supports.
+
+imports:
+  investigation.evidence:
+    revision: 1
+    digest: sha256:b25d25193ad45afd4bb182d0124f6ec8546a6c95dfb084049fb70dcef402d255
+
+evidence_kinds:
+  falsification_attempt:
+    description: An attempt to refute the explanation.
+
+claims:
+  falsification.attempted:
+    description: An attempt to refute the explanation is on record.
+    true_when:
+      evidence:
+        kind: falsification_attempt
+
+obligations:
+  falsification.recorded:
+    description: Record an attempt to refute an explanation observation supports.
+    applicable_when:
+      claim: explanation.supported
+    discharged_when:
+      claim: falsification.attempted
+
+actions:
+  attempt_falsification:
+    description: Try to refute the explanation.
+    may_produce:
+      - evidence: falsification_attempt

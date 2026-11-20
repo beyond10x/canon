@@ -4,27 +4,35 @@
 //! does not depend on the order the sections are written in:
 //!
 //! 1. the format;
-//! 2. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
+//! 2. the imports section (story:protocol-imports): each import id that is not an identifier,
+//!    followed by each of its `refines` entries that is not one (`invalid-identifier`), then each
+//!    import id listed again (`duplicate-identifier`), then each digest not written `sha256:` and
+//!    64 lowercase hexadecimal digits (`invalid-import-digest`), each naming the import, then each
+//!    import, once, as `missing-import`: a document with imports is valid only composed with the
+//!    documents it imports (`b10x_canon::ir::compose`), which leaves it without imports. Every
+//!    other problem is the composed document's, whose declarations may come from any document of
+//!    the composition;
+//! 3. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
 //!    claims, obligations, actions, outcomes, invalidation rules, case inputs and independence
 //!    dimensions, in that section order, then the capabilities actions name, each followed by the
 //!    keys and values of its scope in the order written, the effect classes actions name and the
 //!    protocol each action's `case_open` names, in action order, then the decisions outcomes
 //!    require, in outcome order, then the values case inputs declare, in input order;
-//! 3. duplicate identifiers, in the same section order;
-//! 4. capability requirements whose scope names a key more than once (`duplicate-scope-key`,
+//! 4. duplicate identifiers, in the same section order;
+//! 5. capability requirements whose scope names a key more than once (`duplicate-scope-key`,
 //!    naming the action, the capability and the key, once for every naming after its first), in
 //!    the order the actions and their requirements are written;
-//! 5. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
+//! 6. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
 //!    or `d`, or that are but are too long to count in seconds (each with its own message), in the
 //!    order the evidence kinds are written;
-//! 6. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
+//! 7. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
 //!    more than once (`duplicate-input-value`, naming the input and the value, once for every
 //!    listing after its first), in the order the inputs are written;
-//! 7. action argument schemas outside the argument-schema dialect (`action-arguments`; the dialect,
+//! 8. action argument schemas outside the argument-schema dialect (`action-arguments`; the dialect,
 //!    and the order within one schema, are stated with it), each naming the action, the JSON
 //!    Pointer of the keyword inside the schema and why it is refused, one per offending keyword,
 //!    in the order the actions are written;
-//! 8. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
+//! 9. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
 //!    the artifact an evidence match names as its subject, which is reported after the kind it is
 //!    written beside, then the evidence match's `independent_on`: an empty list,
 //!    `empty-independent-on`, or a dimension it lists more than once, `duplicate-independent-on`,
@@ -55,11 +63,11 @@
 //!    artifact, then each claim the rule invalidates); within a section, in the order its
 //!    declarations are written, and within a declaration, in the order its references are
 //!    written;
-//! 9. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
-//!    claim it tests through any number of claim references (`inert-invalidation`), in the order
-//!    the rules and their claims are written. An order form or a `children` form is not an
-//!    evidence match here: it reads the history, which an invalidation rule does not change;
-//! 10. cycles between claims.
+//! 10. invalidation rules that name a claim reaching no evidence match, in its own predicate or
+//!     in a claim it tests through any number of claim references (`inert-invalidation`), in the
+//!     order the rules and their claims are written. An order form or a `children` form is not an
+//!     evidence match here: it reads the history, which an invalidation rule does not change;
+//! 11. cycles between claims.
 //!
 //! Within a section, entries come in the order they are written. Every message renders document
 //! text on one line. The same document always yields the same problems in the same order.
@@ -69,6 +77,7 @@ pub(crate) mod arguments;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use crate::ir::DIGEST_PREFIX;
 use crate::model::{
     ActionId, ArtifactId, CASE_OUTCOME, CapabilityId, ClaimId, EvidenceKindId, FORMAT,
     IndependenceDimensionId, InputId, InputValue, InvalidationRuleId, OPEN_OUTCOME, ObligationId,
@@ -96,6 +105,10 @@ pub enum Section {
     IndependenceDimension,
     ScopeKey,
     ScopeValue,
+    /// An imported protocol, by the id the `imports` section keys it by.
+    Import,
+    /// An identifier an import lists under `refines`.
+    Refinement,
 }
 
 impl fmt::Display for Section {
@@ -117,6 +130,8 @@ impl fmt::Display for Section {
             Section::IndependenceDimension => "independence dimension",
             Section::ScopeKey => "scope key",
             Section::ScopeValue => "scope value",
+            Section::Import => "import",
+            Section::Refinement => "refinement",
         })
     }
 }
@@ -269,6 +284,66 @@ pub enum Problem {
         pointer: String,
         reason: String,
     },
+    /// An import pins a digest not written `sha256:` followed by 64 lowercase hexadecimal digits.
+    InvalidImportDigest { import: ProtocolId, digest: String },
+    /// A protocol imports one that no supplied document is: a protocol with imports compiles only
+    /// with every document it imports, directly or through another import.
+    MissingImport {
+        importer: ProtocolId,
+        import: ProtocolId,
+    },
+    /// A document supplied to a composition that neither the root nor any document it imports
+    /// imports.
+    UnusedImport { protocol: ProtocolId },
+    /// Two documents supplied to one composition, the root included, are of one protocol.
+    DuplicateImportDocument { protocol: ProtocolId },
+    /// Protocols that import each other in a cycle, from the first a walk from the root meets; the
+    /// first protocol is repeated at the end.
+    ImportCycle { protocols: Vec<ProtocolId> },
+    /// The supplied document of an import is another revision than the import pins.
+    ImportRevisionMismatch {
+        importer: ProtocolId,
+        import: ProtocolId,
+        pinned: u64,
+        supplied: u64,
+    },
+    /// The supplied document of an import, compiled with its own imports, has another digest than
+    /// the import pins.
+    ImportDigestMismatch {
+        importer: ProtocolId,
+        import: ProtocolId,
+        pinned: String,
+        actual: String,
+    },
+    /// An import lists under `refines` an identifier it does not declare, itself or through its
+    /// own imports.
+    UndeclaredRefinement {
+        importer: ProtocolId,
+        import: ProtocolId,
+        id: String,
+    },
+    /// Two imports declare one identifier in one section differently, and the importing document
+    /// does not redeclare it. Two declarations with the same `canon-ir/1` entry are one.
+    ConflictingImports {
+        importer: ProtocolId,
+        section: Section,
+        id: String,
+        first: ProtocolId,
+        second: ProtocolId,
+    },
+    /// A document redeclares an identifier an import declares in the same section, and that
+    /// import does not list it under `refines`.
+    UnrefinedRedeclaration {
+        importer: ProtocolId,
+        section: Section,
+        id: String,
+        import: ProtocolId,
+    },
+    /// An imported document is not valid itself: `problem` says why.
+    InvalidImport {
+        import: ProtocolId,
+        problem: Box<Problem>,
+    },
 }
 
 impl Problem {
@@ -302,6 +377,17 @@ impl Problem {
             Problem::SelfOpenedCase { .. } => "self-opened-case",
             Problem::ClaimCycle { .. } => "claim-cycle",
             Problem::ActionArguments { .. } => "action-arguments",
+            Problem::InvalidImportDigest { .. } => "invalid-import-digest",
+            Problem::MissingImport { .. } => "missing-import",
+            Problem::UnusedImport { .. } => "unused-import",
+            Problem::DuplicateImportDocument { .. } => "duplicate-import-document",
+            Problem::ImportCycle { .. } => "import-cycle",
+            Problem::ImportRevisionMismatch { .. } => "import-revision-mismatch",
+            Problem::ImportDigestMismatch { .. } => "import-digest-mismatch",
+            Problem::UndeclaredRefinement { .. } => "undeclared-refinement",
+            Problem::ConflictingImports { .. } => "conflicting-imports",
+            Problem::UnrefinedRedeclaration { .. } => "unrefined-redeclaration",
+            Problem::InvalidImport { .. } => "invalid-import",
         }
     }
 }
@@ -491,8 +577,148 @@ impl fmt::Display for Problem {
                 }
                 write!(f, ": {}", one_line(reason))
             }
+            Problem::InvalidImportDigest { import, digest } => write!(
+                f,
+                "import `{}` pins digest `{}`, which is not `{DIGEST_PREFIX}` followed by 64 lowercase hexadecimal digits",
+                one_line(import.as_str()),
+                one_line(digest)
+            ),
+            Problem::MissingImport { importer, import } => write!(
+                f,
+                "protocol `{}` imports `{}`, and no supplied document is that protocol",
+                one_line(importer.as_str()),
+                one_line(import.as_str())
+            ),
+            Problem::UnusedImport { protocol } => write!(
+                f,
+                "the supplied protocol `{}` is imported neither by the root nor by any document it imports",
+                one_line(protocol.as_str())
+            ),
+            Problem::DuplicateImportDocument { protocol } => write!(
+                f,
+                "protocol `{}` is supplied more than once",
+                one_line(protocol.as_str())
+            ),
+            Problem::ImportCycle { protocols } => {
+                let path: Vec<String> = protocols.iter().map(|id| one_line(id.as_str())).collect();
+                write!(
+                    f,
+                    "protocols import each other in a cycle: {}",
+                    path.join(" -> ")
+                )
+            }
+            Problem::ImportRevisionMismatch {
+                importer,
+                import,
+                pinned,
+                supplied,
+            } => write!(
+                f,
+                "protocol `{}` imports `{}` pinned to revision {pinned}, and the supplied document is revision {supplied}",
+                one_line(importer.as_str()),
+                one_line(import.as_str())
+            ),
+            Problem::ImportDigestMismatch {
+                importer,
+                import,
+                pinned,
+                actual,
+            } => write!(
+                f,
+                "protocol `{}` imports `{}` pinned to digest {}, and the supplied document compiles to {actual}",
+                one_line(importer.as_str()),
+                one_line(import.as_str()),
+                one_line(pinned)
+            ),
+            Problem::UndeclaredRefinement {
+                importer,
+                import,
+                id,
+            } => write!(
+                f,
+                "protocol `{}` refines `{}` of its import `{}`, which declares no such identifier",
+                one_line(importer.as_str()),
+                one_line(id),
+                one_line(import.as_str())
+            ),
+            Problem::ConflictingImports {
+                importer,
+                section,
+                id,
+                first,
+                second,
+            } => write!(
+                f,
+                "protocol `{}` imports {section} `{}` from `{}` and from `{}`, declared differently",
+                one_line(importer.as_str()),
+                one_line(id),
+                one_line(first.as_str()),
+                one_line(second.as_str())
+            ),
+            Problem::UnrefinedRedeclaration {
+                importer,
+                section,
+                id,
+                import,
+            } => write!(
+                f,
+                "protocol `{}` declares {section} `{}`, which its import `{}` declares and does not list under `refines`",
+                one_line(importer.as_str()),
+                one_line(id),
+                one_line(import.as_str())
+            ),
+            Problem::InvalidImport { import, problem } => write!(
+                f,
+                "imported protocol `{}`: {}: {problem}",
+                one_line(import.as_str()),
+                problem.code()
+            ),
         }
     }
+}
+
+/// The problems of a document's own `imports` section, in the order written: each import id that
+/// is not an identifier, followed by each of its `refines` entries that is not one, then each
+/// import id listed again, then each digest not written [`DIGEST_PREFIX`] and 64 lowercase
+/// hexadecimal digits.
+pub(crate) fn import_section(protocol: &Protocol) -> Vec<Problem> {
+    let mut problems = Vec::new();
+    for (id, import) in protocol.imports.iter() {
+        if !is_identifier(id.as_str()) {
+            problems.push(Problem::InvalidIdentifier {
+                section: Section::Import,
+                id: id.as_str().to_owned(),
+            });
+        }
+        for refined in &import.refines {
+            if !is_identifier(refined) {
+                problems.push(Problem::InvalidIdentifier {
+                    section: Section::Refinement,
+                    id: refined.clone(),
+                });
+            }
+        }
+    }
+    duplicates(
+        Section::Import,
+        &strs(protocol.imports.ids()),
+        &mut problems,
+    );
+    for (id, import) in protocol.imports.iter() {
+        let well_formed = import
+            .digest
+            .strip_prefix(DIGEST_PREFIX)
+            .is_some_and(|hex| {
+                hex.len() == 64 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+            });
+        if !well_formed {
+            problems.push(Problem::InvalidImportDigest {
+                import: id.clone(),
+                digest: import.digest.clone(),
+            });
+        }
+    }
+    problems
 }
 
 /// Validates a parsed protocol. `Ok` when it is valid; otherwise every problem, in a stable order.
@@ -503,6 +729,17 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         problems.push(Problem::UnsupportedFormat {
             found: protocol.format.clone(),
         });
+    }
+
+    problems.extend(import_section(protocol));
+    let mut uncomposed = BTreeSet::new();
+    for import in protocol.imports.ids() {
+        if uncomposed.insert(import) {
+            problems.push(Problem::MissingImport {
+                importer: protocol.protocol.id.clone(),
+                import: import.clone(),
+            });
+        }
     }
 
     let declared: [(Section, Vec<&str>); 10] = [
