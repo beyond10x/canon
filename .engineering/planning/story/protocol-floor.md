@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:protocol-floor
 kind: story
-status: draft
+status: active
 title: Check that a protocol stays above an organization floor with canon floor
 refs:
 - provider: atlas
@@ -40,7 +40,10 @@ scope:
   path: website/docs/reference/
 - confidence: inferred
   path: website/status.yaml
-revision: 4
+revision: 6
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":4}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
+- {from: "proposed", to: "active", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":4}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 ---
 ## Outcome
 

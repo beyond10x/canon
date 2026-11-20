@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:capability-scope
 kind: story
-status: draft
+status: active
 title: Scope capability requirements and grants, default deny, deny over approval over allow
 refs:
 - provider: atlas
@@ -31,7 +31,10 @@ scope:
   path: ess/
 - confidence: cited
   path: fixtures/investigation/capability-scope.yaml
-revision: 4
+revision: 6
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 5, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
+- {from: "proposed", to: "active", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 6, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 ---
 ## Outcome
 

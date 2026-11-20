@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:canon-mutate
 kind: story
-status: draft
+status: active
 title: Measure scenario strength with canon mutate
 relations:
 - decomposes: epic:protocol-analysis
@@ -23,7 +23,10 @@ scope:
   path: crates/canon/src/mutate/
 - confidence: cited
   path: fixtures/investigation/mutate/
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
+- {from: "proposed", to: "active", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 ---
 ## Outcome
 

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ess-command-surface
 kind: story
-status: draft
+status: active
 title: Declare the canon command surface in ESS
 refs:
 - provider: atlas
@@ -19,7 +19,10 @@ scope:
   path: ess/domains/cli.yaml
 - confidence: inferred
   path: ess/system.yaml
-revision: 6
+revision: 8
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"review_outcome":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
+- {from: "proposed", to: "active", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"review_outcome":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 ---
 ## Outcome
 

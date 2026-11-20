@@ -2,12 +2,15 @@
 format: aep.planning-md/3
 id: epic:protocol-analysis
 kind: epic
-status: draft
+status: active
 title: 'Protocol analysis: static checks, generated scenarios and mutation testing'
 relations:
 - serves: vision:governed-autonomy
 - serves: vision:O2
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
+- {from: "proposed", to: "active", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 ---
 ## Outcome
 

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:protocol-imports
 kind: story
-status: draft
+status: active
 title: Compose protocols from pinned imports into one closed canon-ir/1
 refs:
 - provider: atlas
@@ -52,7 +52,10 @@ scope:
   path: website/static/schemas/
 - confidence: inferred
   path: website/status.yaml
-revision: 9
+revision: 11
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 10, decided_on: {"recorded":{"review_outcome":4}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
+- {from: "proposed", to: "active", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 11, decided_on: {"recorded":{"review_outcome":4}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 ---
 ## Outcome
 

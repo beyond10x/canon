@@ -1,6 +1,6 @@
 # Canon — Protocol Specification Language and Calculus
 
-**Status:** Design proposal  
+**Status:** Accepted (operator, 2026-11-20; `approval-record:accept-drafts-2026-11-20`)  
 **Codename / project name:** Canon  
 **Proposed repository:** `beyond10x/canon`  
 **Proposed CLI:** `canon`  

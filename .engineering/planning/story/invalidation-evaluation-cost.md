@@ -2,14 +2,17 @@
 format: aep.planning-md/3
 id: story:invalidation-evaluation-cost
 kind: story
-status: draft
+status: active
 title: Evaluation under invalidation rules is at most quadratic in the claim count
 relations:
 - decomposes: epic:canon-kernel
 - depends_on: story:invalidation-rules
 - serves: vision:O2
 - serves: vision:governed-autonomy
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 2, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
+- {from: "proposed", to: "active", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 ---
 ## Outcome
 
