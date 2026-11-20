@@ -321,8 +321,9 @@ const DOCUMENTS: [Document; 6] = [
         format: "AUTHORITY_FORMAT",
         schema: Some("authority-1.schema.json"),
         list: Some("--authority"),
-        twice: "A capability decided twice is refused, whatever the decision; the JSON Schema cannot \
-                express that, and refuses only an entry repeated exactly.",
+        twice: "A capability decided twice at an equal scope (the same keys with the same values, \
+                in any order) is refused, whatever the decision; the JSON Schema cannot express \
+                that, and refuses only an entry repeated exactly.",
         command: "canon evaluate",
     },
     Document {
