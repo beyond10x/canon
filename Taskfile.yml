@@ -16,10 +16,11 @@ tasks:
       - task: docs-check
 
   ess-gate:
-    desc: Atlas ADR 0076 gate on ess/, and ess/ equal to the Rust model.
+    desc: Atlas ADR 0076 gate on ess/, and ess/ equal to the Rust model and the canon command line.
     cmds:
       - cargo test -p b10x-canon --test ess_gate --test ess_model_matches --locked
       - cargo test -p b10x-canon-expr --test model_matches --locked
+      - cargo test -p canon-cli --test ess_commands_match --locked
 
   docs-generate:
     desc: Regenerate the derived documentation pages and landing data under website/, recording real canon runs.

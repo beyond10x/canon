@@ -6,4 +6,5 @@ specification:
   - domains/check.yaml
   - domains/expr.yaml
   - domains/conform.yaml
+  - domains/cli.yaml
 scenarios: []

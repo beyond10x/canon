@@ -33,10 +33,19 @@ Canon's ESS specification lives under `ess/`. It specifies the `protocol/1` sour
 (`crates/canon/src/model/`), the evaluation documents `canon-case/1` (the Case entity),
 `canon-evidence/1`, `canon-decisions/1` and `canon-decision/1` (story:three-valued-claims,
 story:decision-outcomes) and `canon-authority/1` (story:review-hardening-w7) in the domain
-`canon.protocol`, and the `canon-properties/1` document
-`canon check` reads (story:canon-check) in the domain `canon.check`, with no commands. Atlas ADR
-0076 still owes the `canon` CLI's commands (`canon validate` and its successors), with the story
-that introduces them.
+`canon.protocol`, the `canon-properties/1` document `canon check` reads (story:canon-check) in the
+domain `canon.check`, and the `canon` command surface in the domain `canon.cli`
+(story:ess-command-surface), completing Atlas ADR 0076's data model and command surface.
+
+The commands are declared in `ess/domains/cli.yaml`: one command per leaf subcommand of
+`canon_cli::Cli` (`crates/canon-cli/src/lib.rs`), its wire name the clap path joined by `-`
+(`conform run` is `conform-run`), every long flag an input of the same name, a flag clap does not
+require an `Optional<…>` input. `crates/canon-cli/tests/ess_commands_match.rs`, run by
+`task ess-gate`, holds them: it fails, naming the difference, when a subcommand or flag exists in
+only one of the clap definition and the compiled `canon.cli` domain, when their requiredness
+differs, or when a command has no synthesized scenario. A story that adds or changes a command or a
+flag declares the change in `ess/domains/cli.yaml` in its first commit. `canon-docs` is not the
+command surface and is not declared.
 
 `ess/` is held to a hard gate (Atlas ADR 0076): `ess specify validate --path ess
 --strict-requires`, `ess specify compile --path ess`, `ess verify conform synthesize --path ess`
