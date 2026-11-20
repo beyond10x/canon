@@ -5,7 +5,9 @@
 //!
 //! - **Canonical ordering.** Declarations are keyed and ordered by identifier, not by the order they
 //!   are written in. The members of an `all` or `any` predicate are sorted by [`canonical_order`],
-//!   and an action's capability requirements, the evidence kinds it may produce, the claims an
+//!   and an action's capability requirements (by capability, then by scope, one without a scope
+//!   first, a scope comparing its keys and values in key order), the evidence kinds it may
+//!   produce, the claims an
 //!   invalidation rule invalidates, the values a case input declares, the values an input test
 //!   lists and the dimensions an evidence match demands independence on by identifier, and the
 //!   outcomes a `children` form lists by code point.
@@ -16,13 +18,15 @@
 //! - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
 //!   evidence match without a result has `"result": null`; a claim test without `is` has
 //!   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-//!   true; absent lists and sections are empty. The nine exceptions are an evidence kind's
+//!   true; absent lists and sections are empty. The ten exceptions are an evidence kind's
 //!   `max_age`, the `subject` of an evidence match or an order form, an evidence match's
 //!   `independent_on`, an obligation's `applicable_when`, an action's `arguments`, an action's
-//!   `case_open`, the `invalidation` section, the `case` section and the
-//!   `independence_dimensions` section: each written only when it is declared (a
-//!   section only when it holds a rule, an input or a dimension), so the IR of a protocol that
-//!   declares none of them is the IR it was before they existed. The `independence_dimensions`
+//!   `case_open`, the `scope` of a capability requirement, the `invalidation` section, the `case`
+//!   section and the `independence_dimensions` section: each written only when it is declared (a
+//!   scope only when it names a key, a section only when it holds a rule, an input or a
+//!   dimension), so the IR of a protocol that declares none of them is the IR it was before they
+//!   existed. A capability requirement is `{"capability": …}`, or `{"capability": …, "scope":
+//!   {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
 //!   section is `{<id>: {"description": …}}`. The `case` section is
 //!   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
 //!   authored: `{"first": {"kind": …, "result": …}}`, `{"before": {"first": …, "then": …}}`,
@@ -69,7 +73,8 @@ use crate::model::{
     self, ActionId, Age, ArtifactId, CapabilityId, CaseOpening, ChildOutcomes, ClaimId, ClaimTest,
     EffectClass, EvidenceAfter, EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceSince,
     FirstResult, IndependenceDimensionId, InputId, InputTest, InputValue, InvalidationRuleId,
-    ObligationId, OutcomeId, OutcomeRequirement, Predicate, Protocol, ProtocolId, Truth,
+    ObligationId, OutcomeId, OutcomeRequirement, Predicate, Protocol, ProtocolId, ScopeKey,
+    ScopeValue, Truth,
 };
 use crate::validate::{self, Problem};
 
@@ -151,8 +156,13 @@ pub struct Action {
     pub description: Option<String>,
     /// `{"all": []}`, which is true, when the source declares none.
     pub precondition: Predicate,
-    /// Sorted by capability, each once.
+    /// Every capability a requirement names, sorted by capability, each once.
     pub requires: Vec<CapabilityId>,
+    /// The scopes a capability is required at, for each capability some requirement names a scope
+    /// for (story:capability-scope): sorted, each once, the empty scope standing for a requirement
+    /// of it without one. A capability of `requires` this does not hold is required without a
+    /// scope only; empty when no requirement has a scope. [`Action::requirements`] walks both.
+    pub scopes: BTreeMap<CapabilityId, Vec<Scope>>,
     pub effect: Option<EffectClass>,
     /// Sorted by evidence kind, each once.
     pub may_produce: Vec<EvidenceKindId>,
@@ -162,6 +172,31 @@ pub struct Action {
     /// The child case the action opens, as declared; `None` when it opens none, and `canon-ir/1`
     /// then writes no `case_open` key.
     pub case_open: Option<CaseOpening>,
+}
+
+/// A capability scope: one value for each key it names, in key order. Empty: no scope.
+pub type Scope = BTreeMap<ScopeKey, ScopeValue>;
+
+/// The scope of a requirement without one.
+static UNSCOPED: Scope = BTreeMap::new();
+
+impl Action {
+    /// Every capability requirement, `(capability, scope)`, by capability and then by scope, each
+    /// once; one without a scope has the empty scope. A caller-built IR whose two fields disagree
+    /// requires more, never less: a capability of `requires` that `scopes` gives no scope is
+    /// required without one, and a capability `scopes` holds is required at its scopes whether or
+    /// not `requires` lists it.
+    pub fn requirements(&self) -> impl Iterator<Item = (&CapabilityId, &Scope)> {
+        let capabilities: std::collections::BTreeSet<&CapabilityId> =
+            self.requires.iter().chain(self.scopes.keys()).collect();
+        capabilities.into_iter().flat_map(move |capability| {
+            let scopes: &[Scope] = match self.scopes.get(capability) {
+                Some(scopes) if !scopes.is_empty() => scopes,
+                _ => std::slice::from_ref(&UNSCOPED),
+            };
+            scopes.iter().map(move |scope| (capability, scope))
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -223,6 +258,7 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
                     .map(|requirement| requirement.capability.clone())
                     .collect(),
             ),
+            scopes: scopes(&action.requires),
             effect: action.effect.clone(),
             may_produce: unique(
                 action
@@ -314,6 +350,29 @@ fn unique<T: Ord>(mut ids: Vec<T>) -> Vec<T> {
     ids.sort();
     ids.dedup();
     ids
+}
+
+/// [`Action::scopes`] of an action's requirements: for each capability some requirement names a
+/// scope for, every scope it is required at (the empty one for a requirement without a scope),
+/// sorted, each once. The validator has refused a scope that names a key twice.
+fn scopes(requires: &[model::CapabilityRequirement]) -> BTreeMap<CapabilityId, Vec<Scope>> {
+    let mut scopes: BTreeMap<CapabilityId, Vec<Scope>> = BTreeMap::new();
+    for requirement in requires {
+        let scope: Scope = requirement
+            .scope
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
+        scopes
+            .entry(requirement.capability.clone())
+            .or_default()
+            .push(scope);
+    }
+    scopes
+        .into_iter()
+        .map(|(capability, listed)| (capability, unique(listed)))
+        .filter(|(_, listed)| listed.iter().any(|scope| !scope.is_empty()))
+        .collect()
 }
 
 /// The canonical order of predicates, which is the order of the members of every `all` and `any`
@@ -555,13 +614,29 @@ impl Ir {
                             "requires",
                             Value::Array(
                                 action
-                                    .requires
-                                    .iter()
-                                    .map(|capability| {
-                                        Value::object([(
+                                    .requirements()
+                                    .map(|(capability, scope)| {
+                                        let mut fields = vec![(
                                             "capability",
                                             Value::string(capability.as_str()),
-                                        )])
+                                        )];
+                                        if !scope.is_empty() {
+                                            fields.push((
+                                                "scope",
+                                                Value::Object(
+                                                    scope
+                                                        .iter()
+                                                        .map(|(key, value)| {
+                                                            (
+                                                                key.as_str().to_owned(),
+                                                                Value::string(value.as_str()),
+                                                            )
+                                                        })
+                                                        .collect(),
+                                                ),
+                                            ));
+                                        }
+                                        Value::object(fields)
                                     })
                                     .collect(),
                             ),
@@ -816,7 +891,8 @@ fn truth(value: Truth) -> &'static str {
 mod tests {
     use super::{FORMAT, compile, sorted};
     use crate::model::{
-        self, ArtifactId, ClaimId, ClaimTest, EvidenceKindId, EvidenceMatch, Predicate, Truth,
+        self, ActionId, ArtifactId, CapabilityId, ClaimId, ClaimTest, EvidenceKindId,
+        EvidenceMatch, Predicate, Truth,
     };
 
     fn claim(id: &str, is: Truth) -> Predicate {
@@ -964,6 +1040,60 @@ mod tests {
             ),
             "{compiled}"
         );
+    }
+
+    /// A requirement's scope is written only when it names a key, its keys in code-point order;
+    /// requirements sort by capability and then by scope, the unscoped one first, each once,
+    /// whatever order they and their keys are written in. An empty scope is no scope.
+    #[test]
+    fn a_scoped_requirement_compiles_with_its_scope_sorted_each_once() {
+        let source = format!(
+            "{HEADER}actions:\n  act:\n    requires:\n      - {{capability: m, scope: {{namespace: foo, cluster: prod-eu}}}}\n      - {{capability: m}}\n      - {{capability: m, scope: {{cluster: prod-eu}}}}\n      - {{capability: a, scope: {{}}}}\n      - {{capability: m, scope: {{cluster: prod-eu, namespace: foo}}}}\n"
+        );
+        let compiled = ir(&source);
+        assert!(
+            compiled.contains(
+                "      \"requires\": [\n        {\n          \"capability\": \"a\"\n        },\n        {\n          \"capability\": \"m\"\n        },\n        {\n          \"capability\": \"m\",\n          \"scope\": {\n            \"cluster\": \"prod-eu\"\n          }\n        },\n        {\n          \"capability\": \"m\",\n          \"scope\": {\n            \"cluster\": \"prod-eu\",\n            \"namespace\": \"foo\"\n          }\n        }\n      ]\n"
+            ),
+            "{compiled}"
+        );
+        let protocol = model::parse(&source).expect("parses");
+        let action = &compile(&protocol).expect("compiles").actions[&ActionId::new("act")];
+        assert_eq!(
+            action.requires,
+            [CapabilityId::new("a"), CapabilityId::new("m")]
+        );
+        assert_eq!(action.scopes.len(), 1, "only `m` has a scope: {action:?}");
+        assert_eq!(action.requirements().count(), 4);
+    }
+
+    /// A caller-built action whose `requires` and `scopes` disagree requires more, never less.
+    #[test]
+    fn requirements_of_disagreeing_fields_require_more_never_less() {
+        let scoped: super::Scope = [(model::ScopeKey::new("cluster"), model::ScopeValue::new("a"))]
+            .into_iter()
+            .collect();
+        let action = super::Action {
+            description: None,
+            precondition: Predicate::All(Vec::new()),
+            requires: vec![CapabilityId::new("a"), CapabilityId::new("b")],
+            scopes: [
+                (CapabilityId::new("b"), Vec::new()),
+                (CapabilityId::new("c"), vec![scoped.clone()]),
+            ]
+            .into_iter()
+            .collect(),
+            effect: None,
+            may_produce: Vec::new(),
+            arguments: None,
+            case_open: None,
+        };
+        let found: Vec<(&str, &super::Scope)> = action
+            .requirements()
+            .map(|(capability, scope)| (capability.as_str(), scope))
+            .collect();
+        let unscoped = super::Scope::new();
+        assert_eq!(found, [("a", &unscoped), ("b", &unscoped), ("c", &scoped)]);
     }
 
     #[test]

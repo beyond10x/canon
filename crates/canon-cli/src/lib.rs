@@ -79,9 +79,10 @@ pub enum Command {
         /// A directory holding only `canon-evidence/1` records, one per `*.yaml` or `*.json` file.
         #[arg(long)]
         evidence: PathBuf,
-        /// A `canon-authority/1` document: which capabilities are granted or denied. An action is
-        /// admissible only when every capability it requires is granted; without it, none is
-        /// granted.
+        /// A `canon-authority/1` document: which capabilities are granted, granted only with
+        /// approval or denied, each at a scope or at every scope. An action is admissible only when
+        /// every capability it requires is granted at the scope it requires it; without it, none
+        /// is granted.
         #[arg(long)]
         authority: Option<PathBuf>,
         /// A `canon-decisions/1` document: the explicit decisions taken, each naming the decision,

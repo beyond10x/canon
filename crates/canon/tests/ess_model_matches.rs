@@ -1358,8 +1358,8 @@ fn a_type_reached_only_in_the_model_is_named() {
     let spec = specification();
     let rust = edited(
         "mod.rs",
-        "pub capability: CapabilityId,\n}",
-        "pub capability: CapabilityId,\n    pub grant: ProbeGrant,\n}\n\npub struct ProbeGrant {\n    pub scope: String,\n}",
+        "pub scope: Declarations<ScopeKey, ScopeValue>,\n}",
+        "pub scope: Declarations<ScopeKey, ScopeValue>,\n    pub grant: ProbeGrant,\n}\n\npub struct ProbeGrant {\n    pub scope: String,\n}",
     );
     let found = differences(&spec, &rust);
     assert!(
