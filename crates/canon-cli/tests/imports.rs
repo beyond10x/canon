@@ -366,6 +366,47 @@ fn refining_an_action_replaces_the_imported_action() {
     );
 }
 
+/// Two imports that declare one identifier differently are not refused when the importing document
+/// redeclares it, listed under `refines` of each: the redeclaration replaces both declarations.
+#[test]
+fn a_refined_redeclaration_settles_two_imports_that_conflict() {
+    let source =
+        std::fs::read_to_string(repository_root().join(fixture("invalid/root-conflict.yaml")))
+            .expect("root reads");
+    let refined = source
+        .replace("ee060\n", "ee060\n    refines: [peer_review]\n")
+        .replace("ca7e1cb\n", "ca7e1cb\n    refines: [peer_review]\n")
+        + "\nevidence_kinds:\n  peer_review:\n    description: The review of the finding by a peer.\n";
+    assert_eq!(refined.matches("refines: [peer_review]").count(), 2);
+    let dir = scratch("refined-conflict");
+    let root = dir.join("root.yaml");
+    std::fs::write(&root, refined).expect("root written");
+    let parts: Vec<String> = ["review.yaml", "evidence.yaml", "invalid/second-review.yaml"]
+        .iter()
+        .map(|part| {
+            repository_root()
+                .join(fixture(part))
+                .to_str()
+                .expect("UTF-8")
+                .to_owned()
+        })
+        .collect();
+    let mut args = vec!["compile", "--path", root.to_str().expect("UTF-8")];
+    for part in &parts {
+        args.extend(["--import", part.as_str()]);
+    }
+    let compiled = canon(&args);
+    assert_eq!(text(&compiled.stderr), "");
+    assert_eq!(compiled.status.code(), Some(0));
+    assert!(
+        text(&compiled.stdout).contains(
+            "    \"peer_review\": {\n      \"description\": \"The review of the finding by a peer.\"\n    }"
+        ),
+        "{}",
+        text(&compiled.stdout)
+    );
+}
+
 /// A root with imports passed without them is refused by every command that reads a
 /// `protocol/1` document, naming each import; no import of a protocol without imports changes
 /// anything.
