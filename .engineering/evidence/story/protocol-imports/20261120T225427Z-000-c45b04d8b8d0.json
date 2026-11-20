@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-20T22:54:27Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-imports",
+  "kind": "story",
+  "revision": 47,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "canon conform run --requirements: CANON-IMPORT-001 uncovered on the specification-only commit 24b4101 (20 of 21 covered, 1 scenario unreadable) and passed on ef3d8b1 (20 passed, 21 of 21 covered); the named test imports_compose_into_closed_ir failed on ef7899d (0 passed, 3 failed) and passed on ef3d8b1; VERIFIED",
+    "reference": "w2/protocol-imports/red.log and red2.log vs w2/protocol-imports/gate/4-test.log and 5-conform.log (session scratch)"
+  }
+}

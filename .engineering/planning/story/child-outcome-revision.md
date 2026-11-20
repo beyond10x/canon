@@ -43,7 +43,7 @@ scope:
   path: ess/domains/protocol.yaml
 - confidence: cited
   path: fixtures/investigation/child-outcome-revision.yaml
-revision: 21
+revision: 23
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 20, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 21, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
@@ -237,3 +237,40 @@ that says which revision a runner writes.
 ## Decided
 
 Option A of § Decision needed: the `revision: current` key on the `children` form, with the runner duty of § Runner duty under option A. Decided on 2026-11-20 by the wave coordinator on the drafter's recommendation, after the operator accepted the story without choosing (`approval-record:accept-sdc-requests-2026-11-20`). The unit builds this option and does not reopen the choice.
+
+## Runner duty, corrected on 2026-11-20
+
+§ Runner duty under option A, point 1, is withdrawn. The session working on the SDC prototype
+reported the same day that its end-to-end run cannot meet it: `sdc.epic` opens `sdc.spec` while the
+parent's revision of `spec` is `none`, and the child then writes the spec, so the parent's revision
+of the subject changes while the child runs. A record stamped with the revision at opening would
+never be current, and the parent could never pass under `revision: current`.
+
+That session proposes instead: the record's `subject_revision` is the revision of the subject the
+child evaluated against when it terminated. A child that authors its subject ends at the new
+revision; a child opened about `s1` keeps `s1` when the subject later moves to `s2`, so its outcome
+stops counting. It has not run this variant.
+
+What this changes in the story: nothing in Canon's rule. The form compares each record's
+`subject_revision` with the case snapshot's current revision of that subject, whoever chose the
+value. It changes the sentence the reference page states about the runner. The coordinator's
+reading, 2026-11-20: the proposed rule is the one Canon already states for every evidence record
+("evidence is bound to the revision it was observed on", `README.md`), applied to `case_outcome`.
+The unit documents the comparison and that sentence, and names the earlier convention as one that
+does not work for a child that authors its subject. The operator has not decided this; point 2 of
+the earlier section (new children get new ids) stands.
+
+## Runner duty, refined on 2026-11-21
+
+The session working on the SDC prototype refined its proposal, and reports that Loom's child-case
+runtime is built this way. The coordinator did not read Loom. A terminal `case_outcome` record's
+`subject_revision` is the revision the child's outcome was computed against:
+
+- (a) the child protocol declares the subject artifact: the child's own revision of it at its
+  terminating evaluation;
+- (b) the child protocol does not declare it: the parent's revision of the subject when the child
+  was opened.
+
+This is the sentence the unit writes in the reference page for the `children` form, unless the
+operator decides otherwise before wave 5. It is the same reading as the section above: Canon's
+rule for every evidence record, applied to `case_outcome`. The form's rule in Canon is unchanged.

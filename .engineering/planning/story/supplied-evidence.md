@@ -39,7 +39,7 @@ scope:
   path: fixtures/investigation/invalid/supplied-by-self.yaml
 - confidence: inferred
   path: fixtures/investigation/supplied-evidence/
-revision: 19
+revision: 21
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 18, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 19, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
@@ -193,3 +193,41 @@ say so.
 ## Decided
 
 Option A of § Decision needed: the optional `supplied_by` field on an evidence kind. Decided on 2026-11-20 by the wave coordinator on the drafter's recommendation, after the operator accepted the story without choosing (`approval-record:accept-sdc-requests-2026-11-20`). The unit builds this option and does not reopen the choice.
+
+## A copied record is not always readable unchanged
+
+§ Decision needed says the runner copies a record "unchanged" from the supplier's case. The
+session working on the SDC prototype reported on 2026-11-20, from its end-to-end run, that its
+`roadmap.read` step could not copy a record literally: it had to drop `upstream_revisions.vision`,
+or Canon refused the record. The coordinator did not reproduce this. The likely cause, not
+verified: the record names an upstream artifact the reading protocol does not declare.
+
+This is open and the unit settles it in its first step, before the specification commit, and
+records the choice here:
+
+- A: out of scope. The runner strips what the reading protocol does not declare; the reference
+  says so. A stripped record loses its upstream binding in the reading case.
+- B: a record of a kind that declares `supplied_by` may name upstream artifacts the reading
+  protocol does not declare; they are carried and not checked there.
+
+The unit first reproduces the refusal with a fixture and names the validation code. The operator
+has not decided between A and B.
+
+## The refusal, reproduced by the SDC session
+
+Reported on 2026-11-20 by the session working on the SDC prototype, from a run of `canon evaluate`
+0.9.0; the coordinator did not rerun it. The case is saved in that session's directory under
+`docs/limitations/copied-record-upstream/` (`case.json`, one evidence file, `output.txt`).
+
+```
+error[undeclared-artifact]: evidence `e0062-roadmap.approve` records a revision of upstream artifact `vision`, which the protocol does not declare
+```
+
+The record was written under `sdc.direction`, which declares the artifact `vision`:
+`{kind: roadmap_approval, result: approved, subject: roadmap, subject_revision: …,
+upstream_revisions: {vision: …}}`. The receiving protocol `sdc.epic` declares `epic`, `roadmap` and
+`spec`. The SDC driver strips `upstream_revisions.vision` when it copies, so the record loses its
+binding to the vision revision in the receiving case. Four protocols receive the copy.
+
+The unit builds its fixture for the choice between A and B of the section above from this case:
+a supplied record whose `upstream_revisions` names an artifact only the supplier declares.
