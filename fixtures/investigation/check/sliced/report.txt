@@ -1,0 +1,6 @@
+unreachable-outcome: outcome `contested` is legitimate in no state
+unsatisfiable-precondition: action `retract_trial`: its precondition holds in no state
+unproduced-evidence: claim `site.audited` reads evidence kind `audit_report`, which no action may produce
+authority-bypass: outcome `released` is legitimate without authority in state {evidence `approval`, evidence `trial_run` result `pass`, input `track` `routine`}
+property-failed: property `trial.ignores.survey`: action `run_trial` is blocked in state {input `track` `routine`} and admissible in state {evidence `survey_reading` result `grade_a`, input `track` `routine`}
+checked: protocol `remedy` revision 1: 196608 states (input `track` 2 values), 2 properties, 5 findings

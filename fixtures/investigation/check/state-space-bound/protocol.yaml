@@ -3,7 +3,7 @@ format: protocol/1
 protocol:
   id: investigation
   revision: 1
-  description: Decide whether an explanation is supported by observation and survives an attempt to falsify it.
+  description: Decide whether an explanation is supported by observation and survives an attempt to falsify it, and publish it once a measurement is graded.
 
 artifacts:
   explanation:
@@ -15,7 +15,7 @@ evidence_kinds:
   falsification_attempt:
     description: An attempt to refute the explanation; its result is survived or refuted.
   measurement:
-    description: A graded measurement bearing on the explanation; ten grades are told apart.
+    description: A graded measurement bearing on the explanation; eleven grades are told apart.
 
 claims:
   measurement.graded:
@@ -52,6 +52,9 @@ claims:
         - evidence:
             kind: measurement
             result: grade_j
+        - evidence:
+            kind: measurement
+            result: grade_k
 
   explanation.supported:
     description: The explanation is supported by observation and has survived falsification.
@@ -87,10 +90,12 @@ actions:
       - evidence: falsification_attempt
 
   publish_finding:
-    description: Publish the finding that the explanation is supported.
+    description: Publish the finding that the explanation is supported, once a measurement is graded.
     precondition:
-      claim: explanation.supported
-      is: true
+      all:
+        - claim: explanation.supported
+          is: true
+        - claim: measurement.graded
     requires:
       - capability: finding.publish
 
