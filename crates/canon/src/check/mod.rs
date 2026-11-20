@@ -349,7 +349,13 @@
 //! protocol in which a `children` form and an order form both read `case_outcome` is refused as
 //! `ordered-child-outcomes`, naming the protocol and the kind (above, "Child cases"). Text
 //! that is not a `canon-properties/1` document is refused by [`read_properties`] as
-//! `malformed-input`. An evaluation the evaluator refuses is refused with the evaluator's code.
+//! `malformed-input`. An evaluation the evaluator refuses is refused with the evaluator's code,
+//! and with the refusal an enumeration of the whole product gives first. Over an IR a caller
+//! builds, a state can be refused over a declaration no subject reads (an evidence kind with a
+//! `max_age` the evaluator cannot read, one read only by an obligation and named with a space in
+//! it): when the spaces enumerated are slices, the least state of the whole product, and each
+//! state with one dimension alone off its least value that can hold a refused record, capability,
+//! decision or case input value, are evaluated first, in the order of the whole product.
 
 mod properties;
 mod space;
@@ -724,6 +730,15 @@ pub(crate) fn check_by(
                     members.push(at);
                 }
             }
+        }
+    }
+
+    // A state no slice holds is still evaluated where it may be refused: an evaluation of an IR a
+    // caller builds can be refused over a declaration no subject reads, and the whole product
+    // enumerated would refuse it at its first such state.
+    if plan.iter().all(|(slice, _)| slice.is_some()) {
+        for state in whole.probes() {
+            evaluate(ir, &whole, &state)?;
         }
     }
 

@@ -1,6 +1,6 @@
 //! Minimal witness scenarios for a compiled protocol (story:scenario-generation).
 //!
-//! [`generate`] walks the state space [`crate::check`] enumerates, evaluates every state with
+//! [`generate`] walks the whole state space [`crate::check`] builds, evaluates every state with
 //! Canon's own evaluator, and writes one `canon-conformance/1` scenario per declared outcome and per
 //! action blocked in some state. Each scenario evaluates the witness state of its subject and
 //! expects the evaluation's section for that subject. Pure and deterministic: no clock, network or

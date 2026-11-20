@@ -2216,3 +2216,331 @@ fn a_slice_keeps_the_classes_and_profiles_of_the_whole_space() {
          checked: protocol `p` revision 1: 36 states, 0 properties, 2 findings\n"
     );
 }
+
+/// A protocol in which evidence kind `k` and case input `t` are read only by obligation `settle`,
+/// which is no subject: no outcome, action or property reads them, so no slice holds them.
+const UNREAD: &str = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+    case: {inputs: {t: {values: [x, y]}}}\n\
+    artifacts: {a: {}}\n\
+    evidence_kinds: {k: {}, m: {}}\n\
+    independence_dimensions: {d: {}}\n\
+    claims:\n\
+    \x20\x20seen: {true_when: {evidence: {kind: k}}}\n\
+    \x20\x20noted: {true_when: {evidence: {kind: m}}}\n\
+    obligations: {settle: {discharged_when: {claim: seen}, applicable_when: {input: t, in: [x]}}}\n\
+    actions: {work: {may_produce: [{evidence: k}, {evidence: m}]}}\n\
+    outcomes: {done: {requires: {claim: noted}}}\n";
+
+/// `UNREAD` compiled and then changed by `change`, as a caller that builds an IR can: the refusal
+/// the whole product gives, which each subject over its own slice and `canon check` give too,
+/// both with the protocol's outcome and action and, unless `held` (the declaration is a subject's
+/// own), with neither, so no state is enumerated but the probes. No slice names `outside`, and the
+/// slices hold fewer states than the whole product.
+fn refused_alike(change: impl Fn(&mut Ir), outside: &str, held: bool) -> (&'static str, String) {
+    let mut ir = compiled(UNREAD);
+    change(&mut ir);
+    let refusal = |ir: &Ir| {
+        let whole = check_by(ir, None, Strategy::Whole).expect_err("the whole product refuses");
+        for strategy in [Strategy::Own, Strategy::Chosen] {
+            let sliced = check_by(ir, None, strategy).expect_err("the slices refuse");
+            assert_eq!(
+                (sliced.code(), sliced.to_string()),
+                (whole.code(), whole.to_string())
+            );
+        }
+        (whole.code(), whole.to_string())
+    };
+    let space = Space::new(&ir);
+    let slices = subjects(&ir, &space, None);
+    let widest = slices
+        .iter()
+        .filter_map(|(_, slice)| space.slice(slice).size())
+        .sum::<u128>();
+    assert!(widest < space.size().expect("fits"), "{widest}");
+    if !outside.is_empty() {
+        for (subject, slice) in &slices {
+            let dimensions = space.slice(slice).dimensions();
+            assert!(!dimensions.contains(outside), "{subject}: {dimensions}");
+        }
+    }
+    let with_subjects = refusal(&ir);
+    if !held {
+        ir.outcomes.clear();
+        ir.actions.clear();
+        assert_eq!(refusal(&ir), with_subjects, "without a subject");
+    }
+    with_subjects
+}
+
+/// A refusal as `refused_alike` gives it.
+fn refusal(code: &'static str, message: &str) -> (&'static str, String) {
+    (code, message.to_owned())
+}
+
+/// `seen` reads `matching` in place of a bare match of `k`.
+fn seen_reads(ir: &mut Ir, matching: crate::model::EvidenceMatch) {
+    ir.claims
+        .get_mut(&ClaimId::new("seen"))
+        .expect("declared")
+        .true_when = crate::model::Predicate::Evidence(matching);
+}
+
+fn matching(kind: &str) -> crate::model::EvidenceMatch {
+    crate::model::EvidenceMatch {
+        kind: EvidenceKindId::new(kind),
+        result: None,
+        subject: None,
+        independent_on: None,
+    }
+}
+
+#[test]
+fn an_unreadable_max_age_no_subject_reads_is_refused() {
+    let refused = refused_alike(
+        |ir| {
+            ir.evidence_kinds
+                .get_mut(&EvidenceKindId::new("k"))
+                .expect("declared")
+                .max_age = Some(crate::model::Age::new("1 hour"));
+        },
+        "evidence kind `k`",
+        false,
+    );
+    assert_eq!(
+        refused,
+        refusal(
+            "invalid-max-age",
+            "evidence kind `k` has max_age `1 hour`, which the evaluator cannot read"
+        )
+    );
+}
+
+#[test]
+fn an_invalidation_rule_over_an_undeclared_artifact_no_subject_reads_is_refused() {
+    let refused = refused_alike(
+        |ir| {
+            let rule = crate::ir::InvalidationRule {
+                description: None,
+                upstream: crate::model::ArtifactId::new("ghost"),
+                invalidates: vec![ClaimId::new("seen")],
+            };
+            ir.invalidation
+                .insert(crate::model::InvalidationRuleId::new("r"), rule);
+        },
+        "evidence kind `k`",
+        false,
+    );
+    assert_eq!(
+        refused,
+        refusal(
+            "undeclared-artifact",
+            "invalidation rule `r` watches artifact `ghost`, which the protocol does not declare"
+        )
+    );
+}
+
+#[test]
+fn a_protocol_artifact_or_input_named_with_a_space_is_refused() {
+    let protocol = refused_alike(|ir| ir.protocol.id = ProtocolId::new("p q"), "", false);
+    let artifact = refused_alike(
+        |ir| {
+            ir.artifacts.insert(
+                crate::model::ArtifactId::new("b b"),
+                crate::ir::Described { description: None },
+            );
+        },
+        "",
+        false,
+    );
+    let input = refused_alike(
+        |ir| {
+            let input = crate::ir::CaseInput {
+                description: None,
+                values: vec![crate::model::InputValue::new("x")],
+            };
+            ir.inputs.insert(InputId::new("u u"), input);
+        },
+        "",
+        false,
+    );
+    assert_eq!(
+        [protocol, artifact, input],
+        [
+            refusal(
+                "invalid-identifier",
+                "case protocol identifier `p q` is empty or contains whitespace or a control character"
+            ),
+            refusal(
+                "invalid-identifier",
+                "case artifact identifier `b b` is empty or contains whitespace or a control character"
+            ),
+            refusal(
+                "invalid-identifier",
+                "case input identifier `u u` is empty or contains whitespace or a control character"
+            )
+        ]
+    );
+}
+
+#[test]
+fn an_input_value_no_subject_reads_named_with_a_space_is_refused() {
+    let refused = refused_alike(
+        |ir| {
+            ir.inputs
+                .get_mut(&InputId::new("t"))
+                .expect("declared")
+                .values = vec![
+                crate::model::InputValue::new("x"),
+                crate::model::InputValue::new("y z"),
+            ];
+        },
+        "input `t`",
+        false,
+    );
+    assert_eq!(
+        refused,
+        refusal(
+            "invalid-identifier",
+            "input value `y z` is empty or contains whitespace or a control character"
+        )
+    );
+}
+
+#[test]
+fn an_evidence_kind_no_subject_reads_named_with_a_space_is_refused() {
+    let refused = refused_alike(
+        |ir| {
+            let kind = ir
+                .evidence_kinds
+                .remove(&EvidenceKindId::new("k"))
+                .expect("declared");
+            ir.evidence_kinds.insert(EvidenceKindId::new("k k"), kind);
+            seen_reads(ir, matching("k k"));
+        },
+        "evidence kind `k k`",
+        false,
+    );
+    assert_eq!(
+        refused,
+        refusal(
+            "invalid-identifier",
+            "evidence `e0` kind identifier `k k` is empty or contains whitespace or a control character"
+        )
+    );
+}
+
+/// The space builds a dimension for each declared evidence kind only, so no evaluation `check`
+/// makes holds a record of an undeclared kind, and `undeclared-evidence-kind` is raised neither
+/// over the whole product nor over slices.
+#[test]
+fn an_undeclared_evidence_kind_has_no_dimension_and_is_never_refused() {
+    let mut ir = compiled(UNREAD);
+    seen_reads(&mut ir, matching("ghost"));
+    assert_slices_agree(&ir, None, "UNREAD, `seen` reading undeclared `ghost`");
+    let mut none = ir.clone();
+    none.outcomes.clear();
+    none.actions.clear();
+    assert_slices_agree(&none, None, "the same, without a subject");
+    assert_eq!(
+        Space::new(&ir).dimensions(),
+        "evidence kind `k` 2, evidence kind `m` 2, input `t` 2"
+    );
+}
+
+#[test]
+fn a_record_about_an_undeclared_or_misnamed_artifact_no_subject_reads_is_refused() {
+    let about = |artifact: &str| {
+        let artifact = artifact.to_owned();
+        refused_alike(
+            move |ir| {
+                let mut about = matching("k");
+                about.subject = Some(crate::model::ArtifactId::new(artifact.as_str()));
+                seen_reads(ir, about);
+            },
+            "evidence kind `k`",
+            false,
+        )
+    };
+    assert_eq!(
+        [about("ghost"), about("gh ost")],
+        [
+            refusal(
+                "undeclared-artifact",
+                "evidence `e0` is about artifact `ghost`, which the protocol does not declare"
+            ),
+            refusal(
+                "invalid-identifier",
+                "evidence `e0` subject identifier `gh ost` is empty or contains whitespace or a control character"
+            )
+        ]
+    );
+}
+
+#[test]
+fn a_producer_dimension_no_subject_reads_undeclared_or_misnamed_is_refused() {
+    let demanding = |dimension: &str| {
+        let dimension = dimension.to_owned();
+        refused_alike(
+            move |ir| {
+                let mut demand = matching("k");
+                demand.independent_on = Some(vec![crate::model::IndependenceDimensionId::new(
+                    dimension.as_str(),
+                )]);
+                seen_reads(ir, demand);
+            },
+            "evidence kind `k`",
+            false,
+        )
+    };
+    assert_eq!(
+        [demanding("ghost"), demanding("d d")],
+        [
+            refusal(
+                "undeclared-dimension",
+                "case `check` lists producer `producer-1` as independent on dimension `ghost`, which the protocol does not declare"
+            ),
+            refusal(
+                "invalid-identifier",
+                "independence dimension identifier `d d` is empty or contains whitespace or a control character"
+            )
+        ]
+    );
+}
+
+#[test]
+fn a_capability_or_decision_named_with_a_space_is_refused() {
+    let capability = refused_alike(
+        |ir| {
+            ir.actions
+                .get_mut(&ActionId::new("work"))
+                .expect("declared")
+                .requires = vec![crate::model::CapabilityId::new("c c")];
+        },
+        "",
+        true,
+    );
+    let decision = refused_alike(
+        |ir| {
+            ir.outcomes
+                .get_mut(&OutcomeId::new("done"))
+                .expect("declared")
+                .requires =
+                crate::model::OutcomeRequirement::Decision(crate::model::DecisionName::new("d d"));
+        },
+        "",
+        true,
+    );
+    assert_eq!(
+        [capability, decision],
+        [
+            refusal(
+                "invalid-identifier",
+                "authority capability `c c` is empty or contains whitespace or a control character"
+            ),
+            refusal(
+                "invalid-identifier",
+                "decision name `d d` is empty or contains whitespace or a control character"
+            )
+        ]
+    );
+}

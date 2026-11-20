@@ -1013,7 +1013,13 @@ impl<'a> Space<'a> {
         if self.placeable() < 2 {
             return vec![0; self.placeable()];
         }
-        self.rankings[state[self.order_at()] as usize].clone()
+        let order = state[self.order_at()] as usize;
+        match self.rankings.get(order) {
+            Some(ranks) => ranks.clone(),
+            // A space above the bound keeps no rankings; its probes take the first, all tied.
+            None if order == 0 => vec![0; self.placeable()],
+            None => panic!("a ranking is kept for every order a state takes"),
+        }
     }
 
     /// Whether the evidence dimension at `at` holds a record in `state`: a current one, or one its
@@ -1200,6 +1206,61 @@ impl<'a> Space<'a> {
                 u32::try_from(value).expect("a value within the bound fits u32")
             })
             .collect()
+    }
+
+    /// The states that raise every refusal an evaluation of some state of this space raises, in
+    /// index order, each the first state that raises it: the least state, then each state in which
+    /// one dimension alone is not at its least value, holding
+    ///
+    /// - for an evidence dimension, each set of producers of its first class and upstream vector,
+    ///   its values below the number of sets: the records of a dimension differ, as the evaluator
+    ///   checks them, only in their producers, since each names the dimension's kind, artifact and
+    ///   upstream artifacts, and its result and upstream revisions are never refused;
+    /// - for a capability, a decision, a case input or a later-record dimension, each value;
+    /// - for a history or a last-record dimension, its first value: the records it adds name the
+    ///   dimension's kind and artifact as its own records do, with no producer and no upstream
+    ///   revision.
+    ///
+    /// The order dimension stays at its least value: it moves only instants the evaluator compares.
+    /// A refusal is raised by one record, capability, decision or input value, which a state holds
+    /// whatever its other dimensions are, so the first state that raises a refusal is one of these.
+    /// Called only once the size is known to fit.
+    pub(crate) fn probes(&self) -> Vec<State> {
+        let radices = self.radices();
+        let least: State = vec![0; radices.len()];
+        let mut probes = vec![least.clone()];
+        let mut probe = |at: usize, value: u32| {
+            let mut state = least.clone();
+            state[at] = value;
+            probes.push(state);
+        };
+        for (at, kind) in self.kinds.iter().enumerate() {
+            let sets = kind.values.as_ref().map_or(1, Vec::len);
+            for value in 1..sets {
+                probe(at, u32::try_from(value).expect("few producer sets"));
+            }
+        }
+        let first_history = self.first_history();
+        for (at, radix) in radices.iter().enumerate().skip(self.kinds.len()) {
+            let radix = radix.expect("the size fits, so every radix does");
+            let values =
+                if at >= first_history && at < self.first_later() || at >= self.first_last() {
+                    radix.min(2)
+                } else {
+                    radix
+                };
+            if at == self.order_at() && self.placeable() >= 2 {
+                continue;
+            }
+            for value in 1..values {
+                probe(
+                    at,
+                    u32::try_from(value).expect("a value within the bound fits u32"),
+                );
+            }
+        }
+        probes.sort_by_key(|state| self.index(state));
+        probes
     }
 
     /// The index of `state`: the inverse of [`Space::state`].
