@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:authority-revision-binding
 kind: story
-status: draft
+status: active
 title: Bind authority decisions to a case revision and record the principal who took them
 tags:
 - from-request
@@ -21,8 +21,6 @@ scope:
 - confidence: cited
   path: conformance/scenarios/authority-binding.yaml
 - confidence: inferred
-  path: crates/canon-cli/src/lib.rs
-- confidence: inferred
   path: crates/canon-cli/tests/adversary_conformance_suite_cli.rs
 - confidence: inferred
   path: crates/canon-cli/tests/conform_requirements.rs
@@ -38,7 +36,10 @@ scope:
   path: crates/canon/src/model/authority.rs
 - confidence: cited
   path: ess/domains/protocol.yaml
-revision: 12
+revision: 16
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 14, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 15, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 ---
 ## Outcome
 
@@ -174,3 +175,7 @@ Conformance scenario `CANON-AUTHORITY-002` passes under `canon conform run` over
 - Stories: story:capability-scope, story:revision-ordering, and the scopes of story:protocol-floor, story:protocol-imports, story:invalidation-evaluation-cost and story:canon-mutate.
 - `documents.md` at `8f1f452`.
 - Date: 2026-11-20.
+
+## Decided
+
+Option A of § Decision needed: every bound entry, whatever its decision, applies only at its case revision; a deny that must last is written without `case_revision`. Decided on 2026-11-20 by the wave coordinator on the drafter's recommendation, after the operator accepted the story without choosing (`approval-record:accept-sdc-requests-2026-11-20`). The unit builds this option and does not reopen the choice.

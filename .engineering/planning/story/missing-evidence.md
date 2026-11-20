@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:missing-evidence
 kind: story
-status: draft
+status: active
 title: Report per admissible action which evidence kinds it may produce still lack an applicable record
 tags:
 - from-request
@@ -50,7 +50,10 @@ scope:
   path: ess/domains/protocol.yaml
 - confidence: inferred
   path: fixtures/investigation/missing-evidence.yaml
-revision: 16
+revision: 19
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 18, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 19, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 ---
 ## Outcome
 
@@ -165,3 +168,7 @@ Request item 2 of `$HOME/beyond10x/sdc/docs/canon-requests.md`. Files read:
   - the stories capability-scope, invalidation-evaluation-cost, revision-ordering, protocol-imports, protocol-floor and canon-mutate
 
 Date: 2026-11-20.
+
+## Decided
+
+D1 option 2 and D2 option B of § Decision needed: a record is applicable when the revision-binding and freshness stages leave it and no claim lists it in `excluded_evidence`; the field is a new top-level section `missing_evidence`. Decided on 2026-11-20 by the wave coordinator on the drafter's recommendation, after the operator accepted the story without choosing (`approval-record:accept-sdc-requests-2026-11-20`). The unit builds this option and does not reopen the choice.

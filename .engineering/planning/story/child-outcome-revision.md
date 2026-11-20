@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:child-outcome-revision
 kind: story
-status: draft
+status: active
 title: Bind a child case's outcome to the parent's current revision on the children form
 tags:
 - from-request
@@ -43,9 +43,10 @@ scope:
   path: ess/domains/protocol.yaml
 - confidence: cited
   path: fixtures/investigation/child-outcome-revision.yaml
-- confidence: inferred
-  path: website/status.yaml
-revision: 17
+revision: 21
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 20, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 21, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 ---
 ## Outcome
 
@@ -232,3 +233,7 @@ The session working on the SDC prototype told the coordinator on 2026-11-20 that
 `sdc` driver's child-case runtime, being written that day) does both. That is that runner's
 convention and no Canon rule; the drafter found no Canon document and nothing in Atlas ADR 0081
 that says which revision a runner writes.
+
+## Decided
+
+Option A of § Decision needed: the `revision: current` key on the `children` form, with the runner duty of § Runner duty under option A. Decided on 2026-11-20 by the wave coordinator on the drafter's recommendation, after the operator accepted the story without choosing (`approval-record:accept-sdc-requests-2026-11-20`). The unit builds this option and does not reopen the choice.

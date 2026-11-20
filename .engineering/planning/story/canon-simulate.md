@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:canon-simulate
 kind: story
-status: draft
+status: active
 title: Find stuck states, cycles and dead actions by walking reachable states with canon simulate
 tags:
 - from-request
@@ -34,7 +34,10 @@ scope:
   path: ess/domains/cli.yaml
 - confidence: inferred
   path: fixtures/investigation/simulate/
-revision: 10
+revision: 14
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 13, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 14, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 ---
 ## Outcome
 
@@ -180,3 +183,15 @@ The named test `simulate_reports_reachability_findings` (in `crates/canon-cli/te
 - Request item 4 of `$HOME/beyond10x/sdc/docs/canon-requests.md`. Also read: `docs/canon-simulation-request.md`, `docs/boundary.md`, `docs/driver.md`, `docs/limitations/output.txt`.
 - canon tree `15cfece`: `AGENTS.md`, `crates/canon/src/check/{mod,space}.rs`, `generate/mod.rs`, `eval/{actions,outcomes}.rs`, `model/mod.rs`, `ir/mod.rs`, `crates/canon-cli/src/{lib,main,check}.rs`, `ess/domains/cli.yaml`, story:protocol-floor, story:canon-mutate, story:revision-ordering, story:protocol-imports, epic:protocol-analysis.
 - 2026-11-20.
+
+## What invalidation loops wait for
+
+§ Scope leaves invalidation loops out because `protocol/1` cannot declare that an action revises
+an artifact. Request 10 of the SDC prototype (`docs/plan/wave-plan-2026-11-20.md`, "Requests
+received") proposes a `revises: [artifact]` field on an action. That field is the dependency: with
+it, a revising step can be added to the walk and a loop of revise, invalidate and re-produce
+becomes a finding. Request 10 is a request and no story on 2026-11-20.
+
+## Decided
+
+Option A of § Decision needed: authority steps and decision steps are steps of the walk. Decided on 2026-11-20 by the wave coordinator on the drafter's recommendation, after the operator accepted the story without choosing (`approval-record:accept-sdc-requests-2026-11-20`). The unit builds this option and does not reopen the choice.

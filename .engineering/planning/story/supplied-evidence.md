@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:supplied-evidence
 kind: story
-status: draft
+status: active
 title: 'Declare evidence kinds supplied by another protocol: supplied_by, and canon check counts them as produced'
 tags:
 - from-request
@@ -39,9 +39,10 @@ scope:
   path: fixtures/investigation/invalid/supplied-by-self.yaml
 - confidence: inferred
   path: fixtures/investigation/supplied-evidence/
-- confidence: inferred
-  path: website/status.yaml
-revision: 14
+revision: 19
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 18, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 19, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 ---
 ## Outcome
 
@@ -180,3 +181,15 @@ The named test `supplied_evidence_is_produced_outside` in `crates/canon-cli/test
   - design § 39.5
   - story:case-composition, story:case-inputs, story:protocol-imports, story:capability-scope
 - Date: 2026-11-20.
+
+## Who the supplier may be
+
+`supplied_by` names any other protocol: the parent's, an ancestor's, a sibling stage's or a
+child's. It is not limited to the parent. § Why shows the case that decides this: every copy in
+the SDC protocols comes from `sdc.direction`, which is a child of the root case and a sibling
+stage of `sdc.epic`. The session working on the SDC prototype asked on 2026-11-20 that the story
+say so.
+
+## Decided
+
+Option A of § Decision needed: the optional `supplied_by` field on an evidence kind. Decided on 2026-11-20 by the wave coordinator on the drafter's recommendation, after the operator accepted the story without choosing (`approval-record:accept-sdc-requests-2026-11-20`). The unit builds this option and does not reopen the choice.

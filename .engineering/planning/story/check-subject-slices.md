@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:check-subject-slices
 kind: story
-status: draft
+status: active
 title: Check a protocol beyond 65,536 states by deciding each subject over the dimensions it reads
 tags:
 - from-request
@@ -14,8 +14,6 @@ relations:
 - serves: vision:O2
 - serves: vision:governed-autonomy
 scope:
-- confidence: cited
-  path: crates/canon-cli/src/lib.rs
 - confidence: cited
   path: crates/canon-cli/tests/canon_check.rs
 - confidence: cited
@@ -40,11 +38,10 @@ scope:
   path: fixtures/investigation/check/state-space-bound/
 - confidence: inferred
   path: fixtures/investigation/check/unread-dimension/
-- confidence: cited
-  path: website/docs/reference/cli.md
-- confidence: cited
-  path: website/status.yaml
-revision: 16
+revision: 22
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 21, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 22, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 ---
 ## Outcome
 
@@ -180,3 +177,7 @@ The test is red on that commit because today's check refuses `sliced` and `unrea
 - Request item 3 of `$HOME/beyond10x/sdc/docs/canon-requests.md`, 2026-11-20.
 - Read in sdc: `docs/boundary.md` §2, `docs/limitations/output.txt`, `docs/limitations/{intake-with-abandon,story-with-derived-verified-claim,story-with-four-gate-kinds,monolith}.protocol.yaml`, `docs/protocol-notes.md:80-192`, `docs/check-output.txt`, `docs/canon-simulation-request.md`.
 - Read in canon at `15cfece`: `AGENTS.md`, `crates/canon/src/check/{mod,space}.rs`, `crates/canon/src/generate/mod.rs`, `crates/canon/src/eval/{actions,outcomes}.rs`, `crates/canon-cli/src/{check,lib}.rs`, `crates/canon-cli/tests/canon_check.rs`, `ess/domains/{check,cli}.yaml`, `fixtures/investigation/check/`, the stories canon-check, protocol-floor, protocol-imports, revision-ordering, invalidation-evaluation-cost and canon-mutate.
+
+## Decided
+
+Option A of § Decision needed: one slice per subject, and the whole check is refused when any slice exceeds the bound. Options B to E are out of this story. Decided on 2026-11-20 by the wave coordinator on the drafter's recommendation, after the operator accepted the story without choosing (`approval-record:accept-sdc-requests-2026-11-20`). The unit builds this option and does not reopen the choice.

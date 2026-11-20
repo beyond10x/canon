@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:argument-validator
 kind: story
-status: draft
+status: active
 title: Check a call's arguments against an action's argument schema with a pure library function
 tags:
 - from-request
@@ -31,9 +31,10 @@ scope:
   path: ess/domains/protocol.yaml
 - confidence: cited
   path: website/docs/concepts/protocols.md
-- confidence: inferred
-  path: website/status.yaml
-revision: 10
+revision: 13
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 12, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 13, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 ---
 ## Outcome
 
