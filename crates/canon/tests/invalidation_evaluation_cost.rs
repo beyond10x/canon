@@ -211,6 +211,11 @@ fn a_chain_at_the_depth_bound_evaluates_within_budget() {
                 .iter()
                 .map(|(_, entry)| entry.excluded_evidence.len())
                 .sum();
+            // Freed before the result is sent, so while this test holds `TIMED`: freeing the
+            // 8 million listed exclusions after it let go slowed the other timing test's 400-claim
+            // chain about threefold.
+            drop(decision);
+            drop(chain);
             let _ = sent.send((took, decided, all_true, listed));
         })
         .expect("a worker thread starts");
