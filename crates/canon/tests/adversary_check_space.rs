@@ -55,20 +55,27 @@ fn a_result_only_an_outcome_requirement_matches_is_a_class() {
 }
 
 /// Sixteen kinds, none matched with a result: two values each, 2^16 = 65 536 states, which is the
-/// bound and not more than it, so the space is checked. Seventeen kinds are refused.
+/// bound and not more than it, so the space is checked. Seventeen kinds are refused. The bound
+/// holds each subject's slice (story:check-subject-slices), so `all_seen` reads every kind.
 #[test]
 fn a_space_of_exactly_the_bound_is_checked_and_one_past_it_refused() {
-    let kinds = |n: usize| {
-        (0..n)
-            .map(|i| format!("k{i:02}: {{}}"))
+    let ids = |n: usize| (0..n).map(|i| format!("k{i:02}")).collect::<Vec<_>>();
+    let listed = |n: usize, item: &dyn Fn(&str) -> String| {
+        ids(n)
+            .iter()
+            .map(|id| item(id))
             .collect::<Vec<_>>()
             .join(", ")
     };
     let source = |n: usize| {
         format!(
             "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nartifacts: {{a: {{}}}}\n\
-             evidence_kinds: {{{}}}\n",
-            kinds(n)
+             evidence_kinds: {{{}}}\n\
+             actions: {{probe: {{may_produce: [{}]}}}}\n\
+             outcomes: {{all_seen: {{requires: {{all: [{}]}}}}}}\n",
+            listed(n, &|id| format!("{id}: {{}}")),
+            listed(n, &|id| format!("{{evidence: {id}}}")),
+            listed(n, &|id| format!("{{evidence: {{kind: {id}}}}}")),
         )
     };
     assert_eq!(
@@ -82,8 +89,8 @@ fn a_space_of_exactly_the_bound_is_checked_and_one_past_it_refused() {
     assert_eq!(
         report(&source(17)),
         format!(
-            "refused state-space-bound: protocol `p` revision 1 has 131072 states, more than the \
-             bound of 65536: {dimensions}"
+            "refused state-space-bound: protocol `p` revision 1: outcome `all_seen` reads 131072 \
+             states, more than the bound of 65536: {dimensions}"
         )
     );
 }

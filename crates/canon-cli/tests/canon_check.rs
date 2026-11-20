@@ -155,7 +155,11 @@ fn a_sliced_summary_gives_the_whole_product() {
     );
     let unread = check("unread-dimension", false);
     assert_eq!(
-        (unread.status.code(), text(&unread.stdout), text(&unread.stderr)),
+        (
+            unread.status.code(),
+            text(&unread.stdout),
+            text(&unread.stderr)
+        ),
         (Some(0), UNREAD_SUMMARY.to_owned(), String::new())
     );
 }
@@ -179,13 +183,17 @@ fn a_slice_above_the_bound_is_refused_naming_its_subject() {
             .any(|section| subject.starts_with(section)),
         "{subject}"
     );
-    let (count, rest) = rest.split_once(" states, more than the bound of 65536: ").expect("count");
+    let (count, rest) = rest
+        .split_once(" states, more than the bound of 65536: ")
+        .expect("count");
     let count: u128 = count.parse().expect("a number of states");
     assert!(count > 65536, "{message}");
     let product: u128 = rest
         .split(", ")
         .map(|dimension| {
-            let (_, values) = dimension.rsplit_once(' ').expect("a dimension and its values");
+            let (_, values) = dimension
+                .rsplit_once(' ')
+                .expect("a dimension and its values");
             values.parse::<u128>().expect("a number of values")
         })
         .product();
@@ -210,7 +218,11 @@ fn generate_keeps_the_whole_product_bound() {
         out.to_str().expect("UTF-8"),
     ]);
     assert_eq!(
-        (output.status.code(), text(&output.stdout), text(&output.stderr)),
+        (
+            output.status.code(),
+            text(&output.stdout),
+            text(&output.stderr)
+        ),
         (
             Some(1),
             String::new(),

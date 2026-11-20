@@ -128,8 +128,8 @@ fn a_protocol_without_artifacts_has_no_evidence_states() {
     );
 }
 
-/// A kind with 127 distinct results has 2^128 values: neither it nor the space fits a `u128`, and
-/// the refusal still names both.
+/// A kind with 127 distinct results has 2^128 values: neither it nor the slice of `done`, which
+/// reads it, fits a `u128`, and the refusal still names both.
 #[test]
 fn a_space_too_large_to_count_is_refused_naming_it() {
     let matches: Vec<String> = (0..127)
@@ -147,8 +147,8 @@ fn a_space_too_large_to_count_is_refused_naming_it() {
     assert_eq!(
         refusal.to_string(),
         format!(
-            "protocol `p` revision 2 has more than {} states, more than the bound of 65536: \
-             evidence kind `k` 2^128",
+            "protocol `p` revision 2: outcome `done` reads more than {} states, more than the \
+             bound of 65536: evidence kind `k` 2^128",
             u128::MAX
         )
     );
@@ -218,7 +218,8 @@ fn an_outcome_that_holds_on_absent_governed_evidence_is_no_bypass() {
 }
 
 /// Adversary pass 1, finding 7: the bound refusal the module docs show is one `check` gives, so
-/// its count is the product of its dimensions. Reads the module source at run time.
+/// its count is the product of its dimensions. Reads the module source at run time. The slice of
+/// `act` holds `k`, `m` and `c`, not the decision `d` only `o` reads (story:check-subject-slices).
 #[test]
 fn the_module_docs_show_a_bound_refusal_check_gives() {
     let results = |kind: &str, prefix: &str, n: usize| {
@@ -226,13 +227,13 @@ fn the_module_docs_show_a_bound_refusal_check_gives() {
             .map(|i| format!("{{evidence: {{kind: {kind}, result: {prefix}{i}}}}}"))
             .collect::<Vec<_>>()
     };
-    let mut matches = results("k", "r", 9);
+    let mut matches = results("k", "r", 10);
     matches.extend(results("m", "s", 3));
     let source = format!(
         "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nartifacts: {{a: {{}}}}\n\
          evidence_kinds: {{k: {{}}, m: {{}}}}\n\
          claims: {{x: {{true_when: {{any: [{}]}}}}}}\n\
-         actions: {{act: {{requires: [{{capability: c}}], may_produce: [{{evidence: k}}, {{evidence: m}}]}}}}\n\
+         actions: {{act: {{precondition: {{claim: x}}, requires: [{{capability: c}}], may_produce: [{{evidence: k}}, {{evidence: m}}]}}}}\n\
          outcomes: {{o: {{requires: {{decision: d}}}}}}\n",
         matches.join(", ")
     );
@@ -301,14 +302,15 @@ fn a_bound_dimension_is_written_with_its_subject() {
         "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nartifacts: {{a: {{}}, b: {{}}}}\n\
          evidence_kinds: {{k: {{}}}}\n\
          claims: {{x: {{true_when: {{any: [{}]}}}}}}\n\
-         actions: {{probe: {{may_produce: [{{evidence: k}}]}}}}\n",
+         actions: {{probe: {{may_produce: [{{evidence: k}}]}}}}\n\
+         outcomes: {{graded: {{requires: {{claim: x}}}}}}\n",
         matches.join(", ")
     );
     let refusal = check(&compiled(&large), None).expect_err("refused");
     assert_eq!(
         refusal.to_string(),
-        "protocol `p` revision 1 has 131072 states, more than the bound of 65536: evidence kind \
-         `k` about `b` 131072"
+        "protocol `p` revision 1: outcome `graded` reads 131072 states, more than the bound of \
+         65536: evidence kind `k` about `b` 131072"
     );
 }
 
@@ -434,8 +436,8 @@ fn a_rule_dimension_counts_toward_the_bound_and_is_named() {
         (refusal.code(), refusal.to_string().as_str()),
         (
             "state-space-bound",
-            "protocol `p` revision 2 has 4294967296 states, more than the bound of 65536: evidence \
-             kind `k` with upstream `a` 4294967296"
+            "protocol `p` revision 2: outcome `done` reads 4294967296 states, more than the bound \
+             of 65536: evidence kind `k` with upstream `a` 4294967296"
         )
     );
     let without_rule = check(
@@ -597,6 +599,7 @@ fn order_forms_are_checked_over_the_history_and_order_dimensions() {
          checked: protocol `p` revision 1: 1296 states, 0 properties, 1 finding\n"
     );
     let ir = compiled(source);
+    assert_slices_agree(&ir, None, source);
     let space = Space::new(&ir);
     // `t` has classes failed, passed and none: 8 values and 9 histories; `d` 2 and 3; 3 orders.
     assert_eq!(
@@ -607,21 +610,27 @@ fn order_forms_are_checked_over_the_history_and_order_dimensions() {
     let wide: Vec<String> = (0..12)
         .map(|n| format!("{{first: {{kind: t, result: r{n}}}}}"))
         .collect();
-    let refusal = check(
-        &compiled(&source.replace(
-            "{claim: red_first}, {claim: passes}",
-            &format!("{{any: [{}]}}, {{claim: passes}}", wide.join(", ")),
-        )),
-        None,
-    )
-    .expect_err("refused");
-    assert_eq!(refusal.code(), "state-space-bound", "{refusal}");
-    assert!(
-        refusal.to_string().ends_with(
-            "evidence kind `d` 2, evidence kind `t` 32768, history of evidence kind `d` 3, \
-             history of evidence kind `t` 32769, order of first observations 3"
-        ),
-        "{refusal}"
+    let widened = compiled(&source.replace(
+        "{claim: red_first}, {claim: passes}",
+        &format!("{{any: [{}]}}, {{claim: passes}}", wide.join(", ")),
+    ));
+    let refusal = check(&widened, None).expect_err("refused");
+    // `both`, first in finding order, reads `t` alone, whose classes are the whole space's: the
+    // twelve results the widened `fixed` matches too (story:check-subject-slices).
+    assert_eq!(
+        (refusal.code(), refusal.to_string().as_str()),
+        (
+            "state-space-bound",
+            "protocol `p` revision 1: outcome `both` reads 1073774592 states, more than the bound \
+             of 65536: evidence kind `t` 32768, history of evidence kind `t` 32769"
+        )
+    );
+    let space = Space::new(&widened);
+    let fixed = space.outcome_slice(&widened, &widened.outcomes[&OutcomeId::new("fixed")]);
+    assert_eq!(
+        space.slice(&fixed).dimensions(),
+        "evidence kind `d` 2, evidence kind `t` 32768, history of evidence kind `d` 3, history of \
+         evidence kind `t` 32769, order of first observations 3"
     );
 }
 
@@ -1585,6 +1594,7 @@ fn after_is_checked_over_later_records_and_counts_for_authority_bypass() {
          checked: protocol `p` revision 1: 4212 states, 0 properties, 2 findings\n"
     );
     let ir = compiled(source);
+    assert_slices_agree(&ir, None, source);
     let space = Space::new(&ir);
     assert_eq!(
         space.dimensions(),
@@ -1621,5 +1631,588 @@ fn since_is_checked_over_last_records_and_counts_for_authority_bypass() {
          authority-bypass: outcome `clean` is legitimate without authority in state \
          {evidence `change` earlier, observed at no known instant}\n\
          checked: protocol `p` revision 1: 21060 states, 0 properties, 2 findings\n"
+    );
+    // Over slices too: `test`'s capability is in no outcome's slice (story:check-subject-slices).
+    assert_slices_agree(&compiled(source), None, source);
+}
+
+/// The refusal names the first subject in finding order whose slice is above the bound: outcomes,
+/// then actions, then properties. `done` reads `k` (1024 values) and `gate` reads `k` and `m`
+/// (262144); the property's slice is its outcome's and its claim's together, so it is refused
+/// alone when each part fits.
+#[test]
+fn the_bound_refusal_names_the_first_subject_above_the_bound() {
+    let results = |kind: &str, n: usize| {
+        (0..n)
+            .map(|i| format!("{{evidence: {{kind: {kind}, result: r{i}}}}}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let source = format!(
+        "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nartifacts: {{a: {{}}}}\n\
+         evidence_kinds: {{k: {{}}, m: {{}}}}\n\
+         claims: {{x: {{true_when: {{any: [{}]}}}}, y: {{true_when: {{any: [{}]}}}}}}\n\
+         actions: {{probe: {{may_produce: [{{evidence: k}}, {{evidence: m}}]}}, \
+         gate: {{precondition: {{all: [{{claim: x}}, {{claim: y}}]}}}}}}\n\
+         outcomes: {{done: {{requires: {{claim: x}}}}}}\n",
+        results("k", 9),
+        results("m", 7)
+    );
+    let refusal = check(&compiled(&source), None).expect_err("refused");
+    assert_eq!(
+        (refusal.code(), refusal.to_string().as_str()),
+        (
+            "state-space-bound",
+            "protocol `p` revision 1: action `gate` reads 262144 states, more than the bound of \
+             65536: evidence kind `k` 1024, evidence kind `m` 256"
+        )
+    );
+    let ungated = source.replace(
+        "gate: {precondition: {all: [{claim: x}, {claim: y}]}}",
+        "gate: {precondition: {claim: y}}",
+    );
+    let report = check(&compiled(&ungated), None).expect("every slice fits");
+    assert_eq!(
+        report.to_string(),
+        "checked: protocol `p` revision 1: 262144 states, 0 properties, 0 findings\n"
+    );
+    let body = format!(
+        "{HEAD}properties: {{z: {{subject: {{outcome: done}}, independent_of: {{claim: y}}}}}}\n"
+    );
+    let refusal = check(&compiled(&ungated), Some(&properties(&body))).expect_err("refused");
+    assert_eq!(
+        refusal.to_string(),
+        "protocol `p` revision 1: property `z` reads 262144 states, more than the bound of \
+         65536: evidence kind `k` 1024, evidence kind `m` 256"
+    );
+}
+
+/// A case input a subject does not read holds the value a witness of the whole product holds: the
+/// one whose rendering comes first, `x-y` before `x` (`-` before the closing backtick), not the
+/// first declared. An input whose one value's text begins another's (`` a` `` begins `` a`b` ``)
+/// stays in the slice: what follows decides, and here `` a`b` `` comes first, because `b` comes
+/// before the `}` that follows `` a` ``, so holding `a` would change the witness.
+#[test]
+fn an_unread_input_holds_the_value_a_whole_product_witness_holds() {
+    let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+        case: {inputs: {s: {values: [x, x-y]}, t: {values: [a, 'a`b']}}}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {k: {}, m: {}}\n\
+        claims: {approved: {true_when: {evidence: {kind: k}}}}\n\
+        actions:\n\
+        \x20\x20approve: {requires: [{capability: c}], may_produce: [{evidence: k}]}\n\
+        \x20\x20self_approve: {may_produce: [{evidence: k}]}\n\
+        \x20\x20note: {precondition: {input: s, in: [x]}, may_produce: [{evidence: m}]}\n\
+        outcomes: {granted: {requires: {claim: approved}}}\n";
+    let ir = compiled(source);
+    assert_slices_agree(&ir, None, source);
+    assert_eq!(
+        check_by(&ir, None, Strategy::Own)
+            .expect("checked")
+            .to_string(),
+        "authority-bypass: outcome `granted` is legitimate without authority in state \
+         {evidence `k`, input `s` `x-y`, input `t` `a`b`}\n\
+         checked: protocol `p` revision 1: 48 states (input `s` 2 values, input `t` 2 values), 0 \
+         properties, 1 finding\n"
+    );
+    let space = Space::new(&ir);
+    let granted = space.outcome_slice(&ir, ir.outcomes.values().next().expect("one outcome"));
+    assert_eq!(
+        space.slice(&granted).dimensions(),
+        "evidence kind `k` 2, input `t` 2"
+    );
+}
+
+/// Erasing the last record's comparison kind from a slice would leave the record nowhere in the
+/// order: a slice that holds a dimension a `since` reads as `last` holds every dimension its last
+/// record is placed against, so a subject that reads `k` only through a `first` still decides
+/// over `m`, which the `since` anchored on `k` compares.
+#[test]
+fn a_slice_holds_what_its_last_records_are_placed_against() {
+    let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}}\n\
+        evidence_kinds: {k: {}, m: {}, n: {}}\n\
+        claims:\n\
+        \x20\x20since_k_m: {true_when: {since: {last: k, then: {kind: m, result: fail}}}}\n\
+        \x20\x20first_k_x: {true_when: {first: {kind: k, result: x}}}\n\
+        \x20\x20seen_n: {true_when: {evidence: {kind: n}}}\n\
+        actions: {run: {may_produce: [{evidence: k}, {evidence: m}, {evidence: n}]}}\n\
+        outcomes:\n\
+        \x20\x20early: {requires: {claim: first_k_x}}\n\
+        \x20\x20late: {requires: {claim: since_k_m}}\n\
+        \x20\x20seen: {requires: {claim: seen_n}}\n";
+    let ir = compiled(source);
+    let space = Space::new(&ir);
+    let early = space.outcome_slice(&ir, &ir.outcomes[&OutcomeId::new("early")]);
+    let dimensions = space.slice(&early).dimensions();
+    assert!(
+        dimensions.contains("evidence kind `m`") && !dimensions.contains("evidence kind `n`"),
+        "{dimensions}"
+    );
+    assert_slices_agree(&ir, None, source);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Slices (story:check-subject-slices).
+
+/// The three strategies give one result: each subject over its own slice, each over the widest
+/// slice holding its own (or the whole product) as `canon check` does, and the whole product as
+/// before slices existed. Returns how many states the slices of `ir` hold at most, against the
+/// whole product's.
+fn assert_slices_agree(ir: &Ir, properties: Option<&Properties>, source: &str) -> (u128, u128) {
+    let whole = check_by(ir, properties, Strategy::Whole);
+    let own = check_by(ir, properties, Strategy::Own);
+    let chosen = check(ir, properties);
+    assert_eq!(
+        own, whole,
+        "own slices differ from the whole product:\n{source}"
+    );
+    assert_eq!(
+        chosen, whole,
+        "canon check differs from the whole product:\n{source}"
+    );
+    let space = Space::new(ir);
+    let widest = subjects(ir, &space, properties)
+        .iter()
+        .filter_map(|(_, slice)| space.slice(slice).size())
+        .max()
+        .unwrap_or(1);
+    (widest, space.size().unwrap_or(u128::MAX))
+}
+
+/// The protocols a generator writes: two or three evidence kinds about one or two artifacts, an
+/// optional case input, up to four claims, three actions and three outcomes over every predicate
+/// form, an optional invalidation rule and up to two properties. One in four is small around one
+/// order form, whose history and order dimensions make a space large (an `after` or a `since`
+/// over one kind keeps it within [`GENERATED_STATES`]), and one in four reads child cases.
+fn generated(rng: &mut Rng) -> (String, Option<String>) {
+    let family = rng.below(4);
+    let ordered = family == 0;
+    let children = family == 1;
+    let two = !ordered && rng.below(2) == 0;
+    let artifacts: &[&str] = if two { &["a", "b"] } else { &["a"] };
+    let mut kinds: Vec<&str> = vec!["k", "m"];
+    if !ordered && rng.below(2) == 0 {
+        kinds.push("n");
+    }
+    if children {
+        kinds.push("case_outcome");
+    }
+    let input = match rng.below(if ordered { 8 } else { 4 }) {
+        0 => Some(vec!["x", "y"]),
+        1 => Some(vec!["x", "x-y", "z"]),
+        _ => None,
+    };
+    let context = Context {
+        kinds: kinds.clone(),
+        artifacts: artifacts.to_vec(),
+        input: input.is_some(),
+        children,
+        orders: !ordered,
+    };
+    let depth = if ordered { 1 } else { 2 };
+    let claims = 1 + rng.below(if ordered { 3 } else { 4 });
+    let mut source = String::from(
+        "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+         independence_dimensions: {d: {}, e: {}}\n",
+    );
+    if let Some(values) = &input {
+        source.push_str(&format!(
+            "case: {{inputs: {{s: {{values: [{}]}}}}}}\n",
+            values.join(", ")
+        ));
+    }
+    let listed = |ids: &[&str]| {
+        ids.iter()
+            .map(|id| format!("{id}: {{}}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    source.push_str(&format!("artifacts: {{{}}}\n", listed(artifacts)));
+    source.push_str(&format!("evidence_kinds: {{{}}}\n", listed(&kinds)));
+    source.push_str("claims:\n");
+    for claim in 0..claims {
+        let predicate = match (claim, ordered, children) {
+            (0, true, _) => order_form(rng),
+            (0, _, true) => format!(
+                "{{children: {{in: [{}]}}}}",
+                ["accepted", "p"][rng.below(2)]
+            ),
+            _ => context.predicate(rng, depth, claim),
+        };
+        source.push_str(&format!("  c{claim}: {{true_when: {predicate}}}\n"));
+    }
+    source.push_str("actions:\n");
+    let actions = 1 + rng.below(3);
+    for action in 0..actions {
+        let mut fields = Vec::new();
+        if rng.below(3) != 0 {
+            fields.push(format!(
+                "precondition: {}",
+                context.predicate(rng, depth, claims)
+            ));
+        }
+        match rng.below(if ordered { 8 } else { 4 }) {
+            0 => fields.push("requires: [{capability: g0}]".to_owned()),
+            1 => fields.push("requires: [{capability: g1}]".to_owned()),
+            _ => {}
+        }
+        let produced: Vec<String> = kinds
+            .iter()
+            .filter(|kind| **kind != "case_outcome" && rng.below(2) == 0)
+            .map(|kind| format!("{{evidence: {kind}}}"))
+            .collect();
+        if !produced.is_empty() {
+            fields.push(format!("may_produce: [{}]", produced.join(", ")));
+        }
+        if children && action == 0 {
+            fields.push("case_open: {protocol: q, subject: a}".to_owned());
+        }
+        source.push_str(&format!("  a{action}: {{{}}}\n", fields.join(", ")));
+    }
+    source.push_str("outcomes:\n");
+    let outcomes = 1 + rng.below(3);
+    for outcome in 0..outcomes {
+        let requires = match rng.below(5) {
+            0 => format!("{{decision: d{}}}", rng.below(2)),
+            _ => context.predicate(rng, depth, claims),
+        };
+        source.push_str(&format!("  o{outcome}: {{requires: {requires}}}\n"));
+    }
+    if two && rng.below(3) == 0 {
+        source.push_str(&format!(
+            "invalidation: {{r: {{upstream: b, invalidates: [c{}]}}}}\n",
+            rng.below(claims)
+        ));
+    }
+    let count = rng.below(3);
+    let properties = (count > 0).then(|| {
+        let mut body = String::from("format: canon-properties/1\nprotocol: p\nproperties:\n");
+        for property in 0..count {
+            let subject = if rng.below(2) == 0 {
+                format!("{{action: a{}}}", rng.below(actions))
+            } else {
+                format!("{{outcome: o{}}}", rng.below(outcomes))
+            };
+            body.push_str(&format!(
+                "  x{property}: {{subject: {subject}, independent_of: {{claim: c{}}}}}\n",
+                rng.below(claims)
+            ));
+        }
+        body
+    });
+    (source, properties)
+}
+
+/// One order form over `k` and `m`, or over `k` alone for half of the `after` and `since` forms.
+fn order_form(rng: &mut Rng) -> String {
+    let then = if rng.below(2) == 0 { "k" } else { "m" };
+    let result = ["p", "q"][rng.below(2)];
+    match rng.below(4) {
+        0 => format!("{{first: {{kind: k, result: {result}}}}}"),
+        1 => "{before: {first: k, then: m}}".to_owned(),
+        2 => format!("{{after: {{first: k, then: {{kind: {then}, result: {result}}}}}}}"),
+        _ => format!("{{since: {{last: k, then: {{kind: {then}, result: {result}}}}}}}"),
+    }
+}
+
+/// What a generated predicate may name.
+struct Context<'a> {
+    kinds: Vec<&'a str>,
+    artifacts: Vec<&'a str>,
+    input: bool,
+    children: bool,
+    /// Whether it may hold an order form.
+    orders: bool,
+}
+
+impl Context<'_> {
+    /// A predicate of at most `depth` levels of `all`, `any` and `not`, testing only the claims
+    /// before `claims`, so no claims test each other in a cycle.
+    fn predicate(&self, rng: &mut Rng, depth: usize, claims: usize) -> String {
+        let kind = |rng: &mut Rng| {
+            let plain: Vec<&&str> = self
+                .kinds
+                .iter()
+                .filter(|k| **k != "case_outcome")
+                .collect();
+            *plain[rng.below(plain.len())]
+        };
+        let subject = |rng: &mut Rng| match rng.below(3) {
+            0 => format!(
+                ", subject: {}",
+                self.artifacts[rng.below(self.artifacts.len())]
+            ),
+            _ => String::new(),
+        };
+        let result = |rng: &mut Rng| ["p", "q"][rng.below(2)];
+        match rng.below(if depth == 0 { 7 } else { 10 }) {
+            0 | 1 => {
+                let result = match rng.below(3) {
+                    0 => String::new(),
+                    _ => format!(", result: {}", result(rng)),
+                };
+                let independent = match rng.below(6) {
+                    0 => ", independent_on: [d]",
+                    1 => ", independent_on: [d, e]",
+                    _ => "",
+                };
+                format!(
+                    "{{evidence: {{kind: {}{}{result}{independent}}}}}",
+                    kind(rng),
+                    subject(rng)
+                )
+            }
+            2 if claims > 0 => format!(
+                "{{claim: c{}, is: {}}}",
+                rng.below(claims),
+                ["true", "false", "unknown"][rng.below(3)]
+            ),
+            3 if self.input => format!("{{input: s, in: [{}]}}", ["x", "x-y", "y"][rng.below(3)]),
+            4 if self.orders => match rng.below(4) {
+                0 => format!(
+                    "{{first: {{kind: {}, result: {}{}}}}}",
+                    kind(rng),
+                    result(rng),
+                    subject(rng)
+                ),
+                1 => format!(
+                    "{{before: {{first: {}, then: {}{}}}}}",
+                    kind(rng),
+                    kind(rng),
+                    subject(rng)
+                ),
+                2 => format!(
+                    "{{after: {{first: {}, then: {{kind: {}, result: {}}}{}}}}}",
+                    kind(rng),
+                    kind(rng),
+                    result(rng),
+                    subject(rng)
+                ),
+                _ => format!(
+                    "{{since: {{last: {}, then: {{kind: {}, result: {}}}{}}}}}",
+                    kind(rng),
+                    kind(rng),
+                    result(rng),
+                    subject(rng)
+                ),
+            },
+            5 if self.children => {
+                format!(
+                    "{{children: {{in: [{}]}}}}",
+                    ["accepted", "p"][rng.below(2)]
+                )
+            }
+            7 => format!("{{not: {}}}", self.predicate(rng, depth - 1, claims)),
+            8 | 9 => {
+                let members: Vec<String> = (0..1 + rng.below(3))
+                    .map(|_| self.predicate(rng, depth - 1, claims))
+                    .collect();
+                let form = if rng.below(2) == 0 { "all" } else { "any" };
+                format!("{{{form}: [{}]}}", members.join(", "))
+            }
+            _ => format!("{{evidence: {{kind: {}}}}}", kind(rng)),
+        }
+    }
+}
+
+/// The largest whole product a generated protocol is enumerated three ways over.
+const GENERATED_STATES: u128 = 2048;
+
+/// Generates protocols from `seed` until `wanted` of them compile and have a whole product within
+/// [`GENERATED_STATES`], checks each three ways and asserts every report and refusal agrees.
+/// Returns how many were compared and how many have a subject whose slice is smaller than the
+/// whole product.
+fn generated_protocols_agree(seed: u64, wanted: usize) -> (usize, usize) {
+    let mut rng = Rng(seed);
+    let (mut compared, mut sliced, mut attempts) = (0, 0, 0);
+    let mut features: BTreeMap<&str, usize> = BTreeMap::new();
+    while compared < wanted {
+        attempts += 1;
+        assert!(
+            attempts < wanted * 50,
+            "{compared} of {attempts} generated protocols compile"
+        );
+        let (source, body) = generated(&mut rng);
+        let Ok(parsed) = parse(&source) else {
+            continue;
+        };
+        let Ok(ir) = crate::ir::compile(&parsed) else {
+            continue;
+        };
+        let Some(properties) = body.as_deref().map(read_properties).transpose().ok() else {
+            continue;
+        };
+        if Space::new(&ir)
+            .size()
+            .is_none_or(|size| size > GENERATED_STATES)
+        {
+            continue;
+        }
+        if properties
+            .as_ref()
+            .is_some_and(|p| properties::validate(&ir, p).is_err())
+        {
+            continue;
+        }
+        let (widest, whole) = assert_slices_agree(&ir, properties.as_ref(), &source);
+        compared += 1;
+        if widest < whole {
+            sliced += 1;
+        }
+        let report = check(&ir, properties.as_ref()).map(|report| report.to_string());
+        let text = report.as_deref().unwrap_or("refused");
+        for feature in GENERATED_FEATURES {
+            if source.contains(feature) || text.contains(feature) {
+                *features.entry(feature).or_default() += 1;
+            }
+        }
+    }
+    eprintln!("seed {seed:#x}: {compared} compared, {sliced} sliced, {features:?}");
+    for feature in GENERATED_FEATURES {
+        assert!(
+            features.get(feature).is_some_and(|n| *n >= 2),
+            "seed {seed:#x}: {feature} in fewer than two compared protocols: {features:?}"
+        );
+    }
+    (compared, sliced)
+}
+
+/// What the generated protocols must reach, in the source or the report: every order form, child
+/// cases, invalidation, independence, inputs, and each finding that reads states.
+const GENERATED_FEATURES: [&str; 11] = [
+    "inputs:",
+    "first:",
+    "since:",
+    "after:",
+    "children:",
+    "invalidation:",
+    "independent_on",
+    "unreachable-outcome",
+    "unsatisfiable-precondition",
+    "authority-bypass",
+    "property-failed",
+];
+
+/// Option A's claim, tested: an action's status depends only on what its precondition reads and
+/// the capabilities it requires, an outcome's on its requirement or its decision, a property's on
+/// its subject's slice and its `independent_of` claim. Over generated protocols with every
+/// predicate form, the report of each subject over its own slice, and `canon check`'s, is the
+/// whole product's, byte for byte. Four seeds, run side by side.
+#[test]
+fn generated_protocols_check_alike_sliced_and_whole_0() {
+    let (compared, sliced) = generated_protocols_agree(0x9E37_79B9_7F4A_7C15, 150);
+    assert!(sliced * 2 >= compared, "{sliced} of {compared} sliced");
+}
+
+#[test]
+fn generated_protocols_check_alike_sliced_and_whole_1() {
+    let (compared, sliced) = generated_protocols_agree(0xD1B5_4A32_D192_ED03, 150);
+    assert!(sliced * 2 >= compared, "{sliced} of {compared} sliced");
+}
+
+#[test]
+fn generated_protocols_check_alike_sliced_and_whole_2() {
+    let (compared, sliced) = generated_protocols_agree(0x8CB9_2BA7_2F3D_8DD7, 150);
+    assert!(sliced * 2 >= compared, "{sliced} of {compared} sliced");
+}
+
+#[test]
+fn generated_protocols_check_alike_sliced_and_whole_3() {
+    let (compared, sliced) = generated_protocols_agree(0x2545_F491_4F6C_DD1D, 150);
+    assert!(sliced * 2 >= compared, "{sliced} of {compared} sliced");
+}
+
+/// The largest whole product a fixture protocol is enumerated three ways over, which keeps the
+/// suite's time; the check fixtures hold at most 288 states.
+const FIXTURE_STATES: u128 = 8192;
+
+/// Every `protocol/1` document under `fixtures/` whose whole product is within
+/// [`FIXTURE_STATES`] checks alike over slices and over the whole product, with its
+/// `properties.yaml` when it has one.
+#[test]
+fn every_fixture_protocol_checks_alike_sliced_and_whole() {
+    let manifest = std::env::var_os("CARGO_MANIFEST_DIR").expect("run through cargo");
+    let root = std::path::PathBuf::from(manifest).join("../../fixtures");
+    let mut pending = vec![root];
+    let mut files = Vec::new();
+    while let Some(dir) = pending.pop() {
+        for entry in std::fs::read_dir(&dir).expect("readable") {
+            let path = entry.expect("readable").path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().is_some_and(|e| e == "yaml") {
+                files.push(path);
+            }
+        }
+    }
+    files.sort();
+    let (mut compared, mut sliced) = (0, 0);
+    for path in files {
+        let source = std::fs::read_to_string(&path).expect("readable");
+        if !source.starts_with("format: protocol/1") || path.ends_with("properties.yaml") {
+            continue;
+        }
+        let Ok(ir) = parse(&source)
+            .map_err(|_| ())
+            .and_then(|m| crate::ir::compile(&m).map_err(|_| ()))
+        else {
+            continue;
+        };
+        if Space::new(&ir)
+            .size()
+            .is_none_or(|size| size > FIXTURE_STATES)
+        {
+            continue;
+        }
+        let declared = path.with_file_name("properties.yaml");
+        let properties = declared
+            .exists()
+            .then(|| properties(&std::fs::read_to_string(&declared).expect("readable")));
+        let (widest, whole) =
+            assert_slices_agree(&ir, properties.as_ref(), &path.display().to_string());
+        compared += 1;
+        if widest < whole {
+            sliced += 1;
+        }
+    }
+    eprintln!("{compared} fixture protocols compared, {sliced} sliced");
+    assert!(
+        compared >= 20 && sliced >= 10,
+        "{sliced} of {compared} fixtures sliced"
+    );
+}
+
+/// A slice keeps the classes and producer profiles its evidence dimensions have in the whole
+/// space, not only those its subject's matches name: `granted` reads `k` with no result, yet the
+/// whole product's witness is a record of `fail`, a class only `failed` names, because
+/// `` result `fail` `` is written before the `}` that ends a bare record; and `seen`'s is a record
+/// from the producer only `reviewed` demands. Classes derived from the subject's own matches would
+/// write `{evidence `k`}` and `{evidence `m`}` (story:check-subject-slices, Outcome item 1).
+#[test]
+fn a_slice_keeps_the_classes_and_profiles_of_the_whole_space() {
+    let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+        independence_dimensions: {d: {}}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {k: {}, m: {}}\n\
+        claims:\n\
+        \x20\x20failed: {true_when: {evidence: {kind: k, result: fail}}}\n\
+        \x20\x20reviewed: {true_when: {evidence: {kind: m, independent_on: [d]}}}\n\
+        actions:\n\
+        \x20\x20approve: {requires: [{capability: c}], may_produce: [{evidence: k}, {evidence: m}]}\n\
+        \x20\x20self_approve: {may_produce: [{evidence: k}, {evidence: m}]}\n\
+        outcomes:\n\
+        \x20\x20granted: {requires: {evidence: {kind: k}}}\n\
+        \x20\x20seen: {requires: {evidence: {kind: m}}}\n";
+    let ir = compiled(source);
+    assert_slices_agree(&ir, None, source);
+    assert_eq!(
+        check_by(&ir, None, Strategy::Own)
+            .expect("checked")
+            .to_string(),
+        "authority-bypass: outcome `granted` is legitimate without authority in state \
+         {evidence `k` result `fail`}\n\
+         authority-bypass: outcome `seen` is legitimate without authority in state \
+         {evidence `m` by a producer independent on `d`}\n\
+         checked: protocol `p` revision 1: 36 states, 0 properties, 2 findings\n"
     );
 }

@@ -79,9 +79,12 @@
 //! - `nothing-to-witness`: the protocol declares no outcome and no action is blocked in any state,
 //!   so there is no scenario to write.
 //! - `unrepresentable`: a scenario does not read back as one that passes.
-//! - Every refusal [`crate::check::check`] makes, with its code: a space above the bound
+//! - Every refusal [`crate::check::check`] makes, with its code: a slice above the bound
 //!   (`state-space-bound`), a protocol that reads `case_outcome` with a `children` form and
 //!   an order form (`ordered-child-outcomes`) and an evaluation the evaluator refuses.
+//! - `state-space-bound`: the whole product, which this enumerates, is above the bound though
+//!   every slice `canon check` decides fits. The refusal names the whole product's count, the
+//!   bound and each dimension, as `canon check` did before it decided subjects over slices.
 
 #[cfg(test)]
 mod tests;
@@ -203,9 +206,9 @@ pub fn generate(ir: &Ir, fixture: &str, source: &str) -> Result<Vec<Scenario>, R
     }
     check::check(ir, None)?;
     let space = Space::new(ir);
-    let size = space
-        .size()
-        .expect("canon check accepted the space, so its size fits");
+    // `canon check` decides each subject over its slice; this enumerates the whole product, so it
+    // keeps the whole product's bound.
+    let size = check::whole_product(ir, &space)?;
     let states: Vec<State> = (0..size).map(|index| space.state(index)).collect();
     let evaluated = states
         .iter()

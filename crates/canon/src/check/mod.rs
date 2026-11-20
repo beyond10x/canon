@@ -1,9 +1,10 @@
 //! Exhaustive checking of a compiled protocol over its finite state space (story:canon-check).
 //!
-//! [`check`] enumerates every state of a protocol, evaluates each with Canon's own evaluator
-//! ([`crate::eval::evaluate_with`]) and reports what no single evaluation shows. It is a pure
-//! function of the compiled protocol and the `canon-properties/1` properties: no clock, network or
-//! filesystem, and the same inputs give the same [`Report`], byte for byte.
+//! [`check`] covers every state of a protocol: it enumerates the states of the dimensions each
+//! action, outcome and property reads (its slice, "Slices" below), evaluates each with Canon's own
+//! evaluator ([`crate::eval::evaluate_with`]) and reports what no single evaluation shows. It is a
+//! pure function of the compiled protocol and the `canon-properties/1` properties: no clock,
+//! network or filesystem, and the same inputs give the same [`Report`], byte for byte.
 //!
 //! # The state space
 //!
@@ -244,12 +245,47 @@
 //! its dimension's artifact, the decided capabilities as `canon-authority/1` and the taken decisions as
 //! `canon-decisions/1`.
 //!
+//! # Slices
+//!
+//! Each outcome, each action and each declared property is a subject, decided over its slice: the
+//! dimensions above that it reads (story:check-subject-slices).
+//!
+//! - An outcome's slice is the evidence dimensions its requirement reads, directly or through the
+//!   claims it tests, and the case inputs it tests, likewise; or its one decision dimension.
+//! - An action's slice is the evidence dimensions and case inputs its precondition reads, likewise,
+//!   and one capability dimension per capability it requires.
+//! - A property's slice is its subject's, together with the evidence dimensions and case inputs its
+//!   `independent_of` claim reads.
+//! - An evidence dimension in a slice keeps the classes, upstream artifacts and producer profiles
+//!   it has in the whole space, and brings its history, later-record and last-record dimensions
+//!   with it, and every evidence dimension one of its last records is placed against. The slice's
+//!   order dimension orders the things in the order it holds, as the whole space's orders all of
+//!   them.
+//!
+//! A dimension outside a slice holds the value of least weight: no record, capability undecided,
+//! decision not taken. A case input outside it holds the value whose rendering comes first (of
+//! `` input `s` `v` ``, the `` v` `` first in code-point order), and stays in the slice when one
+//! value's text begins another's. A state of a slice is written, and evaluated, as the whole
+//! product's state with those values. An action's status depends only on its precondition and the
+//! authority given for its requirements, and an outcome's only on its requirement or its decision,
+//! so each subject has in its slice every status it has in the whole product, the same pairs of
+//! statuses across its `independent_of` claim, and the same witnesses: a state that differs outside
+//! the slice weighs more, or, by an input, is written after one that does not.
+//! `unproduced-evidence` reads no state. When the whole product is within the bound and holds no
+//! more states than the slices that no other slice holds, it is enumerated instead, with the same
+//! report; otherwise each subject is decided over the first of those slices that holds its own.
+//! The summary gives the size of the whole product: the states the check covers.
+//!
 //! # The bound
 //!
-//! A space of more than [`STATE_BOUND`] states (65 536) is refused as `state-space-bound`, before
-//! any state is evaluated, naming the count, the bound and each dimension with its number of values:
-//! `` protocol `p` revision 1 has 98304 states, more than the bound of 65536: evidence kind `k`
-//! 1024, evidence kind `m` 16, capability `c` 3, decision `d` 2 ``.
+//! A slice of more than [`STATE_BOUND`] states (65 536) refuses the whole check as
+//! `state-space-bound`, before any state is evaluated, and nothing else is reported. The refusal
+//! names the first such subject in finding order (each outcome, then each action, then each
+//! property, each in identifier order), the count of its slice, the bound and each dimension of the
+//! slice with its number of values: `` protocol `p` revision 1: action `act` reads 98304 states,
+//! more than the bound of 65536: evidence kind `k` 2048, evidence kind `m` 16, capability `c` 3 ``.
+//! A whole product too large to count is refused as before slices existed, naming it: `` protocol
+//! `p` revision 1 has more than … states, more than the bound of 65536: … ``.
 //!
 //! # Findings
 //!
@@ -333,7 +369,7 @@ use crate::model::{
     ProtocolId, Revision, one_line,
 };
 
-pub(crate) use space::{REVISION, Space, State};
+pub(crate) use space::{REVISION, Slice, Space, State};
 
 /// The most states [`check`] evaluates; a larger space is refused.
 pub const STATE_BOUND: u128 = 65_536;
@@ -476,7 +512,8 @@ impl fmt::Display for Finding {
 pub struct Report {
     pub protocol: ProtocolId,
     pub revision: u64,
-    /// How many states were evaluated.
+    /// How many states the check covers: the size of the whole product, whose every state each
+    /// subject's slice stands for. Not how many were evaluated.
     pub states: u128,
     /// Each case input the state space takes every value of, in identifier order, with how many
     /// values it declares; empty for a protocol that declares no input.
@@ -537,9 +574,71 @@ pub(crate) struct Evaluated {
     pub(crate) outcomes: Vec<String>,
 }
 
-/// Checks `ir` over its whole state space, and each of `properties` when given, as the module docs
-/// say. Pure and deterministic.
+/// Checks `ir`, and each of `properties` when given, deciding each subject over its slice, as the
+/// module docs say. Pure and deterministic.
 pub fn check(ir: &Ir, properties: Option<&Properties>) -> Result<Report, Refusal> {
+    check_by(ir, properties, Strategy::Chosen)
+}
+
+/// Which spaces a check enumerates. Every strategy gives the same report for a protocol each gives
+/// one for; only [`Strategy::Chosen`] is `canon check`'s, and the others are what the suite
+/// compares it with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Strategy {
+    /// The whole product, refused above the bound, as before slices existed.
+    #[cfg_attr(not(test), allow(dead_code))]
+    Whole,
+    /// Each subject over exactly its own slice.
+    #[cfg_attr(not(test), allow(dead_code))]
+    Own,
+    /// The whole product when it is within the bound and holds no more states than the slices
+    /// that no other slice holds; otherwise each subject over the first of those slices that holds
+    /// its own.
+    Chosen,
+}
+
+/// A subject of the state-dependent findings: an outcome, an action or a declared property, each
+/// with its position among the outcomes or actions.
+enum Subject<'a> {
+    Outcome(usize, &'a OutcomeId, &'a crate::ir::Outcome),
+    Action(usize, &'a ActionId),
+    Property(&'a PropertyId, &'a crate::model::Property),
+}
+
+/// `` outcome `o` ``, `` action `a` `` or `` property `p` ``.
+impl fmt::Display for Subject<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (section, id) = match self {
+            Subject::Outcome(_, id, _) => ("outcome", id.as_str()),
+            Subject::Action(_, id) => ("action", id.as_str()),
+            Subject::Property(id, _) => ("property", id.as_str()),
+        };
+        write!(f, "{section} `{}`", one_line(id))
+    }
+}
+
+/// What deciding a subject found: whether an outcome is legitimate in some state and its
+/// `authority-bypass`, whether an action's precondition holds in some state, or a property's
+/// `property-failed`.
+#[derive(Default)]
+struct Decided {
+    holds: bool,
+    finding: Option<Finding>,
+}
+
+/// One enumerated space: its states and each one's evaluation, by state index.
+struct Enumerated<'s, 'a> {
+    space: &'s Space<'a>,
+    states: Vec<State>,
+    evaluated: Vec<Evaluated>,
+}
+
+/// [`check`], enumerating the spaces `strategy` says.
+pub(crate) fn check_by(
+    ir: &Ir,
+    properties: Option<&Properties>,
+    strategy: Strategy,
+) -> Result<Report, Refusal> {
     eval::check_depth(ir).map_err(|refusal| Refusal::new(refusal.code(), refusal.to_string()))?;
     if let Some(properties) = properties {
         properties::validate(ir, properties)?;
@@ -556,43 +655,143 @@ pub fn check(ir: &Ir, properties: Option<&Properties>) -> Result<Report, Refusal
             ),
         ));
     }
-    let space = Space::new(ir);
-    let size = match space.size() {
-        Some(size) if size <= STATE_BOUND => size,
-        size => {
-            let count = size.map_or_else(|| format!("more than {}", u128::MAX), |n| n.to_string());
-            return Err(Refusal::new(
-                "state-space-bound",
-                format!(
-                    "protocol `{}` revision {} has {count} states, more than the bound of \
-                     {STATE_BOUND}: {}",
-                    one_line(ir.protocol.id.as_str()),
-                    ir.protocol.revision,
-                    space.dimensions()
-                ),
-            ));
+    let whole = Space::new(ir);
+    let subjects = subjects(ir, &whole, properties);
+    let mut sizes = Vec::new();
+    if strategy != Strategy::Whole {
+        for (subject, slice) in &subjects {
+            let space = whole.slice(slice);
+            match space.size() {
+                Some(size) if size <= STATE_BOUND => sizes.push(size),
+                size => {
+                    let count =
+                        size.map_or_else(|| format!("more than {}", u128::MAX), |n| n.to_string());
+                    return Err(Refusal::new(
+                        "state-space-bound",
+                        format!(
+                            "protocol `{}` revision {}: {subject} reads {count} states, more than \
+                             the bound of {STATE_BOUND}: {}",
+                            one_line(ir.protocol.id.as_str()),
+                            ir.protocol.revision,
+                            space.dimensions()
+                        ),
+                    ));
+                }
+            }
         }
+    }
+    let covered = match (strategy, whole.size()) {
+        (Strategy::Whole, _) | (_, None) => whole_product(ir, &whole)?,
+        (_, Some(size)) => size,
     };
-    let states: Vec<State> = (0..size).map(|index| space.state(index)).collect();
-    let evaluated = states
-        .iter()
-        .map(|state| evaluate(ir, &space, state))
-        .collect::<Result<Vec<_>, _>>()?;
+
+    // Each space to enumerate, `None` for the whole product, with the subjects decided over it.
+    let mut plan: Vec<(Option<Slice>, Vec<usize>)> = Vec::new();
+    let all: Vec<usize> = (0..subjects.len()).collect();
+    match strategy {
+        Strategy::Whole => plan.push((None, all)),
+        Strategy::Own => {
+            for (at, (_, slice)) in subjects.iter().enumerate() {
+                match plan.iter_mut().find(|(s, _)| s.as_ref() == Some(slice)) {
+                    Some((_, members)) => members.push(at),
+                    None => plan.push((Some(slice.clone()), vec![at])),
+                }
+            }
+        }
+        Strategy::Chosen => {
+            // The slices no other slice holds, each once, in subject order.
+            let mut widest: Vec<(&Slice, u128)> = Vec::new();
+            for (at, (_, slice)) in subjects.iter().enumerate() {
+                let held = subjects
+                    .iter()
+                    .any(|(_, other)| other != slice && other.covers(slice));
+                if !held && !widest.iter().any(|(s, _)| *s == slice) {
+                    widest.push((slice, sizes[at]));
+                }
+            }
+            let sliced: u128 = widest.iter().map(|(_, size)| size).sum();
+            if covered <= STATE_BOUND && covered <= sliced {
+                plan.push((None, all));
+            } else {
+                for (slice, _) in &widest {
+                    plan.push((Some((*slice).clone()), Vec::new()));
+                }
+                for (at, (_, slice)) in subjects.iter().enumerate() {
+                    let (_, members) = plan
+                        .iter_mut()
+                        .find(|(s, _)| s.as_ref().is_some_and(|s| s.covers(slice)))
+                        .expect("some widest slice holds every slice");
+                    members.push(at);
+                }
+            }
+        }
+    }
+
+    let governed: BTreeSet<&EvidenceKindId> = ir
+        .actions
+        .values()
+        .filter(|action| !action.requires.is_empty())
+        .flat_map(|action| produces(ir, action))
+        .collect();
+    let free: BTreeSet<&EvidenceKindId> = ir
+        .actions
+        .values()
+        .filter(|action| action.requires.is_empty())
+        .flat_map(|action| produces(ir, action))
+        .collect();
+    let mut decided: Vec<Decided> = subjects.iter().map(|_| Decided::default()).collect();
+    for (slice, members) in &plan {
+        let sliced;
+        let space = match slice {
+            Some(slice) => {
+                sliced = whole.slice(slice);
+                &sliced
+            }
+            None => &whole,
+        };
+        let enumerated = enumerate(ir, space)?;
+        for at in members {
+            decided[*at] = match &subjects[*at].0 {
+                Subject::Outcome(position, id, outcome) => Decided {
+                    holds: enumerated
+                        .evaluated
+                        .iter()
+                        .any(|e| e.outcomes[*position] == "legitimate"),
+                    finding: bypass(ir, &enumerated, *position, id, outcome, &governed, &free),
+                },
+                Subject::Action(position, _) => Decided {
+                    holds: enumerated.evaluated.iter().any(|e| {
+                        matches!(
+                            e.actions[*position].as_str(),
+                            "admissible" | "approval-required"
+                        )
+                    }),
+                    finding: None,
+                },
+                Subject::Property(id, property) => Decided {
+                    holds: true,
+                    finding: failed_property(ir, &enumerated, id, property),
+                },
+            };
+        }
+    }
 
     let mut findings = Vec::new();
-    for (at, outcome) in ir.outcomes.keys().enumerate() {
-        if !evaluated.iter().any(|e| e.outcomes[at] == "legitimate") {
+    for ((subject, _), decided) in subjects.iter().zip(&decided) {
+        if let Subject::Outcome(_, id, _) = subject
+            && !decided.holds
+        {
             findings.push(Finding::UnreachableOutcome {
-                outcome: outcome.clone(),
+                outcome: (*id).clone(),
             });
         }
     }
-    for (at, action) in ir.actions.keys().enumerate() {
-        let holds =
-            |e: &Evaluated| matches!(e.actions[at].as_str(), "admissible" | "approval-required");
-        if !evaluated.iter().any(holds) {
+    for ((subject, _), decided) in subjects.iter().zip(&decided) {
+        if let Subject::Action(_, id) = subject
+            && !decided.holds
+        {
             findings.push(Finding::UnsatisfiablePrecondition {
-                action: action.clone(),
+                action: (*id).clone(),
             });
         }
     }
@@ -611,16 +810,20 @@ pub fn check(ir: &Ir, properties: Option<&Properties>) -> Result<Report, Refusal
             }
         }
     }
-    findings.extend(bypasses(ir, &space, &states, &evaluated));
-    if let Some(properties) = properties {
-        findings.extend(failed_properties(
-            ir, &space, &states, &evaluated, properties,
-        ));
+    for ((subject, _), decided) in subjects.iter().zip(&decided) {
+        if let Subject::Outcome(..) = subject {
+            findings.extend(decided.finding.clone());
+        }
+    }
+    for ((subject, _), decided) in subjects.iter().zip(&decided) {
+        if let Subject::Property(..) = subject {
+            findings.extend(decided.finding.clone());
+        }
     }
     Ok(Report {
         protocol: ir.protocol.id.clone(),
         revision: ir.protocol.revision,
-        states: size,
+        states: covered,
         inputs: ir
             .inputs
             .iter()
@@ -628,6 +831,82 @@ pub fn check(ir: &Ir, properties: Option<&Properties>) -> Result<Report, Refusal
             .collect(),
         properties: properties.map_or(0, |p| p.properties.len()),
         findings,
+    })
+}
+
+/// Every subject in finding order, with its slice: each outcome and each action in identifier
+/// order, then each property in identifier order, whose slice is its subject's together with the
+/// dimensions its `independent_of` claim reads.
+fn subjects<'a>(
+    ir: &'a Ir,
+    whole: &Space<'_>,
+    properties: Option<&'a Properties>,
+) -> Vec<(Subject<'a>, Slice)> {
+    let mut subjects = Vec::new();
+    for (at, (id, outcome)) in ir.outcomes.iter().enumerate() {
+        subjects.push((
+            Subject::Outcome(at, id, outcome),
+            whole.outcome_slice(ir, outcome),
+        ));
+    }
+    for (at, (id, action)) in ir.actions.iter().enumerate() {
+        subjects.push((Subject::Action(at, id), whole.action_slice(ir, action)));
+    }
+    let mut ordered: Vec<_> = properties
+        .map(|p| p.properties.iter().collect())
+        .unwrap_or_default();
+    ordered.sort_by(|a, b| a.0.cmp(b.0));
+    for (id, property) in ordered {
+        let subject = match &property.subject {
+            PropertySubject::Action(action) => {
+                whole.action_slice(ir, ir.actions.get(action).expect("validated"))
+            }
+            PropertySubject::Outcome(outcome) => {
+                whole.outcome_slice(ir, ir.outcomes.get(outcome).expect("validated"))
+            }
+        };
+        let PropertyDependency::Claim(claim) = &property.independent_of;
+        let true_when = &ir.claims.get(claim).expect("validated").true_when;
+        let slice = subject.union(&whole.predicate_slice(ir, true_when));
+        subjects.push((Subject::Property(id, property), slice));
+    }
+    subjects
+}
+
+/// The size of the whole product of `space`, or the refusal of a whole product above the bound,
+/// naming the count, the bound and each dimension: what `canon generate`, which enumerates the
+/// whole product, is held to.
+pub(crate) fn whole_product(ir: &Ir, space: &Space<'_>) -> Result<u128, Refusal> {
+    match space.size() {
+        Some(size) if size <= STATE_BOUND => Ok(size),
+        size => {
+            let count = size.map_or_else(|| format!("more than {}", u128::MAX), |n| n.to_string());
+            Err(Refusal::new(
+                "state-space-bound",
+                format!(
+                    "protocol `{}` revision {} has {count} states, more than the bound of \
+                     {STATE_BOUND}: {}",
+                    one_line(ir.protocol.id.as_str()),
+                    ir.protocol.revision,
+                    space.dimensions()
+                ),
+            ))
+        }
+    }
+}
+
+/// Every state of `space`, within the bound, and its evaluation.
+fn enumerate<'s, 'a>(ir: &Ir, space: &'s Space<'a>) -> Result<Enumerated<'s, 'a>, Refusal> {
+    let size = space.size().expect("the space is within the bound");
+    let states: Vec<State> = (0..size).map(|index| space.state(index)).collect();
+    let evaluated = states
+        .iter()
+        .map(|state| evaluate(ir, space, state))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Enumerated {
+        space,
+        states,
+        evaluated,
     })
 }
 
@@ -707,131 +986,120 @@ fn produces<'a>(
     action.may_produce.iter().chain(opened)
 }
 
-/// The `authority-bypass` findings, in outcome order.
-fn bypasses(ir: &Ir, space: &Space<'_>, states: &[State], evaluated: &[Evaluated]) -> Vec<Finding> {
-    let governed: BTreeSet<&EvidenceKindId> = ir
-        .actions
-        .values()
-        .filter(|action| !action.requires.is_empty())
-        .flat_map(|action| produces(ir, action))
-        .collect();
-    let free: BTreeSet<&EvidenceKindId> = ir
-        .actions
-        .values()
-        .filter(|action| action.requires.is_empty())
-        .flat_map(|action| produces(ir, action))
-        .collect();
-    let legitimate = |state: &State, at: usize| {
+/// The `authority-bypass` finding of the outcome at `at`, decided over `enumerated`.
+fn bypass(
+    ir: &Ir,
+    enumerated: &Enumerated<'_, '_>,
+    at: usize,
+    id: &OutcomeId,
+    outcome: &crate::ir::Outcome,
+    governed: &BTreeSet<&EvidenceKindId>,
+    free: &BTreeSet<&EvidenceKindId>,
+) -> Option<Finding> {
+    let Enumerated {
+        space,
+        states,
+        evaluated,
+    } = enumerated;
+    let requirement = outcome.requires.predicate()?;
+    let legitimate = |state: &State| {
         let index = usize::try_from(space.index(state)).expect("the space is within the bound");
         evaluated[index].outcomes[at] == "legitimate"
     };
-    let mut findings = Vec::new();
-    for (at, (id, outcome)) in ir.outcomes.iter().enumerate() {
-        let Some(requirement) = outcome.requires.predicate() else {
-            continue;
-        };
-        // The evidence dimensions the requirement reads where a record helps it hold. It is
-        // meant to rest on authority only when one of them is of a governed kind.
-        let positive = space.dimensions_read_positively(ir, requirement);
-        if !positive.values().any(|kind| governed.contains(kind)) {
-            continue;
-        }
-        // Legitimate with no authority decision and only evidence no authority is needed for, and
-        // because of evidence present there: taking away one positively read dimension that is
-        // present blocks it. A state where it holds only on absent evidence is no witness.
-        let candidates = (0..states.len()).filter(|index| {
-            let state = &states[*index];
-            let without_authority = !space.decides_authority(state)
-                && space.present(state).iter().all(|kind| free.contains(kind));
-            without_authority
-                && legitimate(state, at)
-                && positive.keys().any(|dimension| {
-                    space.holds(state, *dimension)
-                        && !legitimate(&space.erase(state, &BTreeSet::from([*dimension])), at)
-                })
-        });
-        if let Some(index) = witness(space, states, candidates) {
-            findings.push(Finding::AuthorityBypass {
-                outcome: id.clone(),
-                state: space.render(&states[index]),
-            });
-        }
+    // The evidence dimensions the requirement reads where a record helps it hold. It is meant to
+    // rest on authority only when one of them is of a governed kind.
+    let positive = space.dimensions_read_positively(ir, requirement);
+    if !positive.values().any(|kind| governed.contains(kind)) {
+        return None;
     }
-    findings
+    // Legitimate with no authority decision and only evidence no authority is needed for, and
+    // because of evidence present there: taking away one positively read dimension that is
+    // present blocks it. A state where it holds only on absent evidence is no witness.
+    let candidates = (0..states.len()).filter(|index| {
+        let state = &states[*index];
+        let without_authority = !space.decides_authority(state)
+            && space.present(state).iter().all(|kind| free.contains(kind));
+        without_authority
+            && legitimate(state)
+            && positive.keys().any(|dimension| {
+                space.holds(state, *dimension)
+                    && !legitimate(&space.erase(state, &BTreeSet::from([*dimension])))
+            })
+    });
+    let index = witness(space, states, candidates)?;
+    Some(Finding::AuthorityBypass {
+        outcome: id.clone(),
+        state: space.render(&states[index]),
+    })
 }
 
-/// The `property-failed` findings, in property identifier order.
-fn failed_properties(
+/// The `property-failed` finding of the property `id`, decided over `enumerated`.
+fn failed_property(
     ir: &Ir,
-    space: &Space<'_>,
-    states: &[State],
-    evaluated: &[Evaluated],
-    properties: &Properties,
-) -> Vec<Finding> {
-    let mut ordered: Vec<_> = properties.properties.iter().collect();
-    ordered.sort_by(|a, b| a.0.cmp(b.0));
-    let mut findings = Vec::new();
-    for (id, property) in ordered {
-        // The subject as a report writes it, whether it is an action, and its position.
-        let (subject, is_action, at) = match &property.subject {
-            PropertySubject::Action(action) => (
-                format!("action `{}`", one_line(action.as_str())),
-                true,
-                ir.actions.keys().position(|a| a == action),
-            ),
-            PropertySubject::Outcome(outcome) => (
-                format!("outcome `{}`", one_line(outcome.as_str())),
-                false,
-                ir.outcomes.keys().position(|o| o == outcome),
-            ),
-        };
-        let at = at.expect("validated: the subject is declared");
-        // The subject's status in each state, by state index.
-        let status: Vec<&str> = evaluated
-            .iter()
-            .map(|e| {
-                if is_action {
-                    e.actions[at].as_str()
-                } else {
-                    e.outcomes[at].as_str()
-                }
-            })
-            .collect();
-        let PropertyDependency::Claim(claim) = &property.independent_of;
-        let true_when = &ir.claims.get(claim).expect("validated").true_when;
-        let erased: BTreeSet<usize> = space.dimensions_read(ir, true_when).into_keys().collect();
-        // States that agree outside the erased dimensions share a group; a state has a partner exactly
-        // when its group holds more than one status.
-        let mut groups: BTreeMap<State, Vec<usize>> = BTreeMap::new();
-        for (index, state) in states.iter().enumerate() {
-            groups
-                .entry(space.erase(state, &erased))
-                .or_default()
-                .push(index);
-        }
-        let mixed: Vec<&Vec<usize>> = groups
-            .values()
-            .filter(|members| {
-                let statuses: BTreeSet<&str> = members.iter().map(|m| status[*m]).collect();
-                statuses.len() > 1
-            })
-            .collect();
-        let Some(first) = witness(space, states, mixed.iter().flat_map(|g| g.iter().copied()))
-        else {
-            continue;
-        };
-        let group = &groups[&space.erase(&states[first], &erased)];
-        let other = group
-            .iter()
-            .copied()
-            .filter(|m| status[*m] != status[first]);
-        let second = witness(space, states, other).expect("the first state has a partner");
-        findings.push(Finding::PropertyFailed {
-            property: id.clone(),
-            subject,
-            first: (status[first].to_owned(), space.render(&states[first])),
-            second: (status[second].to_owned(), space.render(&states[second])),
-        });
+    enumerated: &Enumerated<'_, '_>,
+    id: &PropertyId,
+    property: &crate::model::Property,
+) -> Option<Finding> {
+    let Enumerated {
+        space,
+        states,
+        evaluated,
+    } = enumerated;
+    // The subject as a report writes it, whether it is an action, and its position.
+    let (subject, is_action, at) = match &property.subject {
+        PropertySubject::Action(action) => (
+            format!("action `{}`", one_line(action.as_str())),
+            true,
+            ir.actions.keys().position(|a| a == action),
+        ),
+        PropertySubject::Outcome(outcome) => (
+            format!("outcome `{}`", one_line(outcome.as_str())),
+            false,
+            ir.outcomes.keys().position(|o| o == outcome),
+        ),
+    };
+    let at = at.expect("validated: the subject is declared");
+    // The subject's status in each state, by state index.
+    let status: Vec<&str> = evaluated
+        .iter()
+        .map(|e| {
+            if is_action {
+                e.actions[at].as_str()
+            } else {
+                e.outcomes[at].as_str()
+            }
+        })
+        .collect();
+    let PropertyDependency::Claim(claim) = &property.independent_of;
+    let true_when = &ir.claims.get(claim).expect("validated").true_when;
+    let erased: BTreeSet<usize> = space.dimensions_read(ir, true_when).into_keys().collect();
+    // States that agree outside the erased dimensions share a group; a state has a partner exactly
+    // when its group holds more than one status.
+    let mut groups: BTreeMap<State, Vec<usize>> = BTreeMap::new();
+    for (index, state) in states.iter().enumerate() {
+        groups
+            .entry(space.erase(state, &erased))
+            .or_default()
+            .push(index);
     }
-    findings
+    let mixed: Vec<&Vec<usize>> = groups
+        .values()
+        .filter(|members| {
+            let statuses: BTreeSet<&str> = members.iter().map(|m| status[*m]).collect();
+            statuses.len() > 1
+        })
+        .collect();
+    let first = witness(space, states, mixed.iter().flat_map(|g| g.iter().copied()))?;
+    let group = &groups[&space.erase(&states[first], &erased)];
+    let other = group
+        .iter()
+        .copied()
+        .filter(|m| status[*m] != status[first]);
+    let second = witness(space, states, other).expect("the first state has a partner");
+    Some(Finding::PropertyFailed {
+        property: id.clone(),
+        subject,
+        first: (status[first].to_owned(), space.render(&states[first])),
+        second: (status[second].to_owned(), space.render(&states[second])),
+    })
 }

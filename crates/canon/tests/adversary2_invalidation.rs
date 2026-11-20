@@ -507,7 +507,8 @@ fn inert_invalidation_comes_between_references_and_cycles() {
 
 /// A dimension with five upstream artifacts and one class has `2^(1 * 2^5)` values, named with its
 /// upstream artifacts in identifier order; one with 32 has a vector count no `u32` holds, and the
-/// refusal still names it.
+/// refusal still names it. `o` reads `c00`, so its slice holds the dimension, upstream artifacts
+/// and all (story:check-subject-slices).
 #[test]
 fn the_bound_refusal_names_many_upstream_artifacts() {
     let protocol = |n: usize| {
@@ -522,7 +523,8 @@ fn the_bound_refusal_names_many_upstream_artifacts() {
         format!(
             "format: protocol/1\nprotocol: {{id: p, revision: 1}}\n\
              artifacts: {{a: {{}}, {}}}\nevidence_kinds: {{k: {{}}}}\n\
-             claims: {{{}}}\ninvalidation: {{{}}}\n",
+             claims: {{{}}}\ninvalidation: {{{}}}\n\
+             outcomes: {{o: {{requires: {{claim: c00}}}}}}\n",
             artifacts.join(", "),
             claims.join(", "),
             rules.join(", ")
@@ -537,8 +539,8 @@ fn the_bound_refusal_names_many_upstream_artifacts() {
     let refusal = check(&compiled(&protocol(5)), None).expect_err("refused");
     assert_eq!(
         refusal.to_string(),
-        "protocol `p` revision 1 has 4294967296 states, more than the bound of 65536: evidence \
-         kind `k` with upstream `u00`, `u01`, `u02`, `u03`, `u04` 4294967296"
+        "protocol `p` revision 1: outcome `o` reads 4294967296 states, more than the bound of \
+         65536: evidence kind `k` with upstream `u00`, `u01`, `u02`, `u03`, `u04` 4294967296"
     );
     let refusal = check(&compiled(&protocol(32)), None).expect_err("refused");
     assert_eq!(refusal.code(), "state-space-bound");
