@@ -217,10 +217,10 @@ impl<'a> Records<'a> {
     /// the claim is evaluated in its own context, where no match it reaches reads the record.
     /// Outside `claims`, an invalidated record applied. Any other record that none of the
     /// `matches` reading it accepts, for want of the independence it demands, is excluded with the
-    /// reason `not_independent`.
+    /// reason `not_independent`. Under `claim`, `matches` are the matches the claim reaches.
     fn read_by<'m>(
         &self,
-        claim: Option<(&Ir, &ClaimId)>,
+        claim: Option<&ClaimId>,
         matches: impl IntoIterator<Item = Match<'m>> + Clone,
     ) -> Vec<Value> {
         self.records
@@ -233,8 +233,12 @@ impl<'a> Records<'a> {
             })
             .map(|record| {
                 let id = record.id.as_str();
+                let reached = matches
+                    .clone()
+                    .into_iter()
+                    .map(|(kind, subject, _)| (kind, subject));
                 let invalidated = claim
-                    .is_some_and(|(ir, claim)| self.invalidated.lists(ir, claim, record))
+                    .is_some_and(|claim| self.invalidated.lists(reached, claim, record))
                     .then_some(ExclusionReason::Invalidated.as_str());
                 let accepted = matches
                     .clone()
@@ -510,7 +514,7 @@ fn claims(
             None => Vec::new(),
         };
         let matches = reached_matches(ir, id);
-        because.extend(records.read_by(Some((ir, id)), matches.iter().copied()));
+        because.extend(records.read_by(Some(id), matches.iter().copied()));
         // Each kind and subject once, whatever independence its matches demand.
         let read: BTreeSet<(&EvidenceKindId, Option<&ArtifactId>)> = matches
             .iter()
