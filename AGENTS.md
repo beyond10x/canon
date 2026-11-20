@@ -33,10 +33,26 @@ Canon's ESS specification lives under `ess/`. It specifies the `protocol/1` sour
 (`crates/canon/src/model/`), the evaluation documents `canon-case/1` (the Case entity),
 `canon-evidence/1`, `canon-decisions/1` and `canon-decision/1` (story:three-valued-claims,
 story:decision-outcomes) and `canon-authority/1` (story:review-hardening-w7) in the domain
-`canon.protocol`, and the `canon-properties/1` document
-`canon check` reads (story:canon-check) in the domain `canon.check`, with no commands. Atlas ADR
-0076 still owes the `canon` CLI's commands (`canon validate` and its successors), with the story
-that introduces them.
+`canon.protocol`, the `canon-properties/1` document `canon check` reads (story:canon-check) in the
+domain `canon.check`, and the `canon` command surface in the domain `canon.cli`
+(story:ess-command-surface), completing Atlas ADR 0076's data model and command surface.
+
+The commands are declared in `ess/domains/cli.yaml`: one command per leaf subcommand of
+`canon_cli::Cli` (`crates/canon-cli/src/lib.rs`), its wire name the clap path joined by `-`
+(`conform run` is `conform-run`, and no two commands share a wire). A leaf's flags are its own
+long flags, the global ones and those of every command above it. Each flag is the input of the
+same name with every `-` written `_`, since ESS refuses `-` in a field name (`--max-states` is
+`max_states`); a long flag holding `_` is refused. A flag clap does not require is an
+`Optional<…>` input; a flag clap takes more than once is a `List<…>` input, and a flag it takes
+once is not, and no input is any other collection. Every input is text, so the element type is
+not compared. A command and a flag have one name each, so an alias or a short form is refused, and
+so is a flag that counts its occurrences (`ArgAction::Count`), a number the surface does not declare.
+`crates/canon-cli/tests/ess_commands_match.rs`, run by `task ess-gate`, holds them: it fails, naming
+the difference, when a subcommand or flag exists in only one of the clap definition and the
+compiled `canon.cli` domain, when their requiredness or repeatability differs, when two commands
+share a wire, or when a command has no synthesized scenario. A story that adds or changes a command or a
+flag declares the change in `ess/domains/cli.yaml` in its first commit. `canon-docs` is not the
+command surface and is not declared.
 
 `ess/` is held to a hard gate (Atlas ADR 0076): `ess specify validate --path ess
 --strict-requires`, `ess specify compile --path ess`, `ess verify conform synthesize --path ess`
