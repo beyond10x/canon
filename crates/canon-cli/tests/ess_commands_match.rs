@@ -24,7 +24,9 @@
 //! * A flag clap takes more than once (`ArgAction::Append`, or more than one value per
 //!   occurrence) is a `List<…>` input, inside the `Optional<…>` when it is not required; a flag it
 //!   takes once is not a list. The element type is not compared: every value on a command line is
-//!   text.
+//!   text. An input of any other kind (a `Map`, a struct) is reported.
+//! * A command and a flag have one name each: an alias, short form or `ArgAction::Count` flag is
+//!   reported.
 //!
 //! It also synthesizes the specification's conformance suite (`ess verify conform synthesize`)
 //! and counts its scenarios per command: every `canon.cli` command has at least one, which
@@ -104,6 +106,8 @@ struct Input {
     shown: String,
     required: bool,
     list: bool,
+    /// An ESS input's kind, after one `Optional`, when it is neither a single value nor a `List`.
+    other: Option<String>,
 }
 
 /// A command's inputs, keyed by the ESS input name (`max_states` for `--max-states`).
@@ -175,12 +179,36 @@ fn collect_leaves(
                  flag, so no ESS input is its own"
             ));
         }
+        let mut others: Vec<String> = arg
+            .get_all_aliases()
+            .unwrap_or_default()
+            .iter()
+            .map(|alias| format!("--{alias}"))
+            .collect();
+        others.extend(
+            arg.get_short()
+                .into_iter()
+                .chain(arg.get_all_short_aliases().unwrap_or_default())
+                .map(|short| format!("-{short}")),
+        );
+        if !others.is_empty() {
+            surface.unmapped.push(format!(
+                "`{display} --{long}` is also named {}, and an ESS input has one name",
+                others.join(", ")
+            ));
+        }
+        if matches!(arg.get_action(), ArgAction::Count) {
+            surface.unmapped.push(format!(
+                "`{display} --{long}` counts its occurrences, a number the surface does not declare"
+            ));
+        }
         inputs.insert(
             input_name(long),
             Input {
                 shown: format!("--{long}"),
                 required: arg.is_required_set(),
                 list: repeatable(arg),
+                other: None,
             },
         );
     }
@@ -197,7 +225,47 @@ fn collect_leaves(
     {
         let mut below = path.to_vec();
         below.push(sub.get_name());
+        let others: Vec<String> = sub
+            .get_all_aliases()
+            .map(str::to_owned)
+            .chain(
+                sub.get_short_flag()
+                    .into_iter()
+                    .chain(sub.get_all_short_flag_aliases())
+                    .map(|short| format!("-{short}")),
+            )
+            .chain(
+                sub.get_long_flag()
+                    .into_iter()
+                    .chain(sub.get_all_long_flag_aliases())
+                    .map(|long| format!("--{long}")),
+            )
+            .collect();
+        if !others.is_empty() {
+            surface.unmapped.push(format!(
+                "`canon {}` is also named {}, and an ESS command has one wire",
+                below.join(" "),
+                others.join(", ")
+            ));
+        }
         collect_leaves(sub, &below, &inputs, surface);
+    }
+}
+
+/// The kind of the compiled type `held`, when it is neither a single value (a primitive, or a
+/// declared newtype or enum) nor a `List`: `map`, `optional`, `struct`, `union`.
+fn other_kind(ir: &Value, held: &Value) -> Option<String> {
+    let kind = match held["kind"].as_str() {
+        Some("primitive" | "list") => return None,
+        Some("declared") => {
+            let name = held["name"].as_str().unwrap_or_default();
+            ir["types"][name]["body"]["kind"].as_str()
+        }
+        kind => kind,
+    };
+    match kind {
+        Some("newtype" | "enum") => None,
+        kind => Some(kind.unwrap_or("unknown").to_owned()),
     }
 }
 
@@ -233,6 +301,7 @@ fn ess_surface(root: &Path) -> Surface {
                     shown: field,
                     required: !optional,
                     list: held["kind"].as_str() == Some("list"),
+                    other: other_kind(&ir, held),
                 },
             );
         }
@@ -271,6 +340,12 @@ fn differences(clap: &Surface, spec: &Surface) -> Vec<String> {
                 ));
                 continue;
             };
+            if let Some(kind) = &declared.other {
+                out.push(format!(
+                    "`{display} {shown}`: ESS command `{name}` input `{field}` is a {kind}, which \
+                     no flag is: an input is a single value or a List"
+                ));
+            }
             if declared.required != flag.required {
                 out.push(format!(
                     "`{display} {shown}`: clap says {}, ESS command `{name}` says {}",
@@ -668,6 +743,74 @@ fn a_single_valued_flag_declared_as_a_list_is_named() {
             "canon.cli.Evaluate",
             "a List",
         ],
+    );
+}
+
+/// An input that is neither a single value nor a `List`, such as a `Map`, fails, naming the flag.
+#[test]
+fn a_single_valued_flag_declared_as_a_map_is_named() {
+    let spec = ess_surface_edited("single-as-map", |commands| {
+        for input in inputs_of(commands, "canon.cli.Evaluate") {
+            if input["name"].as_str() == Some("authority") {
+                input["type"] = Value::from("Optional<Map<String, String>>");
+            }
+        }
+    });
+    assert_named(
+        &clap_surface(&canon_cli::Cli::command()),
+        &spec,
+        &[
+            "canon evaluate --authority",
+            "canon.cli.Evaluate",
+            "is a map",
+        ],
+    );
+}
+
+/// A second name for a flag or a subcommand, visible or hidden, long or short, fails, naming it.
+#[test]
+fn an_alias_is_named() {
+    let spec = ess_surface(&repo_root());
+    let cases: [(clap::Command, &[&str]); 4] = [
+        (
+            canon_cli::Cli::command().mut_subcommand("validate", |validate| {
+                validate.mut_arg("path", |path| path.visible_alias("file"))
+            }),
+            &["canon validate --path", "--file"],
+        ),
+        (
+            canon_cli::Cli::command().mut_subcommand("validate", |validate| {
+                validate.mut_arg("path", |path| path.alias("hidden-file"))
+            }),
+            &["canon validate --path", "--hidden-file"],
+        ),
+        (
+            canon_cli::Cli::command().mut_subcommand("validate", |validate| {
+                validate.mut_arg("path", |path| path.short('p'))
+            }),
+            &["canon validate --path", "-p"],
+        ),
+        (
+            canon_cli::Cli::command().mut_subcommand("diff", |diff| diff.alias("compare")),
+            &["canon diff", "compare", "one wire"],
+        ),
+    ];
+    for (command, needles) in cases {
+        assert_named(&clap_surface(&command), &spec, needles);
+    }
+}
+
+/// A flag that counts its occurrences fails, naming it: the surface declares no such number.
+#[test]
+fn a_count_flag_is_named() {
+    let spec = ess_surface(&repo_root());
+    let command = canon_cli::Cli::command().mut_subcommand("validate", |validate| {
+        validate.arg(Arg::new("verbose").long("verbose").action(ArgAction::Count))
+    });
+    assert_named(
+        &clap_surface(&command),
+        &spec,
+        &["canon validate --verbose", "counts its occurrences"],
     );
 }
 

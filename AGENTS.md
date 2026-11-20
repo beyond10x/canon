@@ -44,7 +44,9 @@ long flags, the global ones and those of every command above it. Each flag is th
 same name with every `-` written `_`, since ESS refuses `-` in a field name (`--max-states` is
 `max_states`); a long flag holding `_` is refused. A flag clap does not require is an
 `Optional<…>` input; a flag clap takes more than once is a `List<…>` input, and a flag it takes
-once is not. Every input is text, so the element type is not compared.
+once is not, and no input is any other collection. Every input is text, so the element type is
+not compared. A command and a flag have one name each, so an alias or a short form is refused, and
+so is a flag that counts its occurrences (`ArgAction::Count`), a number the surface does not declare.
 `crates/canon-cli/tests/ess_commands_match.rs`, run by `task ess-gate`, holds them: it fails, naming
 the difference, when a subcommand or flag exists in only one of the clap definition and the
 compiled `canon.cli` domain, when their requiredness or repeatability differs, when two commands
