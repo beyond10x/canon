@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-20T21:39:21Z",
+  "actor": "human:timo",
+  "artifact": "story:ess-command-surface",
+  "kind": "story",
+  "revision": 20,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "correction 775f902 on impl/ess-command-surface, diff read by the coordinator",
+    "reference": "AGENTS.md:46",
+    "review": "review-result:adversary-ess-command-surface-pass-2",
+    "outcome": "fixed"
+  }
+}

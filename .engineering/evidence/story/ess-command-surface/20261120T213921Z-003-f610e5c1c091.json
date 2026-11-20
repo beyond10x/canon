@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-20T21:39:21Z",
+  "actor": "human:timo",
+  "artifact": "story:ess-command-surface",
+  "kind": "story",
+  "revision": 20,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "ess specify compile --path ess --format json (ess 0.77.0): 0 commands on wave/2026-11-20-w1 at 3090f57, 7 on impl/ess-command-surface at d2c8e53; synthesize 21 scenarios, 0 refusals; VERIFIED",
+    "reference": "w1/ess-command-surface/verify-baseline.json vs w1/ess-command-surface/verify-treatment.json (session scratch)"
+  }
+}

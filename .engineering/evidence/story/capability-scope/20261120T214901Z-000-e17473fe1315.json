@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-20T21:49:01Z",
+  "actor": "human:timo",
+  "artifact": "story:capability-scope",
+  "kind": "story",
+  "revision": 35,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "canon conform run --requirements conformance/requirements.yaml: CANON-SCOPE-001 failed on the specification-only commit 589a939 (18 passed, 1 failed, 19 of 20 covered) and passed on b2b81e1 (19 passed, 0 failed, 20 of 20 covered); VERIFIED",
+    "reference": "w1/capability-scope/red.log:117-137 vs w1/capability-scope/gate-branch-2.log:1723-1742 (session scratch)"
+  }
+}

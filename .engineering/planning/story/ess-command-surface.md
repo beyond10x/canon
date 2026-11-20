@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ess-command-surface
 kind: story
-status: active
+status: implemented
 title: Declare the canon command surface in ESS
 refs:
 - provider: atlas
@@ -17,9 +17,13 @@ relations:
 scope:
 - confidence: cited
   path: AGENTS.md
-- confidence: inferred
+- confidence: cited
   path: Taskfile.yml
-- confidence: inferred
+- confidence: cited
+  path: crates/canon-cli/tests/adversary2_ess_commands.rs
+- confidence: cited
+  path: crates/canon-cli/tests/adversary_ess_commands.rs
+- confidence: cited
   path: crates/canon-cli/tests/ess_commands_match.rs
 - confidence: cited
   path: ess/domains/cli.yaml
@@ -27,10 +31,11 @@ scope:
   path: ess/ess-inputs.yaml
 - confidence: cited
   path: ess/system.yaml
-revision: 20
+revision: 26
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"review_outcome":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 - {from: "proposed", to: "active", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"review_outcome":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
+- {from: "active", to: "implemented", at: "2026-11-20T22:14:42Z", actor: "human:timo", revision: 26, decided_on: {"recorded":{"test_result":1,"review_outcome":9,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 ---
 ## Outcome
 
@@ -135,3 +140,36 @@ wrong).
 - **Gate environment:** from the repository root the `ess` 0.96.0 dispatcher refuses `--path ess`;
   the gate needs `~/.cache/ess/toolchains/0.77.0` first on `PATH` (measured 2026-11-20: 7 of 11
   `ess_gate` tests fail without it, 11 of 11 pass with it).
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w1 from the implementor's
+confirmation table and the merge `c3ad46f`. It corrects § Scope where the two differ.
+
+- `crates/canon-cli/tests/ess_commands_match.rs` (inferred in § Scope): held, created there. It
+  ended at 13 cases after two correction rounds.
+- `Taskfile.yml`, the `ess-gate` task (inferred): held. The task also runs the two adversary
+  files.
+- Not in § Scope and added by the wave: `crates/canon-cli/tests/adversary_ess_commands.rs` and
+  `crates/canon-cli/tests/adversary2_ess_commands.rs` (the adversary's cases, each compiling the
+  parity test in as a module).
+- The cited Out claim that `ess_model_matches.rs` skips types outside its domains: held
+  (`ess_model_matches.rs:325`); the gate stayed green with the new `canon.cli` errors.
+- The safety fact (a domain in its own file compiles and synthesizes under ess 0.77.0): shown; 21
+  scenarios, 0 refusals.
+
+Settled by the implementor, where § Scope said "not established":
+
+- A compiled command in the 0.77.0 IR is keyed by name and carries `domain`, `input`, `response`,
+  `outcomes` and `naming.wire`; an optional input has `type_ref.kind == "optional"`.
+- An outcome with no event, error or response is refused (`ESS-COMMAND-007 empty_change`). Each
+  command declares a typed `response: [output: String]` for exit 0 and two `external:` refusals,
+  `canon.cli.Rejected` (exit 1) and `canon.cli.Unreadable` (exit 2). Usage errors (exit 64) come
+  from clap before a command runs and are not declared.
+- Every input is `String` or `Optional<String>`: the CLI takes paths and text, not parsed
+  documents.
+
+Rules the parity test holds beyond the story's first text, each from an adversary finding:
+two ESS commands with one wire are refused; global and parent flags count; `--a-b` is the input
+`a_b`; a repeatable flag is a `List` input and a single-valued one is not; no input is another
+collection; an alias, a short form and a `Count` flag are refused.

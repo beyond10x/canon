@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:capability-scope
 kind: story
-status: active
+status: implemented
 title: Scope capability requirements and grants, default deny, deny over approval over allow
 refs:
 - provider: atlas
@@ -19,19 +19,29 @@ scope:
   path: conformance/requirements.yaml
 - confidence: cited
   path: conformance/scenarios/capability-scope.yaml
-- confidence: inferred
+- confidence: cited
   path: crates/canon-cli/src/lib.rs
-- confidence: inferred
-  path: crates/canon/src/check/space.rs
-- confidence: inferred
+- confidence: cited
+  path: crates/canon-cli/tests/adversary_conformance_suite_cli.rs
+- confidence: cited
+  path: crates/canon-cli/tests/conform_requirements.rs
+- confidence: cited
+  path: crates/canon-docs/src/main.rs
+- confidence: cited
+  path: crates/canon-docs/src/pages.rs
+- confidence: cited
+  path: crates/canon-docs/src/source.rs
+- confidence: cited
   path: crates/canon/src/diff/mod.rs
 - confidence: cited
   path: crates/canon/src/eval/actions.rs
 - confidence: cited
   path: crates/canon/src/eval/authority.rs
 - confidence: cited
+  path: crates/canon/src/eval/mod.rs
+- confidence: cited
   path: crates/canon/src/eval/read.rs
-- confidence: inferred
+- confidence: cited
   path: crates/canon/src/explain/mod.rs
 - confidence: cited
   path: crates/canon/src/ir/mod.rs
@@ -41,18 +51,19 @@ scope:
   path: crates/canon/src/model/mod.rs
 - confidence: cited
   path: crates/canon/src/validate/mod.rs
-- confidence: inferred
-  path: crates/canon/tests/missing_keys.rs
-- confidence: inferred
-  path: crates/canon/tests/review_refusal_naming.rs
+- confidence: cited
+  path: crates/canon/tests/ess_model_matches.rs
 - confidence: cited
   path: ess/domains/protocol.yaml
 - confidence: cited
   path: fixtures/investigation/capability-scope.yaml
-revision: 35
+- confidence: cited
+  path: website/docs/concepts/protocols.md
+revision: 51
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 5, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 - {from: "proposed", to: "active", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 6, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
+- {from: "active", to: "implemented", at: "2026-11-20T22:14:42Z", actor: "human:timo", revision: 51, decided_on: {"recorded":{"test_result":1,"review_outcome":2,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 ---
 ## Outcome
 
@@ -188,3 +199,44 @@ is `blocked` naming the denied capability. `crates/canon/tests/ess_model_matches
 
 Atlas ADR 0083 (accepted 2026-10-04) § Decision 1, 5, 6 and § Open; Atlas ADR 0084 § Decision 1;
 aep `crates/govern/aep-domain/src/capability.rs:8-28`; canon design § 33; Atlas ADR 0080.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w1 from the implementor's
+confirmation table and the merge `3795f29`. It corrects § Scope where the two differ.
+
+- `crates/canon/src/explain/mod.rs` (inferred): held, edited (the authority record carries the
+  scope).
+- `crates/canon/src/diff/mod.rs` (inferred): held, edited. Beyond the destructure, requirements
+  are compared with their scope; otherwise a changed scope would have reported no change.
+- `crates/canon/src/check/space.rs` (inferred, "changes if the field type changes"): held and not
+  edited; the IR field type did not change. It is removed from the typed scope.
+- `crates/canon-cli/src/lib.rs:82` (inferred): held, the `--authority` help was edited.
+- `crates/canon/tests/review_refusal_naming.rs:91` and `crates/canon/tests/missing_keys.rs:183`
+  (inferred, "read the duplicate refusal"): **wrong**. Both read the refusal for a left-out key
+  and pass unchanged. They are removed from the typed scope.
+- Not in § Scope and edited: `crates/canon-docs/src/source.rs`, `pages.rs` and `main.rs`
+  (`canon-docs` read only `rename_all = "lowercase"`; `Grant` needs `snake_case`); the `//!`
+  module documentation of `crates/canon/src/eval/mod.rs`; the hand-written
+  `website/docs/concepts/protocols.md:116`; `website/data/canon.terminal.json` (regenerated).
+- Tests re-pinned because behaviour changed: `crates/canon/tests/ess_model_matches.rs`
+  (`a_type_reached_only_in_the_model_is_named`, anchor moved to the `scope` field, assertion
+  unchanged); `crates/canon-cli/tests/adversary_conformance_suite_cli.rs` (two tests) and
+  `crates/canon-cli/tests/conform_requirements.rs` (requirement count 19 to 20).
+
+Settled by the implementor:
+
+- **The IR shape is a side map.** `ir::Action` keeps `requires: Vec<CapabilityId>` and adds
+  `scopes: BTreeMap<CapabilityId, Vec<Scope>>`; `"scope"` is written only on a requirement that
+  has one. `crates/canon-docs/src/landing.rs:241` reads `action.requires` as `CapabilityId`, which
+  is why the field type stayed.
+- Scope keys and values are identifiers, stricter than the "non-empty text" the rescope decided.
+- A key named twice in one requirement is refused as `duplicate-scope-key` (validation step 4;
+  later steps renumbered). `scope: {}` is no scope.
+
+Left open by adversary pass 1 and put to the operator (`review-result:adversary-capability-scope-pass-1`):
+a deny narrower than a requirement does not cover it. With `allow m` beside
+`deny m{cluster: prod-eu, namespace: secret}`, an action requiring `m{cluster: prod-eu}` is
+admissible. That follows § Outcome ("among the grants covering a requirement"; coverage never
+widens inwards) and aep's model; whether a deny that only overlaps a requirement should block it
+is a rule change, not a defect of this unit.
