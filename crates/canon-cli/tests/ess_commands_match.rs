@@ -8,12 +8,23 @@
 //!
 //! How the clap definition maps onto the specification:
 //!
+//! * The clap definition is read built (`clap::Command::build`), as clap parses it: global flags
+//!   are propagated, and clap's own `help` subcommand, `--help` and `--version` are not compared.
 //! * Every leaf subcommand is one ESS command of `canon.cli` whose `naming.wire` is the clap path
 //!   joined by `-`: `canon validate` is `validate`, `canon conform run` is `conform-run`. A
-//!   subcommand that has subcommands of its own (`conform`) is not a command.
-//! * Every long flag `--name` of a leaf is the input `name` of its command. A flag clap requires is
-//!   a required input; one it does not (an `Option<_>`, or one with a default value) is an
-//!   `Optional<…>` input. An argument with no long flag matches nothing and is reported.
+//!   subcommand that has subcommands of its own (`conform`) is not a command. Two ESS commands
+//!   with one wire are reported, since only one of them could be compared.
+//! * The flags of a leaf are its own long flags, the global ones and those of every command above
+//!   it (`canon`, `canon conform`). Each long flag `--name` is the input `name` of its command,
+//!   with every `-` of the flag an `_` of the input (ESS refuses `-` in a field name):
+//!   `--max-states` is `max_states`. A long flag holding `_` is reported, because that translation
+//!   would give it the input of another flag. An argument with no long flag is reported.
+//! * A flag clap requires is a required input; one it does not (an `Option<_>`, or one with a
+//!   default value) is an `Optional<…>` input.
+//! * A flag clap takes more than once (`ArgAction::Append`, or more than one value per
+//!   occurrence) is a `List<…>` input, inside the `Optional<…>` when it is not required; a flag it
+//!   takes once is not a list. The element type is not compared: every value on a command line is
+//!   text.
 //!
 //! It also synthesizes the specification's conformance suite (`ess verify conform synthesize`)
 //! and counts its scenarios per command: every `canon.cli` command has at least one, which
@@ -26,7 +37,7 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use clap::{Arg, CommandFactory};
+use clap::{Arg, ArgAction, CommandFactory};
 use serde_yaml_ng::Value;
 
 /// The ESS domain whose commands are the `canon` command line.
@@ -84,47 +95,109 @@ fn ess(dir: &Path, args: &[&str]) -> Vec<u8> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// One shape for both sides: wire name -> (flag name -> required).
+// One shape for both sides: wire name -> (input name -> input).
 
-/// A command's inputs: flag (input) name to whether it is required.
-type Inputs = BTreeMap<String, bool>;
+/// One input of a command, as either side declares it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Input {
+    /// How the side names it in a difference: `--max-states` for clap, `max_states` for ESS.
+    shown: String,
+    required: bool,
+    list: bool,
+}
+
+/// A command's inputs, keyed by the ESS input name (`max_states` for `--max-states`).
+type Inputs = BTreeMap<String, Input>;
 
 #[derive(Debug, Default)]
 struct Surface {
-    /// Wire name (`conform-run`) to the command as each side names it and its inputs.
+    /// Wire name (`conform-run`) to the command as its side names it and its inputs.
     commands: BTreeMap<String, (String, Inputs)>,
-    /// Arguments that are not long flags, as `canon <path> <id>`; they match nothing.
+    /// What the mapping cannot compare, each a difference already: an argument that is not a long
+    /// flag, a flag holding `_`, a second ESS command with one wire.
     unmapped: Vec<String>,
 }
 
-/// The clap side: every leaf subcommand of `command`, below the path `prefix`.
+/// The ESS input name of the long flag `--<long>`: every `-` is an `_`.
+fn input_name(long: &str) -> String {
+    long.replace('-', "_")
+}
+
+/// Whether clap takes the flag more than once: appended occurrences, or several values in one.
+fn repeatable(arg: &Arg) -> bool {
+    matches!(arg.get_action(), ArgAction::Append)
+        || arg
+            .get_num_args()
+            .is_some_and(|range| range.max_values() > 1)
+}
+
+/// clap's own `--help` and `--version`, which no command declares.
+fn clap_own(arg: &Arg) -> bool {
+    matches!(
+        arg.get_action(),
+        ArgAction::Help | ArgAction::HelpShort | ArgAction::HelpLong | ArgAction::Version
+    )
+}
+
+/// The clap side: every leaf subcommand of `command`, built as clap parses it, with the flags of
+/// every command above it.
 fn clap_surface(command: &clap::Command) -> Surface {
+    let mut command = command.clone();
+    command.build();
     let mut surface = Surface::default();
-    collect_leaves(command, &[], &mut surface);
+    collect_leaves(&command, &[], &Inputs::new(), &mut surface);
     surface
 }
 
-fn collect_leaves(command: &clap::Command, prefix: &[&str], surface: &mut Surface) {
-    for sub in command.get_subcommands() {
-        let mut path = prefix.to_vec();
-        path.push(sub.get_name());
-        if sub.has_subcommands() {
-            collect_leaves(sub, &path, surface);
+fn collect_leaves(
+    command: &clap::Command,
+    path: &[&str],
+    inherited: &Inputs,
+    surface: &mut Surface,
+) {
+    let display = if path.is_empty() {
+        "canon".to_owned()
+    } else {
+        format!("canon {}", path.join(" "))
+    };
+    let mut inputs = inherited.clone();
+    for arg in command.get_arguments().filter(|arg| !clap_own(arg)) {
+        let Some(long) = arg.get_long() else {
+            surface.unmapped.push(format!(
+                "`{display}` argument `{}` is not a long flag, so no ESS input can declare it",
+                arg.get_id().as_str()
+            ));
             continue;
+        };
+        if long.contains('_') {
+            surface.unmapped.push(format!(
+                "`{display} --{long}` holds `_`, which the mapping reads as the `-` of another \
+                 flag, so no ESS input is its own"
+            ));
         }
-        let display = format!("canon {}", path.join(" "));
-        let mut inputs = Inputs::new();
-        for arg in sub.get_arguments() {
-            match arg.get_long() {
-                Some(long) => {
-                    inputs.insert(long.to_owned(), arg.is_required_set());
-                }
-                None => surface
-                    .unmapped
-                    .push(format!("{display} {}", arg.get_id().as_str())),
-            }
+        inputs.insert(
+            input_name(long),
+            Input {
+                shown: format!("--{long}"),
+                required: arg.is_required_set(),
+                list: repeatable(arg),
+            },
+        );
+    }
+    if !command.has_subcommands() {
+        if !path.is_empty() {
+            surface.commands.insert(path.join("-"), (display, inputs));
         }
-        surface.commands.insert(path.join("-"), (display, inputs));
+        return;
+    }
+    // `build` gives every command with subcommands clap's own `help` subcommand.
+    for sub in command
+        .get_subcommands()
+        .filter(|sub| sub.get_name() != "help")
+    {
+        let mut below = path.to_vec();
+        below.push(sub.get_name());
+        collect_leaves(sub, &below, &inputs, surface);
     }
 }
 
@@ -151,8 +224,24 @@ fn ess_surface(root: &Path) -> Surface {
         let mut inputs = Inputs::new();
         for input in command["input"].as_sequence().into_iter().flatten() {
             let field = input["name"].as_str().expect("input name").to_owned();
-            let optional = input["type_ref"]["kind"].as_str() == Some("optional");
-            inputs.insert(field, !optional);
+            let type_ref = &input["type_ref"];
+            let optional = type_ref["kind"].as_str() == Some("optional");
+            let held = if optional { &type_ref["of"] } else { type_ref };
+            inputs.insert(
+                field.clone(),
+                Input {
+                    shown: field,
+                    required: !optional,
+                    list: held["kind"].as_str() == Some("list"),
+                },
+            );
+        }
+        if let Some((first, _)) = surface.commands.get(&wire) {
+            surface.unmapped.push(format!(
+                "ESS commands `{first}` and `{name}` both have wire `{wire}`, which names one \
+                 canon subcommand, so `{name}` is compared with nothing"
+            ));
+            continue;
         }
         surface.commands.insert(wire, (name, inputs));
     }
@@ -161,12 +250,12 @@ fn ess_surface(root: &Path) -> Surface {
 
 /// Every difference between the clap and ESS surfaces, in a stable order.
 fn differences(clap: &Surface, spec: &Surface) -> Vec<String> {
-    let mut out = Vec::new();
-    for argument in &clap.unmapped {
-        out.push(format!(
-            "`{argument}` is not a long flag, so no ESS input can declare it"
-        ));
-    }
+    let mut out: Vec<String> = clap
+        .unmapped
+        .iter()
+        .chain(&spec.unmapped)
+        .cloned()
+        .collect();
     for (wire, (display, clap_inputs)) in &clap.commands {
         let Some((name, spec_inputs)) = spec.commands.get(wire) else {
             out.push(format!(
@@ -174,23 +263,38 @@ fn differences(clap: &Surface, spec: &Surface) -> Vec<String> {
             ));
             continue;
         };
-        for (flag, required) in clap_inputs {
-            match spec_inputs.get(flag) {
-                None => out.push(format!(
-                    "`{display} --{flag}` has no input `{flag}` in ESS command `{name}`"
-                )),
-                Some(spec_required) if spec_required != required => out.push(format!(
-                    "`{display} --{flag}`: clap says {}, ESS command `{name}` says {}",
-                    requiredness(*required),
-                    requiredness(*spec_required)
-                )),
-                Some(_) => {}
+        for (field, flag) in clap_inputs {
+            let shown = &flag.shown;
+            let Some(declared) = spec_inputs.get(field) else {
+                out.push(format!(
+                    "`{display} {shown}` has no input `{field}` in ESS command `{name}`"
+                ));
+                continue;
+            };
+            if declared.required != flag.required {
+                out.push(format!(
+                    "`{display} {shown}`: clap says {}, ESS command `{name}` says {}",
+                    requiredness(flag.required),
+                    requiredness(declared.required)
+                ));
+            }
+            if declared.list != flag.list {
+                out.push(format!(
+                    "`{display} {shown}`: clap takes it {}, ESS command `{name}` input `{field}` \
+                     is {}",
+                    if flag.list { "more than once" } else { "once" },
+                    if declared.list {
+                        "a List"
+                    } else {
+                        "a single value"
+                    }
+                ));
             }
         }
-        for input in spec_inputs.keys() {
-            if !clap_inputs.contains_key(input) {
+        for field in spec_inputs.keys() {
+            if !clap_inputs.contains_key(field) {
                 out.push(format!(
-                    "ESS command `{name}` input `{input}` is not a flag of `{display}`"
+                    "ESS command `{name}` input `{field}` is not a flag of `{display}`"
                 ));
             }
         }
@@ -319,15 +423,18 @@ fn a_flag_only_in_clap_is_named() {
     assert_named(
         &clap_surface(&command),
         &spec,
-        &["canon validate --probe-flag", "canon.cli.Validate"],
+        &[
+            "canon validate --probe-flag",
+            "input `probe_flag`",
+            "canon.cli.Validate",
+        ],
     );
 }
 
-/// A command declared in ESS that is no `canon` subcommand fails, naming it. It is added to a copy
-/// of `ess/` and compiled, so the reading of the compiled IR is what is checked.
-#[test]
-fn a_command_only_in_ess_is_named() {
-    let root = scratch("command-only-in-ess");
+/// The specification of a copy of `ess/` whose `domains/cli.yaml` commands `edit` changed,
+/// compiled, so the reading of the compiled IR is what is checked.
+fn ess_surface_edited(case: &str, edit: impl FnOnce(&mut Vec<Value>)) -> Surface {
+    let root = scratch(case);
     copy_dir(&repo_root().join("ess"), &root.join("ess"));
     let file = root.join("ess/domains/cli.yaml");
     let mut domain: Value = serde_yaml_ng::from_str(
@@ -335,10 +442,44 @@ fn a_command_only_in_ess_is_named() {
             .unwrap_or_else(|error| panic!("{} reads: {error}", file.display())),
     )
     .expect("ess/domains/cli.yaml is YAML");
-    let probe: Value = serde_yaml_ng::from_str(
-        "name: canon.cli.Probe
+    edit(
+        domain["commands"]
+            .as_sequence_mut()
+            .expect("ess/domains/cli.yaml declares commands"),
+    );
+    fs::write(
+        &file,
+        serde_yaml_ng::to_string(&domain).expect("the domain serializes"),
+    )
+    .expect("the edited copy is written");
+    ess_surface(&root)
+}
+
+fn yaml(text: &str) -> Value {
+    serde_yaml_ng::from_str(text).expect("the probe is YAML")
+}
+
+/// The command `name` of a parsed `domains/cli.yaml` commands list.
+fn declared<'a>(commands: &'a mut [Value], name: &str) -> &'a mut Value {
+    commands
+        .iter_mut()
+        .find(|command| command["name"].as_str() == Some(name))
+        .unwrap_or_else(|| panic!("ess/domains/cli.yaml declares no {name}"))
+}
+
+/// The inputs list of the command `name`.
+fn inputs_of<'a>(commands: &'a mut [Value], name: &str) -> &'a mut Vec<Value> {
+    declared(commands, name)["input"]
+        .as_sequence_mut()
+        .unwrap_or_else(|| panic!("{name} declares inputs"))
+}
+
+/// A probe command with its own `wire`, which is no `canon` subcommand.
+fn probe_command(name: &str, wire: &str) -> Value {
+    yaml(&format!(
+        "name: {name}
 naming:
-  wire: probe
+  wire: {wire}
   display: Probe
 input:
   - name: probe_input
@@ -349,23 +490,34 @@ response:
 outcomes:
   - name: done
     returns: true
-",
-    )
-    .expect("the probe command is YAML");
-    domain["commands"]
-        .as_sequence_mut()
-        .expect("ess/domains/cli.yaml declares commands")
-        .push(probe);
-    fs::write(
-        &file,
-        serde_yaml_ng::to_string(&domain).expect("the domain serializes"),
-    )
-    .expect("the edited copy is written");
+"
+    ))
+}
 
+/// A command declared in ESS that is no `canon` subcommand fails, naming it.
+#[test]
+fn a_command_only_in_ess_is_named() {
+    let spec = ess_surface_edited("command-only-in-ess", |commands| {
+        commands.push(probe_command("canon.cli.Probe", "probe"));
+    });
     assert_named(
         &clap_surface(&canon_cli::Cli::command()),
-        &ess_surface(&root),
+        &spec,
         &["canon.cli.Probe", "`probe`", "not a canon subcommand"],
+    );
+}
+
+/// A second ESS command with the wire of a subcommand fails, naming both commands and the wire,
+/// although the first one matches clap exactly.
+#[test]
+fn a_second_command_with_one_wire_is_named() {
+    let spec = ess_surface_edited("shared-wire", |commands| {
+        commands.push(probe_command("canon.cli.Probe", "validate"));
+    });
+    assert_named(
+        &clap_surface(&canon_cli::Cli::command()),
+        &spec,
+        &["canon.cli.Probe", "canon.cli.Validate", "wire `validate`"],
     );
 }
 
@@ -384,6 +536,137 @@ fn a_changed_requiredness_is_named() {
             "clap says required",
             "canon.cli.Evaluate",
             "says optional",
+        ],
+    );
+}
+
+/// A global flag on `canon` is a flag of every leaf subcommand: undeclared, it is named once per
+/// command.
+#[test]
+fn a_global_flag_is_named_on_every_command() {
+    let spec = ess_surface(&repo_root());
+    let command =
+        canon_cli::Cli::command().arg(Arg::new("probe_global").long("probe-global").global(true));
+    let clap = clap_surface(&command);
+    assert_named(
+        &clap,
+        &spec,
+        &["canon check --probe-global", "input `probe_global`"],
+    );
+    let named = differences(&clap, &spec)
+        .iter()
+        .filter(|difference| difference.contains("--probe-global"))
+        .count();
+    assert_eq!(
+        named,
+        clap.commands.len(),
+        "the global flag is a flag of each of the {} commands",
+        clap.commands.len()
+    );
+}
+
+/// A flag of a command above a leaf, `canon conform` or `canon` itself, not marked global, is still
+/// a flag of the leaf's command line, and is named.
+#[test]
+fn a_flag_of_a_parent_command_is_named() {
+    let spec = ess_surface(&repo_root());
+    let conform = canon_cli::Cli::command().mut_subcommand("conform", |conform| {
+        conform.arg(Arg::new("probe_parent").long("probe-parent"))
+    });
+    assert_named(
+        &clap_surface(&conform),
+        &spec,
+        &[
+            "canon conform run --probe-parent",
+            "input `probe_parent`",
+            "canon.cli.ConformRun",
+        ],
+    );
+    let root = canon_cli::Cli::command().arg(Arg::new("probe_root").long("probe-root"));
+    assert_named(
+        &clap_surface(&root),
+        &spec,
+        &["canon check --probe-root", "input `probe_root`"],
+    );
+}
+
+/// `--probe-flag` is the input `probe_flag`: declared so, nothing differs. A flag holding `_`
+/// would take another flag's input, and is named.
+#[test]
+fn a_hyphenated_flag_is_its_underscored_input() {
+    let spec = ess_surface_edited("hyphenated-flag", |commands| {
+        inputs_of(commands, "canon.cli.Validate")
+            .push(yaml("name: probe_flag\ntype: Optional<String>\n"));
+    });
+    let hyphen = canon_cli::Cli::command().mut_subcommand("validate", |validate| {
+        validate.arg(Arg::new("probe_flag").long("probe-flag"))
+    });
+    let found = differences(&clap_surface(&hyphen), &spec);
+    assert!(
+        found.is_empty(),
+        "`--probe-flag` and the input `probe_flag` differ: {found:?}"
+    );
+    let underscore = canon_cli::Cli::command().mut_subcommand("validate", |validate| {
+        validate.arg(Arg::new("probe_flag").long("probe_flag"))
+    });
+    assert_named(
+        &clap_surface(&underscore),
+        &spec,
+        &["canon validate --probe_flag", "holds `_`"],
+    );
+}
+
+/// A flag clap takes more than once is a List input: declared so, nothing differs; declared as a
+/// single value, it is named.
+#[test]
+fn a_repeatable_flag_declared_single_is_named() {
+    let command = canon_cli::Cli::command().mut_subcommand("validate", |validate| {
+        validate.arg(Arg::new("probe").long("probe").action(ArgAction::Append))
+    });
+    let clap = clap_surface(&command);
+    let as_list = ess_surface_edited("repeatable-as-list", |commands| {
+        inputs_of(commands, "canon.cli.Validate")
+            .push(yaml("name: probe\ntype: Optional<List<String>>\n"));
+    });
+    let found = differences(&clap, &as_list);
+    assert!(
+        found.is_empty(),
+        "a repeatable `--probe` and an Optional<List<String>> input differ: {found:?}"
+    );
+    let single = ess_surface_edited("repeatable-as-single", |commands| {
+        inputs_of(commands, "canon.cli.Validate")
+            .push(yaml("name: probe\ntype: Optional<String>\n"));
+    });
+    assert_named(
+        &clap,
+        &single,
+        &[
+            "canon validate --probe",
+            "more than once",
+            "canon.cli.Validate",
+            "a single value",
+        ],
+    );
+}
+
+/// A flag clap takes once that ESS declares a List fails, naming the flag and both sides.
+#[test]
+fn a_single_valued_flag_declared_as_a_list_is_named() {
+    let spec = ess_surface_edited("single-as-list", |commands| {
+        for input in inputs_of(commands, "canon.cli.Evaluate") {
+            if input["name"].as_str() == Some("authority") {
+                input["type"] = Value::from("Optional<List<String>>");
+            }
+        }
+    });
+    assert_named(
+        &clap_surface(&canon_cli::Cli::command()),
+        &spec,
+        &[
+            "canon evaluate --authority",
+            "takes it once",
+            "canon.cli.Evaluate",
+            "a List",
         ],
     );
 }

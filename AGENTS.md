@@ -39,11 +39,16 @@ domain `canon.check`, and the `canon` command surface in the domain `canon.cli`
 
 The commands are declared in `ess/domains/cli.yaml`: one command per leaf subcommand of
 `canon_cli::Cli` (`crates/canon-cli/src/lib.rs`), its wire name the clap path joined by `-`
-(`conform run` is `conform-run`), every long flag an input of the same name, a flag clap does not
-require an `Optional<…>` input. `crates/canon-cli/tests/ess_commands_match.rs`, run by
-`task ess-gate`, holds them: it fails, naming the difference, when a subcommand or flag exists in
-only one of the clap definition and the compiled `canon.cli` domain, when their requiredness
-differs, or when a command has no synthesized scenario. A story that adds or changes a command or a
+(`conform run` is `conform-run`, and no two commands share a wire). A leaf's flags are its own
+long flags, the global ones and those of every command above it. Each flag is the input of the
+same name with every `-` written `_`, since ESS refuses `-` in a field name (`--max-states` is
+`max_states`); a long flag holding `_` is refused. A flag clap does not require is an
+`Optional<…>` input; a flag clap takes more than once is a `List<…>` input, and a flag it takes
+once is not. Every input is text, so the element type is not compared.
+`crates/canon-cli/tests/ess_commands_match.rs`, run by `task ess-gate`, holds them: it fails, naming
+the difference, when a subcommand or flag exists in only one of the clap definition and the
+compiled `canon.cli` domain, when their requiredness or repeatability differs, when two commands
+share a wire, or when a command has no synthesized scenario. A story that adds or changes a command or a
 flag declares the change in `ess/domains/cli.yaml` in its first commit. `canon-docs` is not the
 command surface and is not declared.
 

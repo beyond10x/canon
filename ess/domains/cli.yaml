@@ -1,6 +1,7 @@
 # The `canon` command surface (story:ess-command-surface, Atlas ADR 0076): one command per leaf
 # subcommand of `canon_cli::Cli` (crates/canon-cli/src/lib.rs), each long flag an input of the same
-# name, a flag clap does not require an Optional input. Every flag takes a path or a text value, so
+# name with every `-` written `_`, a flag clap does not require an Optional input, a flag clap takes
+# more than once a List input (AGENTS.md § ESS). Every flag takes a path or a text value, so
 # every input is a String; the document a path names is declared in the domains canon.protocol,
 # canon.check and canon.conform, and what a command does with it is Canon's own conformance suite
 # and tests, not this file. crates/canon-cli/tests/ess_commands_match.rs keeps this file and the clap
