@@ -113,19 +113,31 @@ pub(super) fn values(
             .map(|(number, (id, _))| (*id, number))
             .collect(),
         open: vec![false; claims.len()],
+        alone: vec![None; claims.len()],
+        decided_alone: Vec::new(),
         claims,
         contexts: BTreeMap::new(),
+        shared: Vec::new(),
         values: HashMap::default(),
         in_progress: Vec::new(),
     };
+    // Each claim's own context, and which contexts more than one claim starts a walk in.
+    let starts: Vec<Context> = (0..walk.claims.len())
+        .map(|number| walk.context(invalidated.kept(walk.claims[number].0)))
+        .collect();
+    let mut starting = vec![0usize; walk.contexts.len()];
+    for context in &starts {
+        starting[*context] += 1;
+    }
+    walk.shared = starting.into_iter().map(|claims| claims > 1).collect();
     let mut reported = BTreeMap::new();
-    for number in 0..walk.claims.len() {
+    for (number, context) in starts.into_iter().enumerate() {
         let id = walk.claims[number].0;
         let own = invalidated.kept(id);
-        let context = walk.context(own);
         walk.keep_out(own, true);
         let value = walk.decide(number, context);
         walk.keep_out(own, false);
+        walk.forget_alone();
         reported.insert(id.clone(), value?);
     }
     Ok(reported)
@@ -173,6 +185,8 @@ impl Hasher for MultiplyRotate {
 /// Every claim is evaluated in the context of the claim [`values`] starts from, through every
 /// claim it tests (the predicate's claim tests), so the records that context keeps out are marked
 /// in `kept_out` for the whole of that walk. Claims are known by their number in claim-id order.
+/// A value decided in a context that only one walk starts in is kept by claim number for that walk
+/// alone; one decided in a context several walks share is kept for all of them.
 struct Walk<'a> {
     evidence: EvidenceSets<'a>,
     /// The case's input values, which input tests read.
@@ -188,8 +202,16 @@ struct Walk<'a> {
     numbers: HashMap<&'a ClaimId, usize, Fixed>,
     /// The number of each context met so far: equal records, equal number.
     contexts: BTreeMap<&'a [usize], Context>,
-    /// Each claim's value in each context, by context and claim number.
+    /// By context: whether more than one claim starts a walk in it, so a value decided in it is
+    /// kept for the walks after this one.
+    shared: Vec<bool>,
+    /// Each claim's value in each shared context, by context and claim number.
     values: HashMap<(Context, usize), Truth, Fixed>,
+    /// By claim number, each value decided in the context of this walk when no other walk starts
+    /// in it: kept for this walk only, as a diamond within it needs.
+    alone: Vec<Option<Truth>>,
+    /// The claims `alone` holds a value of.
+    decided_alone: Vec<usize>,
     /// The claims being decided, by number, outermost first.
     in_progress: Vec<usize>,
     /// By claim number: whether the claim is in `in_progress`.
@@ -219,13 +241,25 @@ impl<'a> Walk<'a> {
         }
     }
 
+    /// Forgets the values `alone` holds, which no later walk reads.
+    fn forget_alone(&mut self) {
+        for number in self.decided_alone.drain(..) {
+            self.alone[number] = None;
+        }
+    }
+
     /// The value of the declared claim `number` in one context, memoized, so each claim's
     /// predicate is evaluated once per context. A claim reached again while it is still being
     /// decided closes a cycle, which is refused.
     fn decide(&mut self, number: usize, context: Context) -> Result<Truth, Refusal> {
         let key = (context, number);
-        if let Some(value) = self.values.get(&key) {
-            return Ok(*value);
+        let known = if self.shared[context] {
+            self.values.get(&key).copied()
+        } else {
+            self.alone[number]
+        };
+        if let Some(value) = known {
+            return Ok(value);
         }
         if self.open[number] {
             let start = self
@@ -250,7 +284,12 @@ impl<'a> Walk<'a> {
         self.open[number] = false;
         self.in_progress.pop();
         let value = value?;
-        self.values.insert(key, value);
+        if self.shared[context] {
+            self.values.insert(key, value);
+        } else {
+            self.alone[number] = Some(value);
+            self.decided_alone.push(number);
+        }
         Ok(value)
     }
 

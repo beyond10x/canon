@@ -574,9 +574,11 @@ fn excluded_for(
         return Vec::new();
     }
     // Each kind and subject the reached matches read, once.
-    let matches: BTreeSet<(&EvidenceKindId, Option<&ArtifactId>)> = reached
+    let matches: Vec<(&EvidenceKindId, Option<&ArtifactId>)> = reached
         .iter()
         .map(|matching| (&matching.kind, matching.subject.as_ref()))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
         .collect();
     let read = |record: &EvidenceRecord| {
         matches
