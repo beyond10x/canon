@@ -41,7 +41,7 @@ errors:
     summary: An input file or directory could not be read, or an output could not be written.
     fields:
       # The `error[unreadable]: <path>: <why>` line canon printed.
-      # read from: crates/canon-cli/src/main.rs:70-77
+      # read from: crates/canon-cli/src/main.rs:71-78
       - name: diagnostics
         type: String
 
