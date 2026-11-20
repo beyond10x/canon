@@ -241,11 +241,15 @@
 //!   when it names one, then each form over the child cases that decides it, `{"children":
 //!   [<outcome>, ...], "value": <its value>}`, or
 //!   `{"requirement": "unsatisfiable"}` when none does. `blocked` too when the precondition is
-//!   `true` and the authority decisions deny a capability the action requires, each a reason
+//!   `true` and the authority decisions deny a requirement of the action, each a reason
 //!   `{"capability": <id>, "decision": "denied"}`. `approval-required` when the precondition is
-//!   `true`, nothing is denied and some required capability is not decided, each a reason
-//!   `{"capability": <id>, "decision": "none"}`. `admissible` when the precondition is `true` and
-//!   every required capability is granted (CANON-AUTHORITY-001).
+//!   `true`, nothing is denied and some requirement requires approval or is not decided, each a
+//!   reason `{"capability": <id>, "decision": "require_approval"}` or `{"capability": <id>,
+//!   "decision": "none"}`. A requirement with a scope adds `"scope": {<key>: <value>, ...}` to its
+//!   reason. `admissible` when the precondition is `true` and every requirement is granted
+//!   (CANON-AUTHORITY-001). A requirement is decided by the decisions on its capability that
+//!   cover its scope, `denied` over `require_approval` over `granted`, as `actions.rs` says
+//!   (CANON-SCOPE-001).
 //! - `outcomes` maps each declared outcome to `{"status": "legitimate"}` when its `requires`
 //!   predicate is `true` over the claim values and the evidence left, and otherwise to
 //!   `{"status": "blocked", "reasons": [...]}`. Its reasons follow the one rule an action
@@ -266,13 +270,15 @@
 //! # Authority decisions
 //!
 //! `--authority` names a `canon-authority/1` document: a YAML (or JSON) list of decisions, each a
-//! capability and whether it is granted, `- {capability: finding.publish, decision: granted}` (or
-//! `denied`). An empty list decides nothing. Canon grants nothing and resolves no identity: the
-//! caller decides and passes the decisions in. Refused, in this order: text that is not such a
-//! list, or an entry with another key, another decision or a missing key, as `malformed-input`,
-//! naming the entry by its position, counting from 1, and a missing key by name (`` entry 2:
-//! missing field `capability` ``); then, entry by entry, a capability that is not an identifier
-//! as `invalid-identifier`, and a capability decided a second time as `duplicate-identifier`.
+//! capability, the scope it covers (optional: absent, every scope) and the decision,
+//! `- {capability: metrics.read, scope: {cluster: prod-eu}, decision: granted}` (or
+//! `require_approval`, or `denied`). An empty list decides nothing. Canon grants nothing and
+//! resolves no identity: the caller decides and passes the decisions in. Refused, in this order:
+//! text that is not such a list, or an entry with another key, another decision or a missing
+//! key, as `malformed-input`, naming the entry by its position, counting from 1, and a missing key
+//! by name (`` entry 2: missing field `capability` ``); then, entry by entry, a capability, scope
+//! key or scope value that is not an identifier as `invalid-identifier`, and a capability decided
+//! a second time at an equal scope as `duplicate-identifier` (`authority.rs`).
 //!
 //! # Explicit decisions
 //!

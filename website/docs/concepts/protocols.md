@@ -113,7 +113,8 @@ actions:
 
 Canon checks that capabilities and effect classes are well-formed identifiers. It does not resolve
 who holds a capability: whoever runs the evaluation passes the authority decisions in, as a
-`canon-authority/1` list of capabilities granted or denied (`canon evaluate --authority`). It gives
+`canon-authority/1` list of capabilities granted, granted only with approval or denied, each at a
+scope or at every scope (`canon evaluate --authority`; shipped, scenario `CANON-SCOPE-001`). It gives
 effect classes no built-in meaning today.
 
 :::shipped[Action admissibility]
