@@ -73,7 +73,7 @@ Evaluate a case under a compiled protocol from an evidence set: every claim, and
 | `--ir <IR>` | yes | none | The compiled protocol: `canon-ir/1` exactly as `canon compile` prints it |
 | `--case <CASE>` | yes | none | The `canon-case/1` case snapshot |
 | `--evidence <EVIDENCE>` | yes | none | A directory holding only `canon-evidence/1` records, one per `*.yaml` or `*.json` file |
-| `--authority <AUTHORITY>` | no | none | A `canon-authority/1` document: which capabilities are granted or denied. An action is admissible only when every capability it requires is granted; without it, none is granted |
+| `--authority <AUTHORITY>` | no | none | A `canon-authority/1` document: which capabilities are granted, granted only with approval or denied, each at a scope or at every scope. An action is admissible only when every capability it requires is granted at the scope it requires it; without it, none is granted |
 | `--decisions <DECISIONS>` | no | none | A `canon-decisions/1` document: the explicit decisions taken, each naming the decision, the outcome, the principal and the case revision it was taken at. An outcome that requires a decision is legitimate only with one taken at the case snapshot's revision |
 | `--at <AT>` | no | none | The evaluation instant, in UTC as `YYYY-MM-DDTHH:MM:SSZ`, or `YYYY-MM-DDTHH:MM:SS.fffZ` with one to nine fraction digits. Evidence older than its kind's `max_age` at this instant, counted in whole seconds, does not apply; without it, no evidence expires |
 
@@ -93,7 +93,7 @@ Options:
           A directory holding only `canon-evidence/1` records, one per `*.yaml` or `*.json` file
 
       --authority <AUTHORITY>
-          A `canon-authority/1` document: which capabilities are granted or denied. An action is admissible only when every capability it requires is granted; without it, none is granted
+          A `canon-authority/1` document: which capabilities are granted, granted only with approval or denied, each at a scope or at every scope. An action is admissible only when every capability it requires is granted at the scope it requires it; without it, none is granted
 
       --decisions <DECISIONS>
           A `canon-decisions/1` document: the explicit decisions taken, each naming the decision, the outcome, the principal and the case revision it was taken at. An outcome that requires a decision is legitimate only with one taken at the case snapshot's revision
