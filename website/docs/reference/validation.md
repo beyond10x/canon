@@ -157,7 +157,7 @@ object in code-point order, and the walk keeps a stack of its own, never recursi
 | `import-revision-mismatch` | The supplied document of an import is another revision than the import pins. |
 | `import-digest-mismatch` | The supplied document of an import, compiled with its own imports, has another digest than the import pins. |
 | `undeclared-refinement` | An import lists under `refines` an identifier it does not declare, itself or through its own imports. |
-| `conflicting-imports` | Two imports declare one identifier in one section differently, and the importing document does not redeclare it. Two equal declarations are one declaration. |
+| `conflicting-imports` | Two imports declare one identifier in one section differently, and the importing document does not redeclare it. Two declarations with the same `canon-ir/1` entry are one. |
 | `unrefined-redeclaration` | A document redeclares an identifier an import declares in the same section, and that import does not list it under `refines`. |
 | `invalid-import` | An imported document is not valid itself: `problem` says why. |
 

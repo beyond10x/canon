@@ -26,16 +26,20 @@
 //!    validation, each problem wrapped in `invalid-import`.
 //!
 //! Composition inlines every declaration of every section of an import under its own identifier.
-//! Two imports that declare one identifier in one section with equal declarations give one
+//! Two imports that declare one identifier in one section with identical declarations give one
 //! declaration; with different ones, they are refused, unless the importing document redeclares
-//! the identifier. A document may redeclare an identifier an import declares only when that import
-//! lists it under `refines`, and the redeclaration replaces the imported declaration. A `refines`
-//! entry names an identifier of any section, and must name one the import declares, itself or
-//! through its own imports. The composed document has the importing document's format and header,
-//! and no imports.
+//! the identifier. Identical means identical `canon-ir/1`: the declarations' entries in the
+//! imports' compiled IR are the same JSON, so two declarations that differ only in the ways the
+//! `ir` module documentation lists (the order of `all` members, of `may_produce`, of a case input's
+//! values, an absent precondition and the empty `all`, ...) are one declaration. A document may
+//! redeclare an identifier an import declares only when that import lists it under `refines`, and
+//! the redeclaration replaces the imported declaration. A `refines` entry names an identifier of
+//! any section, and must name one the import declares, itself or through its own imports. The
+//! composed document has the importing document's format and header, and no imports.
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use super::json::Value;
 use super::{Ir, compile};
 use crate::model::{CaseSection, Declarations, Import, Protocol, ProtocolId};
 use crate::validate::{self, Problem, Section};
@@ -46,8 +50,13 @@ pub const DIGEST_PREFIX: &str = "sha256:";
 /// The digest an import pins for a compiled protocol: [`DIGEST_PREFIX`] followed by the SHA-256 of
 /// the IR's canonical JSON ([`Ir::canonical_json`]) in lowercase hexadecimal.
 pub fn digest(ir: &Ir) -> String {
+    digest_of(&ir.canonical_json())
+}
+
+/// [`DIGEST_PREFIX`] followed by the SHA-256 of `canonical_json` in lowercase hexadecimal.
+fn digest_of(canonical_json: &str) -> String {
     let mut text = String::from(DIGEST_PREFIX);
-    for byte in sha256(ir.canonical_json().as_bytes()) {
+    for byte in sha256(canonical_json.as_bytes()) {
         text.push_str(&format!("{byte:02x}"));
     }
     text
@@ -130,11 +139,15 @@ pub fn compose(root: &Protocol, imports: &[Protocol]) -> Result<Protocol, Vec<Pr
         return Err(vec![Problem::ImportCycle { protocols }]);
     }
 
-    let mut composed: BTreeMap<&ProtocolId, (Protocol, String)> = BTreeMap::new();
+    let mut composed: BTreeMap<&ProtocolId, Composed> = BTreeMap::new();
     for id in order {
         let document = documents[id];
         for (import, pin) in imported(document) {
-            let (supplied, actual) = &composed[import];
+            let Composed {
+                protocol: supplied,
+                digest: actual,
+                ..
+            } = &composed[import];
             if pin.revision != supplied.protocol.revision {
                 problems.push(Problem::ImportRevisionMismatch {
                     importer: id.clone(),
@@ -165,9 +178,26 @@ pub fn compose(root: &Protocol, imports: &[Protocol]) -> Result<Protocol, Vec<Pr
                 .map(|problem| invalid(id, problem))
                 .collect::<Vec<_>>()
         })?;
-        composed.insert(id, (protocol, digest(&ir)));
+        let ir = ir.value();
+        let digest = digest_of(&ir.render());
+        composed.insert(
+            id,
+            Composed {
+                protocol,
+                ir,
+                digest,
+            },
+        );
     }
     unreachable!("the walk from the root ends with the root")
+}
+
+/// An imported document composed with its own imports: the document, its compiled `canon-ir/1` as
+/// a JSON value, and the digest of that IR.
+struct Composed {
+    protocol: Protocol,
+    ir: Value,
+    digest: String,
 }
 
 /// A problem of an imported document, naming it.
@@ -217,29 +247,56 @@ fn walk<'a>(
     None
 }
 
-/// One import of the document being composed: its id, its entry and its composed document.
+/// One import of the document being composed: its id, its entry, its composed document and that
+/// document's `canon-ir/1`.
 struct Part<'a> {
     id: &'a ProtocolId,
     import: &'a Import,
     composed: &'a Protocol,
+    ir: &'a Value,
 }
 
 impl Part<'_> {
     fn refines(&self, id: &str) -> bool {
         self.import.refines.iter().any(|refined| refined == id)
     }
+
+    /// The `canon-ir/1` entry of the declaration `id` of `section` in this import's IR.
+    fn declaration(&self, section: Section, id: &str) -> Option<&Value> {
+        let path: &[&str] = match section {
+            Section::Artifact => &["artifacts"],
+            Section::EvidenceKind => &["evidence_kinds"],
+            Section::Claim => &["claims"],
+            Section::Obligation => &["obligations"],
+            Section::Action => &["actions"],
+            Section::Outcome => &["outcomes"],
+            Section::InvalidationRule => &["invalidation"],
+            Section::Input => &["case", "inputs"],
+            Section::IndependenceDimension => &["independence_dimensions"],
+            other => unreachable!("`{other}` is not a declaration section"),
+        };
+        let mut value = self.ir;
+        for key in path.iter().copied().chain([id]) {
+            match value {
+                Value::Object(members) => value = members.get(key)?,
+                _ => return None,
+            }
+        }
+        Some(value)
+    }
 }
 
 /// Composes one document with the composed documents of its imports.
 fn merge(
     document: &Protocol,
-    composed: &BTreeMap<&ProtocolId, (Protocol, String)>,
+    composed: &BTreeMap<&ProtocolId, Composed>,
 ) -> Result<Protocol, Vec<Problem>> {
     let parts: Vec<Part<'_>> = imported(document)
         .map(|(id, import)| Part {
             id,
             import,
-            composed: &composed[id].0,
+            composed: &composed[id].protocol,
+            ir: &composed[id].ir,
         })
         .collect();
     let importer = &document.protocol.id;
@@ -373,17 +430,19 @@ impl Merger<'_, '_> {
     ) -> Declarations<K, V>
     where
         K: AsRef<str> + Clone + PartialEq,
-        V: Clone + PartialEq,
+        V: Clone,
     {
         // Each imported identifier with its first declaration, every part that declares it, and
-        // whether two parts declare it differently.
+        // whether two parts declare it differently: with different `canon-ir/1` entries.
         let mut imported: Vec<(&K, &V, Vec<&Part<'_>>, bool)> = Vec::new();
         for (part, declarations) in self.parts.iter().zip(theirs) {
             for (id, value) in declarations.iter() {
                 match imported.iter_mut().find(|(seen, ..)| *seen == id) {
                     None => imported.push((id, value, vec![part], false)),
-                    Some((_, first, providers, conflict)) => {
-                        if *first != value && !*conflict && !own.contains(id) {
+                    Some((_, _, providers, conflict)) => {
+                        let differs = providers[0].declaration(section, id.as_ref())
+                            != part.declaration(section, id.as_ref());
+                        if differs && !*conflict && !own.contains(id) {
                             *conflict = true;
                             self.problems.push(Problem::ConflictingImports {
                                 importer: self.importer.clone(),

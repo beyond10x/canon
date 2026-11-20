@@ -69,11 +69,13 @@
 //! like any other. Compiled alone, such a protocol is refused, each import `missing-import`. The
 //! composition is a pure function of the documents passed to it, whatever their order, and reads
 //! nothing else. Every imported declaration is inlined under its own identifier, a declaration two
-//! imports share once, and a redeclaration the import lists under `refines` replaces the imported
-//! declaration; the IR names the root's id and revision only and holds no import, so it is the IR
-//! of one document holding the same declarations inline, byte for byte. Each import pins the
-//! revision of the document it reads and its [`digest`]: `sha256:` and the SHA-256, in lowercase
-//! hexadecimal, of that document's `canon-ir/1` bytes, compiled with its own imports.
+//! imports share once (identical declarations are those with the same `canon-ir/1` entry, so two
+//! that differ only in the ways listed above are one), and a redeclaration the import lists under
+//! `refines` replaces the imported declaration; the IR names the root's id and revision only and
+//! holds no import, so it is the IR of one document holding the same declarations inline, byte for
+//! byte. Each import pins the revision of the document it reads and its [`digest`]: `sha256:` and
+//! the SHA-256, in lowercase hexadecimal, of that document's `canon-ir/1` bytes, compiled with its
+//! own imports.
 //!
 //! [`compose`] refuses, in this order, stopping after the first step that finds a problem: a
 //! protocol supplied twice, the root's id included (`duplicate-import-document`); a malformed
@@ -86,7 +88,7 @@
 //! documents that import it: a pinned revision (`import-revision-mismatch`) or digest
 //! (`import-digest-mismatch`, printing both digests) the supplied document does not have, a
 //! `refines` entry its import does not declare (`undeclared-refinement`), an identifier two imports
-//! declare differently in one section that the document does not redeclare
+//! declare with different `canon-ir/1` entries in one section that the document does not redeclare
 //! (`conflicting-imports`), and a redeclaration its import does not list under `refines`
 //! (`unrefined-redeclaration`). A problem of an imported document itself is wrapped in
 //! `invalid-import`, naming it. The composed root is validated like any document, so an imported

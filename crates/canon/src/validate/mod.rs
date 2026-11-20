@@ -323,7 +323,7 @@ pub enum Problem {
         id: String,
     },
     /// Two imports declare one identifier in one section differently, and the importing document
-    /// does not redeclare it. Two equal declarations are one declaration.
+    /// does not redeclare it. Two declarations with the same `canon-ir/1` entry are one.
     ConflictingImports {
         importer: ProtocolId,
         section: Section,
