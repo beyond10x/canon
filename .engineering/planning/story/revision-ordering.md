@@ -51,7 +51,7 @@ scope:
   path: ess/domains/protocol.yaml
 - confidence: cited
   path: fixtures/investigation/revision-ordering.yaml
-revision: 32
+revision: 33
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T20:58:28Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 - {from: "proposed", to: "active", at: "2026-11-20T20:58:28Z", actor: "human:timo", revision: 5, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
@@ -106,8 +106,13 @@ vocabulary (AGENTS.md § Boundary).
 about an artifact's history, so it belongs to the case snapshot, which whoever evaluates the case
 supplies, and not to the producer of a record (B). Both acceptance rows read descent only from the
 revision the green record is on, which is the current one. A is the smallest change that answers
-them. The operator was asked on 2026-11-20; the unit takes A and `item` unless the store records
-another answer before its wave starts.
+them.
+
+**Decided 2026-11-20: option A with the key `item`.** The coordinator put the four options and
+this recommendation to the operator, together with the wave order. The operator's answer,
+verbatim: "dont care abput the order, pick yourself". The coordinator reads that as leaving both
+choices to it and takes the recommendation. The unit builds A and `item`; it does not reopen the
+choice.
 
 ## ESS first
 
