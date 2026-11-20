@@ -1,0 +1,178 @@
+format: canon-conformance/1
+id: CANON-SCOPE-001
+covers: [CANON-SCOPE-001]
+fixture: fixtures/investigation/capability-scope.yaml
+# Action `inspect` has no precondition and requires `metrics.read` at the scope `{cluster: prod-eu,
+# namespace: foo}` (Atlas ADR 0083 § Decision 1). A canon-authority/1 decision may carry a scope
+# too, and decides `granted`, `require_approval` or `denied`. A decision covers a requirement of
+# its capability when every scope key it gives a value for is one the requirement gives the same
+# value: a key it leaves out covers every value of it, and coverage never widens inwards, so a
+# decision for `{cluster: prod-eu, namespace: foo}` would not cover a requirement for
+# `{cluster: prod-eu}`. Among the decisions covering a requirement, `denied` wins over
+# `require_approval`, which wins over `granted`; none covering it is not granted (default deny).
+# A capability reason names the requirement: its capability, its scope when it has one, and the
+# decision that applied (`none` when no decision covers it).
+steps:
+  # Expectation 1. No decision covers the requirement: not granted, so approval is required,
+  # naming the requirement.
+  - id: no-grant
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-1
+        protocol: metrics
+        artifacts: {}
+      evidence: []
+      authority: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "inspect": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }
+
+  # Expectation 2. A grant for `{cluster: prod-eu}` gives no value for `namespace`, so it covers
+  # every namespace of prod-eu, foo included: admissible.
+  - id: cluster-grant-covers
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-1
+        protocol: metrics
+        artifacts: {}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-eu}
+          decision: granted
+    expect:
+      decision: |
+        {
+          "actions": {
+            "inspect": {
+              "status": "admissible"
+            }
+          }
+        }
+
+  # Expectation 3. A grant for `{cluster: prod-us}` gives another value for `cluster`: it does not
+  # cover the requirement, so nothing does, and approval is required.
+  - id: other-cluster-grant
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-1
+        protocol: metrics
+        artifacts: {}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-us}
+          decision: granted
+    expect:
+      decision: |
+        {
+          "actions": {
+            "inspect": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }
+
+  # Expectation 4. A grant for the exact scope and a `require_approval` for `{cluster: prod-eu}`
+  # both cover the requirement: `require_approval` wins over `granted`, so approval is required,
+  # naming the decision that applied.
+  - id: approval-over-grant
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-1
+        protocol: metrics
+        artifacts: {}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-eu, namespace: foo}
+          decision: granted
+        - capability: metrics.read
+          scope: {cluster: prod-eu}
+          decision: require_approval
+    expect:
+      decision: |
+        {
+          "actions": {
+            "inspect": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "require_approval",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }
+
+  # Expectation 5. A denial of unscoped `metrics.read` covers every scope of it, and wins over the
+  # grant for the exact scope: blocked, naming the denied capability. Asking again would not change
+  # a denial.
+  - id: deny-over-grant
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-1
+        protocol: metrics
+        artifacts: {}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          decision: denied
+        - capability: metrics.read
+          scope: {cluster: prod-eu, namespace: foo}
+          decision: granted
+    expect:
+      decision: |
+        {
+          "actions": {
+            "inspect": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "denied",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }

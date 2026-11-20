@@ -14,7 +14,8 @@
 # the independence a case gives each producer. story:action-arguments adds the argument schema an
 # action declares. story:case-composition adds the child case an action opens (`case_open`), the
 # child case a case_outcome evidence record names and the predicate form `children` over the
-# outcomes of a case's child cases.
+# outcomes of a case's child cases. story:capability-scope adds the scope a capability requirement
+# and an authority decision may carry, and the decision require_approval.
 # crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
 domain: canon.protocol
 
@@ -222,13 +223,30 @@ types:
       - name: subject
         type: canon.protocol.ArtifactId
 
-  # read from: crates/canon/src/model/mod.rs:110-114
+  # One capability an action requires authority for, at a scope (Atlas ADR 0083 § Decision 1:
+  # `metrics.inspect` requires `metrics.read{cluster, namespace}`). A requirement is decided from
+  # the authority decisions on its capability that cover it (canon.protocol.AuthorityDecision): a
+  # decision covers it when the requirement gives every scope key the decision gives a value for
+  # that same value. A key the decision leaves out covers every value of it, and coverage never
+  # widens inwards: a decision for {cluster: prod-eu, namespace: foo} does not cover a requirement
+  # for {cluster: prod-eu}, and only a decision without a scope covers an unscoped requirement.
+  # read from: crates/canon/src/model/mod.rs:237-248
+  # read from: .engineering/planning/story/capability-scope.md:59-72
+  # read from: .engineering/planning/story/capability-scope.md:159-163
   - name: canon.protocol.CapabilityRequirement
     kind: struct
     fields:
-      # read from: crates/canon/src/model/mod.rs:113
+      # read from: crates/canon/src/model/mod.rs:241-242
       - name: capability
         type: canon.protocol.CapabilityId
+      # The scope the capability is required at: one value for each key it names, each key once
+      # (canon validate refuses a key named twice as duplicate-scope-key, and a key or value that
+      # is not an identifier as invalid-identifier). Absent or empty, the requirement is unscoped.
+      # canon-ir/1 writes the scope only on a requirement that has one, so the canon-ir/1 of a
+      # protocol without a scope is the one it was before scopes existed.
+      # read from: crates/canon/src/model/mod.rs:243-247
+      - name: scope
+        type: Map<canon.protocol.ScopeKey, canon.protocol.ScopeValue>
 
   # read from: crates/canon/src/model/mod.rs:117-121
   - name: canon.protocol.EvidenceProduction
@@ -849,36 +867,67 @@ types:
   # One authority decision of a canon-authority/1 document. `canon evaluate --authority` names that
   # document: a YAML (or JSON) list of these entries; an empty list decides nothing, and an empty
   # document is not a list. Canon grants nothing and resolves no identity: whoever runs the
-  # evaluation decides which capabilities are granted and passes those decisions in (design § 33).
-  # A capability no action requires may be decided; it changes no action. Refused, in this order:
-  # text that is not such a list, or an entry with another key, another decision or a missing key,
-  # as malformed-input, naming the key an entry leaves out; then, entry by entry in the order given,
-  # a capability that is not an identifier as invalid-identifier, and a capability decided a second
-  # time as duplicate-identifier.
-  # read from: crates/canon/src/eval/authority.rs:1-20
-  # read from: crates/canon/src/model/authority.rs:18-27
+  # evaluation decides which capabilities are granted, at which scope, and passes those decisions
+  # in (design § 33). A capability no action requires may be decided; it changes no action. One
+  # capability may be decided at several scopes; two decisions on one capability with equal scopes
+  # (the same keys with the same values, in any order) are a duplicate. Refused, in this order:
+  # text that is not such a list (a scope that names a key twice included), or an entry with
+  # another key, another decision or a missing key, as malformed-input, naming the key an entry
+  # leaves out; then, entry by entry in the order given, a capability that is not an identifier as
+  # invalid-identifier, then a scope key or value that is not one as invalid-identifier, then a
+  # capability decided a second time at an equal scope as duplicate-identifier.
+  # read from: crates/canon/src/eval/authority.rs:1-29
+  # read from: crates/canon/src/model/authority.rs:33-48
   # read from: .engineering/planning/story/review-hardening-w7.md:28
   # read from: .engineering/planning/story/review-hardening-w7.md:31
+  # read from: .engineering/planning/story/capability-scope.md:74-76
+  # read from: .engineering/planning/story/capability-scope.md:156-158
   - name: canon.protocol.AuthorityDecision
     kind: struct
     fields:
       # The capability decided, an identifier an action's `requires` may name.
-      # read from: crates/canon/src/model/authority.rs:24
+      # read from: crates/canon/src/model/authority.rs:39-40
       - name: capability
         type: canon.protocol.CapabilityId
+      # The scope the decision covers: one value for each key it names, each key once. It covers
+      # a requirement of its capability when the requirement gives each of those keys the same
+      # value; a key it leaves out covers every value of it. Absent or empty, it covers every
+      # scope of the capability (canon.protocol.CapabilityRequirement).
+      # read from: crates/canon/src/model/authority.rs:41-45
+      - name: scope
+        type: Map<canon.protocol.ScopeKey, canon.protocol.ScopeValue>
       # Whether it is granted.
-      # read from: crates/canon/src/model/authority.rs:26
+      # read from: crates/canon/src/model/authority.rs:46-47
       - name: decision
         type: canon.protocol.Grant
 
-  # An authority decision on one capability. An action whose precondition is true is admissible
-  # when every capability it requires is granted, blocked when one is denied, naming it, and
-  # approval-required when none is denied and one is not decided (CANON-AUTHORITY-001).
-  # read from: crates/canon/src/model/authority.rs:29-39
-  # read from: crates/canon/src/eval/actions.rs:23-29
+  # A key of a capability scope (cluster, namespace): what the scope narrows the capability to. An
+  # identifier: not empty, no whitespace, control or Unicode format characters.
+  # read from: crates/canon/src/model/authority.rs:23-27
+  # read from: .engineering/planning/story/capability-scope.md:155
+  - name: canon.protocol.ScopeKey
+    kind: newtype
+    of: String
+
+  # The value a capability scope gives one key (prod-eu). An identifier, as a scope key is.
+  # read from: crates/canon/src/model/authority.rs:28-31
+  # read from: .engineering/planning/story/capability-scope.md:155
+  - name: canon.protocol.ScopeValue
+    kind: newtype
+    of: String
+
+  # An authority decision on one capability at one scope (Atlas ADR 0083 § Decision 1). Among the
+  # decisions covering a requirement, denied wins over require_approval, which wins over granted;
+  # a requirement no decision covers is not granted (default deny). An action whose precondition is
+  # true is admissible when every requirement is granted; blocked when one is denied, naming each
+  # denied requirement; and approval-required when none is denied and one requires approval or is
+  # not decided, naming each such requirement (CANON-AUTHORITY-001, CANON-SCOPE-001).
+  # read from: crates/canon/src/model/authority.rs:50-64
+  # read from: crates/canon/src/eval/actions.rs:39-57
+  # read from: .engineering/planning/story/capability-scope.md:65-72
   - name: canon.protocol.Grant
     kind: enum
-    variants: ["granted", "denied"]
+    variants: ["granted", "require_approval", "denied"]
 
   # One claim's entry in a decision. An object rather than a bare value, so that later stories add
   # to it (story:evidence-revision-binding adds the excluded evidence).
