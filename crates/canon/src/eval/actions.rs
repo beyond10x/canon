@@ -36,18 +36,29 @@
 //!   rule, is a reason after those (story:case-composition), `{"children": [<outcome>, ...],
 //!   "value": <value>}`, its outcomes as the IR lists them, each form once, in the order of those
 //!   lists. Authority is not consulted.
-//! - `blocked`, when the precondition is `true` and the authority denies a capability the action
-//!   requires: each denied capability is a reason, `{"capability": <id>, "decision": "denied"}`.
-//!   Asking again would not change a denial.
-//! - `approval-required`, when the precondition is `true`, nothing is denied, and the authority
-//!   decides some required capability not at all (no `--authority` decides nothing): each such
-//!   capability is a reason, `{"capability": <id>, "decision": "none"}`.
-//! - `admissible`, when the precondition is `true` and every required capability is granted. An
-//!   action with no precondition and no requirement is always admissible.
+//! - `blocked`, when the precondition is `true` and the authority denies a requirement of the
+//!   action: each denied requirement is a reason, `{"capability": <id>, "decision": "denied"}`,
+//!   with `"scope": {<key>: <value>, ...}` added when the requirement has a scope. Asking again
+//!   would not change a denial.
+//! - `approval-required`, when the precondition is `true`, nothing is denied, and some requirement
+//!   requires approval or is not decided (no `--authority` decides nothing): each such requirement
+//!   is a reason, `{"capability": <id>, "decision": "require_approval"}` or `{"capability": <id>,
+//!   "decision": "none"}`, with its `"scope"` added likewise.
+//! - `admissible`, when the precondition is `true` and every requirement is granted. An action
+//!   with no precondition and no requirement is always admissible.
 //!
-//! Capability reasons are in capability order, each capability once, whatever order the IR
-//! lists them in. A protocol that declares no action has no `actions`
-//! section.
+//! A requirement is a capability at a scope, or without one (story:capability-scope). The
+//! authority decisions on its capability that cover it decide it: a decision covers it when the
+//! requirement gives every scope key the decision gives a value for that same value. So a key the
+//! decision leaves out covers every value of it, a decision without a scope covers every
+//! requirement of its capability, and coverage never widens inwards: a decision for `{cluster:
+//! prod-eu, namespace: foo}` does not cover a requirement for `{cluster: prod-eu}`, nor one without
+//! a scope. Of the decisions covering it, `denied` wins over `require_approval`, which wins over
+//! `granted`; a requirement none covers is not decided (default deny).
+//!
+//! Capability reasons are in requirement order, by capability and then by scope (none first), each
+//! requirement once, whatever order the IR lists them in. A protocol that declares no action has
+//! no `actions` section.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -55,7 +66,7 @@ use serde_json::{Map, Value};
 
 use super::authority::Authority;
 use super::claims::{EvidenceSets, Inputs, predicate};
-use crate::ir::{Action, Ir};
+use crate::ir::{Action, Ir, Scope};
 use crate::model::{
     ArtifactId, CapabilityId, ClaimId, EvidenceKindId, EvidenceMatch, Grant,
     IndependenceDimensionId, InputId, Json, Predicate, Truth,
@@ -105,30 +116,51 @@ fn admissibility(
             unmet(&action.precondition, claims, inputs, evidence),
         );
     }
-    let decision = |capability| authority.and_then(|authority| authority.decision(capability));
-    // Each capability once, in capability order, whatever order the IR holds them in.
-    let required: BTreeSet<&CapabilityId> = action.requires.iter().collect();
-    let with = |wanted: Option<Grant>| -> Vec<Value> {
-        required
+    // Each requirement once, by capability and then by scope, whatever order the IR holds them in.
+    let required: BTreeSet<(&CapabilityId, &Scope)> = action.requirements().collect();
+    let decided: Vec<(&CapabilityId, &Scope, Option<Grant>)> = required
+        .into_iter()
+        .map(|(capability, scope)| {
+            let grant = authority.and_then(|authority| authority.decide(capability, scope));
+            (capability, scope, grant)
+        })
+        .collect();
+    let named = |wanted: &dyn Fn(Option<Grant>) -> bool| -> Vec<Value> {
+        decided
             .iter()
-            .filter(|capability| decision(capability) == wanted)
-            .map(|capability| {
-                reason([
-                    ("capability", capability.as_str()),
-                    ("decision", wanted.map_or("none", Grant::as_str)),
-                ])
-            })
+            .filter(|(_, _, grant)| wanted(*grant))
+            .map(|(capability, scope, grant)| requirement_reason(capability, scope, *grant))
             .collect()
     };
-    let denied = with(Some(Grant::Denied));
+    let denied = named(&|grant| grant == Some(Grant::Denied));
     if !denied.is_empty() {
         return ("blocked", denied);
     }
-    let undecided = with(None);
-    if !undecided.is_empty() {
-        return ("approval-required", undecided);
+    let not_granted = named(&|grant| grant != Some(Grant::Granted));
+    if !not_granted.is_empty() {
+        return ("approval-required", not_granted);
     }
     ("admissible", Vec::new())
+}
+
+/// A capability reason: `{"capability": <id>, "decision": <decision or "none">}`, with
+/// `"scope": {<key>: <value>, …}` when the requirement has a scope.
+fn requirement_reason(capability: &CapabilityId, scope: &Scope, grant: Option<Grant>) -> Value {
+    let mut entry = Map::from_iter([
+        ("capability".to_owned(), Value::from(capability.as_str())),
+        (
+            "decision".to_owned(),
+            Value::from(grant.map_or("none", Grant::as_str)),
+        ),
+    ]);
+    if !scope.is_empty() {
+        let members = scope
+            .iter()
+            .map(|(key, value)| (key.as_str().to_owned(), Value::from(value.as_str())))
+            .collect();
+        entry.insert("scope".to_owned(), Value::Object(members));
+    }
+    Value::Object(entry)
 }
 
 /// An evidence match as a reason names it: its kind, its subject and the dimensions it demands
@@ -472,6 +504,62 @@ mod tests {
         assert!(
             found.contains(r#""gated":{"status":"admissible"}"#),
             "{found}"
+        );
+    }
+
+    /// Each requirement is decided on its own, from the decisions on its capability that cover it.
+    /// The approval reasons name every requirement not granted, `require_approval` and undecided
+    /// alike, by capability and then by scope (none first); a denial of one scope blocks, naming
+    /// only that requirement.
+    #[test]
+    fn each_scoped_requirement_is_decided_and_named_on_its_own() {
+        let ir = ir("format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+             actions:\n  act:\n    requires:\n      \
+             - {capability: m, scope: {cluster: b, namespace: foo}}\n      \
+             - {capability: m, scope: {cluster: a}}\n      \
+             - {capability: m}\n      \
+             - {capability: d, scope: {cluster: a}}\n");
+        let section_with = |text: &str| {
+            let given = authority(text);
+            let section = section(
+                &ir,
+                &BTreeMap::new(),
+                &Inputs::new(),
+                EvidenceSets::default(),
+                Some(&given),
+            )
+            .expect("a section");
+            section["act"].clone()
+        };
+        let none =
+            |capability: &str| serde_json::json!({"capability": capability, "decision": "none"});
+        assert_eq!(
+            section_with(
+                "- {capability: m, scope: {cluster: a}, decision: require_approval}\n\
+                 - {capability: m, scope: {namespace: foo}, decision: granted}\n\
+                 - {capability: d, decision: granted}\n"
+            ),
+            serde_json::json!({"status": "approval-required", "reasons": [
+                none("m"),
+                {"capability": "m", "decision": "require_approval", "scope": {"cluster": "a"}},
+            ]})
+        );
+        assert_eq!(
+            section_with(
+                "- {capability: m, decision: granted}\n\
+                 - {capability: m, scope: {cluster: b}, decision: denied}\n\
+                 - {capability: d, scope: {cluster: a}, decision: granted}\n"
+            ),
+            serde_json::json!({"status": "blocked", "reasons": [
+                {"capability": "m", "decision": "denied", "scope": {"cluster": "b", "namespace": "foo"}},
+            ]})
+        );
+        assert_eq!(
+            section_with(
+                "- {capability: m, decision: granted}\n- {capability: d, decision: granted}\n"
+            ),
+            serde_json::json!({"status": "admissible"}),
+            "an unscoped grant covers every scope of its capability"
         );
     }
 

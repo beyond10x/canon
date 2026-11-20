@@ -212,11 +212,12 @@ revision of its subject, an expired one and an invalidated one still count.
 
 ## `CapabilityRequirement`
 
-One capability an action requires authority for.
+One capability an action requires authority for, at a scope (Atlas ADR 0083 § Decision 1).
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `capability` | [identifier](#identifiers) (`CapabilityId`) | required | — |
+| `scope` | map from [identifier](#identifiers) (`ScopeKey`) to [identifier](#identifiers) (`ScopeValue`) | optional | The scope the capability is required at: one value for each key it names (`{cluster: prod-eu, namespace: foo}`), each key once. Absent or empty, the requirement is unscoped, and only an authority decision without a scope covers it. |
 
 ## `EvidenceProduction`
 
@@ -366,6 +367,8 @@ An identifier is text. A well-formed identifier is not empty, and without whites
 
 | Type | Identifies |
 |---|---|
+| `ScopeKey` | A key of a capability scope (`cluster`, `namespace`): what the scope narrows the capability to. An identifier. |
+| `ScopeValue` | The value a capability scope gives one key (`prod-eu`). An identifier. |
 | `ProtocolId` | Identifies a protocol, independently of its revision. |
 | `ArtifactId` | Identifies an artifact a protocol declares. |
 | `ClaimId` | Identifies a claim a protocol declares. |

@@ -28,7 +28,7 @@ use crate::model::{
     EvidenceAfter, EvidenceKind, EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceProduction,
     EvidenceSince, FirstResult, IndependenceDimension, IndependenceDimensionId, InputId, InputTest,
     InputValue, LaterRecord, Obligation, Outcome, OutcomeRequirement, Predicate, Protocol,
-    ProtocolHeader, ProtocolId, Truth, one_line,
+    ProtocolHeader, ProtocolId, ScopeKey, ScopeValue, Truth, one_line,
 };
 
 /// A `malformed-input` refusal: `what` is not a document of its format, and why.
@@ -339,6 +339,7 @@ fn action(entry: &Json) -> Shape<Action> {
         .map(|item| {
             Ok(CapabilityRequirement {
                 capability: CapabilityId::new(text(item, "capability")?),
+                scope: scope(item)?,
             })
         })
         .collect::<Shape<_>>()?;
@@ -367,6 +368,22 @@ fn action(entry: &Json) -> Shape<Action> {
             }),
         },
     })
+}
+
+/// A capability requirement's scope; the IR writes the key only when the scope names a key, each
+/// value a string.
+fn scope(item: &Json) -> Shape<Declarations<ScopeKey, ScopeValue>> {
+    if field(item, "scope").is_none() {
+        return Ok(Declarations::default());
+    }
+    let mut entries = Vec::new();
+    for (key, value) in section(item, "scope")? {
+        let value = value
+            .as_str()
+            .ok_or_else(|| format!("the value of scope key `{}` is not a string", one_line(key)))?;
+        entries.push((ScopeKey::new(key.as_str()), ScopeValue::new(value)));
+    }
+    Ok(Declarations::new(entries))
 }
 
 /// An outcome's requirement: `{"decision": <name>}`, or a predicate.
@@ -493,6 +510,48 @@ mod tests {
     fn the_ir_canon_compile_prints_reads_back_as_the_same_ir() {
         let ir = compiled();
         assert_eq!(read_ir(&ir.canonical_json()), Ok(ir));
+    }
+
+    /// A requirement's scope reads back as compiled; an empty scope, which the compiler never
+    /// writes, a value that is not a string and a key that is not an identifier are refused.
+    #[test]
+    fn a_scoped_requirement_reads_back_and_any_other_scope_is_refused() {
+        let ir = ir::compile(
+            &model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 actions: {act: {requires: [{capability: m, scope: {namespace: foo, cluster: prod-eu}}, \
+                 {capability: m}]}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let text = ir.canonical_json();
+        let scoped = "\"scope\": {\n            \"cluster\": \"prod-eu\",\n            \"namespace\": \"foo\"\n          }";
+        assert!(text.contains(scoped), "{text}");
+        assert_eq!(read_ir(&text), Ok(ir));
+        for (replacement, why) in [
+            ("\"scope\": {}", "not the canonical text"),
+            (
+                "\"scope\": {\n            \"cluster\": 1,\n            \"namespace\": \"foo\"\n          }",
+                "the value of scope key `cluster` is not a string",
+            ),
+            (
+                "\"scope\": {\n            \"clu ster\": \"prod-eu\",\n            \"namespace\": \"foo\"\n          }",
+                "invalid-identifier",
+            ),
+            ("\"scope\": [\"cluster\"]", "`scope` is not an object"),
+        ] {
+            let refused = read_ir(&text.replace(scoped, replacement)).expect_err(replacement);
+            assert_eq!(
+                refused.code(),
+                "malformed-input",
+                "{replacement}: {refused}"
+            );
+            assert!(
+                refused.to_string().contains(why),
+                "{replacement}: {refused}"
+            );
+        }
     }
 
     /// A maximum age reads back as written; one that is not a string, or an explicit null the

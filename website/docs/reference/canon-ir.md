@@ -14,7 +14,9 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
 
 - **Canonical ordering.** Declarations are keyed and ordered by identifier, not by the order they
   are written in. The members of an `all` or `any` predicate are sorted by `canonical_order`,
-  and an action's capability requirements, the evidence kinds it may produce, the claims an
+  and an action's capability requirements (by capability, then by scope, one without a scope
+  first, a scope comparing its keys and values in key order), the evidence kinds it may
+  produce, the claims an
   invalidation rule invalidates, the values a case input declares, the values an input test
   lists and the dimensions an evidence match demands independence on by identifier, and the
   outcomes a `children` form lists by code point.
@@ -25,13 +27,14 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
 - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
   evidence match without a result has `"result": null`; a claim test without `is` has
   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-  true; absent lists and sections are empty. The nine exceptions are an evidence kind's
+  true; absent lists and sections are empty. The ten exceptions are an evidence kind's
   `max_age`, the `subject` of an evidence match or an order form, an evidence match's
   `independent_on`, an obligation's `applicable_when`, an action's `arguments`, an action's
-  `case_open`, the `invalidation` section, the `case` section and the
-  `independence_dimensions` section: each written only when it is declared (a
-  section only when it holds a rule, an input or a dimension), so the IR of a protocol that
-  declares none of them is the IR it was before they existed. The `independence_dimensions`
+  `case_open`, the `scope` of a capability requirement, the `invalidation` section, the `case`
+  section and the `independence_dimensions` section: each written only when it is declared (a
+  scope only when it names a key, a section only when it holds a rule, an input or a
+  dimension), so the IR of a protocol that declares none of them is the IR it was before they
+  existed. A capability requirement is `{"capability": …}`, or `{"capability": …, "scope": {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
   section is `{<id>: {"description": …}}`. The `case` section is
   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
   authored: `{"first": {"kind": …, "result": …}}`, `{"before": {"first": …, "then": …}}`,

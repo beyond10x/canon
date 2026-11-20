@@ -121,3 +121,14 @@ requirements:
       and MUST be TRUE only when every child case ended with an outcome it lists. Two outcome
       records for one child case MUST be refused.
     source: story:case-composition
+  CANON-SCOPE-001:
+    status: implemented
+    statement: >-
+      A capability requirement no authority decision covers MUST NOT be treated as granted. A
+      decision MUST cover a requirement of its capability only when the requirement gives every
+      scope key the decision gives a value for that same value, and MUST cover every value of a key
+      it gives no value for. Among the decisions covering a requirement, a denial MUST win over
+      require_approval and require_approval over a grant; a denied requirement MUST block the
+      action, naming the denied capability, and one requiring approval MUST make it
+      approval-required.
+    source: story:capability-scope

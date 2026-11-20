@@ -12,7 +12,8 @@
 //!   `inputs`, each case input's value, when the case gives any, and `independence`, each producer
 //!   with the dimensions it is independent on, in identifier order, when the case lists any),
 //!   the ids of the evidence set (`evidence`), and, each only when supplied, the authority
-//!   decisions (`authority`, `{"capability", "decision"}` entries), the explicit decisions
+//!   decisions (`authority`, `{"capability", "decision"}` entries, with `"scope"` added to one
+//!   that has a scope, by capability and then by scope, none first), the explicit decisions
 //!   (`decisions`, `{"case_revision", "decision", "outcome", "principal"}` entries) and the
 //!   evaluation instant (`at`).
 //! - `outcomes`: each blocked outcome, `{"because": [...], "status": "blocked"}`.
@@ -368,17 +369,26 @@ fn case_snapshot(case: &Case) -> Value {
     Value::Object(snapshot)
 }
 
-/// The authority decisions as the evaluator read and applied them, by capability.
+/// The authority decisions as the evaluator read and applied them, by capability and then by
+/// scope (none first), each with its scope when it has one.
 fn authority(authority: &Authority) -> Value {
-    sorted(
-        authority
-            .decisions()
-            .map(|(capability, decision)| (capability.as_str(), decision))
-            .collect(),
-    )
-    .into_iter()
-    .map(|(capability, decision)| json!({"capability": capability, "decision": decision}))
-    .collect()
+    authority
+        .decisions()
+        .map(|(capability, scope, decision)| {
+            let mut entry = Map::from_iter([
+                ("capability".to_owned(), json!(capability.as_str())),
+                ("decision".to_owned(), json!(decision)),
+            ]);
+            if !scope.is_empty() {
+                let members: Map<String, Value> = scope
+                    .iter()
+                    .map(|(key, value)| (key.as_str().to_owned(), json!(value.as_str())))
+                    .collect();
+                entry.insert("scope".to_owned(), Value::Object(members));
+            }
+            Value::Object(entry)
+        })
+        .collect()
 }
 
 /// The explicit decisions as the evaluator read them, by decision, outcome, principal and case
@@ -671,6 +681,41 @@ mod tests {
             "`look` is admissible and not explained"
         );
         assert_eq!(explained["computed_from"]["evidence"], json!(["e1", "e2"]));
+    }
+
+    /// Scoped authority decisions are recorded with their scope, by capability and then by scope
+    /// (none first), whatever order they were given in, each as it was decided.
+    #[test]
+    fn scoped_authority_decisions_are_recorded_with_their_scope() {
+        let given = |authority: &'static str| Supplied {
+            authority: Some(authority),
+            ..Supplied::default()
+        };
+        let one = explanation(
+            &[],
+            given(
+                "- {capability: cap, scope: {region: eu}, decision: require_approval}\n\
+                 - {capability: cap, scope: {cluster: b, region: eu}, decision: granted}\n\
+                 - {capability: cap, decision: denied}\n",
+            ),
+        );
+        let two = explanation(
+            &[],
+            given(
+                "- {capability: cap, decision: denied}\n\
+                 - {capability: cap, scope: {region: eu, cluster: b}, decision: granted}\n\
+                 - {capability: cap, scope: {region: eu}, decision: require_approval}\n",
+            ),
+        );
+        assert_eq!(one, two);
+        assert_eq!(
+            one["computed_from"]["authority"],
+            json!([
+                {"capability": "cap", "decision": "denied"},
+                {"capability": "cap", "decision": "granted", "scope": {"cluster": "b", "region": "eu"}},
+                {"capability": "cap", "decision": "require_approval", "scope": {"region": "eu"}},
+            ])
+        );
     }
 
     /// Supplied inputs are recorded in a fixed order, whatever order they were given in, and an

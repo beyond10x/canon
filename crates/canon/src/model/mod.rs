@@ -37,7 +37,7 @@ use serde::Deserialize;
 use serde::de::{MapAccess, Visitor};
 use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 
-pub use authority::{AUTHORITY_FORMAT, AuthorityDecision, Grant};
+pub use authority::{AUTHORITY_FORMAT, AuthorityDecision, Grant, ScopeKey, ScopeValue};
 pub use case::{CASE_FORMAT, Case, CaseArtifact};
 pub use catalogue::{
     NormativeRequirement, REQUIREMENTS_FORMAT, RequirementCatalogue, RequirementId,
@@ -234,12 +234,17 @@ pub struct CaseOpening {
     pub subject: ArtifactId,
 }
 
-/// One capability an action requires authority for.
+/// One capability an action requires authority for, at a scope (Atlas ADR 0083 § Decision 1).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CapabilityRequirement {
     #[serde(deserialize_with = "present::required")]
     pub capability: CapabilityId,
+    /// The scope the capability is required at: one value for each key it names
+    /// (`{cluster: prod-eu, namespace: foo}`), each key once. Absent or empty, the requirement is
+    /// unscoped, and only an authority decision without a scope covers it.
+    #[serde(default, deserialize_with = "present::defaulted")]
+    pub scope: Declarations<ScopeKey, ScopeValue>,
 }
 
 /// One evidence kind an action may produce.

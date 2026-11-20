@@ -109,26 +109,31 @@ evidence matches that demand an independence its producer lacks.
 
 ## `canon-authority/1`
 
-Read by `canon evaluate --authority`: a list of `AuthorityDecision` entries; an empty list is allowed. A capability decided twice is refused, whatever the decision; the JSON Schema cannot express that, and refuses only an entry repeated exactly. The [JSON Schema](https://beyond10x.github.io/canon/schemas/authority-1.schema.json) is generated from the same types.
+Read by `canon evaluate --authority`: a list of `AuthorityDecision` entries; an empty list is allowed. A capability decided twice at an equal scope (the same keys with the same values, in any order) is refused, whatever the decision; the JSON Schema cannot express that, and refuses only an entry repeated exactly. The [JSON Schema](https://beyond10x.github.io/canon/schemas/authority-1.schema.json) is generated from the same types.
 
 ### `AuthorityDecision`
 
-One entry of a `canon-authority/1` document: a capability and whether it is granted.
+One entry of a `canon-authority/1` document: a capability, the scope the decision covers and
+the decision.
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `capability` | [identifier](#identifiers) (`CapabilityId`) | required | The capability decided, an identifier an action's `requires` may name. |
+| `scope` | map from [identifier](#identifiers) (`ScopeKey`) to [identifier](#identifiers) (`ScopeValue`) | optional | The scope the decision covers: one value for each key it names, each key once. It covers a requirement of its capability when the requirement gives each of those keys the same value; a key it leaves out covers every value of it. Absent or empty, it covers every scope. |
 | `decision` | [`Grant`](#grant) | required | Whether it is granted. |
 
 ### `Grant`
 
-An authority decision on one capability. With its precondition `true`, an action is
-`admissible` when every capability it requires is granted, `blocked` when one is denied, and
-`approval-required` when none is denied and one is not decided.
+An authority decision on one capability at one scope. Among the decisions covering a
+requirement, `denied` wins over `require_approval`, which wins over `granted`; none covering it
+is not granted. With its precondition `true`, an action is `admissible` when every requirement
+is granted, `blocked` when one is denied, and `approval-required` when none is denied and one
+requires approval or is not decided.
 
 | Value | Meaning |
 |---|---|
 | `granted` | The capability is granted. |
+| `require_approval` | The capability is granted only with approval: asking for approval could grant it. |
 | `denied` | The capability is denied; asking again would not change it. |
 
 ## `canon-decisions/1`
@@ -195,6 +200,8 @@ An identifier is text. A well-formed identifier is not empty, and without whites
 
 | Type | Identifies |
 |---|---|
+| `ScopeKey` | A key of a capability scope (`cluster`, `namespace`): what the scope narrows the capability to. An identifier. |
+| `ScopeValue` | The value a capability scope gives one key (`prod-eu`). An identifier. |
 | `ProtocolId` | Identifies a protocol, independently of its revision. |
 | `CaseId` | Identifies one case governed by a protocol. |
 | `ArtifactId` | Identifies an artifact a protocol declares. |

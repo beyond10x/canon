@@ -6,21 +6,25 @@
 //! 1. the format;
 //! 2. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
 //!    claims, obligations, actions, outcomes, invalidation rules, case inputs and independence
-//!    dimensions, in that section order, then the capabilities and effect classes actions name and
-//!    the protocol each action's `case_open` names, in action order, then the decisions outcomes
+//!    dimensions, in that section order, then the capabilities actions name, each followed by the
+//!    keys and values of its scope in the order written, the effect classes actions name and the
+//!    protocol each action's `case_open` names, in action order, then the decisions outcomes
 //!    require, in outcome order, then the values case inputs declare, in input order;
 //! 3. duplicate identifiers, in the same section order;
-//! 4. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
+//! 4. capability requirements whose scope names a key more than once (`duplicate-scope-key`,
+//!    naming the action, the capability and the key, once for every naming after its first), in
+//!    the order the actions and their requirements are written;
+//! 5. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
 //!    or `d`, or that are but are too long to count in seconds (each with its own message), in the
 //!    order the evidence kinds are written;
-//! 5. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
+//! 6. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
 //!    more than once (`duplicate-input-value`, naming the input and the value, once for every
 //!    listing after its first), in the order the inputs are written;
-//! 6. action argument schemas outside the argument-schema dialect (`action-arguments`; the dialect,
+//! 7. action argument schemas outside the argument-schema dialect (`action-arguments`; the dialect,
 //!    and the order within one schema, are stated with it), each naming the action, the JSON
 //!    Pointer of the keyword inside the schema and why it is refused, one per offending keyword,
 //!    in the order the actions are written;
-//! 7. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
+//! 8. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
 //!    the artifact an evidence match names as its subject, which is reported after the kind it is
 //!    written beside, then the evidence match's `independent_on`: an empty list,
 //!    `empty-independent-on`, or a dimension it lists more than once, `duplicate-independent-on`,
@@ -51,11 +55,11 @@
 //!    artifact, then each claim the rule invalidates); within a section, in the order its
 //!    declarations are written, and within a declaration, in the order its references are
 //!    written;
-//! 8. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
+//! 9. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
 //!    claim it tests through any number of claim references (`inert-invalidation`), in the order
 //!    the rules and their claims are written. An order form or a `children` form is not an
 //!    evidence match here: it reads the history, which an invalidation rule does not change;
-//! 9. cycles between claims.
+//! 10. cycles between claims.
 //!
 //! Within a section, entries come in the order they are written. Every message renders document
 //! text on one line. The same document always yields the same problems in the same order.
@@ -66,9 +70,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use crate::model::{
-    ActionId, ArtifactId, CASE_OUTCOME, ClaimId, EvidenceKindId, FORMAT, IndependenceDimensionId,
-    InputId, InputValue, InvalidationRuleId, OPEN_OUTCOME, ObligationId, OutcomeId, Predicate,
-    Protocol, ProtocolId, is_identifier, one_line,
+    ActionId, ArtifactId, CASE_OUTCOME, CapabilityId, ClaimId, EvidenceKindId, FORMAT,
+    IndependenceDimensionId, InputId, InputValue, InvalidationRuleId, OPEN_OUTCOME, ObligationId,
+    OutcomeId, Predicate, Protocol, ProtocolId, ScopeKey, is_identifier, one_line,
 };
 
 /// What an identifier names: the protocol itself, a declaration section (named by the singular noun
@@ -90,6 +94,8 @@ pub enum Section {
     Input,
     InputValue,
     IndependenceDimension,
+    ScopeKey,
+    ScopeValue,
 }
 
 impl fmt::Display for Section {
@@ -109,6 +115,8 @@ impl fmt::Display for Section {
             Section::Input => "input",
             Section::InputValue => "input value",
             Section::IndependenceDimension => "independence dimension",
+            Section::ScopeKey => "scope key",
+            Section::ScopeValue => "scope value",
         })
     }
 }
@@ -189,6 +197,12 @@ pub enum Problem {
         obligation: ObligationId,
         kind: EvidenceKindId,
         path: String,
+    },
+    /// A capability requirement's scope names a key more than once.
+    DuplicateScopeKey {
+        action: ActionId,
+        capability: CapabilityId,
+        key: ScopeKey,
     },
     /// A case input declares no value, so no case could give it one.
     EmptyInputValues { input: InputId },
@@ -271,6 +285,7 @@ impl Problem {
             Problem::InvalidMaxAge { .. } => "invalid-max-age",
             Problem::EvidenceInDischarge { .. } => "evidence-in-discharge",
             Problem::EvidenceInApplicability { .. } => "evidence-in-applicability",
+            Problem::DuplicateScopeKey { .. } => "duplicate-scope-key",
             Problem::EmptyInputValues { .. } => "empty-input-values",
             Problem::DuplicateInputValue { .. } => "duplicate-input-value",
             Problem::EmptyInputTest { .. } => "empty-input-test",
@@ -359,6 +374,17 @@ impl fmt::Display for Problem {
                 "obligation `{}` tests evidence kind `{}` at `{path}`; an applicability predicate tests only claim values and case inputs",
                 one_line(obligation.as_str()),
                 one_line(kind.as_str())
+            ),
+            Problem::DuplicateScopeKey {
+                action,
+                capability,
+                key,
+            } => write!(
+                f,
+                "action `{}` requires capability `{}` with scope key `{}` more than once",
+                one_line(action.as_str()),
+                one_line(capability.as_str()),
+                one_line(key.as_str())
             ),
             Problem::EmptyInputValues { input } => {
                 write!(f, "input `{}` declares no value", one_line(input.as_str()))
@@ -501,6 +527,10 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
     for (_, action) in protocol.actions.iter() {
         for requirement in &action.requires {
             named.push((Section::Capability, requirement.capability.as_str()));
+            for (key, value) in requirement.scope.iter() {
+                named.push((Section::ScopeKey, key.as_str()));
+                named.push((Section::ScopeValue, value.as_str()));
+            }
         }
         if let Some(effect) = &action.effect {
             named.push((Section::EffectClass, effect.as_str()));
@@ -534,6 +564,21 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
 
     for (section, ids) in &declared {
         duplicates(*section, ids, &mut problems);
+    }
+
+    for (id, action) in protocol.actions.iter() {
+        for requirement in &action.requires {
+            let mut seen = BTreeSet::new();
+            for key in requirement.scope.ids() {
+                if !seen.insert(key) {
+                    problems.push(Problem::DuplicateScopeKey {
+                        action: id.clone(),
+                        capability: requirement.capability.clone(),
+                        key: key.clone(),
+                    });
+                }
+            }
+        }
     }
 
     for (id, kind) in protocol.evidence_kinds.iter() {
@@ -1067,6 +1112,40 @@ mod tests {
                     .replace("{evidence: {kind: z}}", "{claim: c}")
                     .replace("{claim: x}", "{claim: c}")
                     .replace("{claim: y}", "{claim: c}")
+            ),
+            Vec::<String>::new()
+        );
+    }
+
+    /// A capability requirement's scope keys and values are identifiers, checked right after its
+    /// capability; a key is named once per requirement, reported after the duplicate identifiers
+    /// and before the maximum ages. One capability at several scopes, or with and without one, is
+    /// valid.
+    #[test]
+    fn a_requirement_scope_names_each_key_once_with_identifiers() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            evidence_kinds: {k: {max_age: 5x}}\n\
+            actions:\n  b: {}\n  b: {}\n  a:\n    effect: 'bad effect'\n    requires:\n      \
+            - {capability: m, scope: {'clu ster': prod-eu, namespace: ''}}\n      \
+            - {capability: m, scope: {cluster: a, namespace: foo, cluster: b, cluster: c}}\n      \
+            - {capability: n, scope: {cluster: a}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "invalid-identifier: scope key identifier `clu ster` is empty or contains whitespace or a control character",
+                "invalid-identifier: scope value identifier `` is empty or contains whitespace or a control character",
+                "invalid-identifier: effect class identifier `bad effect` is empty or contains whitespace or a control character",
+                "duplicate-identifier: action `b` is declared more than once",
+                "duplicate-scope-key: action `a` requires capability `m` with scope key `cluster` more than once",
+                "duplicate-scope-key: action `a` requires capability `m` with scope key `cluster` more than once",
+                "invalid-max-age: evidence kind `k` has max_age `5x`, which is not a whole number without leading zeros, followed by s, m, h or d",
+            ]
+        );
+        assert_eq!(
+            problems(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 actions: {a: {requires: [{capability: m}, {capability: m, scope: {cluster: a}}, \
+                 {capability: m, scope: {cluster: b, namespace: foo}}, {capability: m, scope: {}}]}}\n"
             ),
             Vec::<String>::new()
         );

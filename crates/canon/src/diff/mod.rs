@@ -31,7 +31,7 @@
 //! | applicability predicate changed | `BREAKING` |
 //! | action added | `EXPANSION` |
 //! | action removed | `BREAKING` |
-//! | capability requirement added to an action | `TIGHTENING` |
+//! | capability requirement added to an action (a requirement is a capability and its scope, so a changed scope is one removed and one added) | `TIGHTENING` |
 //! | capability requirement removed from an action | `RELAXATION` |
 //! | action effect changed | `BREAKING` |
 //! | evidence kind an action may produce added | `EXPANSION` |
@@ -930,12 +930,31 @@ fn obligation(changes: &mut Changes, id: &str, from: &Obligation, to: &Obligatio
     }
 }
 
+/// An action's capability requirements as a change names them: the capability, followed by its
+/// scope when it has one, `metrics.read{cluster: prod-eu, namespace: foo}`.
+fn requirements(action: &Action) -> Vec<String> {
+    action
+        .requirements()
+        .map(|(capability, scope)| {
+            if scope.is_empty() {
+                return capability.as_str().to_owned();
+            }
+            let members: Vec<String> = scope
+                .iter()
+                .map(|(key, value)| format!("{}: {}", key.as_str(), value.as_str()))
+                .collect();
+            format!("{}{{{}}}", capability.as_str(), members.join(", "))
+        })
+        .collect()
+}
+
 fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
     const SECTION: &str = "action";
     let Action {
         description: from_description,
         precondition: from_precondition,
-        requires: from_requires,
+        requires: _,
+        scopes: _,
         effect: from_effect,
         may_produce: from_may_produce,
         arguments: from_arguments,
@@ -944,7 +963,8 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
     let Action {
         description: to_description,
         precondition: to_precondition,
-        requires: to_requires,
+        requires: _,
+        scopes: _,
         effect: to_effect,
         may_produce: to_may_produce,
         arguments: to_arguments,
@@ -958,11 +978,12 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         from_precondition,
         to_precondition,
     );
+    // `requires` and `scopes` are compared together, as the requirements they make up.
     changes.members(
         SECTION,
         id,
-        from_requires,
-        to_requires,
+        &requirements(from),
+        &requirements(to),
         (Category::Relaxation, "no longer requires capability"),
         (Category::Tightening, "now requires capability"),
     );
@@ -1261,6 +1282,31 @@ mod tests {
                 "BREAKING: action `z` removed",
             ]
         );
+    }
+
+    /// A requirement is its capability and its scope: a changed scope is one requirement removed
+    /// and one added, each named with its scope; an unchanged scope is no change.
+    #[test]
+    fn a_changed_scope_is_a_requirement_removed_and_one_added() {
+        let from = ir("actions: {b: {requires: [{capability: k, scope: {cluster: a}}]}}\n");
+        let to = ir(
+            "actions: {b: {requires: [{capability: k, scope: {namespace: foo, cluster: b}}]}}\n",
+        );
+        assert_eq!(
+            lines(&from, &to),
+            [
+                "RELAXATION: action `b` no longer requires capability `k{cluster: a}`",
+                "TIGHTENING: action `b` now requires capability `k{cluster: b, namespace: foo}`",
+            ]
+        );
+        assert_eq!(
+            lines(&from, &ir("actions: {b: {requires: [{capability: k}]}}\n")),
+            [
+                "RELAXATION: action `b` no longer requires capability `k{cluster: a}`",
+                "TIGHTENING: action `b` now requires capability `k`",
+            ]
+        );
+        assert_eq!(lines(&from, &from), Vec::<String>::new());
     }
 
     /// The report's lines, without the header line.

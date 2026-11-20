@@ -1,39 +1,64 @@
 //! The `canon-authority/1` authority decisions an evaluation may read (`--authority`): which
-//! capabilities whoever runs the evaluation grants or denies (design § 33).
+//! capabilities, at which scope, whoever runs the evaluation grants, grants only with approval or
+//! denies (design § 33, Atlas ADR 0083 § Decision 1).
 //!
 //! The document is a YAML (or JSON) list of entries:
 //!
 //! ```yaml
-//! - capability: finding.publish
-//!   decision: granted        # or denied
+//! - capability: metrics.read
+//!   scope: {cluster: prod-eu}  # optional: absent, the decision covers every scope
+//!   decision: granted          # or require_approval, or denied
 //! ```
 
-use serde::Deserialize;
+use std::fmt;
 
+use serde::{Deserialize, Deserializer, Serialize};
+
+use super::Declarations;
 use super::ids::CapabilityId;
 
 /// The authority decisions format the evaluator reads.
 pub const AUTHORITY_FORMAT: &str = "canon-authority/1";
 
-/// One entry of a `canon-authority/1` document: a capability and whether it is granted.
+identifier!(
+    /// A key of a capability scope (`cluster`, `namespace`): what the scope narrows the capability
+    /// to. An identifier.
+    ScopeKey
+);
+identifier!(
+    /// The value a capability scope gives one key (`prod-eu`). An identifier.
+    ScopeValue
+);
+
+/// One entry of a `canon-authority/1` document: a capability, the scope the decision covers and
+/// the decision.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AuthorityDecision {
     /// The capability decided, an identifier an action's `requires` may name.
     #[serde(deserialize_with = "super::present::required")]
     pub capability: CapabilityId,
+    /// The scope the decision covers: one value for each key it names, each key once. It covers a
+    /// requirement of its capability when the requirement gives each of those keys the same value;
+    /// a key it leaves out covers every value of it. Absent or empty, it covers every scope.
+    #[serde(default, deserialize_with = "super::present::defaulted")]
+    pub scope: Declarations<ScopeKey, ScopeValue>,
     /// Whether it is granted.
     pub decision: Grant,
 }
 
-/// An authority decision on one capability. With its precondition `true`, an action is
-/// `admissible` when every capability it requires is granted, `blocked` when one is denied, and
-/// `approval-required` when none is denied and one is not decided.
+/// An authority decision on one capability at one scope. Among the decisions covering a
+/// requirement, `denied` wins over `require_approval`, which wins over `granted`; none covering it
+/// is not granted. With its precondition `true`, an action is `admissible` when every requirement
+/// is granted, `blocked` when one is denied, and `approval-required` when none is denied and one
+/// requires approval or is not decided.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum Grant {
     /// The capability is granted.
     Granted,
+    /// The capability is granted only with approval: asking for approval could grant it.
+    RequireApproval,
     /// The capability is denied; asking again would not change it.
     Denied,
 }
@@ -43,7 +68,18 @@ impl Grant {
     pub fn as_str(self) -> &'static str {
         match self {
             Grant::Granted => "granted",
+            Grant::RequireApproval => "require_approval",
             Grant::Denied => "denied",
+        }
+    }
+
+    /// How the decision ranks among those covering one requirement: the highest applies, so
+    /// `denied` over `require_approval` over `granted`.
+    pub fn precedence(self) -> u8 {
+        match self {
+            Grant::Granted => 0,
+            Grant::RequireApproval => 1,
+            Grant::Denied => 2,
         }
     }
 }

@@ -15,21 +15,25 @@ does not depend on the order the sections are written in:
 1. the format;
 2. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
    claims, obligations, actions, outcomes, invalidation rules, case inputs and independence
-   dimensions, in that section order, then the capabilities and effect classes actions name and
-   the protocol each action's `case_open` names, in action order, then the decisions outcomes
+   dimensions, in that section order, then the capabilities actions name, each followed by the
+   keys and values of its scope in the order written, the effect classes actions name and the
+   protocol each action's `case_open` names, in action order, then the decisions outcomes
    require, in outcome order, then the values case inputs declare, in input order;
 3. duplicate identifiers, in the same section order;
-4. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
+4. capability requirements whose scope names a key more than once (`duplicate-scope-key`,
+   naming the action, the capability and the key, once for every naming after its first), in
+   the order the actions and their requirements are written;
+5. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
    or `d`, or that are but are too long to count in seconds (each with its own message), in the
    order the evidence kinds are written;
-5. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
+6. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
    more than once (`duplicate-input-value`, naming the input and the value, once for every
    listing after its first), in the order the inputs are written;
-6. action argument schemas outside the argument-schema dialect (`action-arguments`; the dialect,
+7. action argument schemas outside the argument-schema dialect (`action-arguments`; the dialect,
    and the order within one schema, are stated with it), each naming the action, the JSON
    Pointer of the keyword inside the schema and why it is refused, one per offending keyword,
    in the order the actions are written;
-7. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
+8. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
    the artifact an evidence match names as its subject, which is reported after the kind it is
    written beside, then the evidence match's `independent_on`: an empty list,
    `empty-independent-on`, or a dimension it lists more than once, `duplicate-independent-on`,
@@ -60,11 +64,11 @@ does not depend on the order the sections are written in:
    artifact, then each claim the rule invalidates); within a section, in the order its
    declarations are written, and within a declaration, in the order its references are
    written;
-8. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
+9. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
    claim it tests through any number of claim references (`inert-invalidation`), in the order
    the rules and their claims are written. An order form or a `children` form is not an
    evidence match here: it reads the history, which an invalidation rule does not change;
-9. cycles between claims.
+10. cycles between claims.
 
 Within a section, entries come in the order they are written. Every message renders document
 text on one line. The same document always yields the same problems in the same order.
@@ -120,6 +124,7 @@ object in code-point order, and the walk keeps a stack of its own, never recursi
 | `invalid-max-age` | An evidence kind's `max_age` is not a whole number without leading zeros, followed by `s`, `m`, `h` or `d`, or is too long to count in seconds. |
 | `evidence-in-discharge` | A discharge predicate tests evidence; it may test only claim values. `path` locates the evidence match or order form inside the predicate, as `discharged_when.all[1].evidence` or `discharged_when.first`. |
 | `evidence-in-applicability` | An applicability predicate tests evidence; it may test only claim values and case inputs. `path` locates the evidence match or order form inside the predicate, as `applicable_when.not.evidence` or `applicable_when.before`. |
+| `duplicate-scope-key` | A capability requirement's scope names a key more than once. |
 | `empty-input-values` | A case input declares no value, so no case could give it one. |
 | `duplicate-input-value` | A case input lists a value more than once. |
 | `empty-input-test` | An input test lists no value, so it is false in every case. |
