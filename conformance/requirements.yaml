@@ -121,6 +121,17 @@ requirements:
       and MUST be TRUE only when every child case ended with an outcome it lists. Two outcome
       records for one child case MUST be refused.
     source: story:case-composition
+  CANON-IMPORT-001:
+    status: implemented
+    statement: >-
+      A protocol MAY import other protocols, each pinned to its revision and to the digest of its
+      compiled IR. Compiling it with exactly the documents it imports, directly or through another
+      import, MUST give one closed IR that names the importing protocol only, holds every imported
+      declaration once and no import, and does not depend on the order the documents are given in.
+      An import without a document, a document no import names, a revision or digest other than the
+      pin, an import cycle, a redeclaration not listed under refines and two imports that declare
+      one identifier differently MUST be refused.
+    source: story:protocol-imports
   CANON-SCOPE-001:
     status: implemented
     statement: >-

@@ -15,7 +15,8 @@
 # action declares. story:case-composition adds the child case an action opens (`case_open`), the
 # child case a case_outcome evidence record names and the predicate form `children` over the
 # outcomes of a case's child cases. story:capability-scope adds the scope a capability requirement
-# and an authority decision may carry, and the decision require_approval.
+# and an authority decision may carry, and the decision require_approval. story:protocol-imports
+# adds the imports a protocol declares, each pinned to a revision and a digest.
 # crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
 domain: canon.protocol
 
@@ -438,6 +439,48 @@ types:
       # read from: .engineering/planning/story/evidence-independence.md:63-64
       - name: description
         type: Optional<String>
+
+  # One protocol a protocol imports (story:protocol-imports), keyed by the imported protocol's id in
+  # the importing protocol's `imports` section. A value inside its protocol, so a type, not an
+  # entity. It pins exactly one document: there is no range and no "latest". A protocol with
+  # imports compiles only with the documents it imports, directly or through another import,
+  # passed to the compile, and with nothing else: `canon validate`, `canon compile` and
+  # `canon check` take each with `--import <path>`, and a canon-conformance/1 scenario lists them
+  # under `imports`. The documents compose into one protocol/1 document, which compiles into one
+  # closed canon-ir/1 naming the importing protocol's id and revision only and holding no import,
+  # so canon-ir/1 does not change; what composition means, and each refusal, is CANON-IMPORT-001
+  # (conformance/scenarios/imports.yaml) and Canon's own tests, not this file.
+  # read from: .engineering/planning/story/protocol-imports.md:66-69
+  # read from: .engineering/planning/story/protocol-imports.md:197-203
+  # read from: crates/canon/src/model/mod.rs:153-169
+  - name: canon.protocol.Import
+    kind: struct
+    fields:
+      # The revision of the imported protocol the import reads; a supplied document of another
+      # revision is refused (import-revision-mismatch). Never negative, as a protocol's revision is
+      # not; ess_model_matches.rs reads it as a u64.
+      # read from: .engineering/planning/story/protocol-imports.md:66-69
+      # read from: crates/canon/src/model/mod.rs:159-160
+      - name: revision
+        type: Integer
+      # The digest of the imported protocol's compiled canon-ir/1, composed with its own imports:
+      # `sha256:` followed by the 64 lowercase hexadecimal digits of the SHA-256 of the bytes
+      # `canon compile` prints (canon validate refuses another form, invalid-import-digest). A
+      # supplied document that compiles to other bytes is refused (import-digest-mismatch),
+      # printing the pinned and the actual digest.
+      # read from: .engineering/planning/story/protocol-imports.md:66-69
+      # read from: .engineering/planning/story/protocol-imports.md:89-91
+      # read from: crates/canon/src/model/mod.rs:161-164
+      - name: digest
+        type: String
+      # The identifiers of the imported declarations the importing protocol may redeclare, of any
+      # declaration section; a redeclaration replaces the imported declaration whole. Each names
+      # an identifier the import declares (undeclared-refinement otherwise). Absent: none.
+      # read from: .engineering/planning/story/protocol-imports.md:83-88
+      # read from: .engineering/planning/story/protocol-imports.md:197-203
+      # read from: crates/canon/src/model/mod.rs:165-168
+      - name: refines
+        type: List<String>
 
   # A three-valued truth value; unknown is not false.
   # read from: crates/canon/src/model/predicate.rs:69-75
@@ -1091,6 +1134,16 @@ entities:
       # read from: .engineering/planning/story/evidence-independence.md:63-65
       - name: independence_dimensions
         type: Map<canon.protocol.IndependenceDimensionId, canon.protocol.IndependenceDimension>
+      # The protocols this protocol imports, keyed by protocol id like every declaration section
+      # (story:protocol-imports). Optional: a protocol without the section imports nothing, and
+      # since canon-ir/1 holds no import, the IR of every earlier protocol is unchanged. canon
+      # validate refuses an import id that is not an identifier (invalid-identifier) or is listed
+      # twice (duplicate-identifier), and a malformed digest (invalid-import-digest).
+      # read from: .engineering/planning/story/protocol-imports.md:66-69
+      # read from: .engineering/planning/story/protocol-imports.md:197-203
+      # read from: crates/canon/src/model/mod.rs:98-102
+      - name: imports
+        type: Map<canon.protocol.ProtocolId, canon.protocol.Import>
     # revision is a u64 (crates/canon/src/model/mod.rs:54); ESS Integer is signed.
     invariants:
       - revision >= 0

@@ -30,7 +30,7 @@ errors:
     summary: A document was read and rejected, or the command refused or found something.
     fields:
       # What canon printed about it: `error[<code>]: …` lines, or a check's or a run's report.
-      # read from: crates/canon-cli/src/main.rs:102-107
+      # read from: crates/canon-cli/src/main.rs:136-141
       - name: diagnostics
         type: String
 
@@ -41,74 +41,98 @@ errors:
     summary: An input file or directory could not be read, or an output could not be written.
     fields:
       # The `error[unreadable]: <path>: <why>` line canon printed.
-      # read from: crates/canon-cli/src/main.rs:66-73
+      # read from: crates/canon-cli/src/main.rs:70-77
       - name: diagnostics
         type: String
 
 commands:
-  # read from: crates/canon-cli/src/lib.rs:58-63
-  # read from: crates/canon-cli/src/main.rs:123-139
+  # read from: crates/canon-cli/src/lib.rs:58-68
+  # read from: crates/canon-cli/src/main.rs:157-173
   - name: canon.cli.Validate
     naming:
       wire: validate
       display: Validate
-      summary: Parse and validate a protocol/1 document.
+      summary: Parse and validate a protocol/1 document, composed with the documents it imports.
     input:
       # The protocol/1 document to validate.
       # read from: crates/canon-cli/src/lib.rs:60-62
       - name: path
         type: String
+      # A protocol/1 document the protocol imports, directly or through another import, each
+      # given with its own `--import` (story:protocol-imports). A repeatable flag, so a List, and
+      # Optional, since a protocol without imports takes none. The order changes nothing.
+      # read from: crates/canon-cli/src/lib.rs:63-67
+      # read from: .engineering/planning/story/protocol-imports.md:70-72
+      - name: import
+        type: Optional<List<String>>
     response:
       # `valid: protocol `<id>` revision <n>`.
-      # read from: crates/canon-cli/src/main.rs:130-134
+      # read from: crates/canon-cli/src/main.rs:164-168
       - name: output
         type: String
     outcomes:
-      # read from: crates/canon-cli/src/main.rs:87-94
+      # read from: crates/canon-cli/src/main.rs:92-99
+      # read from: crates/canon-cli/src/main.rs:110-116
       - name: unreadable
-        external: the file at path cannot be read
+        external: the file at path or an imported document cannot be read
         error: canon.cli.Unreadable
-      # read from: crates/canon-cli/src/main.rs:96-99
-      # read from: crates/canon-cli/src/main.rs:137
+      # read from: crates/canon-cli/src/main.rs:100-104
+      # read from: crates/canon-cli/src/main.rs:117-123
+      # read from: crates/canon-cli/src/main.rs:133
+      # read from: crates/canon-cli/src/main.rs:171
       - name: rejected
-        external: the document does not parse or is not a valid protocol/1 document
+        external: >-
+          a document does not parse, the imports do not compose, or the composition is not a valid
+          protocol/1 document
         error: canon.cli.Rejected
-      # read from: crates/canon-cli/src/main.rs:129-135
+      # read from: crates/canon-cli/src/main.rs:162-170
       - name: valid
         returns: true
 
-  # read from: crates/canon-cli/src/lib.rs:64-69
-  # read from: crates/canon-cli/src/main.rs:109-121
+  # read from: crates/canon-cli/src/lib.rs:69-79
+  # read from: crates/canon-cli/src/main.rs:143-155
   - name: canon.cli.Compile
     naming:
       wire: compile
       display: Compile
-      summary: Compile a valid protocol/1 document into canon-ir/1 and print it.
+      summary: >-
+        Compile a valid protocol/1 document, composed with the documents it imports, into one
+        closed canon-ir/1 and print it.
     input:
       # The protocol/1 document to compile.
-      # read from: crates/canon-cli/src/lib.rs:66-68
+      # read from: crates/canon-cli/src/lib.rs:72-74
       - name: path
         type: String
+      # A protocol/1 document the protocol imports, directly or through another import, each
+      # given with its own `--import` (story:protocol-imports). A repeatable flag, so a List, and
+      # Optional, since a protocol without imports takes none. The order changes no byte of the IR.
+      # read from: crates/canon-cli/src/lib.rs:75-78
+      # read from: .engineering/planning/story/protocol-imports.md:70-76
+      - name: import
+        type: Optional<List<String>>
     response:
       # The canonical JSON of the canon-ir/1 document.
-      # read from: crates/canon-cli/src/main.rs:116
+      # read from: crates/canon-cli/src/main.rs:150
       - name: output
         type: String
     outcomes:
-      # read from: crates/canon-cli/src/main.rs:87-94
+      # read from: crates/canon-cli/src/main.rs:92-99
+      # read from: crates/canon-cli/src/main.rs:110-116
       - name: unreadable
-        external: the file at path cannot be read
+        external: the file at path or an imported document cannot be read
         error: canon.cli.Unreadable
-      # read from: crates/canon-cli/src/main.rs:96-99
-      # read from: crates/canon-cli/src/main.rs:119
+      # read from: crates/canon-cli/src/main.rs:100-104
+      # read from: crates/canon-cli/src/main.rs:117-123
+      # read from: crates/canon-cli/src/main.rs:133
+      # read from: crates/canon-cli/src/main.rs:153
       - name: rejected
-        external: the document does not parse or does not compile
+        external: a document does not parse, the imports do not compose, or it does not compile
         error: canon.cli.Rejected
-      # read from: crates/canon-cli/src/main.rs:115-118
+      # read from: crates/canon-cli/src/main.rs:149-152
       - name: compiled
         returns: true
 
-  # read from: crates/canon-cli/src/lib.rs:70-97
+  # read from: crates/canon-cli/src/lib.rs:80-107
   # read from: crates/canon-cli/src/evaluate.rs:32-120
   - name: canon.cli.Evaluate
     naming:
@@ -119,27 +143,27 @@ commands:
         canon-decision/1 document.
     input:
       # The compiled protocol, canon-ir/1 as `canon compile` prints it.
-      # read from: crates/canon-cli/src/lib.rs:73-75
+      # read from: crates/canon-cli/src/lib.rs:83-85
       - name: ir
         type: String
       # The canon-case/1 case snapshot.
-      # read from: crates/canon-cli/src/lib.rs:76-78
+      # read from: crates/canon-cli/src/lib.rs:86-88
       - name: case
         type: String
       # A directory holding only canon-evidence/1 records, one per *.yaml or *.json file.
-      # read from: crates/canon-cli/src/lib.rs:79-81
+      # read from: crates/canon-cli/src/lib.rs:89-91
       - name: evidence
         type: String
       # A canon-authority/1 document; without it no capability is granted.
-      # read from: crates/canon-cli/src/lib.rs:82-86
+      # read from: crates/canon-cli/src/lib.rs:92-96
       - name: authority
         type: Optional<String>
       # A canon-decisions/1 document: the explicit decisions taken.
-      # read from: crates/canon-cli/src/lib.rs:87-91
+      # read from: crates/canon-cli/src/lib.rs:97-101
       - name: decisions
         type: Optional<String>
       # The evaluation instant in UTC; without it no evidence expires.
-      # read from: crates/canon-cli/src/lib.rs:92-96
+      # read from: crates/canon-cli/src/lib.rs:102-106
       - name: at
         type: Optional<String>
     response:
@@ -161,44 +185,54 @@ commands:
       - name: evaluated
         returns: true
 
-  # read from: crates/canon-cli/src/lib.rs:98-128
-  # read from: crates/canon-cli/src/check.rs:14-48
+  # read from: crates/canon-cli/src/lib.rs:108-143
+  # read from: crates/canon-cli/src/check.rs:15-54
   - name: canon.cli.Check
     naming:
       wire: check
       display: Check
       summary: >-
-        Check a protocol/1 document over its whole finite state space and report what it finds.
+        Check a protocol/1 document, composed with the documents it imports, over its whole finite
+        state space and report what it finds.
     input:
       # The protocol/1 document to check.
-      # read from: crates/canon-cli/src/lib.rs:121-123
+      # read from: crates/canon-cli/src/lib.rs:132-134
       - name: path
         type: String
       # A canon-properties/1 document of properties checked in every state.
-      # read from: crates/canon-cli/src/lib.rs:124-127
+      # read from: crates/canon-cli/src/lib.rs:135-138
       - name: properties
         type: Optional<String>
+      # A protocol/1 document the protocol imports, directly or through another import, each
+      # given with its own `--import` (story:protocol-imports). A repeatable flag, so a List, and
+      # Optional, since a protocol without imports takes none. The order changes nothing.
+      # read from: crates/canon-cli/src/lib.rs:139-142
+      # read from: .engineering/planning/story/protocol-imports.md:70-72
+      - name: import
+        type: Optional<List<String>>
     response:
       # The check's report, which found nothing.
-      # read from: crates/canon-cli/src/check.rs:36-38
+      # read from: crates/canon-cli/src/check.rs:42-44
       - name: output
         type: String
     outcomes:
-      # read from: crates/canon-cli/src/check.rs:15-23
+      # read from: crates/canon-cli/src/check.rs:16-29
       - name: unreadable
-        external: the protocol or the properties document cannot be read
+        external: the protocol, an imported document or the properties document cannot be read
         error: canon.cli.Unreadable
-      # read from: crates/canon-cli/src/check.rs:25-28
-      # read from: crates/canon-cli/src/check.rs:34-46
+      # read from: crates/canon-cli/src/check.rs:30-34
+      # read from: crates/canon-cli/src/check.rs:40-52
       - name: rejected
-        external: a document is rejected, the check is refused, or the check finds something
+        external: >-
+          a document is rejected, the imports do not compose, the check is refused, or the check
+          finds something
         error: canon.cli.Rejected
-      # read from: crates/canon-cli/src/check.rs:36-38
+      # read from: crates/canon-cli/src/check.rs:42-44
       - name: nothing-found
         returns: true
 
-  # read from: crates/canon-cli/src/lib.rs:129-147
-  # read from: crates/canon-cli/src/generate.rs:25-111
+  # read from: crates/canon-cli/src/lib.rs:143-162
+  # read from: crates/canon-cli/src/generate.rs:26-120
   - name: canon.cli.Generate
     naming:
       wire: generate
@@ -206,36 +240,39 @@ commands:
       summary: Generate canon-conformance/1 scenarios into an empty directory.
     input:
       # The protocol document, as a relative path without `..` components.
-      # read from: crates/canon-cli/src/lib.rs:139-141
+      # read from: crates/canon-cli/src/lib.rs:154-156
       - name: path
         type: String
       # The directory to write the scenarios to: absent or empty.
-      # read from: crates/canon-cli/src/lib.rs:142-146
+      # read from: crates/canon-cli/src/lib.rs:157-161
       - name: out
         type: String
     response:
       # One `wrote: <file>` line per scenario and a summary line.
-      # read from: crates/canon-cli/src/generate.rs:96-110
+      # read from: crates/canon-cli/src/generate.rs:105-119
       - name: output
         type: String
     outcomes:
-      # read from: crates/canon-cli/src/generate.rs:37-44
-      # read from: crates/canon-cli/src/generate.rs:54-57
-      # read from: crates/canon-cli/src/generate.rs:89-95
+      # read from: crates/canon-cli/src/generate.rs:38-45
+      # read from: crates/canon-cli/src/generate.rs:55-58
+      # read from: crates/canon-cli/src/generate.rs:98-104
       - name: unreadable
         external: the protocol cannot be read, or the output directory cannot be written
         error: canon.cli.Unreadable
-      # read from: crates/canon-cli/src/generate.rs:26-33
-      # read from: crates/canon-cli/src/generate.rs:45-52
-      # read from: crates/canon-cli/src/generate.rs:58-85
+      # read from: crates/canon-cli/src/generate.rs:27-34
+      # read from: crates/canon-cli/src/generate.rs:46-53
+      # read from: crates/canon-cli/src/generate.rs:59-93
+      # read from: .engineering/planning/story/protocol-imports.md:94-95
       - name: rejected
-        external: the protocol path or the document is refused, or generation is refused
+        external: >-
+          the protocol path or the document is refused, the protocol has imports (named by its
+          first import), or generation is refused
         error: canon.cli.Rejected
-      # read from: crates/canon-cli/src/generate.rs:96-111
+      # read from: crates/canon-cli/src/generate.rs:105-120
       - name: generated
         returns: true
 
-  # read from: crates/canon-cli/src/lib.rs:148-158
+  # read from: crates/canon-cli/src/lib.rs:162-173
   # read from: crates/canon-cli/src/diff.rs:16-46
   - name: canon.cli.Diff
     naming:
@@ -244,11 +281,11 @@ commands:
       summary: The semantic difference between two compiled revisions of one protocol.
     input:
       # The earlier revision, as `canon compile` prints it.
-      # read from: crates/canon-cli/src/lib.rs:152-154
+      # read from: crates/canon-cli/src/lib.rs:167-169
       - name: from
         type: String
       # The later revision, as `canon compile` prints it.
-      # read from: crates/canon-cli/src/lib.rs:155-157
+      # read from: crates/canon-cli/src/lib.rs:170-172
       - name: to
         type: String
     response:
@@ -271,7 +308,7 @@ commands:
         returns: true
 
   # The clap path `conform run`.
-  # read from: crates/canon-cli/src/lib.rs:159-182
+  # read from: crates/canon-cli/src/lib.rs:173-196
   # read from: crates/canon-cli/src/conform.rs:15-105
   - name: canon.cli.ConformRun
     naming:
@@ -281,11 +318,11 @@ commands:
     input:
       # The registry directory; every *.yaml file in it is one scenario. Defaults to
       # conformance/scenarios, so clap does not require it.
-      # read from: crates/canon-cli/src/lib.rs:170-172
+      # read from: crates/canon-cli/src/lib.rs:184-186
       - name: scenarios
         type: Optional<String>
       # A canon-requirements/1 catalogue the registry answers for.
-      # read from: crates/canon-cli/src/lib.rs:173-180
+      # read from: crates/canon-cli/src/lib.rs:187-194
       - name: requirements
         type: Optional<String>
     response:

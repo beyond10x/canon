@@ -1,0 +1,20 @@
+format: protocol/1
+
+# Its action reopen opens a case under the protocol investigation: valid on its own, refused as
+# self-opened-case once investigation imports it.
+
+protocol:
+  id: investigation.reopen
+  revision: 1
+
+imports:
+  investigation.evidence:
+    revision: 1
+    digest: sha256:b25d25193ad45afd4bb182d0124f6ec8546a6c95dfb084049fb70dcef402d255
+
+actions:
+  reopen:
+    description: Reopen the investigation of the explanation.
+    case_open:
+      protocol: investigation
+      subject: explanation

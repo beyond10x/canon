@@ -1,0 +1,14 @@
+format: protocol/1
+
+protocol:
+  id: investigation.cycle-a
+  revision: 1
+
+imports:
+  investigation.cycle-b:
+    revision: 1
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+artifacts:
+  a:
+    description: Declared by investigation.cycle-a.

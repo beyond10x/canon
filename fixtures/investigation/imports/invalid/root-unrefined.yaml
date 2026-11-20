@@ -1,0 +1,21 @@
+format: protocol/1
+
+# Redeclares the claim peer.approved, which investigation.review declares, without listing it under
+# `refines`: refused as unrefined-redeclaration.
+
+protocol:
+  id: investigation
+  revision: 1
+
+imports:
+  investigation.review:
+    revision: 2
+    digest: sha256:c6d83c4df1df604739d517d82d470b8d399f29a42d59cdd0789c9f71176ee060
+
+claims:
+  peer.approved:
+    description: A peer approved the finding.
+    true_when:
+      evidence:
+        kind: peer_review
+        result: approved

@@ -1,0 +1,13 @@
+format: protocol/1
+
+# Imports investigation.reopen, whose action reopen opens a case under this protocol's own id:
+# refused as self-opened-case.
+
+protocol:
+  id: investigation
+  revision: 1
+
+imports:
+  investigation.reopen:
+    revision: 1
+    digest: sha256:5dd008909ba59455182324fbf10b4f088a4656a66c706680ed8bbb582a8508bd
