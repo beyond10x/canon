@@ -30,13 +30,20 @@ fn classify(files: &[&str]) -> String {
         .expect("write the list");
     let out = child.wait_with_output().expect("the script ends");
     assert!(out.status.success(), "the classifier exits 0 on {files:?}");
-    String::from_utf8(out.stdout).expect("utf-8").trim().to_owned()
+    String::from_utf8(out.stdout)
+        .expect("utf-8")
+        .trim()
+        .to_owned()
 }
 
 #[test]
 fn planning_only_list() {
     assert_eq!(
-        classify(&["docs/plan/wave-2026-11-20-w10.md", "README.md", "CHANGELOG.md"]),
+        classify(&[
+            "docs/plan/wave-2026-11-20-w10.md",
+            "README.md",
+            "CHANGELOG.md"
+        ]),
         "planning-only"
     );
     assert_eq!(
@@ -53,7 +60,11 @@ fn planning_only_list() {
 #[test]
 fn one_code_file_among_planning_files_is_code() {
     assert_eq!(
-        classify(&["docs/plan/a.md", "crates/canon/src/lib.rs", ".engineering/project.yaml"]),
+        classify(&[
+            "docs/plan/a.md",
+            "crates/canon/src/lib.rs",
+            ".engineering/project.yaml"
+        ]),
         "code"
     );
 }
@@ -150,11 +161,15 @@ fn both_workflows_call_the_one_script() {
             "{name} conditions its steps on the classifier's answer"
         );
         assert!(
-            !text.contains(".engineering") && !text.contains("README") && !text.contains("docs/plan"),
+            !text.contains(".engineering")
+                && !text.contains("README")
+                && !text.contains("docs/plan"),
             "{name} holds no path list of its own"
         );
         assert!(
-            !text.lines().any(|line| line.trim_start().starts_with("paths")),
+            !text
+                .lines()
+                .any(|line| line.trim_start().starts_with("paths")),
             "{name}: no `paths:` filter on a trigger"
         );
     }
