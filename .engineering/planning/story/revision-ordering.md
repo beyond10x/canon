@@ -51,7 +51,7 @@ scope:
   path: ess/domains/protocol.yaml
 - confidence: cited
   path: fixtures/investigation/revision-ordering.yaml
-revision: 34
+revision: 35
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T20:58:28Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 - {from: "proposed", to: "active", at: "2026-11-20T20:58:28Z", actor: "human:timo", revision: 5, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
@@ -233,3 +233,46 @@ canon.protocol.EvidenceDescended so a protocol author meets it there."
 - **F8.** `Predicate` stays 96 bytes: the variant is `Descended(Box<EvidenceDescended>)`, because
   three tests of deep nesting overflowed the stack at 120 bytes. A later variant larger than that
   is boxed too.
+
+## Decided in review, after adversary pass 1
+
+`review-result:adversary-revision-ordering-pass-1` was red by two cases (3 warnings, 4 notes).
+The coordinator decided the points below on 2026-11-21 and 2026-11-22; the correction is the
+commits `ce73975e` to `a16d719d` on `impl/revision-ordering`.
+
+- **D1. The refusal of a `descends_from` entry that is not an identifier names the case, the
+  revision and the artifact** (`ce73975e`), as the other two refusals of that list do.
+- **D2. `item` is a `canon.protocol.ItemId`** (specification `37a8e0e4`, model `a16d719d`),
+  declared next to `EvidenceId`. `EvidenceRecord.item` is `Optional<ItemId>`, so the published
+  schema of an evidence record holds the identifier rule the evaluator applies. The refusal
+  keeps its code, its text and its exit status; the type's parse does not check the rule, the
+  evaluator's check still does. The adversary's case built its record with a plain string and
+  did not compile with the type: the coordinator allowed the unit to change that one line
+  (`adversary_descended.rs:112`), which changes how the record is built and not what the case
+  expects.
+- **D3. `computed_from` carries `descends_from` as written** for each case artifact
+  (`5eea4ada`): absent when the case does not give it, `[]` when it gives an empty list.
+- **D4. Earlier records are indexed once by subject and item** (`0a1efe34`). Debug build, best
+  of three, all values FALSE: 4000 items on two revisions took 8.48 s and take 0.63 s; 2000 took
+  2.18 s and take 0.29 s. `canon evaluate` over the adversary's 29 rows gives the same bytes.
+- **D5. An item that failed on an ancestor and still fails stays UNKNOWN.** The value table of
+  this story (F1 to F8) decides it. The comment of `EvidenceDescended` now says so and shows the
+  pattern that gives FALSE for it (`6cb78878`).
+- **D6. The lists of order forms name `descended`** in the help of `canon`, in the refusal of
+  `canon simulate` and its pinned text (`a9b16dc4`).
+- **D7. The unit merged the wave branch at `98169001`** (`93df6057`, no conflict). `canon mutate`
+  walks past the form; the test `nothing_inside_a_descended_form_is_mutated` holds that
+  (`8ef2595c`).
+- **D8. Fenced code is left out of the plain-text description of a schema** (`34afa10d`), found
+  when the comment of D5 gained a snippet.
+- **D9. The fixture keeps its vocabulary** (`test_result`, `merge`, `red.then.green`). It follows
+  the existing order fixtures. Whether fixtures need a stated exception from the boundary rule
+  of `AGENTS.md` is a backlog question at the wave's close.
+- **D10. No second adversary pass on this unit.** On 2026-11-22 the operator put every open
+  story into one wave with one review of the integration branch
+  (`approval-record:accept-artifact-revised-by-2026-11-22`). The correction is read there.
+
+The unit's runs on `a16d719d`: the four adversary cases pass; 225 library tests of `eval`,
+`model`, `generate`, `mutate` and `check` pass; 29 tests of `canon-docs` pass; the `ess-gate`
+task, fmt and clippy exit 0; `conform: 29 passed, 0 failed, 0 unreadable`,
+`requirements: 30 implemented, 30 covered, 0 planned`.
