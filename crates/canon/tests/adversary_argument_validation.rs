@@ -494,16 +494,22 @@ fn diff_finds_no_change_when_an_enum_value_is_rewritten_as_its_exact_double() {
     );
 }
 
-/// The same literal, `9007199254740993.0`, in the protocol's `enum` and in the arguments. The
-/// YAML reader rounds the schema's to 2^53; with the text held the arguments keep 2^53 + 1, so the
-/// call is refused although both files write one value.
+/// D5 (decided in review): a protocol literal the YAML reader rounds stays rounded. The literal
+/// `9007199254740993.0` in the protocol's `enum` reads as the double 2^53. Where the text is held
+/// the arguments `9007199254740993.0` keep 2^53 + 1 and are refused; where doubles are held they
+/// read as 2^53 too and are accepted.
 #[test]
-fn the_same_literal_in_the_protocol_and_the_arguments_is_one_enum_value() {
+fn a_protocol_literal_the_yaml_reader_rounds_is_compared_as_rounded() {
     let schema = compiled_arguments(
         "{type: object, properties: {n: {type: number, enum: [9007199254740993.0]}}}",
     );
     let arguments: Value = serde_json::from_str(r#"{"n": 9007199254740993.0}"#).expect("JSON");
-    assert_eq!(check_arguments(Some(&schema), &arguments), Ok(()));
+    let expected = if holds_text() {
+        pairs(&[("/n", "enum")])
+    } else {
+        Vec::new()
+    };
+    assert_eq!(refusals(Some(&schema), &arguments), expected);
 }
 
 // ---- pass 2: the exact decimal comparison against an oracle written here ----
