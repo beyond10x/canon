@@ -403,6 +403,34 @@ that subject, all about `subject` when it names one. It reads every record of th
 evidence check accepted, excluded or not, and pairs records only on equal `item`. `first` and
 `then` may name one kind.
 
+One item is enough for `true`. An item with `first.result` on a revision its subject descends
+from, `then.result` on the current revision and `first.result` on the current revision too is
+`true`: the form asks for a record of `then.result` on the current revision and does not ask
+that no record of `first.result` is there. A protocol that must exclude it adds a second
+predicate beside the form, such as a second `descended` form from `first.result` to
+`first.result` read through a claim:
+
+```yaml
+claims:
+  failed_again:
+    true_when:
+      descended:
+        first: {kind: observation, result: failed}
+        then: {kind: observation, result: failed}
+        subject: work
+  resolved:
+    true_when:
+      all:
+        - descended:
+            first: {kind: observation, result: failed}
+            then: {kind: observation, result: passed}
+            subject: work
+        - any: [{claim: failed_again, is: false}, {claim: failed_again, is: unknown}]
+```
+
+`resolved` is `false` when an item has `failed` on a revision its subject descends from and
+`failed` again on the current revision, and the form's value otherwise.
+
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `first` | [`LaterRecord`](#laterrecord) | required | The earlier record: its kind and its result. |

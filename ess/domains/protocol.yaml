@@ -815,6 +815,31 @@ types:
   # for equality only, and the form names none. The form is true when a later record has an
   # earlier record; otherwise unknown when there is no later record, or when the case gives no
   # descends_from for the subject of one; otherwise false.
+  # One item is enough for true: the form does not ask that every item with R1 on an ancestor
+  # has R2 now. An item with R1 on an ancestor, R2 on the current revision and also R1 on the
+  # current revision is true, because the form asks for a record of R2 on the current revision
+  # and does not ask that no record of R1 is there. A protocol that must exclude it adds a second
+  # predicate beside the form, such as a second descended form from R1 to R1 read through a
+  # claim (R1 `failed`, R2 `passed`):
+  #
+  #   claims:
+  #     failed_again:
+  #       true_when:
+  #         descended:
+  #           first: {kind: observation, result: failed}
+  #           then: {kind: observation, result: failed}
+  #           subject: work
+  #     resolved:
+  #       true_when:
+  #         all:
+  #           - descended:
+  #               first: {kind: observation, result: failed}
+  #               then: {kind: observation, result: passed}
+  #               subject: work
+  #           - any: [{claim: failed_again, is: false}, {claim: failed_again, is: unknown}]
+  #
+  # `resolved` is false when an item has R1 on an ancestor and R1 again on the current revision,
+  # and the form's value otherwise.
   #
   #   records read (descends_from given unless said)                  value
   #   none                                                            unknown
