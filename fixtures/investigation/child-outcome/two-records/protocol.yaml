@@ -1,0 +1,55 @@
+format: protocol/1
+
+protocol:
+  id: child.two_records
+  revision: 1
+  description: Open one child case, recording two things of the opening, and end when the child ended accepted.
+
+artifacts:
+  thing:
+    description: The thing the child case settles.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child case.
+  booked:
+    description: The child case was booked.
+  briefed:
+    description: The child case was briefed.
+
+claims:
+  prepared:
+    description: The child case was booked and briefed.
+    true_when:
+      all:
+        - evidence:
+            kind: booked
+        - evidence:
+            kind: briefed
+
+  resolved:
+    description: Every child case ended accepted.
+    true_when:
+      children:
+        in: [accepted]
+
+actions:
+  open:
+    description: Open the child case, recording that it was booked and briefed.
+    precondition:
+      claim: prepared
+      is: unknown
+    case_open:
+      protocol: child.task
+      subject: thing
+    may_produce:
+      - evidence: booked
+      - evidence: briefed
+
+outcomes:
+  done:
+    description: The child case was booked and briefed and ended accepted.
+    requires:
+      all:
+        - claim: prepared
+        - claim: resolved

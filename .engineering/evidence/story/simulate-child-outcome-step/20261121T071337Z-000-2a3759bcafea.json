@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T07:13:37Z",
+  "actor": "human:timo",
+  "artifact": "story:simulate-child-outcome-step",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "on 912eead (specification and fixtures only): simulate_child_outcome fails (1 passed, 1 failed, 25 expectations), the closed fixture exits 1 with a stuck-state and every case prints the limit line; on b9f3180: workspace 148 summaries, 1062 passed, 0 failed per the unit's sum, conform 25 passed, 26 covered; VERIFIED by the coordinator from the unit's logs",
+    "reference": "w6/simulate-child-outcome-step/red.log vs gate/final/summary.txt, test.log (session scratch)"
+  }
+}

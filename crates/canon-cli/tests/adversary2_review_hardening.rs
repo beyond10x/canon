@@ -72,8 +72,9 @@ fn check_refuses_a_long_chain_of_claims_without_aborting() {
 const IR_SOURCE: &str = "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}}\n\
     evidence_kinds: {k: {}}\nclaims: {c: {true_when: {evidence: {kind: k}}}}\n";
 
-/// One record id in three files, written in an order that is not file-name order: the refusal
-/// names all three, in file-name order, on every run.
+/// One record id in three files, written in an order that is not file-name order, the last in
+/// file-name order differing from the other two: the refusal names all three, in file-name order,
+/// on every run.
 #[test]
 fn an_id_in_three_files_names_the_three_in_file_name_order() {
     let dir = scratch("three-files");
@@ -93,15 +94,24 @@ fn an_id_in_three_files_names_the_three_in_file_name_order() {
     .expect("case written");
     let evidence = dir.join("evidence");
     std::fs::create_dir(&evidence).expect("evidence dir");
+    // The last file in file-name order differs from the other two, which are equal: the refusal
+    // still names the file of the equal copy.
     for name in ["m.yaml", "z.json", "a.yaml"] {
+        let result = if name == "z.json" {
+            "result: other\n"
+        } else {
+            ""
+        };
         std::fs::write(
             evidence.join(name),
-            "format: canon-evidence/1\nid: e1\nkind: k\nsubject: a\nsubject_revision: r\n",
+            format!(
+                "format: canon-evidence/1\nid: e1\nkind: k\n{result}subject: a\nsubject_revision: r\n"
+            ),
         )
         .expect("record written");
     }
     let expected = "error[duplicate-identifier]: evidence/a.yaml, evidence/m.yaml, \
-                    evidence/z.json: evidence `e1` is given more than once\n";
+                    evidence/z.json: evidence `e1` is given more than once with different content\n";
     for _ in 0..3 {
         let run = canon(
             &dir,

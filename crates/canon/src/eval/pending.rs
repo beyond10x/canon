@@ -108,7 +108,10 @@ fn authority(actions: Option<&Json>, revision: Option<&Revision>) -> Vec<Json> {
     entries.into_iter().map(|(_, entry)| entry).collect()
 }
 
-/// The `decisions` entries, in outcome-id order.
+/// The `decisions` entries, in outcome-id order: one per reason `{"decision", "present": false}`,
+/// with or without the `stale_grounds` of a decision set aside by its grounds
+/// (story:decision-grounds), which the entry does not copy; a reason with any other key is not
+/// one.
 fn decisions(outcomes: Option<&Json>, revision: Option<&Revision>) -> Vec<Json> {
     let mut entries: Vec<((&str, &str), Json)> = members(outcomes)
         .filter(|(_, entry)| entry.get("status").and_then(Value::as_str) == Some("blocked"))
@@ -117,7 +120,10 @@ fn decisions(outcomes: Option<&Json>, revision: Option<&Revision>) -> Vec<Json> 
             let reason = reason.as_object()?;
             let present = reason.get("present")?;
             let decision = reason.get("decision")?.as_str()?;
-            if reason.len() != 2 || present != &Value::Bool(false) {
+            let other_key = reason
+                .keys()
+                .any(|key| !matches!(key.as_str(), "decision" | "present" | "stale_grounds"));
+            if other_key || present != &Value::Bool(false) {
                 return None;
             }
             let options: Vec<&str> = revision.map(|_| DECISION_OPTION).into_iter().collect();

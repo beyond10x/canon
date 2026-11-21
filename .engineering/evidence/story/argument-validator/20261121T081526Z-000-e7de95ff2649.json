@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T08:15:26Z",
+  "actor": "human:timo",
+  "artifact": "story:argument-validator",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "the story's no-allocation sentence was not met: withdrawn by D3",
+    "reference": "story:argument-validator, Decided in review",
+    "review": "review-result:adversary-argument-validator-pass-1",
+    "outcome": "fixed"
+  }
+}

@@ -46,7 +46,7 @@ scope:
   path: ess/domains/protocol.yaml
 - confidence: inferred
   path: fixtures/investigation/decision-grounds.yaml
-revision: 19
+revision: 20
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T00:21:35Z", actor: "human:timo", revision: 18, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-21T00:21:35Z", actor: "human:timo", revision: 19, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
@@ -207,3 +207,25 @@ Conformance scenario `CANON-GROUND-001` passes under `canon conform run` over `f
 ## Decided
 
 Option A of § Decision needed: `ground_revisions` and `ground_evidence` on the entries of `canon-authority/1` and `canon-decisions/1`. An evidence ground holds when the record is applicable in the sense of story:missing-evidence. Decided on 2026-11-21 by the wave coordinator on the drafter's recommendation; the story was accepted under the operator's standing grant without a choice among the options (`approval-record:accept-sdc-requests-12-13-2026-11-21`). The unit builds this option and does not reopen the choice.
+
+## Decided in review, after adversary pass 1
+
+The adversary pass (`review-result:adversary-decision-grounds-pass-1`) was green: the six claims
+held, four mutants the unit's suite let through are now held by the adversary's cases, and it
+asked for one rule to be confirmed or reversed. Decided on 2026-11-21 by the wave coordinator;
+the session the operator named orchestrator of this plan may overrule it.
+
+- **D2, an entry set aside by its case revision adds none of its grounds to `stale_grounds`.**
+  The unit built this and pinned it in CANON-GROUND-001 (step
+  `an-entry-at-another-case-revision-adds-no-ground`); § Outcome said only "each failed ground of
+  the set-aside entries". Confirmed. `stale_grounds` answers "which ground must hold again for a
+  decision already given to count". An entry bound to another case revision does not count
+  whatever its grounds do (story:authority-revision-binding), so naming its grounds would tell a
+  runner to restore something that restores nothing. § Outcome reads from now on: `stale_grounds`
+  lists each failed ground of the entries that every other rule would let apply.
+- In `computed_from`, an entry's `ground_evidence` is written sorted and without repeats and an
+  empty ground field is left out. § Outcome said "as given"; the bytes as built stand, because
+  the same input in another order must give the same bytes.
+- The note on `ess/domains/protocol.yaml` is corrected in the unit: the `read from` range of the
+  authority module and the comments of `AuthorityDecision` and `ExplicitDecision`, which state
+  applicability and the refusal order without grounds.

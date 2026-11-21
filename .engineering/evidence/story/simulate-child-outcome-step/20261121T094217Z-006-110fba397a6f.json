@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T09:42:17Z",
+  "actor": "human:timo",
+  "artifact": "story:simulate-child-outcome-step",
+  "kind": "story",
+  "revision": 14,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "the D3 sentence warned of a case that does not arise: D3 withdrawn as D6, the sentence removed from the help, cli.yaml and the reference; the one-record-per-step limit of story:canon-simulate stated there instead",
+    "reference": "impl/simulate-child-outcome-step 146fac6, b3577db",
+    "review": "review-result:adversary-simulate-child-outcome-step-pass-2",
+    "outcome": "fixed"
+  }
+}

@@ -202,6 +202,41 @@ requirements:
       one taken at another revision MUST NOT. A list with no entry MUST be left out. The section
       MUST NOT change any other section.
     source: story:pending-decisions
+  CANON-EVIDENCE-004:
+    status: implemented
+    statement: >-
+      An evidence record given more than once in one evaluation MUST count once when every copy
+      equals the first in its kind, result, subject, subject revision, observed_at as written,
+      producer, child case and upstream revisions, the upstream revisions in any order. The
+      decision MUST then be byte-identical to the one without the copy, explanation included,
+      wherever the copy stands in the list, and an equal copy of a case_outcome record MUST NOT be
+      refused. A copy that differs in any of them MUST be refused as duplicate-identifier;
+      observed_at MUST be compared as written text, so that 12:00:00Z and 12:00:00.000Z differ.
+    source: story:evidence-redelivery
+  CANON-GROUND-001:
+    status: implemented
+    statement: >-
+      An entry of canon-authority/1 or canon-decisions/1 MAY name grounds: ground_revisions,
+      artifact revisions keyed by artifact, and ground_evidence, evidence record ids. An artifact
+      ground MUST hold exactly when its revision equals the case snapshot's current revision of the
+      artifact, and an evidence ground exactly when a record with its id is applicable in the sense
+      of CANON-FRONTIER-001; an id no given record has MUST NOT be refused. An entry MUST take part
+      in coverage, precedence and decided_by only when every ground holds and its case revision,
+      when it has one, is current, whatever it decided. A requirement covered only by entries that
+      do not apply MUST be approval-required with the reason decision none, and an outcome whose
+      only explicit decision does not apply MUST be blocked with the reason present false; either
+      reason MUST then list under stale_grounds each failed ground of the entries that every other
+      rule would let apply, set aside by their grounds alone, once, artifact grounds by artifact
+      and then revision, as revision_mismatch with the ground's revision, then evidence grounds by
+      id, with the reason the record was excluded with, or present false when no record has the
+      id. An entry set aside by its case revision MUST NOT add a ground, whether its grounds hold
+      or not, since it would not apply whatever they do. pending_decisions MUST list such a
+      requirement and such an outcome as it lists one with no decision. The order of the entries in
+      a document MUST NOT change the result. A ground artifact the protocol does not declare MUST
+      be refused as undeclared-artifact, and a ground artifact, revision or evidence id that is not
+      an identifier as invalid-identifier. Two entries that differ only in their grounds MUST be
+      refused as duplicate-identifier.
+    source: story:decision-grounds
   CANON-COMPOSE-003:
     status: implemented
     statement: >-

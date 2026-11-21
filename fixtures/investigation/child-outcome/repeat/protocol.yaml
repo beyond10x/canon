@@ -1,0 +1,43 @@
+format: protocol/1
+
+protocol:
+  id: child.repeat
+  revision: 1
+  description: Open child cases, recording nothing of the opening, until every child ended accepted or one ended otherwise.
+
+artifacts:
+  thing:
+    description: The thing the child cases settle.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child case.
+
+claims:
+  resolved:
+    description: Every child case ended accepted.
+    true_when:
+      children:
+        in: [accepted]
+
+actions:
+  open:
+    description: Open a child case while the children are unresolved.
+    precondition:
+      claim: resolved
+      is: unknown
+    case_open:
+      protocol: child.task
+      subject: thing
+
+outcomes:
+  done:
+    description: Every child case ended accepted.
+    requires:
+      claim: resolved
+
+  declined:
+    description: A child case ended otherwise.
+    requires:
+      claim: resolved
+      is: false

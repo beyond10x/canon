@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T08:15:26Z",
+  "actor": "human:timo",
+  "artifact": "story:argument-validator",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "with the text held a protocol double above 2^53 was compared by its shortest text: decided D4, schema_number compares it as the integer the double holds; three adversary cases green in both builds; 100 compiled documents give identical IR bytes",
+    "reference": "impl/argument-validator 37f889c",
+    "review": "review-result:adversary-argument-validator-pass-2",
+    "outcome": "fixed"
+  }
+}

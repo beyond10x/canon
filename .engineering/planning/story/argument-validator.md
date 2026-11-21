@@ -31,7 +31,7 @@ scope:
   path: ess/domains/protocol.yaml
 - confidence: cited
   path: website/docs/concepts/protocols.md
-revision: 14
+revision: 15
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 12, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 13, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
@@ -195,3 +195,36 @@ Adversary pass 1 (`review-result:adversary-argument-validator-pass-1`) was red: 
 **D2. The comparison is exact however `serde_json` is built.** `crates/canon-expr` turns on `serde_json`'s `arbitrary_precision`, and Cargo unifies features across a workspace build, so the `canon` binary and `cargo test --workspace` hold a number as its decimal text, while `cargo test -p b10x-canon` holds it as an integer or a double. The function must give the right answer in both builds: a number is compared by its exact decimal value when the text is held, a number with no finite double (`1e400`) is above every finite maximum and below none, and no comparison goes through a double that cannot hold the value. The module documentation states which value is compared in each build. The unit's tests run green in both builds, and the report quotes both runs.
 
 **D3. The sentence "no allocation beyond its result" of § Outcome is withdrawn.** The function allocates a pointer buffer, a sorted list of member names and the escaped tokens. That is not a defect; the sentence was the draft's.
+
+## Decided in review, after adversary pass 2
+
+The second adversary pass (`review-result:adversary-argument-validator-pass-2`) left one finding
+to change and four notes. Decided on 2026-11-21 by the wave coordinator; the session the operator
+named orchestrator of this plan may overrule each.
+
+- **D4, a protocol number that a double holds exactly is compared as that value.** Where
+  `serde_json` holds number text, a number read from the protocol's YAML arrives as the shortest
+  text of its double, and for an integral double above 2^53 that text is another value than the
+  double (`1152921504606846976.0` is 2^60 and its shortest text is `1152921504606847000`). D1 says
+  two numbers are the same when their values are equal exactly, so the unit fixes this: a number
+  read from the protocol whose double is integral and fits a 64-bit integer is held as that
+  integer wherever the shortest text of the double is not its exact value. The fix must not
+  change one byte of the IR of a protocol whose numbers are all at or below 2^53 in magnitude or
+  have a fraction; the unit shows that with the existing fixtures and scenarios and names every
+  IR byte that does change. Where the fix sits (`model/present.rs`, as the adversary proposes, or
+  the argument-schema reader) is the unit's choice by that rule.
+- **D5, a protocol literal the YAML reader rounds stays rounded.** `9007199254740993.0` written in
+  a protocol is not a double; the YAML reader gives `9007199254740992`. Canon compares the value
+  it read. The arguments `9007199254740993.0` are then another value where the text is held and
+  the same value where doubles are held. That difference between the two builds stays and is
+  stated in the `# Numbers` section and in the generated reference. Preserving the literal text of
+  a protocol number is not built here. The same holds for an integral double beyond 64 bits
+  (`1e30`): where the text is held it is compared as its shortest text.
+- **Correction to D2.** D2 said the `canon` binary holds number text. That is true of a binary
+  built with the workspace (`cargo build --workspace`, and every command-line test of the gate)
+  and false of the binary a user installs with `cargo install --locked --git … canon-cli`, whose
+  `serde_json` has no `arbitrary_precision` and holds doubles. D2's rule stands as "exact in both
+  builds"; the as-built section lists every case in which the two builds answer differently.
+- The three notes are corrected in the unit: the pinned wrong answer at
+  `argument_validation.rs:482`, the opening sentence of `# Numbers`, and the borrow of
+  `subtract_digits` that no test of the unit holds.

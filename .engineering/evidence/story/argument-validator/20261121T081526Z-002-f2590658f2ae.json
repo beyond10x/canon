@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T08:15:26Z",
+  "actor": "human:timo",
+  "artifact": "story:argument-validator",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "a protocol literal the YAML reader rounds is another value than the same literal in the arguments where the text is held: decided D5, stays, stated in the Numbers section and the reference; the adversary re-pinned its case to the answer of each build",
+    "reference": "impl/argument-validator a713974",
+    "review": "review-result:adversary-argument-validator-pass-2",
+    "outcome": "fixed"
+  }
+}

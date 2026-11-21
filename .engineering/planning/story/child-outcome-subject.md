@@ -19,6 +19,8 @@ scope:
   path: conformance/requirements.yaml
 - confidence: cited
   path: conformance/scenarios/child-outcome-subject.yaml
+- confidence: cited
+  path: crates/canon/src/check/mod.rs
 - confidence: inferred
   path: crates/canon/src/check/space.rs
 - confidence: cited
@@ -36,12 +38,14 @@ scope:
 - confidence: cited
   path: crates/canon/src/model/predicate.rs
 - confidence: cited
+  path: crates/canon/src/simulate/mod.rs
+- confidence: cited
   path: crates/canon/src/validate/mod.rs
 - confidence: cited
   path: ess/domains/protocol.yaml
 - confidence: cited
   path: fixtures/investigation/child-outcome-subject.yaml
-revision: 17
+revision: 20
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T00:43:59Z", actor: "human:timo", revision: 16, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-21T00:43:59Z", actor: "human:timo", revision: 17, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
@@ -156,3 +160,43 @@ Request 14 from the session working on the SDC prototype, 2026-11-21 (not an ite
 ## Decided
 
 Option A of § Decision needed: an optional `subject` on the `children` form. Decided on 2026-11-21 by the wave coordinator on the drafter's recommendation; the story was accepted under the operator's standing grant without a choice among the options (`approval-record:accept-sdc-request-14-2026-11-21`). The unit builds this option and does not reopen the choice.
+
+## Decided in review, after adversary pass 1
+
+The first adversary pass (`review-result:adversary-child-outcome-subject-pass-1`) found that the
+unit gave a `children` form its own `case_outcome` dimension per subject and left every producer
+of `case_outcome` records unbound: an action that opens children about one artifact produces, in
+`canon check` and in `canon simulate`, records about another. One blocker (a false path and an
+outcome reported terminable that is legitimate in no reachable state, on the unit's own fixture),
+two warnings in `canon check` (a false `authority-bypass`; a slice that takes every subject's
+dimension and is refused as `state-space-bound` at 72 states per slice), one warning on three
+surviving mutants, one note. Decided on 2026-11-21 by the wave coordinator; the session the
+operator named orchestrator of this plan may overrule each.
+
+- **D1, the unit binds what it split.** A `case_outcome` record a walk or a check state holds
+  about artifact A is produced only by an action whose `case_open` is about A. A dimension of
+  `case_outcome` without a subject (every form of the protocol is without `subject`) is produced
+  by every opening action, as before this story: a protocol that uses no `subject` gets the same
+  bytes from `canon check` and `canon simulate` as on the base. This is in the story's scope:
+  the story made the dimension per subject, so the story owes the producers. It reaches
+  `crates/canon/src/check/mod.rs` (`produces`), `crates/canon/src/check/space.rs`
+  (`evidence_reached`, `positive_reads`) and `crates/canon/src/simulate/mod.rs`, which the
+  story's § Scope did not list.
+- **D2, two steps, because another unit of this wave rewrites the walk's child outcomes.**
+  story:simulate-child-outcome-step replaces, in `simulate/mod.rs`, the record step for
+  `case_outcome` by a child-outcome step offered while the mark of an opening action is set. Its
+  § Scope leaves "binding a child outcome to the opening's subject" out. Step 1, now, on this
+  unit's branch: `canon check` (both warnings) and the tests that hold the three mutants. Step 2,
+  after story:simulate-child-outcome-step has merged into the wave branch: this unit merges the
+  wave branch and binds the child-outcome step: a child of action `a` records `case_outcome`
+  only in a dimension about `a`'s `case_open` subject, or in the dimension without a subject. The
+  adversary's two `simulate` cases go green in step 2.
+- **D3, the note stays.** A form that names an artifact no `case_open` action is about gets no
+  finding of its own; the story declines a refusal, and `unproduced-evidence` stays decided per
+  kind. With D1 such a form reads a dimension nothing produces: what `canon check` and `canon
+  simulate` then print for an outcome that requires it (an unreachable outcome, a stuck state) is
+  pinned by a test in step 1 and step 2, whatever it is, and reported.
+- story:child-outcome-recovery (accepted, wave 9 or later) names "one `case_outcome` dimension per
+  `case_open` subject" in `canon simulate` as its own work. D1 and D2 build the part of that which
+  this story's `subject` key needs; that story keeps the revise step and the third value of the
+  mark, and its unit reads this section first.

@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T09:42:17Z",
+  "actor": "human:timo",
+  "artifact": "story:simulate-child-outcome-step",
+  "kind": "story",
+  "revision": 14,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "marks left out of R5 containment survived the unit's tests: held by a_mark_counts_in_containment_and_size_by_its_children and the adversary's case",
+    "reference": "impl/simulate-child-outcome-step 0e78756, 65a963a",
+    "review": "review-result:adversary-simulate-child-outcome-step-pass-1",
+    "outcome": "fixed"
+  }
+}

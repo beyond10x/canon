@@ -29,8 +29,10 @@
 //! The story's rules refined after adversary pass 1 (R1 to R6) are held by
 //! `simulate_follows_the_refined_rules`: an expiry step, the open-state rule for `stuck-state`
 //! and `cycle`, a decision named on a finding, and one finding per smallest state with a count.
-//! Those refined after adversary pass 2 (R2a, an expired child outcome, and R7, the line naming
-//! the limit on child outcomes) by `simulate_follows_the_rules_refined_after_pass_2`.
+//! Those refined after adversary pass 2 (R2a, an expired child outcome) by
+//! `simulate_follows_the_rules_refined_after_pass_2`; R7, the line naming the limit on child
+//! outcomes, was removed by story:simulate-child-outcome-step, whose child-outcome step those two
+//! fixtures also take.
 //!
 //! Each fixture directory carries `protocol.yaml` and the exact output: `report.txt` on standard
 //! output with nothing on standard error, or `refusal.txt` on standard error with nothing on
@@ -243,11 +245,14 @@ fn simulate_follows_the_refined_rules() {
 ///
 /// - `child-expiry`: only a `children` form reads `case_outcome`, which an expiry does not undo,
 ///   so there is no expiry step for it (R2a). Without one, a child that ended with an outcome the
-///   form does not list keeps the outcome illegitimate: the `cycle` is real. The protocol opens
-///   child cases, so the line naming the limit on child outcomes comes before the summary (R7).
+///   form does not list keeps the outcome illegitimate: the `cycle` and the `stuck-state` are
+///   real. A child's outcome arrives by the child-outcome step of
+///   story:simulate-child-outcome-step, which counts the children of `open_change` not ended:
+///   the `stuck-state` holds none, after two children ended, and the `cycle` two or more, where a
+///   step of `open_change` leaves the count where it is.
 /// - `child-expiry-held`: an evidence match reads `case_outcome` too, so an expired record is
 ///   held as expired: absent to the match, present to the `children` form. `{lock}` with an
-///   expired accepted outcome is terminable, as the evaluator says past the `max_age` (R2a, R7).
+///   expired accepted outcome is terminable, as the evaluator says past the `max_age` (R2a).
 #[test]
 fn simulate_follows_the_rules_refined_after_pass_2() {
     let failures = failures(&CHILDREN);

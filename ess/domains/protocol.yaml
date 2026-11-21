@@ -180,8 +180,10 @@ types:
       - name: may_produce
         type: List<canon.protocol.EvidenceProduction>
       # The one argument schema the action declares (story:action-arguments). Absent: the action
-      # takes no arguments; a runner accepts only `{}`. Canon never validates arguments at run
-      # time: the runner that calls the action validates them against this schema. The schema is a JSON
+      # takes no arguments; a runner accepts only `{}`. Canon evaluates no call and never calls an
+      # action. The library function b10x_canon::validate::check_arguments (story:argument-validator)
+      # checks one call's arguments against this schema with JSON Schema 2020-12 meaning, reporting
+      # every refusal; a runner uses it or any 2020-12 validator. The schema is a JSON
       # Schema in Canon's argument-schema dialect, a subset of JSON Schema 2020-12 with the same
       # meaning and no reference at all: every schema, the top level and each nested one, names
       # exactly one `type` (object, array, string, integer, number, boolean or null), the top level
@@ -197,6 +199,7 @@ types:
       # Pointer. Json here, not a typed schema: the dialect is checked by Canon's validator and its
       # conformance tests, like every other validation rule.
       # read from: .engineering/planning/story/action-arguments.md:36-72
+      # read from: .engineering/planning/story/argument-validator.md:39-64
       - name: arguments
         type: Optional<Json>
       # The child case the action opens (story:case-composition, the action case.open of Atlas
@@ -945,7 +948,14 @@ types:
       # read from: .engineering/planning/story/three-valued-claims.md:59
       - name: format
         type: String
-      # read from: .engineering/planning/story/three-valued-claims.md:59
+      # Used once in an evaluation's evidence set, except that a record given more than once
+      # counts once when every copy equals the first (story:evidence-redelivery): equal in kind,
+      # result, subject, subject_revision, observed_at as written text, producer, child_case and
+      # upstream_revisions (the same pairs in any order). The evaluator keeps the first copy, in
+      # the order given, and every later stage reads each id once. A copy that differs in any of
+      # these is refused as duplicate-identifier, "evidence `e1` is given more than once with
+      # different content". Where the evaluator does this: crates/canon/src/eval/evidence.rs.
+      # read from: crates/canon/src/model/evidence.rs:21-22
       - name: id
         type: canon.protocol.EvidenceId
       # read from: .engineering/planning/story/three-valued-claims.md:59
@@ -1011,11 +1021,29 @@ types:
   # One explicit decision of a canon-decisions/1 document. `canon evaluate --decisions` names that
   # document: a YAML (or JSON) list of these entries, the way canon-authority/1 is a list of
   # authority decisions; an empty list decides nothing. A decision applies to the outcome it names
-  # when the outcome requires a decision of its name and its case_revision is the case snapshot's
-  # revision; a decision taken at a superseded case revision does not apply, and the outcome stays
-  # blocked (CANON-OUTCOME-002).
+  # when the outcome requires a decision of its name, its case_revision is the case snapshot's
+  # revision and every ground it rested on holds (ground_revisions, ground_evidence,
+  # story:decision-grounds); a decision taken at a superseded case revision, or set aside by a
+  # ground, does not apply, and the outcome stays blocked (CANON-OUTCOME-002). Its reason
+  # {"decision", "present": false} then lists under stale_grounds each failed ground of the
+  # decisions for it taken at the snapshot's revision, each once, artifact grounds by artifact and
+  # revision, then evidence grounds by id; a decision taken at another case revision adds none of
+  # its grounds, because it would not apply whatever its grounds do, so naming them would ask for a
+  # ground to hold again that restores nothing (CANON-GROUND-001). Two entries equal in decision,
+  # outcome, principal and case revision are a duplicate, whatever their grounds. Refused, in this
+  # order: text that is not such a list, or an entry with another key or a missing one, as
+  # malformed-input; then, entry by entry in the order given, a decision, outcome, principal, case
+  # revision, ground artifact, ground revision or ground evidence id that is not an identifier as
+  # invalid-identifier, then an entry equal to an earlier one as duplicate-identifier; then a
+  # ground artifact the protocol does not declare as undeclared-artifact; then a decision for an
+  # outcome the protocol does not declare as undeclared-outcome, and one for an outcome that does
+  # not require a decision of its name as undeclared-decision. canon evaluate's computed_from
+  # records each entry's grounds, ground_evidence sorted and without repeats, and leaves an empty
+  # ground field out.
   # read from: .engineering/planning/story/decision-outcomes.md:46-48
   # read from: .engineering/planning/story/decision-outcomes.md:53-54
+  # read from: .engineering/planning/story/decision-grounds.md:65-79
+  # read from: crates/canon/src/eval/decisions.rs:1-42
   - name: canon.protocol.ExplicitDecision
     kind: struct
     fields:
@@ -1037,6 +1065,32 @@ types:
       # read from: .engineering/planning/story/decision-outcomes.md:106-108
       - name: case_revision
         type: canon.protocol.Revision
+      # The artifact revisions the decision rested on, keyed by artifact id, in the form of
+      # EvidenceRecord.upstream_revisions (story:decision-grounds). Optional: absent, it is empty.
+      # A ground holds while its revision equals the case snapshot's current revision of the
+      # artifact, compared for equality. The decision applies only while every ground holds, as
+      # well as at its case_revision; one that does not apply leaves its outcome blocked, and the
+      # reason {"decision", "present": false} lists the ground under stale_grounds as {"artifact",
+      # "reason": "revision_mismatch", "revision"}. Each key is an artifact the protocol declares,
+      # else undeclared-artifact, and each key and revision an identifier, else
+      # invalid-identifier. Grounds do not tell two entries apart.
+      # read from: .engineering/planning/story/decision-grounds.md:58-61
+      # read from: .engineering/planning/story/decision-grounds.md:65-79
+      # read from: crates/canon/src/model/explicit.rs:41-45
+      - name: ground_revisions
+        type: Map<canon.protocol.ArtifactId, canon.protocol.Revision>
+      # The evidence records the decision rested on, by id (story:decision-grounds). Optional:
+      # absent, it is empty. A ground holds while a record with that id is applicable: given, left
+      # by the revision-binding and freshness stages, and listed in no claim's excluded_evidence
+      # (CANON-FRONTIER-001). A failed one is listed under stale_grounds as {"evidence", "reason"}
+      # with the reason the record was excluded with, or {"evidence", "present": false} when no
+      # record has the id, which is not refused. Each id an identifier, else invalid-identifier.
+      # read from: .engineering/planning/story/decision-grounds.md:60
+      # read from: .engineering/planning/story/decision-grounds.md:62-64
+      # read from: .engineering/planning/story/decision-grounds.md:69-73
+      # read from: crates/canon/src/model/explicit.rs:46-52
+      - name: ground_evidence
+        type: List<canon.protocol.EvidenceId>
 
   # One authority decision of a canon-authority/1 document. `canon evaluate --authority` names that
   # document: a YAML (or JSON) list of these entries; an empty list decides nothing, and an empty
@@ -1046,19 +1100,30 @@ types:
   # entry may be bound to a case revision and may name the principal who took it
   # (story:authority-revision-binding). A bound entry, whatever its decision, applies only while
   # its case_revision is the case snapshot's revision, compared for equality, and to nothing when
-  # the snapshot has no revision; an unbound entry applies at every case revision. Only the entries
-  # that apply take part in coverage and precedence, so a requirement covered only by entries that
-  # do not apply is not decided. One capability may be decided at several scopes and at several
-  # case revisions; two entries equal in capability, scope (the same keys with the same values, in
-  # any order), case revision and principal are a duplicate. Refused, in this order: text that is
-  # not such a list (a scope that names a key twice included), or an entry with another key,
-  # another decision or a missing key, as malformed-input, naming the key an entry leaves out;
-  # then, entry by entry in the order given, a capability that is not an identifier as
-  # invalid-identifier, then a scope key or value that is not one, then a principal, then a case
-  # revision, each as invalid-identifier, then an entry equal to an earlier one as
-  # duplicate-identifier.
-  # read from: crates/canon/src/eval/authority.rs:1-41
-  # read from: crates/canon/src/model/authority.rs:35-59
+  # the snapshot has no revision; an unbound entry applies at every case revision. An entry that
+  # names grounds (ground_revisions, ground_evidence, story:decision-grounds) applies only while
+  # every ground holds, whatever its decision, so a denial whose ground moved lapses too. Only the
+  # entries that apply take part in coverage and precedence, so a requirement covered only by
+  # entries that do not apply is not decided; its reason {"capability", "decision": "none"} then
+  # lists under stale_grounds each failed ground of the entries on its capability that cover it
+  # and apply at the case revision, each once, artifact grounds by artifact and revision, then
+  # evidence grounds by id. An entry bound to another case revision adds none of its grounds,
+  # because it would not apply whatever its grounds do, so naming them would ask for a ground to
+  # hold again that restores nothing (CANON-GROUND-001). One capability may be decided at several
+  # scopes and at several case revisions; two entries equal in capability, scope (the same keys
+  # with the same values, in any order), case revision and principal are a duplicate, whatever
+  # their decisions and grounds. Refused, in this order: text that is not such a list (a scope or
+  # ground_revisions that names a key twice included), or an entry with another key, another
+  # decision or a missing key, as malformed-input, naming the key an entry leaves out; then, entry
+  # by entry in the order given, a capability that is not an identifier as invalid-identifier,
+  # then a scope key or value that is not one, then a principal, then a case revision, then a
+  # ground artifact or its revision, then a ground evidence id, each as invalid-identifier, then
+  # an entry equal to an earlier one as duplicate-identifier; then, once the explicit decisions are
+  # read too, a ground artifact the protocol does not declare as undeclared-artifact. canon
+  # evaluate's computed_from records each entry's grounds, ground_evidence sorted and without
+  # repeats, and leaves an empty ground field out.
+  # read from: crates/canon/src/eval/authority.rs:1-50
+  # read from: crates/canon/src/model/authority.rs:37-75
   # read from: .engineering/planning/story/review-hardening-w7.md:28
   # read from: .engineering/planning/story/review-hardening-w7.md:31
   # read from: .engineering/planning/story/capability-scope.md:74-76
@@ -1068,23 +1133,23 @@ types:
     kind: struct
     fields:
       # The capability decided, an identifier an action's `requires` may name.
-      # read from: crates/canon/src/model/authority.rs:41-42
+      # read from: crates/canon/src/model/authority.rs:43-45
       - name: capability
         type: canon.protocol.CapabilityId
       # The scope the decision covers: one value for each key it names, each key once. It covers
       # a requirement of its capability when the requirement gives each of those keys the same
       # value; a key it leaves out covers every value of it. Absent or empty, it covers every
       # scope of the capability (canon.protocol.CapabilityRequirement).
-      # read from: crates/canon/src/model/authority.rs:43-47
+      # read from: crates/canon/src/model/authority.rs:46-50
       - name: scope
         type: Map<canon.protocol.ScopeKey, canon.protocol.ScopeValue>
       # Whether it is granted.
-      # read from: crates/canon/src/model/authority.rs:48-49
+      # read from: crates/canon/src/model/authority.rs:51-52
       - name: decision
         type: canon.protocol.Grant
       # Who took the decision, an identifier. Canon records it as given and matches it against
       # nothing, since it resolves no identity (design § 23): it does not change admissibility.
-      # read from: crates/canon/src/model/authority.rs:50-53
+      # read from: crates/canon/src/model/authority.rs:53-56
       # read from: .engineering/planning/story/authority-revision-binding.md:49
       # read from: .engineering/planning/story/authority-revision-binding.md:57
       - name: principal
@@ -1093,21 +1158,48 @@ types:
       # case snapshot's revision (Case.revision): the decision applies only at that revision, as an
       # explicit decision does (ExplicitDecision.case_revision). Absent, it applies at every case
       # revision. A grant does not hold at a later revision descended from it.
-      # read from: crates/canon/src/model/authority.rs:54-58
+      # read from: crates/canon/src/model/authority.rs:57-61
       # read from: .engineering/planning/story/authority-revision-binding.md:50-56
       - name: case_revision
         type: Optional<canon.protocol.Revision>
+      # The artifact revisions the decision rested on, keyed by artifact id, in the form of
+      # EvidenceRecord.upstream_revisions (story:decision-grounds). Optional: absent, it is empty.
+      # A ground holds while its revision equals the case snapshot's current revision of the
+      # artifact, compared for equality. The decision applies only while every ground holds, as
+      # well as at its case_revision when it has one, whatever it decided, so a denial whose ground
+      # moved lapses too. A requirement covered only by entries that do not apply is not decided,
+      # and its reason {"capability", "decision": "none"} lists under stale_grounds the ground as
+      # {"artifact", "reason": "revision_mismatch", "revision"}. Each key is an artifact the
+      # protocol declares, else undeclared-artifact, and each key and revision an identifier, else
+      # invalid-identifier. Grounds do not tell two entries apart.
+      # read from: .engineering/planning/story/decision-grounds.md:58-61
+      # read from: .engineering/planning/story/decision-grounds.md:65-79
+      # read from: crates/canon/src/model/authority.rs:62-67
+      - name: ground_revisions
+        type: Map<canon.protocol.ArtifactId, canon.protocol.Revision>
+      # The evidence records the decision rested on, by id (story:decision-grounds). Optional:
+      # absent, it is empty. A ground holds while a record with that id is applicable: given, left
+      # by the revision-binding and freshness stages, and listed in no claim's excluded_evidence
+      # (CANON-FRONTIER-001). A failed one is listed under stale_grounds as {"evidence", "reason"}
+      # with the reason the record was excluded with, or {"evidence", "present": false} when no
+      # record has the id, which is not refused. Each id an identifier, else invalid-identifier.
+      # read from: .engineering/planning/story/decision-grounds.md:60
+      # read from: .engineering/planning/story/decision-grounds.md:62-64
+      # read from: .engineering/planning/story/decision-grounds.md:69-73
+      # read from: crates/canon/src/model/authority.rs:68-74
+      - name: ground_evidence
+        type: List<canon.protocol.EvidenceId>
 
   # A key of a capability scope (cluster, namespace): what the scope narrows the capability to. An
   # identifier: not empty, no whitespace, control or Unicode format characters.
-  # read from: crates/canon/src/model/authority.rs:23-27
+  # read from: crates/canon/src/model/authority.rs:27-31
   # read from: .engineering/planning/story/capability-scope.md:155
   - name: canon.protocol.ScopeKey
     kind: newtype
     of: String
 
   # The value a capability scope gives one key (prod-eu). An identifier, as a scope key is.
-  # read from: crates/canon/src/model/authority.rs:28-31
+  # read from: crates/canon/src/model/authority.rs:32-35
   # read from: .engineering/planning/story/capability-scope.md:155
   - name: canon.protocol.ScopeValue
     kind: newtype
@@ -1119,8 +1211,8 @@ types:
   # true is admissible when every requirement is granted; blocked when one is denied, naming each
   # denied requirement; and approval-required when none is denied and one requires approval or is
   # not decided, naming each such requirement (CANON-AUTHORITY-001, CANON-SCOPE-001).
-  # read from: crates/canon/src/model/authority.rs:50-64
-  # read from: crates/canon/src/eval/actions.rs:41-59
+  # read from: crates/canon/src/model/authority.rs:77-91
+  # read from: crates/canon/src/eval/actions.rs:41-70
   # read from: .engineering/planning/story/capability-scope.md:65-72
   - name: canon.protocol.Grant
     kind: enum

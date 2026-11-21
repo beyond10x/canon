@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T09:42:17Z",
+  "actor": "human:timo",
+  "artifact": "story:simulate-child-outcome-step",
+  "kind": "story",
+  "revision": 14,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "pre-existing: fixtures/investigation/child-outcome-revision.yaml names a protocol epic and an action open_story, engineering vocabulary AGENTS.md excludes; from wave 4, not in this diff; noted in the plan page's backlog additions of wave 6",
+    "reference": "docs/plan/wave-plan-2026-11-20.md, Backlog additions, wave 6",
+    "review": "review-result:adversary-simulate-child-outcome-step-pass-1",
+    "outcome": "escalated"
+  }
+}
