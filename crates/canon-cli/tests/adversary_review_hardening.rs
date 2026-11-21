@@ -123,7 +123,11 @@ fn an_evidence_refusal_after_reading_names_the_file() {
         )
     };
     let cases = [
-        ("repeated-id", record("e1", "k"), "duplicate-identifier"),
+        (
+            "repeated-id",
+            record("e1", "k").replace("subject_revision: r", "subject_revision: r2"),
+            "duplicate-identifier",
+        ),
         (
             "undeclared-kind",
             record("e2", "z"),
