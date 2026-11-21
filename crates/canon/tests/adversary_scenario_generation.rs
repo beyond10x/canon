@@ -166,9 +166,10 @@ fn every_generated_witness_passes_and_is_minimal_over_every_investigation_protoc
                 // `since.yaml`. check/sliced and check/unread-dimension (story:check-subject-slices)
                 // are checked slice by slice, but their whole product, which generating
                 // enumerates, is beyond the bound. The documents of
-                // fixtures/investigation/imports/ that import others (story:protocol-imports)
-                // compile only with the documents they import, which generation does not take;
-                // `canon generate` refuses them before compiling.
+                // fixtures/investigation/imports/ and fixtures/investigation/floor/ that import
+                // others (story:protocol-imports, story:protocol-floor) compile only with the
+                // documents they import, which generation does not take; `canon generate`
+                // refuses them before compiling.
                 let expected = ((fixture.ends_with("state-space-bound/protocol.yaml")
                     || fixture.ends_with("check/sliced/protocol.yaml")
                     || fixture.ends_with("check/unread-dimension/protocol.yaml")
@@ -180,7 +181,8 @@ fn every_generated_witness_passes_and_is_minimal_over_every_investigation_protoc
                     || ((fixture.ends_with("subject-bound-evidence-match.yaml")
                         || fixture.ends_with("invalidation-rules.yaml"))
                         && why.starts_with("nothing-to-witness"))
-                    || (fixture.starts_with("fixtures/investigation/imports/")
+                    || ((fixture.starts_with("fixtures/investigation/imports/")
+                        || fixture.starts_with("fixtures/investigation/floor/"))
                         && why.starts_with("compile: [MissingImport"));
                 if !expected {
                     failures.push(format!("{fixture}: refused: {why}"));
