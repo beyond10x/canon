@@ -39,11 +39,11 @@
 //!    fixtures were renamed from.
 //!
 //! Two more fixtures are pinned by their bytes. `twice`: the opening action is taken twice and
-//! then closed, and both children's outcomes arrive after it closed (D2); exit 0. `two-records`
-//! is the stated limit of D3, not a claim about a real case: one step adds one record, so the walk
-//! reads `open` producing `booked` and then `briefed` as two takings, two children, and its path
-//! lets two children of `open` record outcomes; a runner that records both in one taking has one
-//! child, for which that path is not a real one.
+//! then closed, and both children's outcomes arrive after it closed (D2); exit 0. `two-records`:
+//! its stuck state is true of a real case, one taking of `open` that records `booked` and
+//! `briefed`, whose only child ends with an outcome the `children` form does not list. The
+//! printed path takes `open` twice, which a runner can do too, since `open` stays admissible
+//! until both records are there (D6: D3 is withdrawn).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};

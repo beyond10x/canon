@@ -273,22 +273,24 @@ commands:
       # child-outcome, expiry and authority steps leads from it to a legitimate outcome. The walk
       # counts, per action that opens a child case, its children that have not ended: none, one,
       # or two or more. A step of the action raises the count; a child's outcome arrives while the
-      # count is above none, an outcome other than open lowers it and replaces an open record, and
-      # a child-outcome step is no action step, so it never makes a state a cycle. A state holding
-      # an open record, current or held as expired, keeps some count above none, because an open
-      # record is a child that has not ended. A stuck state or cycle is printed once per smallest
-      # state, with the decisions that would make an outcome legitimate and the number of other
-      # such states that contain it. A case_outcome
-      # record that expires stays read by every children form: with no evidence match reading
-      # case_outcome it has no expiry step, otherwise it is held as expired, absent to every
-      # evidence match. Limit: one step adds one record, so an opening action that records two
-      # things in one taking is walked as taken twice, with two children, and a stuck state or
-      # cycle reached through the second child's outcome may not be one in a real case.
+      # count is above none, an outcome other than open lowers it, or from two or more may also
+      # leave it at two or more, and replaces an open record, and a child-outcome step is no
+      # action step, so it never makes a state a cycle. A state holding an open record, current or
+      # held as expired, keeps some count above none, because an open record is a child that has
+      # not ended. A stuck state or cycle is printed once per smallest state, with the decisions
+      # that would make an outcome legitimate and the number of other such states that contain
+      # it. A case_outcome record that expires stays read by every children form: with no
+      # evidence match reading case_outcome it has no expiry step, otherwise it is held as
+      # expired, absent to every evidence match. Limit: a step adds one record, so where an
+      # action's guard closes on its first record the walk never holds two records of one taking
+      # together, and an outcome that needs both is reported as unreached.
       # read from: .engineering/planning/story/canon-simulate.md:69-80
+      # read from: .engineering/planning/story/canon-simulate.md:235
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R1 to R5
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 2", R2a
-      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 1", D1 and D3
+      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 1", D1
       # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, D5: an `open` record is a child that has not ended"
+      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 2: D3 is withdrawn"
       - name: rejected
         external: >-
           the document is rejected, the walk is refused (an order form, or more than 65536

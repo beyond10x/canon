@@ -183,12 +183,8 @@
 //! different results gives a `cycle`, because mixed results leave the match `unknown` and the
 //! walk cannot set the mixed records aside by a revision.
 //!
-//! One step adds one record ("Decided in review, after adversary pass 1", D3). An opening action
-//! that records two things in one taking is walked as taken twice, its mark at two or more, so a
-//! second child's outcome may arrive where a real case has one child, and a stuck state or cycle
-//! reached through it may not be one in a real case (fixture
-//! `fixtures/investigation/child-outcome/two-records`). A child-outcome step may add a class of
-//! a dimension no child of the marked action is recorded in.
+//! A child-outcome step may add a class of a dimension no child of the marked action is recorded
+//! in.
 //!
 //! # Cost
 //!
