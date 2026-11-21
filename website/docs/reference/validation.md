@@ -100,6 +100,10 @@ offline, so it has no reference at all.
   `array`, `string`, `integer`, `number`, `boolean` or `null`. The top level is `type: object`.
 - `title` and `description`, strings, anywhere.
 - `enum`, on any type: a non-empty list of distinct JSON scalars, each of the schema's type.
+  Two numbers are the same value when their values are equal exactly (see
+  [Numbers](#numbers)): `1` and `1.0` are one value, `9007199254740993` and
+  `9007199254740992.0` two. `canon validate` refuses a value listed twice by that rule, and
+  `canon diff` adds and removes `enum` values by it.
 - `object`: `properties` (a map of name to schema), `required` (a list of distinct names, each
   declared in `properties`), `additionalProperties` (a boolean only).
 - `array`: `items` (one schema), `minItems`, `maxItems`.
@@ -139,8 +143,9 @@ runner that holds an `ir::Action` passes `action.arguments.as_ref()`; one that h
   the keyword that refused and one line of text. Meaning is that of JSON Schema 2020-12.
 - `type`: an `integer` is any number with no fractional part, so `1.0` is an integer. When
   `type` refuses at a location, no other keyword of that schema is checked there.
-- `enum`: values are equal when they are equal in JSON Schema's sense, numbers by exact value:
-  `1` and `1.0` are one value, and two integers a double cannot tell apart are two.
+- `enum`: values are equal when they are equal in JSON Schema's sense, numbers when their
+  values are equal exactly: `1` and `1.0` are one value, and two integers a double cannot tell
+  apart are two.
 - `required`: a missing name is refused at the object's pointer, the reason naming it, in the
   order the schema lists the names.
 - `additionalProperties: false`: an undeclared member is refused at the member's pointer.
@@ -148,14 +153,53 @@ runner that holds an `ir::Action` passes `action.arguments.as_ref()`; one that h
   those, so the depth reached is at most `MAX_SCHEMA_DEPTH`.
 - `minItems`, `maxItems` count the array's items; `minLength`, `maxLength` count the string's
   Unicode code points.
-- `minimum`, `maximum` compare exactly: an integer is never compared through a double, and a
-  fractional number is compared by its exact value. A number the JSON text writes beyond the
-  range of a 64-bit integer is the double `serde_json` reads it as.
+- `minimum`, `maximum` compare exactly, by the value [Numbers](#numbers) states.
 - `title` and `description` never refuse.
 
 Refusals come in document order: a location's own refusals first, its keywords in code-point
 order (`enum`, the maximums, the minimums, then `required`), then its members in code-point
 order of their names, or its items in order. The same input gives the same refusals.
+
+### Numbers
+
+Two numbers are the same when their values are equal exactly, and one is above the other when
+its value is. One comparison decides `minimum`, `maximum`, `enum` and `type: integer` in
+`check_arguments`, the duplicate `enum` value `canon validate` refuses, and the `enum` values
+`canon diff` finds added or removed. No value goes through a double that cannot hold it.
+
+Which value that is depends on how `serde_json` is built. Cargo builds it once per build with
+the features of every crate that uses it, and this crate cannot see them at compile time, so it
+reads once at run time whether `serde_json` writes `0.10` back as `0.10` (the text is held) or
+as `0.1` (a double is held).
+
+- **Text held** (`serde_json`'s `arbitrary_precision`, which `b10x-canon-expr` turns on, so a
+  build that includes that crate has it, such as `cargo build --workspace` or
+  `cargo test --workspace`, and `cargo build -p canon-cli` does not): the value is the decimal
+  the text writes, its sign, digits and exponent, of any length. `9007199254740992.5` is above
+  `maximum: 9007199254740992` and not an integer; `-9223372036854775809` is below
+  `minimum: -9223372036854775808`. `1e400`, which has no finite double, is above every finite
+  bound and below none, an integer, and the same only as a number of the same value (`10e399`);
+  `-1e400` likewise below. `1e-400` is above `0` and not an integer.
+- **Double held** (no `arbitrary_precision`, as in `cargo test -p b10x-canon` or a runner whose
+  `serde_json` lacks it): the value is the 64-bit integer or finite double `serde_json` read,
+  compared exactly, so an integer is never rounded to a double. A literal with a fraction or an
+  exponent is the nearest double: `9007199254740993.0` is 2^53. An integer literal beyond the
+  64-bit range, below -2^63 or above 2^64 - 1, is the nearest double as well:
+  `-9223372036854775809` is -2^63 and meets `minimum: -9223372036854775808`. A literal beyond
+  the double range, such as `1e400`, is refused by `serde_json`, so no caller holds one; `1e-400`
+  is the double 0.
+
+The two builds answer differently in these cases only:
+
+- a literal that is not exactly the integer or double read without `arbitrary_precision`, as in
+  each example above;
+- a number made from a double (`Number::from_f64`, or a number with a fraction or an exponent
+  in a protocol's YAML): with `arbitrary_precision` it holds the shortest text that reads back
+  as that double. Against another such number and against every integer from -2^53 to 2^53
+  that text orders as the double does; against a larger integer it can differ, since 2^60 is
+  written `1152921504606847000`;
+- a bound or an `integer` `enum` value written `-0`: the integer 0 with `arbitrary_precision`,
+  and without it the double -0.0, which `canon validate` refuses as not an integer.
 
 ## Problem codes
 
