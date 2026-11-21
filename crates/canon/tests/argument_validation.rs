@@ -233,6 +233,261 @@ fn enum_values_are_equal_by_exact_value() {
     );
 }
 
+/// Whether serde_json keeps a number's text (its `arbitrary_precision` feature): on in `cargo test
+/// --workspace`, where `b10x-canon-expr` turns it on, off in `cargo test -p b10x-canon`.
+fn holds_text() -> bool {
+    "0.10"
+        .parse::<serde_json::Number>()
+        .is_ok_and(|number| number.to_string() == "0.10")
+}
+
+/// `{"n": <text>}` as serde_json reads it; `None` when it refuses the text.
+fn read_n(text: &str) -> Option<Value> {
+    serde_json::from_str(&format!("{{\"n\": {text}}}")).ok()
+}
+
+/// A top-level schema whose property `n` is the JSON text `property`.
+fn with_n(property: &str) -> Value {
+    serde_json::from_str(&format!(
+        r#"{{"type": "object", "properties": {{"n": {property}}}}}"#
+    ))
+    .expect("JSON")
+}
+
+/// What `check_arguments` refuses of `{"n": <text>}` under `with_n(property)`.
+fn refusals_of(property: &str, text: &str) -> Vec<(String, String)> {
+    let arguments = read_n(text).unwrap_or_else(|| panic!("serde_json reads {text}"));
+    refusals(Some(&with_n(property)), &arguments)
+}
+
+/// Where serde_json keeps the text, a number is its exact decimal value; where it does not, it is
+/// the double serde_json reads (`9007199254740992.5` is `9007199254740992`).
+#[test]
+fn a_written_fraction_is_its_exact_value_where_the_text_is_held() {
+    let cases = [
+        (
+            r#"{"type": "number", "maximum": 9007199254740992}"#,
+            "9007199254740992.5",
+            "maximum",
+        ),
+        (r#"{"type": "integer"}"#, "9007199254740992.5", "type"),
+    ];
+    for (property, text, keyword) in cases {
+        let expected = if holds_text() {
+            pairs(&[("/n", keyword)])
+        } else {
+            Vec::new()
+        };
+        assert_eq!(
+            refusals_of(property, text),
+            expected,
+            "{text} under {property}"
+        );
+    }
+    let cases = [
+        (
+            r#"{"type": "number", "minimum": 9007199254740993}"#,
+            "minimum",
+        ),
+        (r#"{"type": "number", "enum": [9007199254740993]}"#, "enum"),
+    ];
+    for (property, keyword) in cases {
+        let expected = if holds_text() {
+            Vec::new()
+        } else {
+            pairs(&[("/n", keyword)])
+        };
+        assert_eq!(
+            refusals_of(property, "9007199254740993.0"),
+            expected,
+            "under {property}"
+        );
+    }
+}
+
+/// An integer literal beyond the 64-bit range is that integer where the text is held, and the
+/// nearest double where it is not.
+#[test]
+fn an_integer_beyond_64_bits_is_exact_where_the_text_is_held() {
+    let below = refusals_of(
+        r#"{"type": "integer", "minimum": -9223372036854775808}"#,
+        "-9223372036854775809",
+    );
+    let expected = if holds_text() {
+        pairs(&[("/n", "minimum")])
+    } else {
+        Vec::new() // the double -2^63, equal to the bound
+    };
+    assert_eq!(below, expected);
+    assert_eq!(
+        refusals_of(
+            r#"{"type": "integer", "maximum": 18446744073709551615}"#,
+            "18446744073709551616"
+        ),
+        pairs(&[("/n", "maximum")])
+    );
+    let written = refusals_of(
+        r#"{"type": "number", "enum": [18446744073709551615]}"#,
+        "18446744073709551615.0",
+    );
+    let expected = if holds_text() {
+        Vec::new()
+    } else {
+        pairs(&[("/n", "enum")]) // the double 2^64
+    };
+    assert_eq!(written, expected);
+}
+
+/// `1e400` has no finite double: where the text is held it is above every finite bound, an
+/// integer, and equal only to a number of the same value; where it is not, serde_json refuses it.
+/// `1e-400` is above 0 where the text is held, and the double 0 where it is not.
+#[test]
+fn a_number_beyond_the_double_range_is_its_exact_value_where_the_text_is_held() {
+    if !holds_text() {
+        assert_eq!(read_n("1e400"), None);
+        assert_eq!(read_n("-1e400"), None);
+        assert_eq!(
+            refusals_of(r#"{"type": "integer", "maximum": 0}"#, "1e-400"),
+            Vec::new()
+        );
+        return;
+    }
+    let cases: [(&str, &str, &[(&str, &str)]); 10] = [
+        (
+            r#"{"type": "number", "maximum": 5}"#,
+            "1e400",
+            &[("/n", "maximum")],
+        ),
+        (r#"{"type": "number", "minimum": 0}"#, "1e400", &[]),
+        (
+            r#"{"type": "number", "minimum": 0}"#,
+            "-1e400",
+            &[("/n", "minimum")],
+        ),
+        (r#"{"type": "number", "maximum": 0}"#, "-1E+400", &[]),
+        (
+            r#"{"type": "number", "enum": [1.5]}"#,
+            "1e400",
+            &[("/n", "enum")],
+        ),
+        (r#"{"type": "integer"}"#, "1e400", &[]),
+        (r#"{"type": "number", "enum": [1e400]}"#, "10e399", &[]),
+        (
+            r#"{"type": "number", "enum": [1e400]}"#,
+            "1e401",
+            &[("/n", "enum")],
+        ),
+        (
+            r#"{"type": "number", "maximum": 0}"#,
+            "1e-400",
+            &[("/n", "maximum")],
+        ),
+        (r#"{"type": "integer"}"#, "1e-400", &[("/n", "type")]),
+    ];
+    for (property, text, expected) in cases {
+        assert_eq!(
+            refusals_of(property, text),
+            pairs(expected),
+            "{text} under {property}"
+        );
+    }
+}
+
+/// `canon validate`'s duplicate check uses the same comparison: `9007199254740993` and
+/// `9007199254740993.0` are one value where the text is held, and two where it is not (the second
+/// is the double 2^53); `9007199254740993` and `9007199254740992.0` are two in both.
+#[test]
+fn an_enum_lists_each_exact_value_once() {
+    let schema = with_n(r#"{"type": "number", "enum": [9007199254740993, 9007199254740993.0]}"#);
+    let found = check_arguments(Some(&schema), &json!({"n": 9_007_199_254_740_993_u64}));
+    let expected = if holds_text() {
+        Err(ArgumentsRefused::Schema(vec![(
+            "/properties/n/enum/1".to_owned(),
+            "`9007199254740993.0` is listed more than once".to_owned(),
+        )]))
+    } else {
+        Ok(())
+    };
+    assert_eq!(found, expected);
+    let distinct = with_n(r#"{"type": "number", "enum": [9007199254740993, 9007199254740992.0]}"#);
+    assert_eq!(
+        check_arguments(Some(&distinct), &json!({"n": 9_007_199_254_740_993_u64})),
+        Ok(())
+    );
+    if holds_text() {
+        let same = with_n(r#"{"type": "number", "enum": [1e400, 10e399]}"#);
+        assert_eq!(
+            check_arguments(Some(&same), &json!({})),
+            Err(ArgumentsRefused::Schema(vec![(
+                "/properties/n/enum/1".to_owned(),
+                "`10e399` is listed more than once".to_owned(),
+            )]))
+        );
+    }
+}
+
+/// Values both builds hold alike, above 2^53 and beyond the 64-bit range, compared exactly.
+#[test]
+fn doubles_beyond_two_to_the_53_are_compared_exactly_in_both_builds() {
+    let cases: [(&str, &str, &[(&str, &str)]); 7] = [
+        (
+            r#"{"type": "integer", "maximum": 9007199254740993}"#,
+            "9007199254740994.0",
+            &[("/n", "maximum")],
+        ),
+        (
+            r#"{"type": "integer", "maximum": 9007199254740994}"#,
+            "9007199254740994.0",
+            &[],
+        ),
+        (
+            r#"{"type": "integer", "minimum": -9223372036854775808}"#,
+            "-9223372036854777856.0",
+            &[("/n", "minimum")],
+        ),
+        (
+            r#"{"type": "number", "maximum": 18446744073709551615}"#,
+            "1e300",
+            &[("/n", "maximum")],
+        ),
+        (
+            r#"{"type": "number", "minimum": -9223372036854775808}"#,
+            "-1e300",
+            &[("/n", "minimum")],
+        ),
+        (r#"{"type": "integer"}"#, "1e300", &[]),
+        (
+            r#"{"type": "number", "enum": [9007199254740994]}"#,
+            "9007199254740994.0",
+            &[],
+        ),
+    ];
+    for (property, text, expected) in cases {
+        assert_eq!(
+            refusals_of(property, text),
+            pairs(expected),
+            "{text} under {property}"
+        );
+    }
+}
+
+/// A number made from a double (`Number::from_f64`, as a protocol's YAML gives it) is that double
+/// where the text is not held, and the shortest text that reads back as it where it is: 2^60 is
+/// written `1152921504606847000`, which is not 2^60.
+#[test]
+fn a_number_made_from_a_double_is_the_double_or_its_shortest_text() {
+    let double = serde_json::Number::from_f64(1_152_921_504_606_846_976.0).expect("finite");
+    let schema =
+        json!({"type": "object", "properties": {"n": {"type": "number", "enum": [double]}}});
+    let found = refusals(Some(&schema), &json!({"n": 1_152_921_504_606_846_976_u64}));
+    let expected = if holds_text() {
+        pairs(&[("/n", "enum")])
+    } else {
+        Vec::new()
+    };
+    assert_eq!(found, expected);
+}
+
 /// Expectation 6: every refusal is reported, in document order with members in code-point order;
 /// a location's own refusals come before its members', and the same input gives the same result.
 #[test]
@@ -419,13 +674,20 @@ fn check_arguments_agrees_with_the_oracle_on_random_schemas() {
     );
 }
 
-/// The refusal type carries its three parts.
+/// A refusal carries the escaped pointer, the keyword and the reason, and prints them on one line.
 #[test]
 fn a_refusal_has_a_pointer_a_keyword_and_a_reason() {
-    let refusal = ArgumentRefusal {
-        pointer: "/a".to_owned(),
-        keyword: "type",
-        reason: "r".to_owned(),
-    };
-    assert_eq!(refusal.clone(), refusal);
+    let refused = check_arguments(None, &json!({"a/b": 1}));
+    assert_eq!(
+        refused,
+        Err(ArgumentsRefused::Arguments(vec![ArgumentRefusal {
+            pointer: "/a~1b".to_owned(),
+            keyword: "additionalProperties",
+            reason: "`a/b` is not declared in `properties`".to_owned(),
+        }]))
+    );
+    assert_eq!(
+        refused.expect_err("refused").to_string(),
+        "arguments at `/a~1b`: `a/b` is not declared in `properties`"
+    );
 }
