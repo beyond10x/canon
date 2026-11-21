@@ -4,7 +4,9 @@
 use serde::Deserialize;
 
 use super::Declarations;
-use super::ids::{ArtifactId, CaseId, EvidenceId, EvidenceKindId, Instant, Principal, Revision};
+use super::ids::{
+    ArtifactId, CaseId, EvidenceId, EvidenceKindId, Instant, ItemId, Principal, Revision,
+};
 
 /// The evidence record format this model reads.
 pub const EVIDENCE_FORMAT: &str = "canon-evidence/1";
@@ -55,5 +57,5 @@ pub struct EvidenceRecord {
     /// for equality only, which a `descended` form pairs an earlier and a later record on. A
     /// record without it takes no part in that form.
     #[serde(default, deserialize_with = "super::present::optional")]
-    pub item: Option<String>,
+    pub item: Option<ItemId>,
 }

@@ -446,7 +446,7 @@ fn scenario(
                 line(10, &format!("child_case: {}", quote(child.as_str())));
             }
             if let Some(item) = &record.item {
-                line(10, &format!("item: {}", quote(item)));
+                line(10, &format!("item: {}", quote(item.as_str())));
             }
             if !record.upstream_revisions.is_empty() {
                 line(10, "upstream_revisions:");

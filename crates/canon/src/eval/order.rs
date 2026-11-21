@@ -76,7 +76,7 @@ use super::claims::reads;
 use super::composition::Artifacts;
 use crate::model::{
     ArtifactId, EvidenceAfter, EvidenceDescended, EvidenceKindId, EvidenceOrder, EvidenceRecord,
-    EvidenceSince, FirstResult, LaterRecord, Predicate, Revision, Truth,
+    EvidenceSince, FirstResult, ItemId, LaterRecord, Predicate, Revision, Truth,
 };
 
 /// The value of an order form over the `history`, with `artifacts` the case snapshot's artifacts,
@@ -304,7 +304,7 @@ fn descended(
             && record.item.is_some()
     };
     let artifact = |record: &EvidenceRecord| artifacts?.get(&record.subject);
-    let mut earlier: BTreeMap<(&ArtifactId, &Option<String>), Vec<&Revision>> = BTreeMap::new();
+    let mut earlier: BTreeMap<(&ArtifactId, &Option<ItemId>), Vec<&Revision>> = BTreeMap::new();
     for first in history.iter().filter(|record| of(&form.first, record)) {
         let revisions = earlier.entry((&first.subject, &first.item)).or_default();
         revisions.push(&first.subject_revision);
@@ -1517,7 +1517,7 @@ mod tests {
     /// instant: `descended` reads none.
     fn run(result: &str, subject: &str, revision: &str, item: Option<&str>) -> EvidenceRecord {
         let mut record = at_revision(record("e", "k", Some(result), subject, None), revision);
-        record.item = item.map(str::to_owned);
+        record.item = item.map(ItemId::new);
         record
     }
 

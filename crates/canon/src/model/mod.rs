@@ -54,7 +54,7 @@ pub use explicit::{DECISIONS_FORMAT, ExplicitDecision};
 pub use ids::{
     ActionId, Age, ArtifactId, CapabilityId, CaseId, ClaimId, DecisionName, EffectClass,
     EvidenceId, EvidenceKindId, IndependenceDimensionId, InputId, InputValue, Instant,
-    InvalidationRuleId, ObligationId, OutcomeId, Principal, ProtocolId, Revision,
+    InvalidationRuleId, ItemId, ObligationId, OutcomeId, Principal, ProtocolId, Revision,
 };
 pub use parse::{FORMAT, ParseError, parse};
 pub use predicate::{

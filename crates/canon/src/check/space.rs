@@ -1740,7 +1740,7 @@ impl<'a> Space<'a> {
             .collect();
         for record in &mut records {
             if self.descended && !unnamed.contains(&(&record.kind, &record.subject)) {
-                record.item = Some(ITEM.to_owned());
+                record.item = Some(crate::model::ItemId::new(ITEM));
             }
             if record.kind.as_str() == CASE_OUTCOME {
                 record.child_case = Some(CaseId::new(record.id.as_str()));

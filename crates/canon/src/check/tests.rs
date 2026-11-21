@@ -747,7 +747,8 @@ fn every_value_of_descended_is_reached_jointly_with_the_evidence_matches() {
                 observed_at: instants[rng.below(3)].map(crate::model::Instant::new),
                 upstream_revisions: Declarations::default(),
                 child_case: None,
-                item: [Some("item"), Some("other"), None][rng.below(3)].map(str::to_owned),
+                item: [Some("item"), Some("other"), None][rng.below(3)]
+                    .map(crate::model::ItemId::new),
             })
             .collect();
         let ancestors = [

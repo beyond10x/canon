@@ -156,7 +156,7 @@ fn check_record<'a>(
         identifier(&format!("{named} child case identifier"), child.as_str())?;
     }
     if let Some(item) = &record.item {
-        identifier(&format!("{named} item"), item)?;
+        identifier(&format!("{named} item"), item.as_str())?;
     }
     if let Some(observed_at) = &record.observed_at
         && observed_at.seconds().is_none()

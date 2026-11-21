@@ -109,7 +109,7 @@ fn the_published_schema_of_item_holds_the_identifier_rule_the_evaluator_applies(
         "the schema of `item` accepts what the evaluator refuses as invalid-identifier: {item}"
     );
     let empty = model::EvidenceRecord {
-        item: Some(String::new()),
+        item: Some(model::ItemId::new("")),
         ..record()
     };
     let case = eval::read_case(
