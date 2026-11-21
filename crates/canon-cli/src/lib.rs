@@ -198,8 +198,9 @@ pub enum Command {
     /// cycle, it says every record step and ends `every revision by action x leads to a state no
     /// outcome is reachable from`. Each is printed once, at its smallest state, with the shortest
     /// path that reaches it, each decision that would make an outcome legitimate there, and how
-    /// many other such states contain it; an open state in which every step of every admissible
-    /// action, record or revise, returns the state is counted as waiting. The summary
+    /// many other such states contain it; an open state in which no outcome is legitimate, no
+    /// action is approval-required, and every step of every admissible action, record or revise,
+    /// returns the state is counted as waiting. The summary
     /// counts the reachable states, per outcome those in which it is legitimate, the waiting
     /// states, the findings and the stuck and cycle states they stand for. A protocol with an
     /// order form (`first`, `before`, `after`, `since`) is refused (`ordered-evidence`), and so is

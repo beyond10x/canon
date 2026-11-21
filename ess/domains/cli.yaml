@@ -263,11 +263,12 @@ commands:
       # waiting on supplied evidence, a child outcome or expiry when an action opens a child case
       # (case_open). A state names each opening action whose children have not all ended: `action
       # a opened a child` for one, `action a opened 2 or more children` for more. An open state
-      # waits only when every step of every admissible action, record or revise, returns it. A
-      # revise step is written `action x revises a`, or `action x revises a and produces …` with
-      # the record or group it adds; in a state, a record of a dimension a children form reads
-      # that a revision set aside is written `… earlier`, and one observed before an upstream
-      # artifact moved `… observed before upstream a moved`.
+      # waits only when no outcome is legitimate in it, no action is approval-required there, and
+      # every step of every admissible action, record or revise, returns it. A revise step is
+      # written `action x revises a`, or `action x revises a and produces …` with the record or
+      # group it adds; in a state, a record of a dimension a children form reads that a revision
+      # set aside is written `… earlier`, and one observed before an upstream artifact moved `…
+      # observed before upstream a moved`.
       # read from: .engineering/planning/story/canon-simulate.md:67
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R3 and R5
       # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 1", D1
