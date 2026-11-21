@@ -132,7 +132,7 @@ fn decisions(outcomes: Option<&Json>, revision: Option<&Revision>) -> Vec<Json> 
             Some(((outcome, decision), Value::Object(entry)))
         })
         .collect();
-    entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+    entries.sort_by_key(|(key, _)| *key);
     entries.into_iter().map(|(_, entry)| entry).collect()
 }
 
