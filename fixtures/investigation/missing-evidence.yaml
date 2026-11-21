@@ -28,8 +28,6 @@ evidence_kinds:
     description: A note written while collecting notes on an escalated observation.
   alpha_note:
     description: Another note written while collecting notes on an escalated observation.
-  report:
-    description: A report on an escalated observation.
 
 claims:
   explanation.supported:
@@ -90,15 +88,15 @@ actions:
       - evidence: alpha_note
 
   file_report:
-    description: File a report on an observation that was escalated; filing needs approval.
+    description: Ask a peer to review the escalated finding at once; it needs the approval publishing does.
     precondition:
       evidence:
         kind: supporting_observation
         result: escalated
     requires:
-      - capability: report.file
+      - capability: finding.publish
     may_produce:
-      - evidence: report
+      - evidence: peer_review
 
   publish_finding:
     description: Publish the finding that the explanation is supported.

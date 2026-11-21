@@ -10,14 +10,14 @@ fixture: fixtures/investigation/missing-evidence.yaml
 # `inspect` may produce supporting_observation, `attempt_falsification` falsification_attempt,
 # `request_peer_review` peer_review and `collect_notes` zeta_note and alpha_note (declared in that
 # order, so the order of kinds in the section is the identifier order, not the declared one);
-# `file_report` may produce report and needs the capability report.file; `summarize` produces
-# nothing; `publish_finding` needs the claim explanation.supported and the capability
+# `file_report` may produce peer_review too and needs the capability finding.publish; `summarize`
+# produces nothing; `publish_finding` needs the claim explanation.supported and the capability
 # finding.publish. `request_peer_review` is admissible only while an observation has the result
 # needs_review, `collect_notes` and `file_report` only while one has the result escalated, and
 # `publish_finding` never is here (blocked without support, approval-required with it), so only
 # `inspect` and `attempt_falsification` are keys, except in the last two steps. In the last step
-# `file_report` is approval-required, as no authority grants report.file, and is not a key although
-# it may produce report. That the section is absent when no action qualifies is not a step: the
+# `file_report` is approval-required, as no authority grants finding.publish, and is not a key
+# although it may produce peer_review, which has no record. That the section is absent when no action qualifies is not a step: the
 # runner fails a section the decision does not carry, so the absence is held by the unit tests of
 # crates/canon/src/eval/missing.rs. The claim reads falsification_attempt through a match that demands
 # independence on different_principal, so every case lists reviewer-2 on it and every falsification
@@ -377,10 +377,10 @@ steps:
         }
 
   # Expectation 9. The observation carries the result escalated, which makes `collect_notes`
-  # admissible and `file_report` approval-required (no authority grants report.file). The
+  # admissible and `file_report` approval-required (no authority grants finding.publish). The
   # admissible action may produce two kinds, none with a record, declared zeta_note first and
-  # alpha_note second: both are listed, in identifier order. `file_report` may produce `report`,
-  # which no record has either, and is not a key: only an admissible action is. `publish_finding`
+  # alpha_note second: both are listed, in identifier order. `file_report` may produce
+  # `peer_review`, which no record has either, and is not a key: only an admissible action is. `publish_finding`
   # is approval-required too, and has nothing to produce.
   - id: approval-required-action-and-two-kinds
     evaluate:
@@ -421,7 +421,7 @@ steps:
             "file_report": {
               "reasons": [
                 {
-                  "capability": "report.file",
+                  "capability": "finding.publish",
                   "decision": "none"
                 }
               ],
