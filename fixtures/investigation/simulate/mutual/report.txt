@@ -3,4 +3,4 @@ dead-action: action `review_draft` is admissible in no reachable state
 dead-action: action `write_draft` is admissible in no reachable state
 unreached-outcome: outcome `done` is legitimate in no reachable state
 no-outcome-reachable: protocol `simulate.mutual` revision 1 reaches no state in which an outcome is legitimate
-simulated: protocol `simulate.mutual` revision 1: 1 reachable state, 0 terminable (outcome `done` 0), 5 findings
+simulated: protocol `simulate.mutual` revision 1: 1 reachable state, 0 terminable (outcome `done` 0), 5 findings (1 stuck or cycle state)

@@ -1,0 +1,57 @@
+format: protocol/1
+
+protocol:
+  id: simulate.unread
+  revision: 1
+  description: Seeded defect, the mutual protocol with a supplied note that nothing reads; the note leaves the case as stuck as before.
+
+artifacts:
+  paper:
+    description: The paper being written.
+
+evidence_kinds:
+  draft:
+    description: A draft of the paper.
+  note:
+    description: A note on the paper, from a simulate.archive case, which nothing reads.
+    supplied_by: simulate.archive
+  review:
+    description: A review of the paper.
+
+claims:
+  paper.drafted:
+    description: The paper has a draft.
+    true_when:
+      evidence:
+        kind: draft
+
+  paper.reviewed:
+    description: The paper has a review.
+    true_when:
+      evidence:
+        kind: review
+
+actions:
+  write_draft:
+    description: Write a draft, which needs a review first.
+    precondition:
+      claim: paper.reviewed
+      is: true
+    may_produce:
+      - evidence: draft
+
+  review_draft:
+    description: Review the draft, which needs a draft first.
+    precondition:
+      claim: paper.drafted
+      is: true
+    may_produce:
+      - evidence: review
+
+outcomes:
+  done:
+    description: The paper is drafted and reviewed.
+    requires:
+      all:
+        - claim: paper.drafted
+        - claim: paper.reviewed

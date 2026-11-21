@@ -241,15 +241,19 @@ commands:
       display: Simulate
       summary: >-
         Walk every state a case of a protocol/1 document can reach from the empty case and report
-        stuck states, cycles, dead actions and unreached outcomes.
+        the states no sequence of steps gets out of (stuck states and cycles, one per smallest
+        state), dead actions and unreached outcomes.
     input:
       # The protocol/1 document to simulate.
       # read from: .engineering/planning/story/canon-simulate.md:44
       - name: path
         type: String
     response:
-      # The walk's summary line, which found nothing.
+      # The walk's summary line, which found nothing: the reachable states, the terminable ones
+      # per outcome, the open states with no action to take (waiting on supplied evidence or
+      # expiry) when the protocol declares a supplied or an expiring kind, and 0 findings.
       # read from: .engineering/planning/story/canon-simulate.md:67
+      # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R3 and R5
       - name: output
         type: String
     outcomes:
@@ -257,11 +261,17 @@ commands:
       - name: unreadable
         external: the protocol cannot be read
         error: canon.cli.Unreadable
+      # A stuck state or a cycle is a state that is not open: no sequence of action, authority,
+      # supplied and expiry steps leads from it to a legitimate outcome. Each is printed once per
+      # smallest state, with the decisions that would make an outcome legitimate and the number
+      # of other such states that contain it.
       # read from: .engineering/planning/story/canon-simulate.md:69-80
+      # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R1 to R5
       - name: rejected
         external: >-
-          the document is rejected, the walk is refused, or the walk finds a stuck state, a cycle,
-          a dead action or an unreached outcome
+          the document is rejected, the walk is refused (an order form, or more than 65536
+          reachable states), or the walk finds a state no step sequence gets out of, a dead action
+          or an unreached outcome
         error: canon.cli.Rejected
       # read from: .engineering/planning/story/canon-simulate.md:69
       - name: nothing-found

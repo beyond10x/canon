@@ -1,0 +1,44 @@
+format: protocol/1
+
+protocol:
+  id: simulate.result
+  revision: 1
+  description: Accept a report a review accepts; a report is reviewed once while a review is fresh, so no second, different result is recorded beside it, and a review that did not accept expires and lets the next one through.
+
+artifacts:
+  report:
+    description: The report under review.
+
+evidence_kinds:
+  review:
+    description: A review of the report, valid for a day; its result is accepted or another.
+    max_age: 1d
+
+claims:
+  report.accepted:
+    description: A fresh review accepted the report.
+    true_when:
+      evidence:
+        kind: review
+        result: accepted
+
+  report.reviewed:
+    description: The report has a fresh review.
+    true_when:
+      evidence:
+        kind: review
+
+actions:
+  review_report:
+    description: Review the report, while it has no fresh review.
+    precondition:
+      claim: report.reviewed
+      is: unknown
+    may_produce:
+      - evidence: review
+
+outcomes:
+  accepted:
+    description: The report is accepted.
+    requires:
+      claim: report.accepted

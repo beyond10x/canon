@@ -23,8 +23,12 @@
 //!    `ess_commands_match.rs`, holds the declaration of the command in `ess/domains/cli.yaml`.)
 //!
 //! A kind that declares `supplied_by` is produced outside the protocol: a record of it may arrive
-//! at any step, so a state that waits only on one is not stuck, and the summary counts it
-//! (`supplied` against `unsupplied`, the same protocol without the declaration).
+//! at any step, so a state a supplied record leads out of is not stuck, and the summary counts it
+//! as waiting (`supplied` against `unsupplied`, the same protocol without the declaration).
+//!
+//! The story's rules refined after adversary pass 1 (R1 to R6) are held by
+//! `simulate_follows_the_refined_rules`: an expiry step, the open-state rule for `stuck-state`
+//! and `cycle`, a decision named on a finding, and one finding per smallest state with a count.
 //!
 //! Each fixture directory carries `protocol.yaml` and the exact output: `report.txt` on standard
 //! output with nothing on standard error, or `refusal.txt` on standard error with nothing on
@@ -47,7 +51,7 @@ enum Expected {
 
 /// Every fixture directory, the exit status and where the expected text goes. A walk that finds
 /// nothing exits 0; findings and a refusal exit 1 (`REJECTED`).
-const CASES: [(&str, i32, Expected); 9] = [
+const CASES: [(&str, i32, Expected); 15] = [
     ("clean", 0, Expected::Report),
     ("mutual", 1, Expected::Report),
     ("denied", 1, Expected::Report),
@@ -57,6 +61,22 @@ const CASES: [(&str, i32, Expected); 9] = [
     ("state-space-bound", 0, Expected::Report),
     ("supplied", 0, Expected::Report),
     ("unsupplied", 1, Expected::Report),
+    ("expiry", 0, Expected::Report),
+    ("renew-loop", 1, Expected::Report),
+    ("decision-exit", 1, Expected::Report),
+    ("contained", 1, Expected::Report),
+    ("unread-supplied", 1, Expected::Report),
+    ("clean-result", 0, Expected::Report),
+];
+
+/// The cases of the rules refined after adversary pass 1 (the story's last section, R1 to R6).
+const REFINED: [&str; 6] = [
+    "expiry",
+    "renew-loop",
+    "decision-exit",
+    "contained",
+    "unread-supplied",
+    "clean-result",
 ];
 
 /// The cases of the named test, expectations 1 to 7.
@@ -189,6 +209,26 @@ fn simulate_reports_reachability_findings() {
 #[test]
 fn simulate_lets_a_supplied_record_arrive_at_any_step() {
     let failures = failures(&["supplied", "unsupplied"]);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The rules refined after adversary pass 1:
+///
+/// - `expiry`: an action admissible only after a `max_age` record expires is reached by the
+///   expiry step (R2), and the state that waits for the expiry is counted as waiting (R3).
+/// - `renew-loop`: a record renewed and expiring forever, while the outcome needs evidence nothing
+///   produces, is a `cycle` at the state in which renewing returns the same state (R2, R3, R6).
+/// - `decision-exit`: a stuck state a decision makes terminable is still stuck, and the finding
+///   names the decision and its outcome (R4).
+/// - `contained`: one denial strands the case beside any of three memo states; one finding is
+///   printed, at the smallest state, with the count of the others (R5).
+/// - `unread-supplied`: a supplied kind nothing reads leaves `{}` stuck, with an empty path, and
+///   no state waits (R3, R5).
+/// - `clean-result`: a protocol that reads a `result:` is clean when no action may record a
+///   second, different result beside a fresh one.
+#[test]
+fn simulate_follows_the_refined_rules() {
+    let failures = failures(&REFINED);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
