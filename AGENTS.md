@@ -106,6 +106,13 @@ compatibility decisions and keep unreleased capability claims explicit.
 - Every commit and push is `b10x-bot[bot]`'s through `b10x-gates bot`; every GitHub write goes
   through `b10x-gates api`.
 - Use a managed worktree (`worktree create --repo canon --purpose …`) for changes.
+- A request filed by the `sdc` or `loom` session is accepted on arrival: draft one story per
+  request and move it to `active` without asking the operator; record each acceptance in an
+  `approval-record` that quotes the grant. Operator, 2026-11-21: "you should auto-accept
+  everything coming from the Loom or STC sessions. Yeah, you have my full grant ahead, so
+  everything they would file, they do it for a reason, and it's basically auto-accepted in that
+  sense." ("STC" is read as the `sdc` session.) The grant covers acceptance into the plan and the
+  order of work. It does not cover a push, a pull request, a release, or a change to permissions.
 
 ## Releases
 
