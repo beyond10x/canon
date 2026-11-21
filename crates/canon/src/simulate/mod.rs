@@ -39,6 +39,19 @@
 //!   expired record is an absent one to every evidence match (`crate::check`, "The state space"),
 //!   so the state without the class evaluates as a case in which those records are past their
 //!   `max_age`. With it the step graph can loop.
+//!
+//!   `case_outcome` is the exception (R2a): the evaluator's `children` form reads every accepted
+//!   `case_outcome` record, expired ones too (`eval/composition.rs`: an expiry does not undo a
+//!   child's outcome), and every evidence match loses an expired one. When no evidence match
+//!   reads `case_outcome`, it has no expiry step, which would change nothing the evaluator reads.
+//!   When one does and a `children` form reads it too, the step holds the class's record as
+//!   expired: one bit after the class's profiles, the record written as the history dimension of
+//!   a `children` form writes an earlier one, at a superseded revision of its artifact and with no
+//!   producer, which revision binding keeps from every evidence match, as freshness keeps an
+//!   expired record, and every `children` form reads. A state can always hold it, so no protocol
+//!   is refused for it. It is rendered `` evidence `case_outcome` result `r` expired ``, after the
+//!   class's current records; a later record of the class sits beside it, as a second child's
+//!   outcome does.
 //! - **Authority step.** A capability some action requires goes from undecided to `granted` or to
 //!   `denied`.
 //! - **Decision step.** A decision some outcome requires goes from not taken to taken.
@@ -111,11 +124,32 @@
 //! offered, since a walk that has not seen every reachable state cannot say that none is stuck.
 //! An evaluation the evaluator refuses is refused with its code.
 //!
-//! # Known limit
+//! # Known limits
 //!
 //! No artifact is revised. A kind read with `result:` that an action may produce twice with
 //! different results gives a `cycle`, because mixed results leave the match `unknown` and the
 //! walk cannot set the mixed records aside by a revision.
+//!
+//! A child case's outcome is walked only as a step of its opening action, while that action is
+//! admissible: a runner records it when the child ends, which may be after the opening action's
+//! guard has closed. So a `stuck-state` or `cycle` in a state that waits for a child's outcome may
+//! not be one in a real case. When some action declares `case_open`, the report says so on one
+//! line after the findings and before the summary, [`CHILD_OUTCOME_LIMIT`] (R7), which changes
+//! neither the exit status nor the count of findings; story:simulate-child-outcome-step removes
+//! it.
+//!
+//! # Cost
+//!
+//! Each reachable state is evaluated once by Canon's evaluator, which dominates a walk with few
+//! findings: 65536 states and no finding take 12.4 to 14.5 s in a release build (measured
+//! 2026-11-21 on a shared workstation). Finding the smallest states (R5) compares states of one
+//! kind only within a group of equal case inputs, each with those of a smaller size and then of
+//! a greater one, stopping at the first that contains it: 65536 stuck states, each with case
+//! inputs of its own, take 9.0 s, against 157.7 s when every state was compared with every
+//! other; 16384 take 2.1 s, against 19.3 s. Within one group it stays quadratic: n stuck or cycle
+//! states with equal inputs of which none contains another take up to n² comparisons, which for
+//! 65536 such states is the cost of the search before the grouping. No SDC protocol comes near:
+//! the slowest walks in under 4 s.
 
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::fmt;
@@ -123,7 +157,10 @@ use std::fmt;
 use crate::check::{self, Reader, Space, State, Walked};
 use crate::eval;
 use crate::ir::Ir;
-use crate::model::{ActionId, DecisionName, EvidenceKindId, OutcomeId, ProtocolId, one_line};
+use crate::model::{
+    ActionId, CASE_OUTCOME, DecisionName, EvidenceKindId, OutcomeId, Predicate, ProtocolId,
+    one_line,
+};
 
 #[cfg(test)]
 mod tests;
@@ -299,6 +336,8 @@ pub struct Report {
     /// How many reachable states the printed stuck states and cycles stand for.
     pub dead: usize,
     pub findings: Vec<Finding>,
+    /// Whether some action opens a child case, so the report states [`CHILD_OUTCOME_LIMIT`] (R7).
+    pub opens_children: bool,
 }
 
 impl Report {
@@ -308,6 +347,14 @@ impl Report {
     }
 }
 
+/// The line a report prints after its findings and before its summary when some action opens a
+/// child case (R7): the limit on child outcomes until story:simulate-child-outcome-step lets a
+/// `case_outcome` record arrive after its opening action was taken. It is no finding: it changes
+/// neither the exit status nor the count of findings.
+pub const CHILD_OUTCOME_LIMIT: &str = "limit: a child case's outcome is walked only as a step of \
+     its opening action, so a `stuck-state` or `cycle` in a state that waits for a child's \
+     outcome may not be one in a real case";
+
 fn counted(count: usize, one: &str, many: &str) -> String {
     format!("{count} {}", if count == 1 { one } else { many })
 }
@@ -315,11 +362,15 @@ fn counted(count: usize, one: &str, many: &str) -> String {
 /// One line per finding, then the summary: `` simulated: protocol `p` revision 1: 4 reachable
 /// states, 2 terminable (outcome `a` 2), 0 findings (0 stuck or cycle states) ``, with `` , 1
 /// waiting on supplied evidence or expiry `` before the findings when the protocol declares a
-/// supplied or an expiring kind.
+/// supplied or an expiring kind. [`CHILD_OUTCOME_LIMIT`] comes before the summary when some action
+/// opens a child case.
 impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for finding in &self.findings {
             writeln!(f, "{finding}")?;
+        }
+        if self.opens_children {
+            writeln!(f, "{CHILD_OUTCOME_LIMIT}")?;
         }
         let mut terminable = format!("{} terminable", self.terminable);
         if !self.outcomes.is_empty() {
@@ -372,7 +423,9 @@ enum Step {
 }
 
 /// Where a walk's records sit after the space's state: one slot per evidence dimension and class,
-/// each the down-closed set of producer profiles its records meet, as bits in whole words.
+/// each the down-closed set of producer profiles its records meet, as bits in whole words, and,
+/// in a dimension that holds expired records, one more bit after the profiles' for a record of the
+/// class held as expired (R2a).
 struct Layout<'d, 'a> {
     dimensions: &'d [Walked<'a>],
     /// The length of the space's state at the front of a walk's state.
@@ -381,15 +434,26 @@ struct Layout<'d, 'a> {
     slots: Vec<Vec<usize>>,
     /// For each dimension, how many words a slot of it takes.
     words: Vec<usize>,
+    /// For each dimension, whether an expiry holds its records as expired instead of removing
+    /// them.
+    holds: Vec<bool>,
 }
 
 impl<'d, 'a> Layout<'d, 'a> {
+    #[cfg(test)]
     fn new(dimensions: &'d [Walked<'a>], base: usize) -> Self {
+        Self::holding(dimensions, base, &vec![false; dimensions.len()])
+    }
+
+    /// The layout in which each dimension `holds` marks keeps a record held as expired.
+    fn holding(dimensions: &'d [Walked<'a>], base: usize, holds: &[bool]) -> Self {
         let mut at = base;
         let mut slots = Vec::new();
         let mut words = Vec::new();
-        for walked in dimensions {
-            let width = walked.profiles.len().div_ceil(32).max(1);
+        for (walked, held) in dimensions.iter().zip(holds) {
+            let width = (walked.profiles.len() + usize::from(*held))
+                .div_ceil(32)
+                .max(1);
             words.push(width);
             slots.push(
                 (0..walked.classes.len())
@@ -406,6 +470,7 @@ impl<'d, 'a> Layout<'d, 'a> {
             base,
             slots,
             words,
+            holds: holds.to_vec(),
         }
     }
 
@@ -436,20 +501,43 @@ impl<'d, 'a> Layout<'d, 'a> {
         walked
     }
 
-    /// Whether `state` holds a record of `class` in `dimension`.
+    /// Whether `state` holds a current record of `class` in `dimension`.
     fn present(&self, state: &State, dimension: usize, class: usize) -> bool {
-        let start = self.slots[dimension][class];
-        state[start..start + self.words[dimension]]
-            .iter()
-            .any(|word| *word != 0)
+        (0..self.dimensions[dimension].profiles.len())
+            .any(|profile| self.has(state, dimension, class, profile))
     }
 
-    /// `state` without any record of `class` in `dimension`.
+    /// `state` without any current record of `class` in `dimension`; in a dimension that holds
+    /// expired records, with one of the class held as expired.
     fn expire(&self, state: &State, dimension: usize, class: usize) -> State {
         let mut walked = state.clone();
         let start = self.slots[dimension][class];
-        walked[start..start + self.words[dimension]].fill(0);
+        let profiles = self.dimensions[dimension].profiles.len();
+        for profile in 0..profiles {
+            walked[start + profile / 32] &= !(1 << (profile % 32));
+        }
+        if self.holds[dimension] {
+            walked[start + profiles / 32] |= 1 << (profiles % 32);
+        }
         walked
+    }
+
+    /// Each dimension and class of `state` that holds a record held as expired, in that order.
+    fn expired(&self, state: &State) -> Vec<(usize, usize)> {
+        let mut expired = Vec::new();
+        for (dimension, walked) in self.dimensions.iter().enumerate() {
+            if !self.holds[dimension] {
+                continue;
+            }
+            let profiles = walked.profiles.len();
+            for class in 0..walked.classes.len() {
+                let start = self.slots[dimension][class];
+                if state[start + profiles / 32] & (1 << (profiles % 32)) != 0 {
+                    expired.push((dimension, class));
+                }
+            }
+        }
+        expired
     }
 
     /// The records of `state`, as the space writes them: each dimension and class that holds one,
@@ -559,7 +647,16 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
     let dimensions = space.walked();
     let initial = space.initial_states();
     let base = initial.first().map_or(0, Vec::len);
-    let layout = Layout::new(&dimensions, base);
+    // R2a: an expired `case_outcome` record still counts for a `children` form. With no evidence
+    // match reading the kind it has no expiry step; with one and a `children` form, an expiry
+    // holds the record as expired.
+    let (children_read, matched) = case_outcome_readers(ir);
+    let is_case_outcome = |dimension: &Walked<'_>| dimension.kind.as_str() == CASE_OUTCOME;
+    let holds: Vec<bool> = dimensions
+        .iter()
+        .map(|dimension| is_case_outcome(dimension) && children_read && matched)
+        .collect();
+    let layout = Layout::holding(&dimensions, base, &holds);
     let of_kinds = |kinds: &BTreeSet<&EvidenceKindId>| -> Vec<usize> {
         (0..dimensions.len())
             .filter(|at| kinds.contains(dimensions[*at].kind))
@@ -589,7 +686,10 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         .filter(|(_, kind)| kind.max_age.is_some())
         .map(|(id, _)| id)
         .collect();
-    let expiring = of_kinds(&expiring_kinds);
+    let expiring: Vec<usize> = of_kinds(&expiring_kinds)
+        .into_iter()
+        .filter(|at| matched || !is_case_outcome(&dimensions[*at]))
+        .collect();
     let capabilities = space.walked_capabilities().len();
     let decisions = space.walked_decisions().len();
 
@@ -618,7 +718,7 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
             ir,
             &space,
             &state[..base].to_vec(),
-            space.walk_evidence(&held),
+            space.walk_evidence(&held, &layout.expired(&state)),
         )
         .map_err(|refusal| Refusal::new(refusal.code(), refusal.to_string()))?;
         let legitimate: Vec<usize> = (0..ir.outcomes.len())
@@ -829,32 +929,53 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         steps.reverse();
         steps
     };
-    let rendered =
-        |at: usize| space.render_walk(&states[at][..base].to_vec(), &layout.held(&states[at]));
+    let rendered = |at: usize| {
+        space.render_walk(
+            &states[at][..base].to_vec(),
+            &layout.held(&states[at]),
+            &layout.expired(&states[at]),
+        )
+    };
     let contains = |smaller: usize, larger: usize| {
         space.decided_within(&states[smaller], &states[larger])
             && layout.records_within(&states[smaller], &states[larger])
     };
     // The smallest states of one kind, each with how many other states of the kind contain it.
+    // A state is contained only in one with the same case inputs and a greater size (a state
+    // contained in another of its size is that state), so the states are compared only within a
+    // group of equal inputs, and each only with those of a smaller size, then a greater one.
+    let sizes: Vec<u32> = states.iter().map(|state| layout.size(state)).collect();
     let smallest = |of: &[usize]| -> Vec<(usize, usize)> {
-        let mut by_size: Vec<usize> = of.to_vec();
-        by_size.sort_by_key(|at| (layout.size(&states[*at]), *at));
-        let mut found: Vec<usize> = Vec::new();
-        for at in &by_size {
-            if !found.iter().any(|small| contains(*small, *at)) {
-                found.push(*at);
+        let mut groups: HashMap<&[u32], Vec<usize>> = HashMap::new();
+        for at in of {
+            groups
+                .entry(space.walk_inputs(&states[*at]))
+                .or_default()
+                .push(*at);
+        }
+        let mut printed = Vec::new();
+        for mut group in groups.into_values() {
+            group.sort_by_key(|at| (sizes[*at], *at));
+            let mut found: Vec<usize> = Vec::new();
+            for at in &group {
+                if !found
+                    .iter()
+                    .any(|small| sizes[*small] < sizes[*at] && contains(*small, *at))
+                {
+                    found.push(*at);
+                }
+            }
+            for small in found {
+                let larger = group.partition_point(|other| sizes[*other] <= sizes[small]);
+                let containing = group[larger..]
+                    .iter()
+                    .filter(|other| contains(small, **other))
+                    .count();
+                printed.push((small, containing));
             }
         }
-        found
-            .into_iter()
-            .map(|small| {
-                let containing = of
-                    .iter()
-                    .filter(|other| **other != small && contains(small, **other))
-                    .count();
-                (small, containing)
-            })
-            .collect()
+        printed.sort_unstable();
+        printed
     };
     let decision_exits = |at: usize| -> Vec<(DecisionName, Vec<OutcomeId>)> {
         let mut exits: Vec<(usize, usize)> = visited[at]
@@ -960,7 +1081,39 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         waiting: (!supplied_kinds.is_empty() || !expiring_kinds.is_empty()).then_some(waiting),
         dead: stuck.len() + cycles.len(),
         findings,
+        opens_children: ir.actions.values().any(|action| action.case_open.is_some()),
     })
+}
+
+/// Whether a `children` form reads `case_outcome`, and whether an evidence match does, in any
+/// claim, obligation, precondition or outcome requirement of `ir`.
+fn case_outcome_readers(ir: &Ir) -> (bool, bool) {
+    let predicates = ir
+        .claims
+        .values()
+        .map(|claim| &claim.true_when)
+        .chain(
+            ir.obligations
+                .values()
+                .map(|obligation| &obligation.discharged_when),
+        )
+        .chain(ir.actions.values().map(|action| &action.precondition))
+        .chain(
+            ir.outcomes
+                .values()
+                .filter_map(|outcome| outcome.requires.predicate()),
+        );
+    let (mut children, mut matched) = (false, false);
+    for predicate in predicates {
+        predicate.visit(&mut |node| match node {
+            Predicate::Children(_) => children = true,
+            Predicate::Evidence(matching) if matching.kind.as_str() == CASE_OUTCOME => {
+                matched = true;
+            }
+            _ => {}
+        });
+    }
+    (children, matched)
 }
 
 /// The first declaration whose predicate holds an order form: each claim's `true_when`, each

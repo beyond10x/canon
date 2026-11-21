@@ -206,7 +206,7 @@ fn the_state_after_an_expiry_evaluates_as_a_case_past_its_max_age() {
         &ir,
         &space,
         &base,
-        space.walk_evidence(&layout.held(&expired)),
+        space.walk_evidence(&layout.held(&expired), &layout.expired(&expired)),
     )
     .expect("evaluates");
 
@@ -256,6 +256,193 @@ fn the_state_after_an_expiry_evaluates_as_a_case_past_its_max_age() {
     let simulated: Vec<String> = walked.actions.into_iter().chain(walked.outcomes).collect();
     assert_eq!(simulated, real);
     assert_eq!(real, ["admissible", "blocked", "admissible", "blocked"]);
+}
+
+/// A `case_outcome` kind with a `max_age` that a `children` form and an evidence match read.
+const HELD: &str = "format: protocol/1\n\
+    protocol: {id: p, revision: 1, description: A protocol.}\n\
+    artifacts: {findings: {description: The findings.}}\n\
+    evidence_kinds:\n\
+    \x20 case_outcome: {description: The outcome of a child case., max_age: 1h}\n\
+    \x20 lock: {description: A lock.}\n\
+    claims:\n\
+    \x20 resolved: {description: Every child ended accepted., true_when: {children: {in: \
+    [accepted]}}}\n\
+    \x20 opened: {description: A fresh child outcome., true_when: {evidence: {kind: \
+    case_outcome}}}\n\
+    \x20 locked: {description: Locked., true_when: {evidence: {kind: lock}}}\n\
+    actions:\n\
+    \x20 open_change: {description: Open a child., precondition: {all: [{claim: opened, is: \
+    unknown}, {claim: locked, is: unknown}]}, case_open: {protocol: q, subject: findings}}\n\
+    \x20 lock: {description: Lock once resolved., precondition: {claim: resolved}, may_produce: \
+    [{evidence: lock}]}\n\
+    outcomes:\n\
+    \x20 done: {description: Resolved and locked., requires: {all: [{claim: resolved}, {claim: \
+    locked}]}}\n";
+
+/// R2a: a `case_outcome` record held as expired evaluates as the real case two hours after the
+/// child's outcome was recorded: the evidence match loses it, the `children` form still reads it.
+#[test]
+fn a_child_outcome_held_as_expired_evaluates_as_a_case_past_its_max_age() {
+    let ir = compiled(HELD);
+    let space = Space::new(&ir);
+    let dimensions = space.walked();
+    let base = space.initial_states().remove(0);
+    let holds: Vec<bool> = dimensions
+        .iter()
+        .map(|walked| walked.kind.as_str() == CASE_OUTCOME)
+        .collect();
+    let layout = Layout::holding(&dimensions, base.len(), &holds);
+    let mut empty = base.clone();
+    empty.resize(layout.length(), 0);
+    let at = |kind: &str| {
+        dimensions
+            .iter()
+            .position(|walked| walked.kind.as_str() == kind)
+            .expect("a dimension of the kind")
+    };
+    let outcome = at("case_outcome");
+    let accepted = dimensions[outcome]
+        .classes
+        .iter()
+        .position(|class| *class == Some("accepted"))
+        .expect("an accepted class");
+    let both = layout.add(&layout.add(&empty, outcome, accepted, 0), at("lock"), 0, 0);
+    let expired = layout.expire(&both, outcome, accepted);
+    assert_eq!(layout.held(&expired), [(at("lock"), 0, vec![0])]);
+    assert_eq!(layout.expired(&expired), [(outcome, accepted)]);
+    assert_eq!(
+        space.render_walk(&base, &layout.held(&expired), &layout.expired(&expired)),
+        "{evidence `case_outcome` result `accepted` expired, evidence `lock`}"
+    );
+    let walked = check::evaluate_records(
+        &ir,
+        &space,
+        &base,
+        space.walk_evidence(&layout.held(&expired), &layout.expired(&expired)),
+    )
+    .expect("evaluates");
+
+    let case = eval::read_case(
+        "format: canon-case/1\nid: C-1\nprotocol: p\nartifacts: {findings: {revision: r1}}\n",
+    )
+    .expect("a case");
+    let evidence: Vec<_> = [
+        "format: canon-evidence/1\nid: e1\nkind: case_outcome\nsubject: findings\n\
+         subject_revision: r1\nchild_case: C-2\nresult: accepted\n\
+         observed_at: 2026-01-01T00:00:00Z\n",
+        "format: canon-evidence/1\nid: e2\nkind: lock\nsubject: findings\nsubject_revision: r1\n\
+         observed_at: 2026-01-01T00:10:00Z\n",
+    ]
+    .iter()
+    .map(|text| eval::read_evidence(text).expect("a record"))
+    .collect();
+    let decision = eval::evaluate_with(
+        &ir,
+        &case,
+        &evidence,
+        Supplied {
+            at: Some("2026-01-01T02:00:00Z"),
+            ..Supplied::default()
+        },
+    )
+    .expect("evaluates");
+    let status = |section: &Option<model::Json>, id: &str| {
+        section.as_ref().expect("a section")[id]["status"]
+            .as_str()
+            .expect("a status")
+            .to_owned()
+    };
+    let real: Vec<String> = ir
+        .actions
+        .keys()
+        .map(|id| status(&decision.actions, id.as_str()))
+        .chain(
+            ir.outcomes
+                .keys()
+                .map(|id| status(&decision.outcomes, id.as_str())),
+        )
+        .collect();
+    let simulated: Vec<String> = walked.actions.into_iter().chain(walked.outcomes).collect();
+    assert_eq!(simulated, real);
+    assert_eq!(real, ["admissible", "blocked", "legitimate"]);
+}
+
+/// R2a, the `cycle` left when only a `children` form reads `case_outcome`: in it one child ended
+/// with an outcome the form does not list, which no revision, expiry or invalidation undoes, so
+/// the form stays `false` and the outcome that needs it is illegitimate in every later case. The
+/// real case, with the walk's three child outcomes, at an instant past every `max_age`.
+#[test]
+fn a_child_that_ended_outside_the_list_keeps_the_children_form_false() {
+    let ir = compiled(
+        &HELD
+            .replace(
+                "\x20 opened: {description: A fresh child outcome., true_when: {evidence: {kind: \
+         case_outcome}}}\n",
+                "",
+            )
+            .replace(
+                "{all: [{claim: opened, is: unknown}, {claim: locked, is: unknown}]}",
+                "{claim: locked, is: unknown}",
+            ),
+    );
+    let case = eval::read_case(
+        "format: canon-case/1\nid: C-1\nprotocol: p\nartifacts: {findings: {revision: r1}}\n",
+    )
+    .expect("a case");
+    let evidence: Vec<_> = [
+        ("e1", "C-2", "accepted"),
+        ("e2", "C-3", "open"),
+        ("e3", "C-4", "other"),
+    ]
+    .iter()
+    .map(|(id, child, result)| {
+        eval::read_evidence(&format!(
+            "format: canon-evidence/1\nid: {id}\nkind: case_outcome\nsubject: findings\n\
+                 subject_revision: r1\nchild_case: {child}\nresult: {result}\n\
+                 observed_at: 2026-01-01T00:00:00Z\n"
+        ))
+        .expect("a record")
+    })
+    .collect();
+    for at in [None, Some("2026-01-02T00:00:00Z")] {
+        let decision = eval::evaluate_with(
+            &ir,
+            &case,
+            &evidence,
+            Supplied {
+                at,
+                ..Supplied::default()
+            },
+        )
+        .expect("evaluates");
+        let resolved = decision
+            .claims
+            .get(&model::ClaimId::new("resolved"))
+            .expect("the claim");
+        assert_eq!(resolved.value, model::Truth::False, "at {at:?}");
+        assert_eq!(
+            decision.outcomes.expect("outcomes")["done"]["status"],
+            "blocked",
+            "at {at:?}"
+        );
+    }
+}
+
+/// R7: a protocol with an action that opens a child case prints the limit on child outcomes
+/// after the findings and before the summary; one without such an action does not.
+#[test]
+fn a_protocol_that_opens_child_cases_states_the_limit() {
+    let text = report(HELD);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines[lines.len() - 2], CHILD_OUTCOME_LIMIT);
+    assert_eq!(
+        text.matches(CHILD_OUTCOME_LIMIT).count(),
+        1,
+        "one limit line:\n{text}"
+    );
+    let without = report(&HELD.replace(", case_open: {protocol: q, subject: findings}", ""));
+    assert!(!without.contains("limit:"), "{without}");
 }
 
 /// The walk is a pure function: the same IR gives the same report, and a protocol with its

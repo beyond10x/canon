@@ -2447,11 +2447,26 @@ impl<'a> Space<'a> {
     /// The evidence records of a walk's records, as [`Space::evidence`] writes the current records
     /// of a state: for each `(dimension, class, producers)` of `held`, in that order, one record
     /// per producer profile, about the dimension's artifact at [`REVISION`], recording every
-    /// upstream artifact at [`REVISION`], with no observation instant.
-    pub(crate) fn walk_evidence(&self, held: &[(usize, usize, Vec<usize>)]) -> Vec<EvidenceRecord> {
+    /// upstream artifact at [`REVISION`], with no observation instant. Then, for each
+    /// `(dimension, class)` of `expired`, a `case_outcome` record of that class held as expired
+    /// (R2a of story:canon-simulate): about its artifact at [`EARLIER`], as the history dimension
+    /// of a `children` form writes an earlier record, with no producer. The evaluator's revision
+    /// binding keeps it from every evidence match, as its freshness stage keeps an expired record,
+    /// and every `children` form reads it, as it reads an expired one (`eval/composition.rs`).
+    pub(crate) fn walk_evidence(
+        &self,
+        held: &[(usize, usize, Vec<usize>)],
+        expired: &[(usize, usize)],
+    ) -> Vec<EvidenceRecord> {
         let mut records = Vec::new();
-        for (at, class, producers) in held {
-            let kind = &self.kinds[*at];
+        let current = held.iter().flat_map(|(at, class, producers)| {
+            producers
+                .iter()
+                .map(move |profile| (*at, *class, Some(*profile)))
+        });
+        let earlier = expired.iter().map(|(at, class)| (*at, *class, None));
+        for (at, class, profile) in current.chain(earlier) {
+            let kind = &self.kinds[at];
             let Some(record) = &kind.record else {
                 continue;
             };
@@ -2461,50 +2476,76 @@ impl<'a> Space<'a> {
                     .map(|artifact| ((*artifact).clone(), Revision::new(REVISION)))
                     .collect(),
             );
-            for profile in producers {
-                let mut walked = EvidenceRecord {
-                    id: EvidenceId::new(format!("e{}", records.len())),
-                    result: kind.classes[*class].map(str::to_owned),
-                    observed_at: None,
-                    upstream_revisions: upstream_revisions.clone(),
-                    producer: self.producer(&kind.profiles[*profile]),
-                    ..record.clone()
-                };
-                if walked.kind.as_str() == CASE_OUTCOME {
-                    walked.child_case = Some(CaseId::new(walked.id.as_str()));
-                    if walked.result.is_none() {
-                        walked.result = Some(self.unlisted.clone());
-                    }
-                }
-                records.push(walked);
+            let mut walked = EvidenceRecord {
+                id: EvidenceId::new(format!("e{}", records.len())),
+                result: kind.classes[class].map(str::to_owned),
+                observed_at: None,
+                upstream_revisions,
+                producer: profile.and_then(|profile| self.producer(&kind.profiles[profile])),
+                ..record.clone()
+            };
+            if profile.is_none() {
+                walked.subject_revision = Revision::new(EARLIER);
             }
+            if walked.kind.as_str() == CASE_OUTCOME {
+                walked.child_case = Some(CaseId::new(walked.id.as_str()));
+                if walked.result.is_none() {
+                    walked.result = Some(self.unlisted.clone());
+                }
+            }
+            records.push(walked);
         }
         records
     }
 
+    /// The case-input values of a walk's state `state`, in input order.
+    pub(crate) fn walk_inputs<'s>(&self, state: &'s [u32]) -> &'s [u32] {
+        let first = self.kinds.len() + self.capabilities.len() + self.decisions.len();
+        &state[first..first + self.inputs.len()]
+    }
+
     /// A walk's state as a report writes it, as [`Space::render`] writes a state: its records
-    /// (`held`, in dimension, class and profile order), then the decided capabilities, the taken
-    /// decisions and the case inputs of `state`. It reads no dimension's table of values, which a
-    /// dimension too large for the check does not have.
-    pub(crate) fn render_walk(&self, state: &State, held: &[(usize, usize, Vec<usize>)]) -> String {
+    /// (`held`, in dimension, class and profile order, each class's record held as expired, in
+    /// `expired`, after its current ones, `` evidence `k` result `r` expired ``), then the decided
+    /// capabilities, the taken decisions and the case inputs of `state`. It reads no dimension's
+    /// table of values, which a dimension too large for the check does not have.
+    pub(crate) fn render_walk(
+        &self,
+        state: &State,
+        held: &[(usize, usize, Vec<usize>)],
+        expired: &[(usize, usize)],
+    ) -> String {
+        let mut records: Vec<(usize, usize, Option<usize>)> = held
+            .iter()
+            .flat_map(|(at, class, producers)| {
+                producers
+                    .iter()
+                    .map(move |profile| (*at, *class, Some(*profile)))
+            })
+            .chain(expired.iter().map(|(at, class)| (*at, *class, None)))
+            .collect();
+        records.sort_by_key(|(at, class, profile)| (*at, *class, profile.is_none()));
         let mut items = Vec::new();
-        for (at, class, producers) in held {
-            let kind = &self.kinds[*at];
-            for profile in producers {
-                let name = kind.name();
-                let mut item = match kind.classes[*class] {
-                    Some(result) => format!("evidence {name} result `{}`", one_line(result)),
-                    None => format!("evidence {name}"),
-                };
-                let profile = &kind.profiles[*profile];
-                if !profile.is_empty() {
-                    item.push_str(&format!(
-                        " by a producer independent on {}",
-                        listed(profile)
-                    ));
+        for (at, class, profile) in records {
+            let kind = &self.kinds[at];
+            let name = kind.name();
+            let mut item = match kind.classes[class] {
+                Some(result) => format!("evidence {name} result `{}`", one_line(result)),
+                None => format!("evidence {name}"),
+            };
+            match profile {
+                Some(profile) => {
+                    let profile = &kind.profiles[profile];
+                    if !profile.is_empty() {
+                        item.push_str(&format!(
+                            " by a producer independent on {}",
+                            listed(profile)
+                        ));
+                    }
                 }
-                items.push(item);
+                None => item.push_str(" expired"),
             }
+            items.push(item);
         }
         let capabilities = &state[self.kinds.len()..];
         for (id, value) in self.capabilities.iter().zip(capabilities) {

@@ -157,18 +157,23 @@ pub enum Command {
     /// current record an admissible action may produce, adds one record of a kind that declares
     /// `supplied_by` (at any step), lets one record class of a kind that declares `max_age`
     /// expire, grants or denies one capability some action requires, or takes one decision some
-    /// outcome requires; no action runs. A state is open when action, supplied, expiry and
-    /// authority steps lead from it to a legitimate outcome; decisions do not count. A state that
-    /// is not open is a stuck state when no action is admissible or approval-required, and a cycle
-    /// when no action is approval-required and every step of every admissible action returns the
-    /// same state. Each is printed once, at its smallest state, with the shortest path that
-    /// reaches it, each decision that would make an outcome legitimate there, and how many other
-    /// such states contain it; an open state with nothing to do is counted as waiting. The summary
-    /// counts the reachable states, per outcome those in which it is legitimate, the waiting
-    /// states, the findings and the stuck and cycle states they stand for. A protocol with an
-    /// order form (`first`, `before`, `after`, `since`) is refused (`ordered-evidence`), and so is
-    /// a walk that would visit more than 65536 states (`reachable-state-bound`), which reports
-    /// nothing of what it saw.
+    /// outcome requires; no action runs. An expired `case_outcome` record still counts for a
+    /// `children` form: with no evidence match reading `case_outcome` it does not expire, and
+    /// otherwise it is held as expired, absent to every evidence match. A state is open when
+    /// action, supplied, expiry and authority steps lead from it to a legitimate outcome;
+    /// decisions do not count. A state that is not open is a stuck state when no action is
+    /// admissible or approval-required, and a cycle when no action is approval-required and every
+    /// step of every admissible action returns the same state. Each is printed once, at its
+    /// smallest state, with the shortest path that reaches it, each decision that would make an
+    /// outcome legitimate there, and how many other such states contain it; an open state with
+    /// nothing to do is counted as waiting. The summary counts the reachable states, per outcome
+    /// those in which it is legitimate, the waiting states, the findings and the stuck and cycle
+    /// states they stand for. When an action opens a child case (`case_open`), a line starting
+    /// `limit:` comes before the summary: a child case's outcome is walked only as a step of its
+    /// opening action, so a stuck state or cycle in a state that waits for a child's outcome may
+    /// not be one in a real case. A protocol with an order form (`first`, `before`, `after`,
+    /// `since`) is refused (`ordered-evidence`), and so is a walk that would visit more than 65536
+    /// states (`reachable-state-bound`), which reports nothing of what it saw.
     Simulate {
         /// The protocol document to simulate.
         #[arg(long)]
