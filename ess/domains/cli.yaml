@@ -269,8 +269,13 @@ commands:
       # written `action x revises a`, or `action x revises a and produces …` with the record or
       # group it adds; in a state, a record of a dimension a children form reads that a revision
       # set aside is written `… earlier`, and one observed before an upstream artifact moved `…
-      # observed before upstream a moved`.
+      # observed before upstream a moved`. An artifact that declares revised_by (story:artifact-
+      # revised-by) has a revise step in every state, written `protocol q revises a`: a case of
+      # the named protocol may move it between two evaluations. It is no action step, so a state
+      # only it opens waits and is no finding; a protocol with such an artifact counts its
+      # waiting states as waiting on supplied evidence, expiry or a revision by another protocol.
       # read from: .engineering/planning/story/canon-simulate.md:67
+      # read from: .engineering/planning/story/artifact-revised-by.md, section "Outcome", 5 and 6
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R3 and R5
       # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 1", D1
       # read from: .engineering/planning/story/simulate-revise-step.md, section "Outcome", 1, 2 and 4

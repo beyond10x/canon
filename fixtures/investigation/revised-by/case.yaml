@@ -1,0 +1,5 @@
+format: canon-case/1
+id: REV-1
+protocol: revised.by.example
+artifacts:
+  doc: {revision: r1}

@@ -897,3 +897,32 @@ fn a_walk_with_revise_steps_stays_within_the_check_product() {
         );
     }
 }
+
+/// An external revision is a step of its own, written with the protocol that revises: it is tried
+/// after the supplied steps and before the expiry steps. The state `{u}` is reached from `{t, u}`
+/// both by `t` expiring and by `q` revising `a`, which `t` is about; the revise step comes first,
+/// so the shortest path to it ends with it.
+#[test]
+fn an_external_revision_is_written_as_protocol_revises() {
+    let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+        artifacts: {a: {revised_by: q}}\n\
+        evidence_kinds: {t: {max_age: 1h}, u: {}, n: {}}\n\
+        claims:\n\
+        \x20 c: {true_when: {evidence: {kind: t, subject: a}}}\n\
+        \x20 g: {true_when: {any: [{evidence: {kind: t, subject: a}}, {evidence: {kind: u}}]}}\n\
+        \x20 never: {true_when: {evidence: {kind: n}}}\n\
+        actions:\n\
+        \x20 produce_t: {precondition: {claim: g, is: unknown}, may_produce: [{evidence: t}]}\n\
+        \x20 produce_u: {precondition: {claim: c, is: true}, may_produce: [{evidence: u}]}\n\
+        outcomes: {o: {requires: {claim: never}}}\n";
+    let text = report(source);
+    assert!(
+        text.contains(
+            "stuck-state: state {evidence `u`}: no outcome is legitimate and no action is \
+             admissible or approval-required; path: action `produce_t` produces evidence `t` \
+             about `a`, then action `produce_u` produces evidence `u`, then protocol `q` \
+             revises `a`"
+        ),
+        "{text}"
+    );
+}

@@ -59,7 +59,7 @@ enum Expected {
 
 /// Every fixture directory, the exit status and where the expected text goes. A walk that finds
 /// nothing exits 0; findings and a refusal exit 1 (`REJECTED`).
-const CASES: [(&str, i32, Expected); 23] = [
+const CASES: [(&str, i32, Expected); 25] = [
     ("clean", 0, Expected::Report),
     ("mutual", 1, Expected::Report),
     ("denied", 1, Expected::Report),
@@ -83,6 +83,8 @@ const CASES: [(&str, i32, Expected); 23] = [
     ("revise-denied", 1, Expected::Report),
     ("revise-mixed", 0, Expected::Report),
     ("revise-child", 0, Expected::Report),
+    ("revised-by", 0, Expected::Report),
+    ("revised-by-undeclared", 1, Expected::Report),
 ];
 
 /// The cases of story:simulate-revise-step, expectations 1 to 6.
