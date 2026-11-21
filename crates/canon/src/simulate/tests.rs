@@ -309,10 +309,15 @@ fn a_child_outcome_held_as_expired_evaluates_as_a_case_past_its_max_age() {
         .expect("an accepted class");
     let both = layout.add(&layout.add(&empty, outcome, accepted, 0), at("lock"), 0, 0);
     let expired = layout.expire(&both, outcome, accepted);
-    assert_eq!(layout.held(&expired), [(at("lock"), 0, vec![0])]);
+    assert_eq!(layout.held(&expired), [(at("lock"), 0, 0, vec![0])]);
     assert_eq!(layout.expired(&expired), [(outcome, accepted)]);
     assert_eq!(
-        space.render_walk(&base, &layout.held(&expired), &layout.expired(&expired)),
+        space.render_walk(
+            &base,
+            &layout.held(&expired),
+            &layout.expired(&expired),
+            &[]
+        ),
         "{evidence `case_outcome` result `accepted` expired, evidence `lock`}"
     );
     let walked = check::evaluate_records(
