@@ -474,11 +474,16 @@ fn predicate(value: &Json) -> Shape<Predicate> {
                 subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
             }))
         }
+        // `"revision"` is written only as `current`; an `any` read here compiles to no key, so
+        // the bytes differ and the text is refused.
         "children" => Ok(Predicate::Children(ChildOutcomes {
             r#in: values(inner, "in")?
                 .into_iter()
                 .map(|value| value.as_str().to_owned())
                 .collect(),
+            revision: absent_or_text(inner, "revision")?
+                .map(|revision| revision.parse())
+                .transpose()?,
         })),
         _ => Err(
             "a predicate is not one of all, any, not, evidence, claim, input, first, before, after, since or children"

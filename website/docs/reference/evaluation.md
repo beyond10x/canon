@@ -72,7 +72,13 @@ A claim's value is its `true_when` predicate's value over the evidence set:
   `open` while the child runs. It is `unknown` with no record, `false` when a record's outcome
   is neither listed nor `open` (a child that ended outside the set), otherwise `unknown` while a
   child is `open` and `true` when every child ended with a listed outcome (CANON-COMPOSE-001).
-  No record is listed in `excluded_evidence` because of it.
+  With `revision: current`, `{children: {in: [O, ...], revision: current}}`
+  (story:child-outcome-revision), it reads only the records whose `subject_revision` is the
+  case snapshot's current revision of their `subject`, by the same rules: a record about
+  another revision neither establishes nor contradicts it, and with no record read it is
+  `unknown` (CANON-COMPOSE-002). `revision: any` reads what no key reads. No record is listed
+  in `excluded_evidence` because of it, and a reason names it with its `revision` when the IR
+  writes one.
 
 `unknown` and `false` are never collapsed, and only `true` satisfies a positive requirement.
 

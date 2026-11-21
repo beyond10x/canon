@@ -486,3 +486,244 @@ fn the_diff_takes_a_changed_form_or_opening_as_breaking() {
         "BREAKING: action `open_change` case it opens changed from protocol `software.change` about `findings` to none"
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// story:child-outcome-revision: `revision: current` on the form. CANON-COMPOSE-002
+// (conformance/scenarios/child-outcome-revision.yaml) states the values; these state the IR, the
+// keying of reasons, the explanation, the diff and `canon check`.
+
+fn revision_fixture() -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/investigation/child-outcome-revision.yaml");
+    std::fs::read_to_string(&path).expect("the child-outcome-revision fixture reads")
+}
+
+/// `revision: any` compiles to the bytes of the form without the key; `current` is written and
+/// reads back; an IR text that writes `any` or another value is refused; two forms that differ
+/// only in `revision` are two members, no key first.
+#[test]
+fn the_ir_writes_revision_only_when_current_and_reads_it_back() {
+    let any = compiled_with_claim("{children: {in: [b, a], revision: any}}");
+    assert_eq!(
+        any.canonical_json(),
+        compiled_with_claim("{children: {in: [a, b]}}").canonical_json()
+    );
+    let current = compiled_with_claim("{children: {in: [a], revision: current}}");
+    let text = current.canonical_json();
+    let value: Value = serde_json::from_str(&text).expect("JSON");
+    assert_eq!(
+        value["claims"]["c"]["true_when"],
+        json!({"children": {"in": ["a"], "revision": "current"}})
+    );
+    assert_eq!(eval::read_ir(&text).expect("reads"), current);
+    let written_any = text.replacen("\"current\"", "\"any\"", 1);
+    assert_eq!(
+        eval::read_ir(&written_any).expect_err("refused").code(),
+        "malformed-input",
+        "an `any` the IR never writes"
+    );
+    let written_other = text.replacen("\"current\"", "\"latest\"", 1);
+    assert!(eval::read_ir(&written_other).is_err());
+
+    let both = compiled_with_claim(
+        "{all: [{children: {in: [a], revision: current}}, {children: {in: [a], revision: any}}, \
+         {children: {in: [a]}}]}",
+    );
+    let value: Value = serde_json::from_str(&both.canonical_json()).expect("JSON");
+    assert_eq!(
+        value["claims"]["c"]["true_when"],
+        json!({"all": [
+            {"children": {"in": ["a"]}},
+            {"children": {"in": ["a"], "revision": "current"}},
+        ]})
+    );
+    assert!(
+        model::parse(
+            "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+             evidence_kinds: {case_outcome: {}}\n\
+             claims: {c: {true_when: {children: {in: [a], revision: latest}}}}\n",
+        )
+        .is_err(),
+        "a revision other than `any` or `current` does not parse"
+    );
+}
+
+/// The fixture's protocol, compiled.
+fn revision_compiled() -> Ir {
+    compiled(&revision_fixture())
+}
+
+/// A record about the spec at `revision`.
+fn spec_outcome(id: &str, child: &str, result: &str, revision: &str) -> EvidenceRecord {
+    record(
+        id,
+        "case_outcome",
+        Some(child),
+        Some(result),
+        "spec",
+        revision,
+    )
+}
+
+/// A blocked action whose precondition is `any` of the bound form, the form with `any` and the
+/// form without the key names two forms, one with its key and one without, each with its own
+/// value; the explanation names the form the same way and lists no record under it.
+#[test]
+fn reasons_and_the_explanation_name_the_form_with_its_revision() {
+    let fixture = revision_fixture().replacen(
+        "  build:\n    description: Build the epic once every child story case about the spec's current revision ended delivered.\n    precondition:\n      children:\n        in: [delivered]\n        revision: current\n",
+        "  build:\n    precondition:\n      any:\n        - children: {in: [delivered], revision: current}\n        - children: {in: [delivered], revision: any}\n        - children: {in: [delivered]}\n",
+        1,
+    );
+    assert_ne!(fixture, revision_fixture(), "the action was replaced");
+    let decision = eval::evaluate(
+        &compiled(&fixture),
+        &case("epic", &["spec"], "s2"),
+        &[spec_outcome("o1", "STORY-1", "abandoned", "s1")],
+    )
+    .expect("decides");
+    let actions = decision.actions.as_ref().expect("actions");
+    assert_eq!(
+        actions["build"]["reasons"],
+        json!([
+            {"children": ["delivered"], "value": "false"},
+            {"children": ["delivered"], "revision": "current", "value": "unknown"},
+        ])
+    );
+    let explanation = decision.explanation.expect("an explanation");
+    assert_eq!(
+        explanation["claims"]["delivered.current"],
+        json!({
+            "because": [{"children": ["delivered"], "revision": "current", "value": "unknown"}],
+            "value": "unknown",
+        })
+    );
+    assert_eq!(
+        explanation["claims"]["delivered.any"],
+        json!({
+            "because": [{"children": ["delivered"], "value": "false"}],
+            "value": "false",
+        })
+    );
+    assert_eq!(
+        decision
+            .claims
+            .get(&model::ClaimId::new("delivered.current"))
+            .expect("the claim")
+            .excluded_evidence
+            .len(),
+        0
+    );
+}
+
+/// Adding, removing or changing `revision` on a form is `BREAKING`, as any change to a form is;
+/// `any` for no key is no change.
+#[test]
+fn the_diff_takes_a_changed_revision_as_breaking() {
+    let from = revision_compiled();
+    let later = |text: String| compiled(&text.replacen("revision: 1", "revision: 2", 1));
+    let unbound = later(revision_fixture().replace("        revision: current\n", ""));
+    let lines: Vec<String> = diff(&from, &unbound)
+        .expect("diffs")
+        .changes
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    assert!(
+        lines.iter().all(|line| line.starts_with("BREAKING: ")),
+        "{lines:?}"
+    );
+    let any = later(revision_fixture().replacen(
+        "        in: [delivered]\n\nactions:",
+        "        in: [delivered]\n        revision: any\n\nactions:",
+        1,
+    ));
+    let unchanged: Vec<String> = diff(&later(revision_fixture()), &any)
+        .expect("diffs")
+        .changes
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    assert!(unchanged.is_empty(), "{unchanged:?}");
+}
+
+/// `canon check` over the fixture: the opening action produces `case_outcome`, and a `revision:
+/// current` form reads the space a form without it reads: the kind's one dimension, of three
+/// classes (`delivered`, `open`, another), so 8 values, its history dimension of 9, and the
+/// capability's 3.
+#[test]
+fn check_covers_the_fixture_as_it_covers_a_form_without_revision() {
+    let report = check(&revision_compiled(), None).expect("checks");
+    assert_eq!(
+        report.to_string(),
+        "checked: protocol `epic` revision 1: 216 states, 0 properties, 0 findings\n"
+    );
+}
+
+/// `canon check` reaches every combination of claim values a history gives when `revision:
+/// current` forms read beside forms without it and evidence matches, over records about two
+/// artifacts at the current revision and an earlier one: the history dimension's earlier records
+/// are about a superseded revision, which only the forms without the key read.
+#[test]
+fn check_reaches_every_combination_of_current_and_any_forms() {
+    let head = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+        artifacts: {findings: {}, report: {}}\nevidence_kinds: {case_outcome: {}}\n\
+        actions: {open: {case_open: {protocol: q, subject: findings}}}\n\
+        claims:\n\
+        \x20\x20resolved: {true_when: {children: {in: [accepted, declined]}}}\n\
+        \x20\x20resolved_now: {true_when: {children: {in: [accepted, declined], revision: current}}}\n\
+        \x20\x20accepted_now: {true_when: {children: {in: [accepted], revision: current}}}\n\
+        \x20\x20any_open: {true_when: {evidence: {kind: case_outcome, result: open}}}\n";
+    let ir = compiled(head);
+    let case = case("p", &["findings", "report"], "r1");
+    let results = ["accepted", "declined", "open", "abandoned"];
+    let mut rng = Rng(0x0BAD_5EED);
+    let mut found: BTreeMap<Vec<(String, Truth)>, Vec<EvidenceRecord>> = BTreeMap::new();
+    for _ in 0..6000 {
+        let records: Vec<EvidenceRecord> = (0..rng.below(5))
+            .map(|n| {
+                record(
+                    &format!("h{n}"),
+                    "case_outcome",
+                    Some(&format!("c{n}")),
+                    Some(results[rng.below(results.len())]),
+                    ["findings", "report"][rng.below(2)],
+                    ["r1", "r0"][rng.below(2)],
+                )
+            })
+            .collect();
+        let decision = eval::evaluate(&ir, &case, &records).expect("decides");
+        let values: Vec<(String, Truth)> = decision
+            .claims
+            .iter()
+            .map(|(id, claim)| (id.as_str().to_owned(), claim.value))
+            .collect();
+        found.entry(values).or_insert(records);
+    }
+    assert!(found.len() >= 15, "{} combinations", found.len());
+    let mut outcomes = String::from("outcomes:\n");
+    for (index, combination) in found.keys().enumerate() {
+        let tests: Vec<String> = combination
+            .iter()
+            .map(|(claim, value)| format!("{{claim: {claim}, is: {value}}}"))
+            .collect();
+        outcomes.push_str(&format!(
+            "\x20\x20o{index}: {{requires: {{all: [{}]}}}}\n",
+            tests.join(", ")
+        ));
+    }
+    let protocol = compiled(&format!("{head}{outcomes}"));
+    let report = check(&protocol, None).expect("checks").to_string();
+    for (index, (combination, history)) in found.iter().enumerate() {
+        let status = &eval::evaluate(&protocol, &case, history)
+            .expect("decides")
+            .outcomes
+            .expect("outcomes")[format!("o{index}")]["status"];
+        assert_eq!(status, "legitimate", "o{index} on its own history");
+        assert!(
+            !report.contains(&format!("unreachable-outcome: outcome `o{index}` ")),
+            "{combination:?} is legitimate on {history:?}, but the check calls it unreachable"
+        );
+    }
+}

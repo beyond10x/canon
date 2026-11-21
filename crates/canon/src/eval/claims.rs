@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::hash::{BuildHasherDefault, Hasher};
 
 use super::Refusal;
+use super::composition::Artifacts;
 use super::independence::Independence;
 use super::invalidation::Invalidated;
 use crate::ir::{Claim, Ir};
@@ -16,14 +17,19 @@ use crate::model::{
 /// The evidence a predicate reads: the records the exclusion stages `left`, which evidence matches
 /// read, the `history`, every record the evidence check accepted, which the order forms read
 /// (`order.rs`), and the case's `independence`, which decides which records an evidence match that
-/// demands independence reads (`independence.rs`). The default reads no record and lists no
-/// producer.
+/// demands independence reads (`independence.rs`), and the case's `artifacts`, whose current
+/// revisions decide which records a `children` form with `revision: current` reads
+/// (`composition.rs`). The default reads no record, lists no producer and gives no artifact a
+/// current revision.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct EvidenceSets<'a> {
     pub(crate) left: &'a [EvidenceRecord],
     pub(crate) history: &'a [EvidenceRecord],
     /// `None` lists no producer: no record satisfies a demand for independence.
     pub(crate) independence: Option<&'a Independence>,
+    /// `None` gives no artifact a current revision: a `children` form with `revision: current`
+    /// reads no record.
+    pub(crate) artifacts: Option<&'a Artifacts>,
 }
 
 impl EvidenceSets<'_> {
@@ -58,6 +64,7 @@ impl<'a> EvidenceSets<'a> {
             left: records,
             history: records,
             independence: None,
+            artifacts: None,
         }
     }
 }
@@ -321,8 +328,11 @@ impl<'a> Walk<'a> {
             | Predicate::Since(_) => {
                 super::order::value(predicate, self.evidence.history).unwrap_or(Truth::Unknown)
             }
-            // Every case_outcome record, likewise: a child's outcome is not invalidated.
-            Predicate::Children(form) => super::composition::value(form, self.evidence.history),
+            // The case_outcome records the form reads of the history, likewise: a child's outcome
+            // is not invalidated.
+            Predicate::Children(form) => {
+                super::composition::value(form, self.evidence.history, self.evidence.artifacts)
+            }
             // Tested with the records invalidated for either claim kept out. Those invalidated for
             // the tested claim are invalidated for every claim built on it (`Invalidated`), so this
             // context already holds them: the union is this context, and the tested claim is
@@ -374,7 +384,9 @@ pub(super) fn predicate(
         Predicate::First(_) | Predicate::Before(_) | Predicate::After(_) | Predicate::Since(_) => {
             super::order::value(predicate, evidence.history).unwrap_or(Truth::Unknown)
         }
-        Predicate::Children(form) => super::composition::value(form, evidence.history),
+        Predicate::Children(form) => {
+            super::composition::value(form, evidence.history, evidence.artifacts)
+        }
         Predicate::Claim(test) => tested(
             claims.get(&test.claim).copied().unwrap_or(Truth::Unknown),
             test.is,

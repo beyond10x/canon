@@ -208,6 +208,23 @@ the set; otherwise `unknown` while a child is `open`, and `true` when every chil
 listed outcome. A child's outcome is a fact about the child case, so a record about an earlier
 revision of its subject, an expired one and an invalidated one still count.
 
+`{children: {in: [O, ...], revision: current}}` (story:child-outcome-revision) binds the form
+to the current revision: it reads only the `case_outcome` records whose `subject_revision` is
+the case snapshot's current revision of their `subject`, by the rules above. A record about an
+earlier revision is not read: it neither establishes nor contradicts the form, and is not
+listed in `excluded_evidence`; with no record read the form is `unknown`. So a parent whose
+subject is revised after its children ended falls back to `unknown` until a child about the new
+revision ends, and since one child has one record whatever its revision
+(`duplicate-child-case`), that child is a new one, with a new id. `revision: any`, like no key,
+reads every record. A terminal `case_outcome` record's `subject_revision` is the revision the
+child's outcome was computed against: when the child protocol declares the subject artifact,
+the child's own revision of it at its terminating evaluation; when it does not, the parent's
+revision of the subject when the child was opened. Canon does not write the record and does not
+check who did; it compares the record's `subject_revision` with the snapshot's current revision
+of the record's `subject`, as it binds every evidence record to the revision it was observed on.
+A runner that stamps a record with the revision at which the child was opened, whatever the
+child did, never satisfies the form for a child that writes its own subject.
+
 | Key | Value | Meaning |
 |---|---|---|
 | `all` | list of [`Predicate`](#predicate) | True when every member is true; true when empty. |
@@ -344,14 +361,16 @@ itself.
 
 The form over the case's child cases, written `{children: {in: [<outcome>, ...]}}`: whether
 every child case ended with one of the outcomes listed. It reads every `case_outcome` record
-the evidence check accepted, as the order forms read the history: `unknown` with no record,
-`false` when a record's outcome is neither listed nor `open` (a child that ended outside the
-set), otherwise `unknown` when a child is still `open` and `true` when every child ended with
-a listed outcome.
+the evidence check accepted, as the order forms read the history, or with `revision: current`
+only those about the current revision of their subject: `unknown` with no record read, `false`
+when a record's outcome is neither listed nor `open` (a child that ended outside the set),
+otherwise `unknown` when a child is still `open` and `true` when every child ended with a
+listed outcome.
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `in` | list of text | required | The outcomes a child case may have ended with, written `in`: not empty, each once, never `open`. |
+| `revision` | [`ChildRevision`](#childrevision) | optional | Which records the form reads (story:child-outcome-revision): absent or `any`, every `case_outcome` record; `current`, only those whose `subject_revision` is the case snapshot's current revision of their `subject`. |
 
 ## `Truth`
 
@@ -374,6 +393,19 @@ later than the latest record of its `last` kind: a record of `kind` with `result
 |---|---|---|---|
 | `kind` | [identifier](#identifiers) (`EvidenceKindId`) | required | The evidence kind of the later record. |
 | `result` | text | required | The result the later record is to have. |
+
+## `ChildRevision`
+
+Which `case_outcome` records a `children` form reads (story:child-outcome-revision). A terminal
+record's `subject_revision` is the revision the child's outcome was computed against: when the
+child protocol declares the subject artifact, the child's own revision of it at its terminating
+evaluation; when it does not, the parent's revision of the subject when the child was opened.
+Canon does not write the record: it compares that revision with the case snapshot's.
+
+| Value | Meaning |
+|---|---|
+| `any` | Every record the evidence check accepted, about whatever revision of its subject: the form without the key. |
+| `current` | Only the records whose `subject_revision` is the case snapshot's current revision of their `subject`. A record about another revision is not read: it neither establishes nor contradicts the form. |
 
 ## Identifiers
 

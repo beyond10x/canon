@@ -38,8 +38,10 @@
 //!   "result": <result>, "value": <value>}`, with `"subject"` when it names one; every `after`
 //!   first, then every `before`, then every `first`, then every `since`, each form once), then
 //!   each form over the child cases it holds, `{"children": [<outcome>, ...], "value": <value>}`,
-//!   over the same history, each form once, in the order of its outcome list
-//!   (story:case-composition), then each record an evidence match the claim reaches reads (as its
+//!   with `"revision": "current"` added for a form that reads only the records about the current
+//!   revision of their subject (story:child-outcome-revision), over the same history, each form
+//!   once, in the order of its outcome list, then no `revision` first (story:case-composition),
+//!   then each record an evidence match the claim reaches reads (as its
 //!   `excluded_evidence` list counts them), written as below, then each evidence match it reaches
 //!   that reads no record of the evidence set, `{"kind": <kind>, "status": "absent"}`, with
 //!   `"subject": <artifact>` added when the match names one, in kind and then subject order (no
@@ -152,7 +154,7 @@ pub(crate) fn explain(
         .map(|(id, _)| id)
         .chain(named.filter_map(|name| values.keys().find(|id| id.as_str() == name)))
         .collect();
-    let claims = claims(ir, seeds, &values, &case_inputs, &records, evidence);
+    let claims = claims(ir, seeds, &values, &case_inputs, &records, evidence, case);
 
     let mut sections = Map::new();
     sections.insert(
@@ -504,6 +506,7 @@ fn claims(
     inputs: &CaseInputs,
     records: &Records<'_>,
     history: &[EvidenceRecord],
+    case: &Case,
 ) -> Map<String, Value> {
     let mut entries = Map::new();
     let mut pending = seeds;
@@ -520,6 +523,7 @@ fn claims(
                 because.extend(children_reasons(
                     declared.true_when.children_forms(),
                     history,
+                    &case.artifacts,
                 ));
                 because
             }

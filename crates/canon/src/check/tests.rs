@@ -1864,7 +1864,8 @@ fn assert_slices_agree(ir: &Ir, properties: Option<&Properties>, source: &str) -
 /// optional case input, up to four claims, three actions and three outcomes over every predicate
 /// form, an optional invalidation rule and up to two properties. One in four is small around one
 /// order form, whose history and order dimensions make a space large (an `after` or a `since`
-/// over one kind keeps it within [`GENERATED_STATES`]), and one in four reads child cases.
+/// over one kind keeps it within [`GENERATED_STATES`]), and one in four reads child cases, half of
+/// its `children` forms with `revision: current`.
 fn generated(rng: &mut Rng) -> (String, Option<String>) {
     let family = rng.below(4);
     let ordered = family == 0;
@@ -1914,10 +1915,7 @@ fn generated(rng: &mut Rng) -> (String, Option<String>) {
     for claim in 0..claims {
         let predicate = match (claim, ordered, children) {
             (0, true, _) => order_form(rng),
-            (0, _, true) => format!(
-                "{{children: {{in: [{}]}}}}",
-                ["accepted", "p"][rng.below(2)]
-            ),
+            (0, _, true) => children_form(rng),
             _ => context.predicate(rng, depth, claim),
         };
         source.push_str(&format!("  c{claim}: {{true_when: {predicate}}}\n"));
@@ -1982,6 +1980,19 @@ fn generated(rng: &mut Rng) -> (String, Option<String>) {
         body
     });
     (source, properties)
+}
+
+/// One `children` form listing `accepted` or `p`, half of them with `revision: current`
+/// (story:child-outcome-revision). One draw decides both, its remainder by 2 the outcome as a
+/// draw below 2 did before the key existed, so every later draw, and every protocol a seed
+/// generates but for the key, is what it was.
+fn children_form(rng: &mut Rng) -> String {
+    let draw = rng.below(4);
+    let revision = if draw >= 2 { ", revision: current" } else { "" };
+    format!(
+        "{{children: {{in: [{}]{revision}}}}}",
+        ["accepted", "p"][draw % 2]
+    )
 }
 
 /// One order form over `k` and `m`, or over `k` alone for half of the `after` and `since` forms.
@@ -2077,12 +2088,7 @@ impl Context<'_> {
                     subject(rng)
                 ),
             },
-            5 if self.children => {
-                format!(
-                    "{{children: {{in: [{}]}}}}",
-                    ["accepted", "p"][rng.below(2)]
-                )
-            }
+            5 if self.children => children_form(rng),
             7 => format!("{{not: {}}}", self.predicate(rng, depth - 1, claims)),
             8 | 9 => {
                 let members: Vec<String> = (0..1 + rng.below(3))
@@ -2159,13 +2165,15 @@ fn generated_protocols_agree(seed: u64, wanted: usize) -> (usize, usize) {
 }
 
 /// What the generated protocols must reach, in the source or the report: every order form, child
-/// cases, invalidation, independence, inputs, and each finding that reads states.
-const GENERATED_FEATURES: [&str; 11] = [
+/// cases, a `children` form bound to the current revision (story:child-outcome-revision),
+/// invalidation, independence, inputs, and each finding that reads states.
+const GENERATED_FEATURES: [&str; 12] = [
     "inputs:",
     "first:",
     "since:",
     "after:",
     "children:",
+    "revision: current",
     "invalidation:",
     "independent_on",
     "unreachable-outcome",

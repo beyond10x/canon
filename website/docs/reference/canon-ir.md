@@ -27,22 +27,25 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
 - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
   evidence match without a result has `"result": null`; a claim test without `is` has
   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-  true; absent lists and sections are empty. The eleven exceptions are an evidence kind's
+  true; absent lists and sections are empty. The twelve exceptions are an evidence kind's
   `max_age` and its `supplied_by`, the `subject` of an evidence match or an order form, an
   evidence match's `independent_on`, an obligation's `applicable_when`, an action's
   `arguments`, an action's `case_open`, the `scope` of a capability requirement, the
-  `invalidation` section, the `case` section and the `independence_dimensions` section: each
-  written only when it is declared (a scope only when it names a key, a section only when it
-  holds a rule, an input or a dimension), so the IR of a protocol that declares none of them is
-  the IR it was before they existed. An evidence kind's `supplied_by` is the protocol id as
+  `revision` of a `children` form, the `invalidation` section, the `case` section and the
+  `independence_dimensions` section: each written only when it is declared (a scope only when
+  it names a key, a `children` form's `revision` only when it is `current`, a section only when
+  it holds a rule, an input or a dimension), so the IR of a protocol that declares none of them
+  is the IR it was before they existed. An evidence kind's `supplied_by` is the protocol id as
   declared, a name nothing resolves (story:supplied-evidence). A capability requirement is `{"capability": …}`, or `{"capability": …, "scope": {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
   section is `{<id>: {"description": …}}`. The `case` section is
   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
   authored: `{"first": {"kind": …, "result": …}}`, `{"before": {"first": …, "then": …}}`,
   `{"after": {"first": …, "then": {"kind": …, "result": …}}}` and
   `{"since": {"last": …, "then": {"kind": …, "result": …}}}`.
-  The form over the child cases is `{"children": {"in": [...]}}`, and an action's `case_open`
-  is `{"protocol": …, "subject": …}`, as declared (story:case-composition).
+  The form over the child cases is `{"children": {"in": [...]}}`, or `{"children": {"in": [...], "revision": "current"}}` when it reads only the records about the current revision of
+  their subject (story:child-outcome-revision): `revision: any` reads what no key reads and is
+  written as no key. An action's `case_open` is `{"protocol": …, "subject": …}`, as declared
+  (story:case-composition).
   An action's `arguments` is its JSON Schema as declared, the same JSON value, its object keys
   sorted like every object's (story:action-arguments).
 - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
