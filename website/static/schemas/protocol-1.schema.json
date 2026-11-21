@@ -255,6 +255,17 @@
         "case_open": {
           "description": "The child case the action opens (story:case-composition): a case governed by another protocol, about a declared artifact. Absent: the action opens no case. Canon opens nothing itself; whoever takes the action opens the child case. A case has one commission, and a second party works through a child case: this is the one primitive by which a case hands work to another party (D207).",
           "$ref": "#/$defs/CaseOpening"
+        },
+        "author": {
+          "description": "Who writes the action's arguments and the content of the artifacts it revises (story:judgement-marking): `program`, a reproducible function of the action's inputs, or `judgement`, a person or a model. Absent: `program`. It has no evaluation meaning, names no executor, model or tool, and Canon cannot prove that a runner honours it.",
+          "$ref": "#/$defs/Author"
+        },
+        "revises": {
+          "description": "The declared artifacts the action may move to a new revision (story:judgement-marking). Absent: none. It has no evaluation meaning; Canon never refuses a runner that moves an artifact outside it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
         }
       }
     },
@@ -544,6 +555,10 @@
       "properties": {
         "evidence": {
           "$ref": "#/$defs/Identifier"
+        },
+        "decided_by": {
+          "description": "Who decides the result of a record of this kind the action produces (story:judgement-marking). Absent: the action's `author`. `program` on a judgement action covers a record the runner writes from the effect it applied, such as provenance. It has no evaluation meaning.",
+          "$ref": "#/$defs/Author"
         }
       },
       "required": [
@@ -567,6 +582,13 @@
       "required": [
         "protocol",
         "subject"
+      ]
+    },
+    "Author": {
+      "description": "Who decides (story:judgement-marking): a reproducible procedure, or a judgement by a person or a model. On an action (`author`) it says who writes the action's arguments and the artifacts it revises; on a production (`decided_by`) who decides the record's result.",
+      "enum": [
+        "program",
+        "judgement"
       ]
     },
     "OutcomeRequirement": {
