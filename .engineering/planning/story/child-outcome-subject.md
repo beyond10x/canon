@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:child-outcome-subject
 kind: story
-status: active
+status: implemented
 title: Select the child cases a children form reads by the artifact they were opened about
 tags:
 - from-request
@@ -20,15 +20,25 @@ scope:
 - confidence: cited
   path: conformance/scenarios/child-outcome-subject.yaml
 - confidence: cited
+  path: crates/canon-cli/src/lib.rs
+- confidence: cited
+  path: crates/canon-cli/tests/adversary_conformance_suite_cli.rs
+- confidence: cited
+  path: crates/canon-cli/tests/conform_requirements.rs
+- confidence: cited
   path: crates/canon/src/check/mod.rs
 - confidence: inferred
   path: crates/canon/src/check/space.rs
 - confidence: cited
+  path: crates/canon/src/check/tests.rs
+- confidence: cited
   path: crates/canon/src/eval/actions.rs
 - confidence: cited
-  path: crates/canon/src/eval/claims.rs
-- confidence: cited
   path: crates/canon/src/eval/composition.rs
+- confidence: cited
+  path: crates/canon/src/eval/mod.rs
+- confidence: cited
+  path: crates/canon/src/eval/outcomes.rs
 - confidence: cited
   path: crates/canon/src/eval/read.rs
 - confidence: inferred
@@ -42,13 +52,20 @@ scope:
 - confidence: cited
   path: crates/canon/src/validate/mod.rs
 - confidence: cited
+  path: crates/canon/tests/adversary_child_outcome_subject.rs
+- confidence: cited
+  path: crates/canon/tests/child_outcome_subject.rs
+- confidence: cited
+  path: ess/domains/cli.yaml
+- confidence: cited
   path: ess/domains/protocol.yaml
 - confidence: cited
   path: fixtures/investigation/child-outcome-subject.yaml
-revision: 20
+revision: 32
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T00:43:59Z", actor: "human:timo", revision: 16, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-21T00:43:59Z", actor: "human:timo", revision: 17, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "active", to: "implemented", at: "2026-11-21T11:37:26Z", actor: "human:timo", revision: 32, decided_on: {"recorded":{"test_result":1,"review_outcome":7,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w6"}
 ---
 ## Outcome
 
@@ -200,3 +217,20 @@ operator named orchestrator of this plan may overrule each.
   `case_open` subject" in `canon simulate` as its own work. D1 and D2 build the part of that which
   this story's `subject` key needs; that story keeps the revise step and the third value of the
   mark, and its unit reads this section first.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w6 from the implementor's three reports, the two adversary reports (`review-result:adversary-child-outcome-subject-pass-1`, `-pass-2`) and the merge of `impl/child-outcome-subject` (`7d9f63f`). It corrects the body where the two differ. The unit was built in three steps: the form, then D1 in `canon check` (step 1), then D1 in the walk of `canon simulate` (step 2), after story:simulate-child-outcome-step had merged.
+
+- A `children` form takes an optional `subject`. The evaluator reads the `case_outcome` records about that artifact; a form without `subject` reads every child, as before. `canon evaluate` is unchanged for a protocol without `subject`: 27 scenarios pass on the wave branch without this unit and with it.
+- `Space::produced_by` in `crates/canon/src/check/space.rs` is the one rule for who produces a `case_outcome` record (D1): an opening action produces the record about its `case_open` subject when the protocol reads `case_outcome` about that artifact by name, in a `children` form or in an evidence match; otherwise the record without a subject; never a record about another artifact. `check::produces` still answers per kind, for `unproduced-evidence`.
+- `canon check`: `bypass` decides governed and free per dimension; `evidence_reached` and `positive_reads` return the form's subject, so a slice and the `state-space-bound` message hold only the dimensions an outcome reads.
+- `canon simulate`: a child of an opening action records only in the dimension `produced_by` gives that action; the replacing successor stays within the record's dimension; D5 of story:simulate-child-outcome-step reads only the marks of the actions that produce the dimension of the `open` record. The known-limit sentence "a child-outcome step may add a class of a dimension no child of the marked action is recorded in" is removed.
+- A protocol that reads `case_outcome` about no artifact by name gives the same `canon check` and `canon simulate` bytes as the wave branch without this unit: 128 protocol documents, 256 of 256 outputs equal (stdout, stderr, exit code).
+- D3 as built: a form about an artifact no `case_open` is about gets no finding of its own. `canon check` prints 0 findings for it; `canon simulate` prints a `cycle` at `opened 2 or more children`, `unreached-outcome` and `no-outcome-reachable`. Each line is true of real cases and is pinned.
+- Figures as built on the unit's fixture, reachable states / terminable / waiting / findings (stuck or cycle states): 400/60/24/1 (32); unbound it was 528/68/24/1 (32) with 14 terminable states no case reaches.
+- The second adversary pass compared `canon simulate` and `canon check` with its own enumeration of real cases, judged by `canon evaluate`, on 15 protocols: reachable outcomes agree on 15 of 15, bypasses on 8 of 8. Its enumeration opens at most 2 children per opening action.
+- Scenario `CANON-COMPOSE-003`, with the claim `wave.troubled` (a subject under `not` and without `revision`). The catalogue has 29 requirements at this merge.
+- The last adversary pass left two notes on reference wording, both corrected (`cbb14deb`, `2f5e34bb`): the help of `canon check` and `canon simulate`, the `simulate` module documentation and `ess/domains/cli.yaml` now say that the record is about the `case_open` artifact when the protocol reads `case_outcome` about it by name, in a `children` form or an evidence match, and the `simulate` help states the binding and the narrowed D5. The coordinator read both diffs.
+- Not in § Scope and edited: `crates/canon-cli/src/lib.rs` (the `check` and `simulate` help), `ess/domains/cli.yaml`, `crates/canon/src/check/tests.rs` (the random generator now writes forms with a subject), `crates/canon/src/eval/mod.rs` and `eval/outcomes.rs`, the two requirement count tests. In § Scope and not edited: `crates/canon/src/eval/claims.rs`. Added by the unit: `crates/canon/tests/child_outcome_subject.rs`. Added by the adversary: `crates/canon/tests/adversary_child_outcome_subject.rs` (10 cases after both passes).
+- story:child-outcome-recovery reads "Decided in review" of this story first: D1 and D2 build the per-subject dimension that story names; the revise step and the third value of the mark stay with it.

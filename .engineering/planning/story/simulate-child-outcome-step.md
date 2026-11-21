@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:simulate-child-outcome-step
 kind: story
-status: active
+status: implemented
 title: Let a child case's outcome arrive after its opening action as a step of canon simulate, and drop the printed limit line
 tags:
 - from-request
@@ -17,6 +17,10 @@ relations:
 scope:
 - confidence: cited
   path: crates/canon-cli/src/lib.rs
+- confidence: cited
+  path: crates/canon-cli/tests/adversary_simulate_child_outcome_cli.rs
+- confidence: cited
+  path: crates/canon-cli/tests/canon_simulate.rs
 - confidence: inferred
   path: crates/canon-cli/tests/simulate_child_outcome.rs
 - confidence: cited
@@ -24,13 +28,26 @@ scope:
 - confidence: inferred
   path: crates/canon/src/simulate/tests.rs
 - confidence: cited
+  path: crates/canon/tests/adversary_simulate.rs
+- confidence: cited
+  path: crates/canon/tests/adversary_simulate_child_outcome.rs
+- confidence: cited
   path: ess/domains/cli.yaml
+- confidence: cited
+  path: fixtures/child-outcome-adversary/
+- confidence: cited
+  path: fixtures/child-outcome-large/
 - confidence: inferred
   path: fixtures/investigation/child-outcome/
-revision: 14
+- confidence: cited
+  path: fixtures/investigation/simulate/child-expiry-held/report.txt
+- confidence: cited
+  path: fixtures/investigation/simulate/child-expiry/report.txt
+revision: 24
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T05:02:20Z", actor: "human:timo", revision: 9, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
 - {from: "proposed", to: "active", at: "2026-11-21T05:02:20Z", actor: "human:timo", revision: 10, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
+- {from: "active", to: "implemented", at: "2026-11-21T11:37:25Z", actor: "human:timo", revision: 24, decided_on: {"recorded":{"test_result":1,"review_outcome":8,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w6"}
 ---
 ## Outcome
 
@@ -286,3 +303,18 @@ on wording. Decided on 2026-11-21 by the wave coordinator.
   unit says it there in one sentence; it is not new with this story.
 - The sentence "an outcome other than `open` lowers it" in the help and `cli.yaml` gains its
   second half: from two-or-more the count may also stay at two-or-more.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w6 from the implementor's three reports, the two adversary reports (`review-result:adversary-simulate-child-outcome-step-pass-1`, `-pass-2`) and the merge of `impl/simulate-child-outcome-step` (`164d97e`). It corrects the body where the two differ. § Outcome 1, 3 and 4 and "Why both claims still hold" describe option A as first decided; what was built is D1 with D5 of "Decided in review", and D3 is withdrawn (D6).
+
+- The mark of an opening action is two bits of the walk state: none, one (`01`), two or more (`11`). The bitwise containment and the bit count of story:canon-simulate's R5 work on them unchanged. `10` cannot arise.
+- A step of the opening action raises the mark and is a step even when it adds no record. The child-outcome step is offered per opening action whose mark is above none and names that action. `open` keeps the mark; any other class lowers it (one to none; two or more to one and, as a second successor, to two or more), for the plain and the replacing successor alike. A successor that would hold an `open` record, current or held as expired, with every mark at none is dropped (D5).
+- story:child-outcome-subject, merged after this unit, binds the step: a child of an opening action records only in the `case_outcome` dimension that action produces, and D5 reads the marks of the actions that produce the dimension of the `open` record.
+- Figures as built, reachable states / terminable / waiting / findings (stuck or cycle states): `closed` 5/2/2/0; `ends-open` 5/1/2/1 (1); `repeat` 20/13/3/0; `denied` 7/2/2/1 (1); the two large fixtures 78/43/6/4 (14) and 122/69/13/5 (25); `twice` 39/13/6/0; `two-records` 56/3/4/1 (10). § Acceptance 1 to 6 state the figures of option A, which are superseded.
+- The two large fixtures are in `fixtures/child-outcome-large/`, not in `fixtures/investigation/child-outcome/`: inside the investigation tree they took the test that generates scenarios over every investigation fixture from 108 s to 241 s. `crates/canon-cli/tests/simulate_child_outcome.rs` holds their bytes. They are renamed copies under the "Fixture rule"; the summary lines of the original and the renamed protocol were shown equal once the names are mapped.
+- The line naming the limit on child outcomes (R7 of story:canon-simulate) is no longer printed. `fixtures/investigation/simulate/child-expiry` and `child-expiry-held` were re-pinned (30/3/5/2 (9) and 252/9/41/5 (183)); the adversary checked their seven findings with the evaluator.
+- A protocol without an action that declares `case_open` prints the bytes of the base: 110 files compared.
+- The reference states the one-record-per-step limit of story:canon-simulate in the `Simulate` help and `ess/domains/cli.yaml`: where an action's guard closes on its first record, an outcome that needs two records of one taking is reported as not reached. story:simulate-record-groups removes it for records declared together.
+- Not in § Scope and edited: comments of `crates/canon-cli/tests/canon_simulate.rs`; the child-expiry case of `crates/canon/tests/adversary_simulate.rs`. Added by the adversary: `crates/canon/tests/adversary_simulate_child_outcome.rs` (5 cases), `crates/canon-cli/tests/adversary_simulate_child_outcome_cli.rs` (1 case), `fixtures/child-outcome-adversary/`.
+- `check/space.rs` was not changed by this unit.

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:evidence-redelivery
 kind: story
-status: active
+status: implemented
 title: Count an equal re-delivered evidence record once and refuse a differing one, so an at-least-once runner can resume a crashed run
 tags:
 - from-request
@@ -25,6 +25,8 @@ scope:
 - confidence: cited
   path: crates/canon-cli/tests/adversary_conformance_suite_cli.rs
 - confidence: cited
+  path: crates/canon-cli/tests/adversary_review_hardening.rs
+- confidence: cited
   path: crates/canon-cli/tests/conform_requirements.rs
 - confidence: cited
   path: crates/canon-cli/tests/evidence_file_named.rs
@@ -42,10 +44,11 @@ scope:
   path: website/docs/concepts/evaluation.md
 - confidence: inferred
   path: website/docs/reference/evaluation.md
-revision: 18
+revision: 21
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T23:28:16Z", actor: "human:timo", revision: 17, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T23:28:16Z", actor: "human:timo", revision: 18, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "active", to: "implemented", at: "2026-11-21T11:37:24Z", actor: "human:timo", revision: 21, decided_on: {"recorded":{"test_result":1,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w6"}
 ---
 ## Outcome
 
@@ -178,3 +181,15 @@ Scenario `CANON-EVIDENCE-004` passes under `canon conform run`, with these expec
 ## Decided
 
 Option A of § Decision needed: an equal copy counts once; a differing copy is refused as `duplicate-identifier` with the new message. Decided on 2026-11-21 by the wave coordinator on the drafter's recommendation; the operator accepted the story without choosing (`approval-record:accept-sdc-requests-9-11-2026-11-21`). The unit builds this option and does not reopen the choice.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w6 from the implementor's report, the adversary's report (`review-result:adversary-evidence-redelivery-pass-1`, green, no finding) and the merge of `impl/evidence-redelivery` (`540ad15`). It corrects the body where the two differ.
+
+- `eval::evidence::check` returns the distinct records: the first copy of each id in the order given. `evaluate_with` evaluates those, so every later stage, `composition::one_record_per_child` included, sees each id once.
+- Equality is decided by `same_record`, which names every field of `EvidenceRecord`: a field added to the record later does not compile until the comparison names it. `observed_at` is compared as written text; `upstream_revisions` as sorted pairs. Every field is a string, so the two builds of `serde_json` cannot differ here.
+- A differing copy is refused where the id is checked: after the format, the identifiers and `observed_at` of that record, before its kind and its upstream artifacts. A record refused for an earlier reason is refused for it first. This is the reference's existing rule (inputs are checked in the order given and the first problem is the refusal); the unit made the outcome less dependent on order than the base was (`[a, a, x_bad]` and `[x_bad, a, a]` are now both refused for `x`).
+- Which equal copy is kept cannot be seen in any output: equal copies differ at most in the order of upstream keys, which nothing prints.
+- `canon evaluate` with several evidence files reads them in sorted file-name order and still names, in a refusal, every file that holds a record of the cited id, the file of a dropped equal copy included.
+- Scenario `CANON-EVIDENCE-004`. Six existing tests were re-pinned, each because its "repeated id" was an equal copy; two of them are in files § Scope did not list: `crates/canon-cli/tests/review_refusal_naming.rs` and `crates/canon-cli/tests/adversary_review_hardening.rs`.
+- The scenario pins the decision provenance version (`"canon": "0.9.0"`), as `explanation.yaml` and `pending-decisions.yaml` do: a release changes it.

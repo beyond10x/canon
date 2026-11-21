@@ -125,8 +125,11 @@ compatibility decisions and keep unreleased capability claims explicit.
 
 Releases are source releases at bare-version tags, starting with `0.1.0`. Update the workspace
 version, Cargo.lock and CHANGELOG.md, refresh installation/status prose and regenerate documentation.
-Update the expected decision provenance version in `conformance/scenarios/explanation.yaml` and
-`crates/canon-cli/tests/adversary_skel_cli.rs`; keep their other exact-output expectations unchanged.
+Update the expected decision provenance version (`"canon": "<version>"`) wherever a scenario or
+a test pins it: `conformance/scenarios/explanation.yaml`, `pending-decisions.yaml` and
+`evidence-redelivery.yaml`, and `crates/canon-cli/tests/adversary_skel_cli.rs`; find any newer
+one with `git grep -n '"canon": "' -- conformance crates`. Keep their other exact-output
+expectations unchanged.
 Land the bot-authored preparation on main with `task check` and CI green, then create an annotated
 bot tag on that exact commit and its GitHub Release through `b10x-gates`. Verify the peeled tag,
 required source checks, Release and downloadable source archives. There is no binary packaging
