@@ -2369,6 +2369,16 @@ pub(crate) struct Walked<'a> {
     /// `within[i][j]`: profile `i` is within profile `j`, so a record from a producer of profile
     /// `j` meets every demand one of profile `i` meets.
     pub(crate) within: Vec<Vec<bool>>,
+    /// The artifact every record of the dimension is about (story:simulate-revise-step): the one
+    /// its matches name for a bound dimension, otherwise the first artifact no match of the kind
+    /// names. `None` for a dimension of a protocol that declares no artifact.
+    pub(crate) subject: Option<ArtifactId>,
+    /// The upstream artifacts of the invalidation rules that can keep a record of the dimension
+    /// from a claim, in identifier order: bit `i` of an upstream vector of
+    /// [`Space::walk_evidence`] and [`Space::render_walk`] is `upstreams[i]`.
+    pub(crate) upstreams: Vec<&'a ArtifactId>,
+    /// Whether a `children` form reads the dimension, which then has earlier records.
+    pub(crate) history: bool,
 }
 
 /// What `canon simulate` needs of the space (story:canon-simulate). A walk holds its own records:
@@ -2411,6 +2421,9 @@ impl<'a> Space<'a> {
                             .collect()
                     })
                     .collect(),
+                subject: kind.record.as_ref().map(|record| record.subject.clone()),
+                upstreams: kind.upstreams.clone(),
+                history: kind.history,
             })
             .collect()
     }
@@ -2488,9 +2501,11 @@ impl<'a> Space<'a> {
     }
 
     /// The evidence records of a walk's records, as [`Space::evidence`] writes the current records
-    /// of a state: for each `(dimension, class, producers)` of `held`, in that order, one record
-    /// per producer profile, about the dimension's artifact at [`REVISION`], recording every
-    /// upstream artifact at [`REVISION`], with no observation instant. Then, for each
+    /// of a state: for each `(dimension, class, vector, producers)` of `held`, in that order, one
+    /// record per producer profile, about the dimension's artifact at [`REVISION`], recording each
+    /// upstream artifact whose bit `vector` sets (bit `i` for [`Walked::upstreams`]`[i]`) at
+    /// [`EARLIER`], observed before it moved (story:simulate-revise-step), and every other one at
+    /// [`REVISION`], with no observation instant. Then, for each
     /// `(dimension, class)` of `expired`, a `case_outcome` record of that class held as expired
     /// (R2a of story:canon-simulate): about its artifact at [`EARLIER`], as the history dimension
     /// of a `children` form writes an earlier record, with no producer. The evaluator's revision
@@ -2498,17 +2513,17 @@ impl<'a> Space<'a> {
     /// and every `children` form reads it, as it reads an expired one (`eval/composition.rs`).
     pub(crate) fn walk_evidence(
         &self,
-        held: &[(usize, usize, Vec<usize>)],
+        held: &[(usize, usize, u32, Vec<usize>)],
         expired: &[(usize, usize)],
     ) -> Vec<EvidenceRecord> {
         let mut records = Vec::new();
-        let current = held.iter().flat_map(|(at, class, producers)| {
+        let current = held.iter().flat_map(|(at, class, vector, producers)| {
             producers
                 .iter()
-                .map(move |profile| (*at, *class, Some(*profile)))
+                .map(move |profile| (*at, *class, *vector, Some(*profile)))
         });
-        let earlier = expired.iter().map(|(at, class)| (*at, *class, None));
-        for (at, class, profile) in current.chain(earlier) {
+        let earlier = expired.iter().map(|(at, class)| (*at, *class, 0, None));
+        for (at, class, vector, profile) in current.chain(earlier) {
             let kind = &self.kinds[at];
             let Some(record) = &kind.record else {
                 continue;
@@ -2516,7 +2531,12 @@ impl<'a> Space<'a> {
             let upstream_revisions = Declarations::new(
                 kind.upstreams
                     .iter()
-                    .map(|artifact| ((*artifact).clone(), Revision::new(REVISION)))
+                    .enumerate()
+                    .map(|(bit, artifact)| {
+                        let moved = vector & (1 << bit) != 0;
+                        let revision = if moved { EARLIER } else { REVISION };
+                        ((*artifact).clone(), Revision::new(revision))
+                    })
                     .collect(),
             );
             let mut walked = EvidenceRecord {
@@ -2548,28 +2568,32 @@ impl<'a> Space<'a> {
     }
 
     /// A walk's state as a report writes it, as [`Space::render`] writes a state: its records
-    /// (`held`, in dimension, class and profile order, each class's record held as expired, in
-    /// `expired`, after its current ones, `` evidence `k` result `r` expired ``), then the decided
-    /// capabilities, the taken decisions and the case inputs of `state`. It reads no dimension's
-    /// table of values, which a dimension too large for the check does not have.
+    /// (`held`, in dimension, class, upstream vector and profile order, a record observed before
+    /// an upstream artifact moved written `` evidence `k` observed before upstream `a` moved ``,
+    /// and each class's record held as expired, in `expired`, after its current ones,
+    /// `` evidence `k` result `r` expired ``, or `` … earlier `` in a dimension `earlier` marks,
+    /// one a revision sets aside (story:simulate-revise-step)), then the decided capabilities, the
+    /// taken decisions and the case inputs of `state`. It reads no dimension's table of values,
+    /// which a dimension too large for the check does not have.
     pub(crate) fn render_walk(
         &self,
         state: &State,
-        held: &[(usize, usize, Vec<usize>)],
+        held: &[(usize, usize, u32, Vec<usize>)],
         expired: &[(usize, usize)],
+        earlier: &[bool],
     ) -> String {
-        let mut records: Vec<(usize, usize, Option<usize>)> = held
+        let mut records: Vec<(usize, usize, u32, Option<usize>)> = held
             .iter()
-            .flat_map(|(at, class, producers)| {
+            .flat_map(|(at, class, vector, producers)| {
                 producers
                     .iter()
-                    .map(move |profile| (*at, *class, Some(*profile)))
+                    .map(move |profile| (*at, *class, *vector, Some(*profile)))
             })
-            .chain(expired.iter().map(|(at, class)| (*at, *class, None)))
+            .chain(expired.iter().map(|(at, class)| (*at, *class, 0, None)))
             .collect();
-        records.sort_by_key(|(at, class, profile)| (*at, *class, profile.is_none()));
+        records.sort_by_key(|(at, class, _, profile)| (*at, *class, profile.is_none()));
         let mut items = Vec::new();
-        for (at, class, profile) in records {
+        for (at, class, vector, profile) in records {
             let kind = &self.kinds[at];
             let name = kind.name();
             let mut item = match kind.classes[class] {
@@ -2585,7 +2609,21 @@ impl<'a> Space<'a> {
                             listed(profile)
                         ));
                     }
+                    let moved: Vec<String> = kind
+                        .upstreams
+                        .iter()
+                        .enumerate()
+                        .filter(|(bit, _)| vector & (1 << bit) != 0)
+                        .map(|(_, artifact)| format!("`{}`", one_line(artifact.as_str())))
+                        .collect();
+                    if !moved.is_empty() {
+                        item.push_str(&format!(
+                            " observed before upstream {} moved",
+                            moved.join(", ")
+                        ));
+                    }
                 }
+                None if earlier.get(at).copied().unwrap_or(false) => item.push_str(" earlier"),
                 None => item.push_str(" expired"),
             }
             items.push(item);

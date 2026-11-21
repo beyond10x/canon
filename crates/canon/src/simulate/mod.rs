@@ -1,6 +1,8 @@
 //! A breadth-first walk over the states a case of a compiled protocol can reach from the empty
-//! case (story:canon-simulate, with the rules refined after adversary pass 1, R1 to R6, and
-//! story:simulate-child-outcome-step, which lets a child case's outcome arrive after its opening).
+//! case (story:canon-simulate, with the rules refined after adversary pass 1, R1 to R6,
+//! story:simulate-child-outcome-step, which lets a child case's outcome arrive after its opening,
+//! and story:simulate-revise-step, which lets an admissible action move the artifacts it declares
+//! in `revises` to a new revision).
 //!
 //! [`simulate`] walks every reachable state, one step at a time, evaluates each with Canon's own
 //! evaluator and reports what no single evaluation and no static check shows: states no sequence
@@ -15,8 +17,14 @@
 //! (`crate::check`, "The state space") with every evidence dimension at no record: its capability
 //! decisions, its taken decisions and its case inputs. Each record is of one class of one evidence
 //! dimension of that space, from a producer of one of its profiles, at the current revision and
-//! observed after every move of an upstream artifact; for each dimension and class the walk holds
-//! the down-closed set of profiles its records meet, as the space's values do. It is evaluated as
+//! observed after every move of an upstream artifact, or, after a revise step, before the move of
+//! some upstream artifacts an action revises (the space's upstream vector); for each dimension,
+//! class and vector the walk holds the down-closed set of profiles its records meet, as the
+//! space's values do. A dimension has a vector per subset of the upstream artifacts some action
+//! declares in `revises`, so a protocol that declares none has one per dimension and class. A
+//! state holds no revision number: two sequences of steps that leave the same records reach the
+//! same state, and a walk state is a state of the space `canon check` covers plus the marks
+//! below. It is evaluated as
 //! `canon check` evaluates a state, as a case snapshot with every artifact at one revision, no
 //! termination and no evaluation instant. The walk never needs a dimension's table of values, so
 //! the number of values of a dimension is never a reason to refuse (R1): its bound counts the
@@ -65,6 +73,38 @@
 //!   a state holding one kind of a group alone is not a state of such a case. `canon validate`
 //!   refuses a group naming `case_outcome` on an action that opens a child case, so a child's
 //!   outcome is never grouped.
+//! - **Revise step** (story:simulate-revise-step). An action that declares `revises` may move
+//!   those artifacts to a new revision: taken only from a state in which it is `admissible`, one
+//!   successor per non-empty subset of its `revises`, each combined with no record, then with
+//!   each record of its single-kind steps and each combination of its group steps, as those
+//!   steps take them. In the successor every artifact of the subset is at a new revision, then
+//!   the record or the group is added at the current one. Canon revises nothing; the step says
+//!   that a runner may move an artifact between two evaluations, where the protocol says an
+//!   action does. A revision of artifact `a` changes a state as the space `canon check` covers
+//!   models one (`crate::check`, "The state space"):
+//!   - a current record about `a` leaves the state: revision binding keeps it from every
+//!     evidence match, and nothing else reads it in a protocol the walk accepts, since order
+//!     forms are refused;
+//!   - in a dimension a `children` form reads, a current record about `a` becomes an earlier
+//!     record of its class, at a superseded revision: every `children` form without
+//!     `revision: current` still reads it (`eval/composition.rs`), and the state writes it
+//!     `` evidence `case_outcome` about `a` result `r` earlier ``. It is the bit an expiry holds
+//!     a `case_outcome` record in (R2a, below), so a record of one class both expired and set
+//!     aside is one earlier record, as in the space's history dimension, and a dimension a revise
+//!     step can set aside writes it `earlier` whichever step set it;
+//!   - a current record of a dimension with upstream `a` becomes the one observed before `a`
+//!     moved, written `` … observed before upstream `a` moved ``: the invalidation stage keeps it
+//!     from the claims `a`'s rules invalidate;
+//!   - records held as earlier, capability decisions, taken decisions and marks stay. The case
+//!     revision does not move: an authority entry or a decision bound to it would lapse when it
+//!     moved, so a denial a protocol leaves standing stays standing, and a finding with a denial
+//!     is about a lasting denial.
+//!
+//!   The artifact a record is about is its dimension's: the one its matches name for a bound
+//!   dimension, otherwise the first artifact no match of the kind names, as the space takes it.
+//!   A revise step is an action step in every other way: it raises the action's mark, and it is
+//!   no step when its successor is the state it starts from. An action without `revises` has no
+//!   revise step, and a protocol in which no action declares one walks as before.
 //! - **Supplied step.** A kind that declares `supplied_by` is produced by another protocol's
 //!   cases (story:supplied-evidence), and no action step produces it: a record of it may arrive at
 //!   any step, from any state, by the combinations an action step takes.
@@ -113,8 +153,8 @@
 //!   `denied`.
 //! - **Decision step.** A decision some outcome requires goes from not taken to taken.
 //!
-//! No step revises an artifact, terminates the case or adds a record at a superseded revision,
-//! so the history dimensions of a `children` form stay empty.
+//! No step terminates the case or adds a record at a superseded revision: a `children` form's
+//! earlier records are those an expiry or a revision held as earlier.
 //!
 //! # Order
 //!
@@ -124,15 +164,20 @@
 //! order: actions in identifier order, then their kinds in no group, dimensions, classes and
 //! profiles in the space's own orders, then their groups in order of each group's least kind id,
 //! each group's combinations with its members in kind-id order and the last member varying
-//! fastest, each member's dimensions, classes and profiles in the space's orders; supplied kinds
-//! the same way; the child-outcome step, by opening action, dimension, class and profile, each
-//! plain successor before its replacing ones, and each with the lower mark before the kept one;
-//! expiring kinds in dimension order, then classes; capabilities in
-//! identifier order, `granted` before `denied`; decisions in name order.
+//! fastest, each member's dimensions, classes and profiles in the space's orders, then its revise
+//! steps, the subsets of its `revises` in lexicographic order of their sorted ids (`[a]`,
+//! `[a, b]`, `[b]`), each with no record, then its records and group combinations in the order
+//! above, a revise step counting as one step; supplied kinds the same way; the child-outcome
+//! step, by opening action, dimension, class and profile, each plain successor before its
+//! replacing ones, and each with the lower mark before the kept one; expiring kinds in dimension
+//! order, then classes; capabilities in identifier order, `granted` before `denied`; decisions in
+//! name order.
 //!
 //! # Findings
 //!
-//! A state is *open* when some sequence of action, supplied, child-outcome, expiry and authority
+//! A *record step* is an action's single-kind or group step (and the step of an action that adds
+//! nothing); an action's steps are its record steps and its revise steps. A state is *open* when
+//! some sequence of action (record and revise), supplied, child-outcome, expiry and authority
 //! steps leads from it to a state in which an outcome is legitimate (R3); decision steps are not
 //! part of that sequence (R4), since a protocol with an outcome that requires only a decision can
 //! leave every state by it. In this order:
@@ -140,45 +185,63 @@
 //! - `stuck-state`: a state that is not open, in which no action is `admissible` or
 //!   `approval-required`.
 //! - `cycle`: a state that is not open, in which no action is `approval-required`, some action is
-//!   `admissible` and every step of every admissible action returns the same state. It names those
-//!   actions (R6: with expiry steps the states the steps never leave can be a loop; the finding is
-//!   the state of it in which every action step returns the same state).
+//!   `admissible` and every record step of every admissible action returns the same state. It
+//!   names those actions (R6: with expiry steps the states the steps never leave can be a loop;
+//!   the finding is the state of it in which every record step returns the same state). When a
+//!   revise step of an admissible action changes the state, the finding says `` every record step
+//!   of action `x` `` where it says `` every step of action `x` `` otherwise, and ends with
+//!   `` ; every revision by action `y` leads to a state no outcome is reachable from ``, naming
+//!   each such action: the state is not open, so neither is any state a step leads to.
 //! - `dead-action`: an action `admissible` in no reachable state, in identifier order.
 //! - `unreached-outcome`: an outcome legitimate in no reachable state, in identifier order; then
 //!   `no-outcome-reachable`, once, when the protocol declares outcomes and every one is unreached.
 //!
 //! A state that meets the second half of the `stuck-state` or the `cycle` rule, in which no
-//! outcome is legitimate, and that is open waits: on a supplied record, a child's outcome or an
-//! expiry, the only steps that can open it. It is no finding; the summary counts it when the
-//! protocol declares a supplied or an expiring kind, `` W waiting on supplied evidence or expiry
-//! ``, and when it declares an action that opens a child case, `` W waiting on supplied evidence,
-//! a child outcome or expiry ``.
+//! outcome is legitimate, that is open and in which every step of every admissible action, record
+//! or revise, returns it, waits: on a supplied record, a child's outcome or an expiry, the only
+//! steps that can open it. It is no finding; the summary counts it when the protocol declares a
+//! supplied or an expiring kind, `` W waiting on supplied evidence or expiry ``, and when it
+//! declares an action that opens a child case, `` W waiting on supplied evidence, a child outcome
+//! or expiry ``. An open state a revise step leads out of neither waits nor is a finding.
 //!
 //! One finding is printed per smallest state (R5): among the states of one kind, `stuck-state`
 //! or `cycle`, one is printed when no other of that kind is contained in it. State A is contained
-//! in state B when both give every case input the same value and every record of A (each class,
-//! with the producer profiles it meets), every capability decision of A, every decision taken in
-//! A and every mark of A is in B, none below one below two or more. Every reachable state that
-//! is not open leads by action and authority steps, which only add records and decisions and
-//! raise marks, to a state of one of the two
-//! kinds, and every state of a kind contains a printed one, so nothing is left out; the
-//! child-outcome step's replacing successor removes a record, but it is not an action step, as an
-//! expiry is not, and the argument does not use it. A printed state is not open, so no child
-//! outcome that may arrive in it opens it. A printed finding names its state and its shortest
-//! path, then, when a decision step
-//! leads from its state to a state with a legitimate outcome, each such decision in name order
-//! and the outcomes it makes legitimate (R4), `` decision `d` taken makes outcome `o` legitimate
-//! ``, and last, when other states of its kind contain its state, how many, `` 3 other stuck
-//! states contain it `` (`` 1 other cycle state contains it ``).
+//! in state B when both give every case input the same value and every record of A (each class
+//! and upstream vector, with the producer profiles it meets, and each record held as earlier),
+//! every capability decision of A, every decision taken in A and every mark of A is in B, none
+//! below one below two or more.
+//!
+//! Nothing that is not open goes unreported (story:simulate-revise-step, § Outcome 4, read with
+//! the child-outcome and expiry steps). Record steps only add: a record, or a mark raised, and
+//! authority steps only decide a capability. Take a reachable state that is not open and follow
+//! record and authority steps from it, each changing the state, for as long as one does: each
+//! successor holds more than the one before, so this ends, at a state m whose record steps all
+//! return it and whose capabilities are all decided, since an authority step would change it.
+//! Each state on the way is not open, as no step leads from a state that is not open to one that
+//! is. In m no action is `approval-required`, every capability being decided, so m is a
+//! `stuck-state` when no action is admissible and a `cycle` otherwise, and every state of a kind
+//! contains a printed one. The argument uses no revise, child-outcome or expiry step, the three
+//! that remove a record or lower a mark: they are what the old `cycle` rule, which asked every
+//! step of every admissible action to return the state, could not cover, since a state a revise
+//! step leaves never met it. A printed state is not open, so no child outcome that may arrive in
+//! it and no revision opens it. A printed finding names its state and its shortest path, then,
+//! when a decision step leads from its state to a state with a legitimate outcome, each such
+//! decision in name order and the outcomes it makes legitimate (R4), `` decision `d` taken makes
+//! outcome `o` legitimate ``, then, when other states of its kind contain its state, how many,
+//! `` 3 other stuck states contain it `` (`` 1 other cycle state contains it ``), and last the
+//! revision suffix of a `cycle`.
 //!
 //! A state is written as `canon check` writes one, its records, capabilities, decisions and case
 //! inputs, followed by each mark above none in action order, `` action `a` opened a child `` for
-//! one and `` action `a` opened 2 or more children `` for two or more. Printed
+//! one and `` action `a` opened 2 or more children `` for two or more. A record observed before an
+//! upstream artifact moved is written `` evidence `k` about `b` observed before upstream `a`
+//! moved ``, after its class's records observed after every move. Printed
 //! stuck states and cycles are ordered by the length of their path, then by their rendering. A
 //! path is written as its steps, `` action `a` produces evidence `k` result `r` `` (`` action `a`
 //! produces nothing `` for the step of an opening action that adds no record; a group step on one
 //! line, its records in kind-id order joined by ` and `, `` action `a` produces evidence `k`
-//! and evidence `l` result `r` ``), `` protocol `s`
+//! and evidence `l` result `r` ``), `` action `a` revises `b`, `c` `` (`` action `a` revises `b`
+//! and produces evidence `k` `` with a record or a group), `` protocol `s`
 //! supplies evidence `k` ``, `` a child of action `a` records evidence `case_outcome` result `r`
 //! ``, `` evidence `k` expires ``, `` capability `c` denied ``, `` decision `d` taken ``, joined
 //! by `, then `, or `empty`. The findings are followed by the summary: `` simulated: protocol `p`
@@ -202,9 +265,18 @@
 //!
 //! # Known limits
 //!
-//! No artifact is revised. A kind read with `result:` that an action may produce twice with
-//! different results gives a `cycle`, because mixed results leave the match `unknown` and the
-//! walk cannot set the mixed records aside by a revision.
+//! Only an action's own `revises` moves an artifact, and only where the action is admissible: an
+//! artifact another case revises, or one the protocol revises only through an action no state
+//! admits, never moves, so a failed check on it is still a finding, and a kind read with
+//! `result:` that an action may produce twice with different results gives a `cycle` unless an
+//! admissible action revises the record's artifact. The case revision never moves, so a lasting
+//! denial is reported, and a denial a runner binds to a case revision is walked as lasting. The
+//! records of a dimension no match names an artifact for are about the first artifact no match
+//! of the kind names, as the space takes them, so a revision of that artifact sets every such
+//! record aside, `case_outcome` records of a protocol that reads them about no artifact by name
+//! included, and a revision of another artifact sets none of them aside. A child that has not
+//! ended keeps recording at the current revision after its subject is revised: a child's outcome
+//! always arrives as a current record.
 //!
 //! # Cost
 //!
@@ -225,8 +297,8 @@ use crate::check::{self, Reader, Space, State, Walked};
 use crate::eval;
 use crate::ir::Ir;
 use crate::model::{
-    ActionId, CASE_OUTCOME, DecisionName, EvidenceKindId, OPEN_OUTCOME, OutcomeId, Predicate,
-    ProtocolId, one_line,
+    ActionId, ArtifactId, CASE_OUTCOME, DecisionName, EvidenceKindId, OPEN_OUTCOME, OutcomeId,
+    Predicate, ProtocolId, one_line,
 };
 
 #[cfg(test)]
@@ -280,8 +352,12 @@ pub enum Finding {
     StuckState(Dead),
     Cycle {
         dead: Dead,
-        /// The admissible actions, each of whose steps returns the state.
+        /// The admissible actions, each of whose record steps returns the state.
         actions: Vec<ActionId>,
+        /// The admissible actions some revise step of which changes the state, each to a state
+        /// no outcome is reachable from (story:simulate-revise-step); empty when every revise
+        /// step returns it.
+        revising: Vec<ActionId>,
     },
     DeadAction {
         action: ActionId,
@@ -352,19 +428,35 @@ impl fmt::Display for Finding {
                 dead.state,
                 tail(dead, "stuck")
             ),
-            Finding::Cycle { dead, actions } => {
-                let actions: Vec<String> = actions
-                    .iter()
-                    .map(|action| format!("action `{}`", one_line(action.as_str())))
-                    .collect();
+            Finding::Cycle {
+                dead,
+                actions,
+                revising,
+            } => {
+                let named = |actions: &[ActionId]| -> String {
+                    actions
+                        .iter()
+                        .map(|action| format!("action `{}`", one_line(action.as_str())))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                };
                 write!(
                     f,
                     "state {}: no outcome is legitimate, no action is approval-required, and \
-                     every step of {} returns this state{}",
+                     every {}step of {} returns this state{}",
                     dead.state,
-                    actions.join(", "),
+                    if revising.is_empty() { "" } else { "record " },
+                    named(actions),
                     tail(dead, "cycle")
-                )
+                )?;
+                if !revising.is_empty() {
+                    write!(
+                        f,
+                        "; every revision by {} leads to a state no outcome is reachable from",
+                        named(revising)
+                    )?;
+                }
+                Ok(())
             }
             Finding::DeadAction { action } => write!(
                 f,
@@ -475,9 +567,19 @@ struct Replacing {
     expired: bool,
 }
 
+/// What a revise step adds after its revision (story:simulate-revise-step): no record, one
+/// record of a kind in no group, or one of the action's group combinations, by position.
+#[derive(Clone, Copy, Debug)]
+enum Adds {
+    Nothing,
+    Record(Added),
+    Group(usize),
+}
+
 /// One step of the walk, one variant per kind of step, by position: an action step (the action,
 /// and the record it adds, `None` for the step of an action that adds none), an action's group
-/// step (the action, and which of its group combinations it adds), a supplied record, a
+/// step (the action, and which of its group combinations it adds), an action's revise step (the
+/// action, which subset of its `revises` it moves and what it adds), a supplied record, a
 /// child's outcome (the action whose mark it lowers or keeps, the record, and the `open` records
 /// it replaces, if any), a record class that expires, an authority decision or a decision taken.
 #[derive(Clone, Copy, Debug)]
@@ -491,6 +593,13 @@ enum Step {
     Group {
         action: usize,
         at: usize,
+    },
+    /// A revise step of `action` (story:simulate-revise-step): the artifacts of its subset
+    /// `subset` of `revises` move to a new revision, then `adds` is added at the current one.
+    Revise {
+        action: usize,
+        subset: usize,
+        adds: Adds,
     },
     Supplied(Added),
     Child {
@@ -511,20 +620,27 @@ enum Step {
     },
 }
 
-/// Where a walk's records sit after the space's state: one slot per evidence dimension and class,
-/// each the down-closed set of producer profiles its records meet, as bits in whole words, and,
-/// in a dimension that holds expired records, one more bit after the profiles' for a record of the
-/// class held as expired (R2a). The marks follow the records: two bits per action that opens a
-/// child case, in action order, in whole words, none when no action opens one.
+/// Where a walk's records sit after the space's state: one slot per evidence dimension, class and
+/// upstream vector, each the down-closed set of producer profiles its records meet, as bits in
+/// whole words, and, in a dimension that holds expired records, one more bit after the profiles'
+/// of the class's first slot for a record of the class held as expired (R2a) or set aside as
+/// earlier by a revision (story:simulate-revise-step). A dimension has one vector per subset of
+/// the upstream artifacts a revise step can move, the first observed after every move, so a
+/// protocol that revises nothing has one slot per dimension and class. The marks follow the
+/// records: two bits per action that opens a child case, in action order, in whole words, none
+/// when no action opens one.
 struct Layout<'d, 'a> {
     dimensions: &'d [Walked<'a>],
     /// The length of the space's state at the front of a walk's state.
     base: usize,
-    /// For each dimension and class, the position of its slot's first word.
-    slots: Vec<Vec<usize>>,
-    /// For each dimension, whether an expiry holds its records as expired instead of removing
-    /// them.
+    /// For each dimension, class and upstream vector, the position of its slot's first word.
+    slots: Vec<Vec<Vec<usize>>>,
+    /// For each dimension, whether an expiry or a revision holds its records as earlier instead
+    /// of removing them.
     holds: Vec<bool>,
+    /// For each dimension, the positions in its `upstreams` of those a revise step can move: bit
+    /// `i` of a vector's position is `upstreams[moving[i]]`.
+    moving: Vec<Vec<usize>>,
     /// The position of the first word of the marks, after every slot.
     marks: usize,
     /// The position of each action that opens a child case, in action order: mark `i` is
@@ -546,19 +662,36 @@ impl<'d, 'a> Layout<'d, 'a> {
     }
 
     /// The layout in which each dimension `holds` marks keeps a record held as expired.
+    #[cfg(test)]
     fn holding(dimensions: &'d [Walked<'a>], base: usize, holds: &[bool]) -> Self {
+        Self::revising(dimensions, base, holds, vec![Vec::new(); dimensions.len()])
+    }
+
+    /// The layout in which each dimension `holds` marks keeps a record held as earlier, and each
+    /// dimension has a vector per subset of its upstream artifacts at the positions `moving`
+    /// gives it.
+    fn revising(
+        dimensions: &'d [Walked<'a>],
+        base: usize,
+        holds: &[bool],
+        moving: Vec<Vec<usize>>,
+    ) -> Self {
         let mut at = base;
         let mut slots = Vec::new();
-        for (walked, held) in dimensions.iter().zip(holds) {
+        for ((walked, held), moving) in dimensions.iter().zip(holds).zip(&moving) {
             let width = (walked.profiles.len() + usize::from(*held))
                 .div_ceil(32)
                 .max(1);
             slots.push(
                 (0..walked.classes.len())
                     .map(|_| {
-                        let start = at;
-                        at += width;
-                        start
+                        (0..1usize << moving.len())
+                            .map(|_| {
+                                let start = at;
+                                at += width;
+                                start
+                            })
+                            .collect()
                     })
                     .collect(),
             );
@@ -568,9 +701,76 @@ impl<'d, 'a> Layout<'d, 'a> {
             base,
             slots,
             holds: holds.to_vec(),
+            moving,
             marks: at,
             openers: Vec::new(),
         }
+    }
+
+    /// The upstream vector of position `vector` of `dimension`, as [`Space::walk_evidence`] reads
+    /// one: bit `i` for the dimension's `upstreams[i]`.
+    fn vector(&self, dimension: usize, vector: usize) -> u32 {
+        self.moving[dimension]
+            .iter()
+            .enumerate()
+            .filter(|(bit, _)| vector & (1 << bit) != 0)
+            .map(|(_, upstream)| 1u32 << upstream)
+            .sum()
+    }
+
+    /// `state` after a revision of each of `artifacts` (story:simulate-revise-step, § Outcome 2):
+    /// every current record about one of them leaves, held as earlier in a dimension a `children`
+    /// form reads, and every current record of a dimension with one of them upstream is observed
+    /// before it moved. Records held as earlier, decisions, capabilities and marks stay.
+    fn revise(&self, state: &State, artifacts: &[&ArtifactId]) -> State {
+        let mut walked = state.clone();
+        for (dimension, kind) in self.dimensions.iter().enumerate() {
+            let profiles = kind.profiles.len();
+            let about = kind
+                .subject
+                .as_ref()
+                .is_some_and(|subject| artifacts.contains(&subject));
+            if about {
+                for class in 0..kind.classes.len() {
+                    let present = self.present(&walked, dimension, class);
+                    for &start in &self.slots[dimension][class] {
+                        for profile in 0..profiles {
+                            walked[start + profile / 32] &= !(1 << (profile % 32));
+                        }
+                    }
+                    if present && kind.history && self.holds[dimension] {
+                        let start = self.slots[dimension][class][0];
+                        walked[start + profiles / 32] |= 1 << (profiles % 32);
+                    }
+                }
+                continue;
+            }
+            let moved: usize = self.moving[dimension]
+                .iter()
+                .enumerate()
+                .filter(|(_, upstream)| artifacts.contains(&kind.upstreams[**upstream]))
+                .map(|(bit, _)| 1 << bit)
+                .sum();
+            if moved == 0 {
+                continue;
+            }
+            for slots in &self.slots[dimension] {
+                for (vector, &from) in slots.iter().enumerate() {
+                    let to = slots[vector | moved];
+                    if to == from {
+                        continue;
+                    }
+                    for profile in 0..profiles {
+                        let bit = 1 << (profile % 32);
+                        if walked[from + profile / 32] & bit != 0 {
+                            walked[from + profile / 32] &= !bit;
+                            walked[to + profile / 32] |= bit;
+                        }
+                    }
+                }
+            }
+        }
+        walked
     }
 
     /// The whole length of a walk's state.
@@ -619,7 +819,19 @@ impl<'d, 'a> Layout<'d, 'a> {
     fn held_expired(&self, state: &State, dimension: usize, class: usize) -> bool {
         let profiles = self.dimensions[dimension].profiles.len();
         self.holds[dimension]
-            && state[self.slots[dimension][class] + profiles / 32] & (1 << (profiles % 32)) != 0
+            && state[self.slots[dimension][class][0] + profiles / 32] & (1 << (profiles % 32)) != 0
+    }
+
+    /// `state` without every current record of `class` in `dimension`, of every upstream vector.
+    fn remove(&self, state: &State, dimension: usize, class: usize) -> State {
+        let mut walked = state.clone();
+        let profiles = self.dimensions[dimension].profiles.len();
+        for &start in &self.slots[dimension][class] {
+            for profile in 0..profiles {
+                walked[start + profile / 32] &= !(1 << (profile % 32));
+            }
+        }
+        walked
     }
 
     /// `state` without the records of `class` in `dimension` that `replacing` names: every
@@ -631,52 +843,59 @@ impl<'d, 'a> Layout<'d, 'a> {
         class: usize,
         replacing: Replacing,
     ) -> State {
-        let mut walked = state.clone();
-        let start = self.slots[dimension][class];
+        let mut walked = if replacing.current {
+            self.remove(state, dimension, class)
+        } else {
+            state.clone()
+        };
+        let start = self.slots[dimension][class][0];
         let profiles = self.dimensions[dimension].profiles.len();
-        if replacing.current {
-            for profile in 0..profiles {
-                walked[start + profile / 32] &= !(1 << (profile % 32));
-            }
-        }
         if replacing.expired && self.holds[dimension] {
             walked[start + profiles / 32] &= !(1 << (profiles % 32));
         }
         walked
     }
 
-    /// Whether profile `profile` is in the slot of `dimension` and `class` of `state`.
-    fn has(&self, state: &State, dimension: usize, class: usize, profile: usize) -> bool {
-        state[self.slots[dimension][class] + profile / 32] & (1 << (profile % 32)) != 0
+    /// Whether profile `profile` is in the slot of `dimension`, `class` and upstream vector
+    /// position `vector` of `state`.
+    fn has(
+        &self,
+        state: &State,
+        dimension: usize,
+        class: usize,
+        vector: usize,
+        profile: usize,
+    ) -> bool {
+        state[self.slots[dimension][class][vector] + profile / 32] & (1 << (profile % 32)) != 0
     }
 
-    /// `state` with one more record of `class` in `dimension`, from a producer of `profile`.
+    /// `state` with one more record of `class` in `dimension`, from a producer of `profile`,
+    /// observed after every move of an upstream artifact.
     fn add(&self, state: &State, dimension: usize, class: usize, profile: usize) -> State {
         let mut walked = state.clone();
         let within = &self.dimensions[dimension].within;
         for inner in 0..within.len() {
             if within[inner][profile] {
-                walked[self.slots[dimension][class] + inner / 32] |= 1 << (inner % 32);
+                walked[self.slots[dimension][class][0] + inner / 32] |= 1 << (inner % 32);
             }
         }
         walked
     }
 
-    /// Whether `state` holds a current record of `class` in `dimension`.
+    /// Whether `state` holds a current record of `class` in `dimension`, of any upstream vector.
     fn present(&self, state: &State, dimension: usize, class: usize) -> bool {
-        (0..self.dimensions[dimension].profiles.len())
-            .any(|profile| self.has(state, dimension, class, profile))
+        (0..self.slots[dimension][class].len()).any(|vector| {
+            (0..self.dimensions[dimension].profiles.len())
+                .any(|profile| self.has(state, dimension, class, vector, profile))
+        })
     }
 
     /// `state` without any current record of `class` in `dimension`; in a dimension that holds
     /// expired records, with one of the class held as expired.
     fn expire(&self, state: &State, dimension: usize, class: usize) -> State {
-        let mut walked = state.clone();
-        let start = self.slots[dimension][class];
+        let mut walked = self.remove(state, dimension, class);
+        let start = self.slots[dimension][class][0];
         let profiles = self.dimensions[dimension].profiles.len();
-        for profile in 0..profiles {
-            walked[start + profile / 32] &= !(1 << (profile % 32));
-        }
         if self.holds[dimension] {
             walked[start + profiles / 32] |= 1 << (profiles % 32);
         }
@@ -691,8 +910,8 @@ impl<'d, 'a> Layout<'d, 'a> {
                 continue;
             }
             let profiles = walked.profiles.len();
-            for (class, &start) in self.slots[dimension].iter().enumerate() {
-                if state[start + profiles / 32] & (1 << (profiles % 32)) != 0 {
+            for (class, slots) in self.slots[dimension].iter().enumerate() {
+                if state[slots[0] + profiles / 32] & (1 << (profiles % 32)) != 0 {
                     expired.push((dimension, class));
                 }
             }
@@ -700,28 +919,31 @@ impl<'d, 'a> Layout<'d, 'a> {
         expired
     }
 
-    /// The records of `state`, as the space writes them: each dimension and class that holds one,
-    /// with the profiles of its records, one per greatest member of its set, in profile order.
-    fn held(&self, state: &State) -> Vec<(usize, usize, Vec<usize>)> {
+    /// The records of `state`, as the space writes them: each dimension, class and upstream
+    /// vector that holds one, with the vector as [`Space::walk_evidence`] reads it and the
+    /// profiles of its records, one per greatest member of its set, in profile order.
+    fn held(&self, state: &State) -> Vec<(usize, usize, u32, Vec<usize>)> {
         let mut held = Vec::new();
         for (dimension, walked) in self.dimensions.iter().enumerate() {
             for class in 0..walked.classes.len() {
-                let members: Vec<usize> = (0..walked.profiles.len())
-                    .filter(|profile| self.has(state, dimension, class, *profile))
-                    .collect();
-                if members.is_empty() {
-                    continue;
+                for vector in 0..self.slots[dimension][class].len() {
+                    let members: Vec<usize> = (0..walked.profiles.len())
+                        .filter(|profile| self.has(state, dimension, class, vector, *profile))
+                        .collect();
+                    if members.is_empty() {
+                        continue;
+                    }
+                    let greatest = members
+                        .iter()
+                        .copied()
+                        .filter(|member| {
+                            !members
+                                .iter()
+                                .any(|other| other != member && walked.within[*member][*other])
+                        })
+                        .collect();
+                    held.push((dimension, class, self.vector(dimension, vector), greatest));
                 }
-                let greatest = members
-                    .iter()
-                    .copied()
-                    .filter(|member| {
-                        !members
-                            .iter()
-                            .any(|other| other != member && walked.within[*member][*other])
-                    })
-                    .collect();
-                held.push((dimension, class, greatest));
             }
         }
         held
@@ -761,9 +983,13 @@ struct Visited {
     /// The outcomes legitimate in it, by position.
     legitimate: Vec<usize>,
     /// Whether it meets the second half of the `stuck-state` rule, or of the `cycle` rule with the
-    /// admissible actions, or neither.
+    /// admissible actions, or neither: the `cycle` rule asks only that every record step of every
+    /// admissible action return it.
     idle: Option<Vec<usize>>,
-    /// The states its action, supplied, child-outcome, expiry and authority steps lead to.
+    /// The admissible actions some revise step of which leads out of it, in action order.
+    revisers: Vec<usize>,
+    /// The states its action (record and revise), supplied, child-outcome, expiry and authority
+    /// steps lead to.
     next: Vec<usize>,
     /// The states its decision steps lead to, with each decision's position.
     decided: Vec<(usize, usize)>,
@@ -814,9 +1040,42 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
     // holds the record as expired.
     let (children_read, matched) = case_outcome_readers(ir);
     let is_case_outcome = |dimension: &Walked<'_>| dimension.kind.as_str() == CASE_OUTCOME;
+    // story:simulate-revise-step: the artifacts some action declares in `revises`. A record about
+    // one of them that a `children` form reads is held as earlier after a revision, and is
+    // written `… earlier`; a dimension with one of them upstream has a vector per subset of them.
+    let revisable: BTreeSet<&ArtifactId> = ir
+        .actions
+        .values()
+        .flat_map(|action| &action.revises)
+        .collect();
+    let revised_earlier: Vec<bool> = dimensions
+        .iter()
+        .map(|dimension| {
+            dimension.history
+                && dimension
+                    .subject
+                    .as_ref()
+                    .is_some_and(|subject| revisable.contains(subject))
+        })
+        .collect();
     let holds: Vec<bool> = dimensions
         .iter()
-        .map(|dimension| is_case_outcome(dimension) && children_read && matched)
+        .zip(&revised_earlier)
+        .map(|(dimension, earlier)| {
+            (is_case_outcome(dimension) && children_read && matched) || *earlier
+        })
+        .collect();
+    let moving: Vec<Vec<usize>> = dimensions
+        .iter()
+        .map(|dimension| {
+            dimension
+                .upstreams
+                .iter()
+                .enumerate()
+                .filter(|(_, upstream)| revisable.contains(*upstream))
+                .map(|(at, _)| at)
+                .collect()
+        })
         .collect();
     // One mark per action that opens a child case, in action order.
     let openers: Vec<usize> = ir
@@ -827,7 +1086,17 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         .map(|(at, _)| at)
         .collect();
     let child_outcomes = !openers.is_empty();
-    let layout = Layout::holding(&dimensions, base, &holds).marking(openers);
+    let layout = Layout::revising(&dimensions, base, &holds, moving).marking(openers);
+    // Each action's revise subsets: the non-empty subsets of its `revises`, in order of their
+    // sorted ids; none for an action that declares no `revises`.
+    let action_subsets: Vec<Vec<Vec<&ArtifactId>>> = ir
+        .actions
+        .values()
+        .map(|action| {
+            let sorted: BTreeSet<&ArtifactId> = action.revises.iter().collect();
+            subsets(&sorted.into_iter().collect::<Vec<_>>())
+        })
+        .collect();
     let of_kinds = |kinds: &BTreeSet<&EvidenceKindId>| -> Vec<usize> {
         (0..dimensions.len())
             .filter(|at| kinds.contains(dimensions[*at].kind))
@@ -1004,6 +1273,7 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
 
         let mut successors: Vec<(State, Step)> = Vec::new();
         let mut returns = true;
+        let mut revisers: Vec<usize> = Vec::new();
         for action in &admissible {
             admissible_somewhere[*action] = true;
             // Each step raises the action's mark when it opens a child case: its single-kind steps,
@@ -1047,6 +1317,45 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
                     returns = false;
                     successors.push((walked, step));
                 }
+            }
+            // Its revise steps, after its record steps: each subset of its `revises`, then no
+            // record, each single-kind record and each group combination, in that order. They
+            // do not count for `returns`: the `cycle` rule reads record steps only.
+            let mut revising = false;
+            for (subset, artifacts) in action_subsets[*action].iter().enumerate() {
+                let revised = layout.revise(&state, artifacts);
+                let adds = std::iter::once(Adds::Nothing)
+                    .chain(action_records[*action].iter().copied().map(Adds::Record))
+                    .chain((0..action_groups[*action].len()).map(Adds::Group));
+                for adds in adds {
+                    let added = match adds {
+                        Adds::Nothing => revised.clone(),
+                        Adds::Record(record) => {
+                            layout.add(&revised, record.dimension, record.class, record.profile)
+                        }
+                        Adds::Group(at) => action_groups[*action][at].iter().fold(
+                            revised.clone(),
+                            |added, record| {
+                                layout.add(&added, record.dimension, record.class, record.profile)
+                            },
+                        ),
+                    };
+                    let walked = layout.raise(&added, *action);
+                    if walked != state {
+                        revising = true;
+                        successors.push((
+                            walked,
+                            Step::Revise {
+                                action: *action,
+                                subset,
+                                adds,
+                            },
+                        ));
+                    }
+                }
+            }
+            if revising {
+                revisers.push(*action);
             }
         }
         for record in &supplied_records {
@@ -1168,6 +1477,7 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
             depth: parents[next].1,
             legitimate,
             idle,
+            revisers,
             next: followed,
             decided,
         });
@@ -1206,8 +1516,12 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         let Some(admissible) = &state.idle else {
             continue;
         };
+        // An open state waits only when every step of every admissible action, record or
+        // revise, returns it; one a revise step leads out of is neither waiting nor a finding.
         if open[at] {
-            waiting += 1;
+            if state.revisers.is_empty() {
+                waiting += 1;
+            }
         } else if admissible.is_empty() {
             stuck.push(at);
         } else {
@@ -1256,6 +1570,33 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
                     action_id(*action),
                     records.join(" and ")
                 )
+            }
+            Step::Revise {
+                action,
+                subset,
+                adds,
+            } => {
+                let artifacts: Vec<String> = action_subsets[*action][*subset]
+                    .iter()
+                    .map(|artifact| format!("`{}`", one_line(artifact.as_str())))
+                    .collect();
+                let mut text = format!(
+                    "action `{}` revises {}",
+                    action_id(*action),
+                    artifacts.join(", ")
+                );
+                match adds {
+                    Adds::Nothing => {}
+                    Adds::Record(record) => {
+                        text.push_str(&format!(" and produces {}", added(record)));
+                    }
+                    Adds::Group(at) => {
+                        let records: Vec<String> =
+                            action_groups[*action][*at].iter().map(added).collect();
+                        text.push_str(&format!(" and produces {}", records.join(" and ")));
+                    }
+                }
+                text
             }
             Step::Supplied(record) => {
                 let supplier = ir
@@ -1325,6 +1666,7 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
             &states[at][..base].to_vec(),
             &layout.held(&states[at]),
             &layout.expired(&states[at]),
+            &revised_earlier,
         );
         for (_, action, mark) in layout.raised(&states[at]) {
             text.pop();
@@ -1428,11 +1770,8 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
     for (at, containing) in ordered_findings(&stuck) {
         findings.push(Finding::StuckState(dead(at, containing)));
     }
-    for (at, containing) in ordered_findings(&cycles) {
-        let actions = visited[at]
-            .idle
-            .as_ref()
-            .expect("a cycle state is idle")
+    let action_ids = |actions: &[usize]| -> Vec<ActionId> {
+        actions
             .iter()
             .map(|action| {
                 ir.actions
@@ -1441,10 +1780,13 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
                     .expect("a declared action")
                     .clone()
             })
-            .collect();
+            .collect()
+    };
+    for (at, containing) in ordered_findings(&cycles) {
         findings.push(Finding::Cycle {
             dead: dead(at, containing),
-            actions,
+            actions: action_ids(visited[at].idle.as_ref().expect("a cycle state is idle")),
+            revising: action_ids(&visited[at].revisers),
         });
     }
     for (id, reached) in ir.actions.keys().zip(&admissible_somewhere) {
@@ -1491,6 +1833,23 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         dead: stuck.len() + cycles.len(),
         findings,
     })
+}
+
+/// The non-empty subsets of `items`, each in the order of `items`, in lexicographic order of
+/// those sequences: for `[a, b, c]`, `[a]`, `[a, b]`, `[a, b, c]`, `[a, c]`, `[b]`, `[b, c]`,
+/// `[c]` (story:simulate-revise-step, "in order of their sorted ids").
+fn subsets<T: Copy>(items: &[T]) -> Vec<Vec<T>> {
+    fn extend<T: Copy>(items: &[T], from: usize, prefix: &mut Vec<T>, found: &mut Vec<Vec<T>>) {
+        for at in from..items.len() {
+            prefix.push(items[at]);
+            found.push(prefix.clone());
+            extend(items, at + 1, prefix, found);
+            prefix.pop();
+        }
+    }
+    let mut found = Vec::new();
+    extend(items, 0, &mut Vec::new(), &mut found);
+    found
 }
 
 /// Whether a `children` form reads `case_outcome`, and whether an evidence match does, in any

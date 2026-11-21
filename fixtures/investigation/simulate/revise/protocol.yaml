@@ -1,0 +1,45 @@
+format: protocol/1
+
+protocol:
+  id: simulate.revise
+  revision: 1
+  description: Test a document until a test passes; a test that did not pass is set aside by revising the document, after which the document is tested again.
+
+artifacts:
+  doc:
+    description: The document under test.
+
+evidence_kinds:
+  test:
+    description: A test of the document; its result is pass or another.
+
+claims:
+  doc.passed:
+    description: A test of the current revision of the document passed.
+    true_when:
+      evidence:
+        kind: test
+        subject: doc
+        result: pass
+
+actions:
+  check:
+    description: Test the document, while it has no test result.
+    precondition:
+      claim: doc.passed
+      is: unknown
+    may_produce:
+      - evidence: test
+
+  fix:
+    description: Revise the document after a test that did not pass; it records nothing.
+    precondition:
+      claim: doc.passed
+      is: false
+    revises: [doc]
+
+outcomes:
+  passed:
+    description: The document passed its test.
+    requires:
+      claim: doc.passed

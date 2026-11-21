@@ -1,0 +1,44 @@
+format: protocol/1
+
+protocol:
+  id: simulate.revise.undeclared
+  revision: 1
+  description: The protocol of the revise fixture without its revises declaration; the action that would revise the document declares nothing it moves, so a test that did not pass is never set aside.
+
+artifacts:
+  doc:
+    description: The document under test.
+
+evidence_kinds:
+  test:
+    description: A test of the document; its result is pass or another.
+
+claims:
+  doc.passed:
+    description: A test of the current revision of the document passed.
+    true_when:
+      evidence:
+        kind: test
+        subject: doc
+        result: pass
+
+actions:
+  check:
+    description: Test the document, while it has no test result.
+    precondition:
+      claim: doc.passed
+      is: unknown
+    may_produce:
+      - evidence: test
+
+  fix:
+    description: Work on the document after a test that did not pass; it records nothing and declares no artifact it revises.
+    precondition:
+      claim: doc.passed
+      is: false
+
+outcomes:
+  passed:
+    description: The document passed its test.
+    requires:
+      claim: doc.passed

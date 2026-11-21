@@ -233,19 +233,23 @@ commands:
 
   # Walks every state a case can reach from the empty case, one step at a time
   # (story:canon-simulate), modelled on canon.cli.Check; a child case's outcome arrives at any step
-  # after the action that opened the child was taken (story:simulate-child-outcome-step).
+  # after the action that opened the child was taken (story:simulate-child-outcome-step); an
+  # admissible action may move an artifact it declares in revises to a new revision
+  # (story:simulate-revise-step).
   # read from: .engineering/planning/story/canon-simulate.md:44-80
   # read from: .engineering/planning/story/canon-simulate.md:125
   # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Outcome", 1 to 5
+  # read from: .engineering/planning/story/simulate-revise-step.md, section "Outcome", 1
   - name: canon.cli.Simulate
     naming:
       wire: simulate
       display: Simulate
       summary: >-
         Walk every state a case of a protocol/1 document can reach from the empty case, a child
-        case's outcome arriving at any step after the action that opened the child, and report the
-        states no sequence of steps gets out of (stuck states and cycles, one per smallest state),
-        dead actions and unreached outcomes.
+        case's outcome arriving at any step after the action that opened the child and an
+        admissible action moving the artifacts it declares in revises to a new revision, and
+        report the states no sequence of steps gets out of (stuck states and cycles, one per
+        smallest state), dead actions and unreached outcomes.
     input:
       # The protocol/1 document to simulate.
       # read from: .engineering/planning/story/canon-simulate.md:44
@@ -258,10 +262,17 @@ commands:
       # declares a supplied or an expiring kind and no action that opens a child case, and as
       # waiting on supplied evidence, a child outcome or expiry when an action opens a child case
       # (case_open). A state names each opening action whose children have not all ended: `action
-      # a opened a child` for one, `action a opened 2 or more children` for more.
+      # a opened a child` for one, `action a opened 2 or more children` for more. An open state
+      # waits only when no outcome is legitimate in it, no action is approval-required there, and
+      # every step of every admissible action, record or revise, returns it. A revise step is
+      # written `action x revises a`, or `action x revises a and produces …` with the record or
+      # group it adds; in a state, a record of a dimension a children form reads that a revision
+      # set aside is written `… earlier`, and one observed before an upstream artifact moved `…
+      # observed before upstream a moved`.
       # read from: .engineering/planning/story/canon-simulate.md:67
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R3 and R5
       # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 1", D1
+      # read from: .engineering/planning/story/simulate-revise-step.md, section "Outcome", 1, 2 and 4
       - name: output
         type: String
     outcomes:
@@ -269,8 +280,9 @@ commands:
       - name: unreadable
         external: the protocol cannot be read
         error: canon.cli.Unreadable
-      # A stuck state or a cycle is a state that is not open: no sequence of action, supplied,
-      # child-outcome, expiry and authority steps leads from it to a legitimate outcome. The walk
+      # A stuck state or a cycle is a state that is not open: no sequence of action (record and
+      # revise), supplied, child-outcome, expiry and authority steps leads from it to a
+      # legitimate outcome. The walk
       # counts, per action that opens a child case, its children that have not ended: none, one,
       # or two or more. A step of the action raises the count; a child's outcome arrives while the
       # count is above none, an outcome other than open lowers it, or from two or more may also
@@ -289,6 +301,22 @@ commands:
       # that artifact by name, in a children form or an evidence match, otherwise without a
       # subject; an open record keeps a count above none on an action that produces its
       # dimension. A protocol that reads case_outcome about no artifact by name walks as before.
+      # Revise step: from a state in which an action that declares revises is admissible, one
+      # step per non-empty subset of those artifacts, alone or with one record or one group the
+      # action may produce, tried after the action's record steps. A revision of an artifact
+      # removes the current records about it, except that a record of a dimension a children
+      # form reads becomes an earlier record, which every children form without revision:
+      # current still reads; a record of a dimension with that artifact upstream becomes one
+      # observed before it moved, which its invalidation rules keep from their claims. A state
+      # holds no revision number, and the case revision does not move: authority decisions and
+      # taken decisions stay. A cycle is a state that is not open, in which no action is
+      # approval-required, some action is admissible and every record step of every admissible
+      # action returns the same state; when a revise step of an admissible action changes it,
+      # the finding says every record step and ends with `every revision by action x leads to a
+      # state no outcome is reachable from`. An action that declares no revises has no revise
+      # step, so a protocol without revises walks as before.
+      # read from: .engineering/planning/story/simulate-revise-step.md, section "Outcome", 1 to 4
+      # read from: .engineering/planning/story/simulate-revise-step.md, section "Scope" (one record or one group)
       # read from: .engineering/planning/story/canon-simulate.md:69-80
       # read from: .engineering/planning/story/canon-simulate.md:235
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R1 to R5

@@ -1,0 +1,54 @@
+format: protocol/1
+
+protocol:
+  id: simulate.revise.upstream
+  revision: 1
+  description: Test b against a; a test of b that did not pass is set aside by revising a, which an invalidation rule keeps every earlier test of b from the claim, after which b is tested again.
+
+artifacts:
+  a:
+    description: The artifact b is tested against.
+  b:
+    description: The artifact under test.
+
+evidence_kinds:
+  test:
+    description: A test of b; its result is pass or another.
+
+claims:
+  b.passed:
+    description: A test of b made against the current revision of a passed.
+    true_when:
+      evidence:
+        kind: test
+        subject: b
+        result: pass
+
+actions:
+  check:
+    description: Test b, while it has no test result that counts.
+    precondition:
+      claim: b.passed
+      is: unknown
+    may_produce:
+      - evidence: test
+
+  fix:
+    description: Revise a after a test of b that did not pass; it records nothing.
+    precondition:
+      claim: b.passed
+      is: false
+    revises: [a]
+
+outcomes:
+  passed:
+    description: b passed a test made against the current revision of a.
+    requires:
+      claim: b.passed
+
+invalidation:
+  a.revised:
+    description: A test of b made against an earlier revision of a no longer counts.
+    upstream: a
+    invalidates:
+      - b.passed
