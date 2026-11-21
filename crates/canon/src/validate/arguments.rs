@@ -1099,6 +1099,23 @@ mod tests {
         }
     }
 
+    /// The scale of a number is its exponent plus a shift of the other sign, which borrows across
+    /// every digit of a long exponent: `0.00001e10…0` (38 zeros) is `1e99…95` (37 nines).
+    #[test]
+    fn a_scale_borrows_across_every_digit() {
+        let nines = "9".repeat(37);
+        let zeros = "0".repeat(38);
+        assert_eq!(
+            decimal(&format!("0.00001e1{zeros}")),
+            decimal(&format!("1e{nines}5"))
+        );
+        assert_eq!(
+            decimal(&format!("-12345e-1{zeros}")),
+            decimal(&format!("-1.2345e-{nines}6"))
+        );
+        assert_eq!(decimal("0.001e1000"), decimal("1e997"));
+    }
+
     /// A value has no fractional part when its digits all sit before the point.
     #[test]
     fn decimal_text_knows_an_integer() {

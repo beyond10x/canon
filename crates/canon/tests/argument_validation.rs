@@ -475,11 +475,67 @@ fn doubles_beyond_two_to_the_53_are_compared_exactly_in_both_builds() {
     }
 }
 
-/// A number made from a double (`Number::from_f64`, as a protocol's YAML gives it) is that double
-/// where the text is not held, and the shortest text that reads back as it where it is: 2^60 is
-/// written `1152921504606847000`, which is not 2^60.
+/// The protocol `act` whose `arguments` is the YAML text `schema`, compiled: the schema as
+/// `canon-ir/1` holds it, and the IR's canonical JSON text.
+fn compiled(schema: &str) -> (Value, String) {
+    let text = format!(
+        "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nactions:\n  act:\n    arguments: {schema}\n"
+    );
+    let ir = ir::compile(&model::parse(&text).expect("parses")).expect("compiles");
+    let arguments = ir
+        .actions
+        .values()
+        .next()
+        .and_then(|action| action.arguments.clone());
+    (arguments.expect("declared"), ir.canonical_json())
+}
+
+/// D4: a protocol number whose double is an integer in the 64-bit range, and whose shortest text
+/// is another value, is held as that integer. `1152921504606846976.0` is 2^60 exactly, and its
+/// shortest text `1.152921504606847e+18` is not: the schema holds 2^60, the IR writes it, and the
+/// arguments 2^60 are its `enum` value in both builds.
 #[test]
-fn a_number_made_from_a_double_is_the_double_or_its_shortest_text() {
+fn a_protocol_number_a_double_holds_exactly_is_that_integer() {
+    let (schema, ir) =
+        compiled("{type: object, properties: {n: {type: number, enum: [1152921504606846976.0]}}}");
+    assert_eq!(
+        schema["properties"]["n"]["enum"][0],
+        json!(1_152_921_504_606_846_976_u64)
+    );
+    assert!(ir.contains("1152921504606846976"), "{ir}");
+    assert_eq!(
+        check_arguments(Some(&schema), &json!({"n": 1_152_921_504_606_846_976_u64})),
+        Ok(())
+    );
+    let (schema, _) = compiled(
+        "{type: object, properties: {n: {type: integer, minimum: -9223372036854775808.0, \
+         enum: [1152921504606846976.0, 18446744073709549568.0]}}}",
+    );
+    assert_eq!(
+        schema["properties"]["n"],
+        json!({"type": "integer", "minimum": i64::MIN,
+               "enum": [1_152_921_504_606_846_976_u64, 18_446_744_073_709_549_568_u64]})
+    );
+}
+
+/// D4 changes no number whose shortest text is its value: integers up to 2^53, fractions, and the
+/// doubles above 2^53 whose shortest text is exact keep the IR text they had.
+#[test]
+fn a_protocol_number_whose_shortest_text_is_exact_keeps_it() {
+    let (_, ir) = compiled(
+        "{type: object, properties: {n: {type: number, \
+         enum: [3.0, -0.0, 1.5, 9007199254740992.0, 9007199254740994.0, 1e19]}}}",
+    );
+    let written = "[\n              3.0,\n              -0.0,\n              1.5,\n              \
+                   9007199254740992.0,\n              9007199254740994.0,\n              1e+19\n";
+    assert!(ir.contains(written), "{ir}");
+}
+
+/// A number a caller makes with `Number::from_f64` is not read from a protocol, so D4 does not
+/// reach it: it is the double where the text is not held, and its shortest text where it is (2^60
+/// is written `1.152921504606847e+18`, which is not 2^60). The module docs name this difference.
+#[test]
+fn a_number_a_caller_makes_from_a_double_is_the_double_or_its_shortest_text() {
     let double = serde_json::Number::from_f64(1_152_921_504_606_846_976.0).expect("finite");
     let schema =
         json!({"type": "object", "properties": {"n": {"type": "number", "enum": [double]}}});
