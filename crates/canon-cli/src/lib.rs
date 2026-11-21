@@ -130,7 +130,8 @@ pub enum Command {
     /// something that demands nothing reads it. Evidence a `children` form reads (`case_outcome`)
     /// is also there with earlier records at a superseded revision, each record the outcome of a
     /// child case of its own, and with no place in the order, which the form does not read; an
-    /// action that opens a child case (`case_open`) counts as producing `case_outcome`; and a
+    /// action that opens a child case (`case_open`) counts as producing `case_outcome` about its
+    /// `case_open` subject, and a `children` form naming a `subject` reads only those records; and a
     /// protocol that reads `case_outcome` with both a `children` form and an order form is refused
     /// (`ordered-child-outcomes`). Each outcome, action and property is decided over the
     /// evidence, authority, decisions and case inputs it reads (its slice), with the findings and

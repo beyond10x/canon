@@ -218,8 +218,8 @@ struct Named<'a> {
     /// once.
     orders: Vec<&'a Predicate>,
     /// Each form over the child cases that decides it; `composition.rs` names each once, by the
-    /// outcomes it lists and its `revision`, so two forms that differ only in `revision` are two
-    /// reasons.
+    /// outcomes it lists, its `revision` and its `subject`, so two forms that differ only in
+    /// `revision`, or only in `subject`, are two reasons.
     children: Vec<&'a ChildOutcomes>,
 }
 
