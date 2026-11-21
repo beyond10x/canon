@@ -21,6 +21,12 @@
 //! Two cases pin § Outcome 4 ("R5 containment also requires every mark of A to be set in B.
 //! `size` counts set marks"), which no test of the unit reads: with the marks left out of
 //! `records_within`, or out of `size`, in `simulate/mod.rs`, every test of the unit stays green.
+//!
+//! Both cases are green since the count of children (D1, D5) at `0e787567`.
+//!
+//! Pass 2, under the count of D1: those two protocols never raise a mark past one. A third case
+//! holds containment and size at two or more: the same records with the mark at one and at two
+//! or more are two stuck states, the first contained in the second.
 
 use std::path::PathBuf;
 
@@ -274,4 +280,44 @@ fn a_state_without_a_mark_does_not_contain_one_with_it() {
         ],
         "whole report:\n{report}"
     );
+}
+
+/// `open` may be taken until `seal`, which needs one taking: `{started, sealed}` is stuck with
+/// the mark of `open` at one and at two or more (`open` taken twice, then `seal`). The state at
+/// one is contained in the state at two or more, which holds one thing more: one finding,
+/// standing for both.
+const MARK_AT_TWO_OR_MORE: &str = "format: protocol/1\n\
+    protocol: {id: p, revision: 1, description: Open until sealed and seal once started.}\n\
+    artifacts: {thing: {description: The thing.}}\n\
+    evidence_kinds:\n\
+    \x20 started: {description: Started.}\n\
+    \x20 sealed: {description: Sealed.}\n\
+    \x20 never: {description: A record nothing makes.}\n\
+    claims:\n\
+    \x20 is_started: {description: Started., true_when: {evidence: {kind: started}}}\n\
+    \x20 is_sealed: {description: Sealed., true_when: {evidence: {kind: sealed}}}\n\
+    \x20 is_never: {description: Never., true_when: {evidence: {kind: never}}}\n\
+    actions:\n\
+    \x20 open: {description: Open until sealed., precondition: {claim: is_sealed, is: unknown}, \
+    case_open: {protocol: q, subject: thing}, may_produce: [{evidence: started}]}\n\
+    \x20 seal: {description: Seal once started., precondition: {all: [{claim: is_started}, \
+    {claim: is_sealed, is: unknown}]}, may_produce: [{evidence: sealed}]}\n\
+    outcomes:\n\
+    \x20 done: {description: Never., requires: {claim: is_never}}\n";
+
+#[test]
+fn a_mark_at_two_or_more_contains_and_outweighs_a_mark_at_one() {
+    let report = simulate::simulate(&compiled(MARK_AT_TWO_OR_MORE)).expect("walked");
+    assert_eq!(
+        dead_lines(&report),
+        vec![
+            "stuck-state: state {evidence `sealed`, evidence `started`, action `open` opened a \
+             child}: no outcome is legitimate and no action is admissible or approval-required; \
+             path: action `open` produces evidence `started`, then action `seal` produces \
+             evidence `sealed`; 1 other stuck state contains it"
+                .to_owned()
+        ],
+        "whole report:\n{report}"
+    );
+    assert_eq!(report.states, 5, "whole report:\n{report}");
 }
