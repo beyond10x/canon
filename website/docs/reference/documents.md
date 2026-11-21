@@ -116,7 +116,8 @@ Read by `canon evaluate --authority`: a list of `AuthorityDecision` entries; an 
 ### `AuthorityDecision`
 
 One entry of a `canon-authority/1` document: a capability, the scope the decision covers, the
-decision and, optionally, who took it and the case revision it was taken at.
+decision and, optionally, who took it, the case revision it was taken at and the grounds it
+rested on.
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|
@@ -125,6 +126,8 @@ decision and, optionally, who took it and the case revision it was taken at.
 | `decision` | [`Grant`](#grant) | required | Whether it is granted. |
 | `principal` | [identifier](#identifiers) (`Principal`) | optional | Who took it, an identifier, recorded as given: Canon resolves no identity, so it is matched against nothing and does not change admissibility. |
 | `case_revision` | [identifier](#identifiers) (`Revision`) | optional | The case revision it was taken at, an identifier: the decision applies only while the case snapshot's `revision` equals it, and to nothing when the snapshot has none. Absent, it applies at every case revision. |
+| `ground_revisions` | map from [identifier](#identifiers) (`ArtifactId`) to [identifier](#identifiers) (`Revision`) | optional | The artifact revisions the decision rested on, keyed by artifact, each key once (story:decision-grounds): a ground holds while its revision is the case snapshot's current revision of the artifact, compared for equality. The decision applies only while every ground holds, whatever it decided. Absent or empty, it rests on no artifact. |
+| `ground_evidence` | list of [identifier](#identifiers) (`EvidenceId`) | optional | The evidence records the decision rested on, by id: a ground holds while a record with that id is applicable, the rule of `missing_evidence` (given, left by the revision-binding and freshness stages, and listed in no claim's `excluded_evidence`), so expiry and invalidation reach the decision through it. An id no record has does not hold and is not refused. Absent or empty, it rests on no record. |
 
 ### `Grant`
 
@@ -147,7 +150,8 @@ Read by `canon evaluate --decisions`: a list of `ExplicitDecision` entries; an e
 ### `ExplicitDecision`
 
 One entry of a `canon-decisions/1` document. It applies to `outcome` when the outcome requires
-a decision named `decision` and `case_revision` is the case snapshot's revision.
+a decision named `decision`, `case_revision` is the case snapshot's revision and every ground
+holds.
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|
@@ -155,6 +159,8 @@ a decision named `decision` and `case_revision` is the case snapshot's revision.
 | `outcome` | [identifier](#identifiers) (`OutcomeId`) | required | The outcome it was taken for. |
 | `principal` | [identifier](#identifiers) (`Principal`) | required | Who took it. |
 | `case_revision` | [identifier](#identifiers) (`Revision`) | required | The case revision it was taken at. |
+| `ground_revisions` | map from [identifier](#identifiers) (`ArtifactId`) to [identifier](#identifiers) (`Revision`) | optional | The artifact revisions the decision rested on, keyed by artifact, each key once (story:decision-grounds): a ground holds while its revision is the case snapshot's current revision of the artifact, compared for equality. Absent or empty, it rests on no artifact. |
+| `ground_evidence` | list of [identifier](#identifiers) (`EvidenceId`) | optional | The evidence records the decision rested on, by id: a ground holds while a record with that id is applicable, the rule of `missing_evidence` (given, left by the revision-binding and freshness stages, and listed in no claim's `excluded_evidence`), so expiry and invalidation reach the decision through it. An id no record has does not hold and is not refused. Absent or empty, it rests on no record. |
 
 ## `canon-properties/1`
 

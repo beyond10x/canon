@@ -5,7 +5,7 @@
 //! # The `canon-authority/1` input
 //!
 //! A YAML (or JSON) list of decisions, each a capability, the scope it covers, the decision and,
-//! optionally, who took it and the case revision it was taken at:
+//! optionally, who took it, the case revision it was taken at and the grounds it rested on:
 //!
 //! ```yaml
 //! - capability: metrics.read
@@ -13,35 +13,45 @@
 //!   decision: granted          # or require_approval, or denied
 //!   principal: ops-lead        # optional: who took it, recorded as given
 //!   case_revision: c2          # optional: absent, the decision applies at every case revision
+//!   ground_revisions: {spec: r2}  # optional: the artifact revisions it rested on
+//!   ground_evidence: [e1]         # optional: the evidence records it rested on
 //! ```
 //!
 //! The entry type is [`crate::model::AuthorityDecision`]. An empty list (`[]`) decides nothing; an
 //! empty document is not a list. A capability no action requires may be decided; it changes no
 //! action. One capability may be decided at several scopes and at several case revisions; two
 //! entries equal in capability, scope (the same keys with the same values, in any order), case
-//! revision and principal are a duplicate, whatever their decisions. Refused, in this order: text
-//! that is not such a list (a scope that names a key twice included), or an entry with another
-//! key, another decision or a missing key, as `malformed-input` (`` `--authority` is not a
-//! canon-authority/1 document: entry <n>: <why> ``, counting entries from 1, where a missing key is
-//! named: `` missing field `capability` ``); then, entry by entry in the order given, a capability
-//! that is not an identifier as `invalid-identifier`, then a scope key or value that is not one,
-//! in the order written, then a principal, then a case revision, each as `invalid-identifier`,
-//! then an entry equal to an earlier one as `duplicate-identifier` (`` `--authority` decides
-//! capability `<c>` more than once ``, with `` at scope {<key>: <value>, …} `` after the
-//! capability when the scope is not empty, its keys in code-point order, then `` at case revision
-//! `<r>` `` and `` by `<p>` `` when those are given).
+//! revision and principal are a duplicate, whatever their decisions and grounds. Refused, in this
+//! order: text that is not such a list (a scope or `ground_revisions` that names a key twice
+//! included), or an entry with another key, another decision or a missing key, as
+//! `malformed-input` (`` `--authority` is not a canon-authority/1 document: entry <n>: <why> ``,
+//! counting entries from 1, where a missing key is named: `` missing field `capability` ``); then,
+//! entry by entry in the order given, a capability that is not an identifier as
+//! `invalid-identifier`, then a scope key or value that is not one, in the order written, then a
+//! principal, then a case revision, then a ground artifact or its revision, in the order written,
+//! then a ground evidence id, each as `invalid-identifier`, then an entry equal to an earlier one
+//! as `duplicate-identifier` (`` `--authority` decides capability `<c>` more than once ``, with ``
+//! at scope {<key>: <value>, …} `` after the capability when the scope is not empty, its keys in
+//! code-point order, then `` at case revision `<r>` `` and `` by `<p>` `` when those are given).
+//! A ground artifact the protocol does not declare is refused later, as `undeclared-artifact`
+//! (`grounds.rs`).
 //!
 //! An entry with a case revision is bound to it (story:authority-revision-binding): whatever its
 //! decision, it applies only while the case snapshot's `revision` equals it, and to nothing when
 //! the snapshot has no revision, the rule an explicit decision follows (`decisions.rs`). An entry
-//! without one applies at every case revision. The principal is recorded as given and matched
-//! against nothing: Canon resolves no identity (design § 23), so it does not change admissibility.
-//! [`Authority::applying_at`] keeps the entries that apply; [`Authority::decide`] then decides one
-//! requirement from those alone, so an entry that does not apply takes part in neither coverage
-//! nor precedence.
+//! without one applies at every case revision. An entry with grounds applies only while every
+//! ground holds (story:decision-grounds, `grounds.rs`), whatever its decision, so a denial whose
+//! ground moved lapses too. The principal is recorded as given and matched against nothing: Canon
+//! resolves no identity (design § 23), so it does not change admissibility.
+//! [`Authority::applying_at`] keeps the entries that apply, once, and records the failed grounds
+//! of each entry set aside by its grounds alone; [`Authority::decide`] then decides one requirement
+//! from the entries that apply alone, so an entry that does not apply takes part in neither
+//! coverage nor precedence, and [`Authority::stale_grounds`] names the failed grounds of the
+//! set-aside entries that would have covered it.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
+use super::grounds::{Failed, Grounds, Standing};
 use super::read::{entries, malformed, yaml};
 use super::{Refusal, identifier};
 use crate::ir::Scope;
@@ -51,14 +61,24 @@ use crate::model::{AuthorityDecision, CapabilityId, Grant, Principal, Revision, 
 const INPUT: &str = "`--authority`";
 
 /// What tells two entries apart: capability, scope, case revision (none first) and principal
-/// (none first), ordered in that order.
+/// (none first), ordered in that order. Grounds are not part of it.
 type Key = (CapabilityId, Scope, Option<Revision>, Option<Principal>);
+
+/// What an entry decides, and what it rested on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Entry {
+    grant: Grant,
+    grounds: Grounds,
+}
 
 /// The authority decisions, read from the text given as `--authority`, keyed by capability, then
 /// by scope, then by case revision and then by principal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Authority {
-    decisions: BTreeMap<Key, Grant>,
+    decisions: BTreeMap<Key, Entry>,
+    /// The entries [`Authority::applying_at`] set aside by their grounds alone, each with its
+    /// capability, its scope and the grounds that failed. Empty in the decisions as read.
+    lapsed: Vec<(CapabilityId, Scope, BTreeSet<Failed>)>,
 }
 
 /// One decision as given, what the explanation records.
@@ -69,20 +89,33 @@ pub(crate) struct Given<'a> {
     pub(crate) principal: Option<&'a Principal>,
     /// `"granted"`, `"require_approval"` or `"denied"`.
     pub(crate) decision: &'static str,
+    /// The grounds it rested on.
+    pub(crate) grounds: &'a Grounds,
 }
 
 impl Authority {
-    /// The decisions that apply at the case revision `current` (the case snapshot's `revision`):
-    /// every unbound one, and each bound one whose case revision equals `current`. With no
-    /// current revision, only the unbound ones.
-    pub(super) fn applying_at(&self, current: Option<&Revision>) -> Authority {
-        let decisions = self
-            .decisions
-            .iter()
-            .filter(|((_, _, bound, _), _)| bound.is_none() || bound.as_ref() == current)
-            .map(|(key, grant)| (key.clone(), *grant))
-            .collect();
-        Authority { decisions }
+    /// The decisions that apply at the case revision `current` (the case snapshot's `revision`)
+    /// with the grounds as `standing` has them: each one whose grounds all hold that is unbound or
+    /// bound to `current`. With no current revision, only unbound ones apply. An entry at its case
+    /// revision (or with none) whose grounds do not all hold is kept aside with the grounds that
+    /// failed, for [`Authority::stale_grounds`]; an entry bound to another case revision is
+    /// dropped, its grounds unread.
+    pub(super) fn applying_at(&self, current: Option<&Revision>, standing: &Standing) -> Authority {
+        let mut decisions = BTreeMap::new();
+        let mut lapsed = Vec::new();
+        for (key, entry) in &self.decisions {
+            let (capability, scope, bound, _) = key;
+            if bound.is_some() && bound.as_ref() != current {
+                continue;
+            }
+            let failed = standing.failed(&entry.grounds);
+            if failed.is_empty() {
+                decisions.insert(key.clone(), entry.clone());
+            } else {
+                lapsed.push((capability.clone(), scope.clone(), failed));
+            }
+        }
+        Authority { decisions, lapsed }
     }
 
     /// The decision that applies to a requirement of `capability` at `scope` (empty: a requirement
@@ -94,8 +127,23 @@ impl Authority {
         self.decisions
             .iter()
             .filter(|((decided, covered, _, _), _)| decided == capability && covers(covered, scope))
-            .map(|(_, grant)| *grant)
+            .map(|(_, entry)| entry.grant)
             .max_by_key(|grant| grant.precedence())
+    }
+
+    /// The failed grounds of every entry [`Authority::applying_at`] set aside by its grounds that
+    /// is on `capability` and covers `scope`, each once, in `stale_grounds` order. Empty for the
+    /// decisions as read.
+    pub(super) fn stale_grounds(
+        &self,
+        capability: &CapabilityId,
+        scope: &Scope,
+    ) -> BTreeSet<Failed> {
+        self.lapsed
+            .iter()
+            .filter(|(decided, covered, _)| decided == capability && covers(covered, scope))
+            .flat_map(|(_, _, failed)| failed.iter().cloned())
+            .collect()
     }
 
     /// Every decision as given, in capability order, then scope order (none first), then case
@@ -103,12 +151,13 @@ impl Authority {
     /// records (`crate::explain`), so it and the evaluator read one value.
     pub(crate) fn decisions(&self) -> impl Iterator<Item = Given<'_>> {
         self.decisions.iter().map(
-            |((capability, scope, case_revision, principal), grant)| Given {
+            |((capability, scope, case_revision, principal), entry)| Given {
                 capability,
                 scope,
                 case_revision: case_revision.as_ref(),
                 principal: principal.as_ref(),
-                decision: grant.as_str(),
+                decision: entry.grant.as_str(),
+                grounds: &entry.grounds,
             },
         )
     }
@@ -159,6 +208,7 @@ pub(super) fn read(text: Option<&str>) -> Result<Option<Authority>, Refusal> {
         if let Some(case_revision) = &entry.case_revision {
             identifier("authority case revision", case_revision.as_str())?;
         }
+        let grounds = Grounds::read("authority", &entry.ground_revisions, &entry.ground_evidence)?;
         // The YAML reader refuses a key written twice in one mapping, so each key is here once.
         let scope: Scope = entry
             .scope
@@ -194,9 +244,16 @@ pub(super) fn read(text: Option<&str>) -> Result<Option<Authority>, Refusal> {
                 ),
             ));
         }
-        decisions.insert(key, entry.decision);
+        let entry = Entry {
+            grant: entry.decision,
+            grounds,
+        };
+        decisions.insert(key, entry);
     }
-    Ok(Some(Authority { decisions }))
+    Ok(Some(Authority {
+        decisions,
+        lapsed: Vec::new(),
+    }))
 }
 
 #[cfg(test)]
@@ -230,7 +287,8 @@ mod tests {
         assert_eq!(
             read(Some("[]")),
             Ok(Some(Authority {
-                decisions: BTreeMap::new()
+                decisions: BTreeMap::new(),
+                lapsed: Vec::new(),
             }))
         );
     }
@@ -428,10 +486,11 @@ mod tests {
         .expect("reads")
         .expect("given");
         let none = Scope::new();
+        let standing = Standing::default();
         let at = |revision: Option<&str>, capability: &str| {
             let revision = revision.map(Revision::new);
             authority
-                .applying_at(revision.as_ref())
+                .applying_at(revision.as_ref(), &standing)
                 .decide(&capability.into(), &none)
         };
         assert_eq!(at(Some("c1"), "m"), Some(Grant::Denied));
@@ -449,7 +508,7 @@ mod tests {
             "no current revision: no bound decision"
         );
         assert_eq!(
-            authority.applying_at(None).decisions().count(),
+            authority.applying_at(None, &standing).decisions().count(),
             1,
             "only the unbound decision applies without a revision"
         );
