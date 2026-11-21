@@ -66,8 +66,10 @@ pub struct AuthorityDecision {
     #[serde(default, deserialize_with = "super::present::defaulted")]
     pub ground_revisions: Declarations<ArtifactId, Revision>,
     /// The evidence records the decision rested on, by id: a ground holds while a record with
-    /// that id is applicable (`missing_evidence`'s rule). An id no record has does not hold and is
-    /// not refused. Absent or empty, it rests on no record.
+    /// that id is applicable, the rule of `missing_evidence` (given, left by the revision-binding
+    /// and freshness stages, and listed in no claim's `excluded_evidence`), so expiry and
+    /// invalidation reach the decision through it. An id no record has does not hold and is not
+    /// refused. Absent or empty, it rests on no record.
     #[serde(default, deserialize_with = "super::present::defaulted")]
     pub ground_evidence: Vec<EvidenceId>,
 }

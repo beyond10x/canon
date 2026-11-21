@@ -1033,7 +1033,7 @@ types:
       # read from: .engineering/planning/story/decision-grounds.md:60
       # read from: .engineering/planning/story/decision-grounds.md:62-64
       # read from: .engineering/planning/story/decision-grounds.md:69-73
-      # read from: crates/canon/src/model/explicit.rs:46-50
+      # read from: crates/canon/src/model/explicit.rs:46-52
       - name: ground_evidence
         type: List<canon.protocol.EvidenceId>
 
@@ -1057,7 +1057,7 @@ types:
   # revision, each as invalid-identifier, then an entry equal to an earlier one as
   # duplicate-identifier.
   # read from: crates/canon/src/eval/authority.rs:1-41
-  # read from: crates/canon/src/model/authority.rs:37-73
+  # read from: crates/canon/src/model/authority.rs:37-75
   # read from: .engineering/planning/story/review-hardening-w7.md:28
   # read from: .engineering/planning/story/review-hardening-w7.md:31
   # read from: .engineering/planning/story/capability-scope.md:74-76
@@ -1120,7 +1120,7 @@ types:
       # read from: .engineering/planning/story/decision-grounds.md:60
       # read from: .engineering/planning/story/decision-grounds.md:62-64
       # read from: .engineering/planning/story/decision-grounds.md:69-73
-      # read from: crates/canon/src/model/authority.rs:68-72
+      # read from: crates/canon/src/model/authority.rs:68-74
       - name: ground_evidence
         type: List<canon.protocol.EvidenceId>
 
@@ -1145,7 +1145,7 @@ types:
   # true is admissible when every requirement is granted; blocked when one is denied, naming each
   # denied requirement; and approval-required when none is denied and one requires approval or is
   # not decided, naming each such requirement (CANON-AUTHORITY-001, CANON-SCOPE-001).
-  # read from: crates/canon/src/model/authority.rs:75-89
+  # read from: crates/canon/src/model/authority.rs:77-91
   # read from: crates/canon/src/eval/actions.rs:41-59
   # read from: .engineering/planning/story/capability-scope.md:65-72
   - name: canon.protocol.Grant
