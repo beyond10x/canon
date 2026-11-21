@@ -274,3 +274,156 @@ fn an_empty_description_and_an_empty_result_are_written_and_read_back() {
     assert_eq!(text.matches("\"description\": \"\"").count(), 10, "{text}");
     assert_eq!(text.matches("\"result\": \"\"").count(), 1, "{text}");
 }
+
+// ---------------------------------------------------------------------------------------------
+// Adversary pass 2: the module docs' "Keys" and "Depth" sections, read as the specification.
+
+/// A protocol whose only claim is `c` and holds `true_when`.
+fn with_claim(id: &str, true_when: Predicate) -> Protocol {
+    let mut protocol = model::parse(HEADER).expect("the header parses");
+    protocol.claims = Declarations::new(vec![(
+        ClaimId::new(id),
+        Claim {
+            description: None,
+            true_when,
+        },
+    )]);
+    protocol
+}
+
+/// "Keys": a `\`, a `"`, a line feed, carriage return, tab, backspace or form feed take two bytes,
+/// every other escaped character six, any other character its length in UTF-8, and a key of at
+/// most 1022 bytes as written reads back. Each form, grown to 1022 bytes, reads back spelled as
+/// the docs say ("Spelling"); grown to 1023 it does not.
+#[test]
+fn a_key_grown_by_each_escape_form_reads_back_at_1022_bytes_as_written_and_not_at_1023() {
+    let forms: [(char, &str); 12] = [
+        ('"', "\\\""),
+        ('\\', "\\\\"),
+        ('\n', "\\n"),
+        ('\r', "\\r"),
+        ('\t', "\\t"),
+        ('\u{8}', "\\b"),
+        ('\u{c}', "\\f"),
+        ('\u{1}', "\\u0001"),
+        ('\u{85}', "\\u0085"),
+        ('\u{2028}', "\\u2028"),
+        ('\u{feff}', "\\uFEFF"),
+        ('\u{1f600}', "\u{1f600}"),
+    ];
+    for (c, spelling) in forms {
+        for (n, reads) in [(1022, true), (1023, false)] {
+            let units = n / spelling.len();
+            let pad = "k".repeat(n - units * spelling.len());
+            let key = format!("{}{pad}", c.to_string().repeat(units));
+            let written = format!("\"{}{pad}\": ", spelling.repeat(units));
+            let protocol = with_claim(&key, Predicate::All(Vec::new()));
+            let text = write(&protocol);
+            assert!(
+                text.contains(&written),
+                "U+{:04X} is written {spelling}",
+                u32::from(c)
+            );
+            assert_eq!(
+                model::parse(&text).is_ok_and(|read| read == protocol),
+                reads,
+                "U+{:04X}: a key of {n} bytes as written",
+                u32::from(c)
+            );
+        }
+    }
+}
+
+/// "Keys": the limit holds for an identifier and for a property name inside `arguments`, at every
+/// place the model keys by text, however deep the key is indented. Each source spells the key as
+/// an explicit `?` key, which `parse` reads at any length.
+#[test]
+fn a_key_reads_back_at_1022_bytes_and_not_at_1023_in_every_map_the_model_keys_by_text() {
+    let nested = |k: &str| {
+        let mut value = format!("{{? {k} : 1}}");
+        for _ in 0..25 {
+            value = format!("{{n: {value}}}");
+        }
+        format!("actions:\n  a:\n    arguments: {value}\n")
+    };
+    type Place<'a> = (&'a str, &'a dyn Fn(&str) -> String);
+    let places: [Place<'_>; 13] = [
+        ("artifacts", &|k| format!("artifacts:\n  ? {k}\n  : {{}}\n")),
+        ("evidence_kinds", &|k| {
+            format!("evidence_kinds:\n  ? {k}\n  : {{}}\n")
+        }),
+        ("claims", &|k| {
+            format!("claims:\n  ? {k}\n  : {{true_when: {{all: []}}}}\n")
+        }),
+        ("obligations", &|k| {
+            format!("obligations:\n  ? {k}\n  : {{discharged_when: {{all: []}}}}\n")
+        }),
+        ("actions", &|k| format!("actions:\n  ? {k}\n  : {{}}\n")),
+        ("outcomes", &|k| {
+            format!("outcomes:\n  ? {k}\n  : {{requires: {{all: []}}}}\n")
+        }),
+        ("invalidation", &|k| {
+            format!("invalidation:\n  ? {k}\n  : {{upstream: a, invalidates: []}}\n")
+        }),
+        ("independence_dimensions", &|k| {
+            format!("independence_dimensions:\n  ? {k}\n  : {{}}\n")
+        }),
+        ("imports", &|k| {
+            format!("imports:\n  ? {k}\n  : {{revision: 1, digest: d}}\n")
+        }),
+        ("case inputs", &|k| {
+            format!("case:\n  inputs:\n    ? {k}\n    : {{values: [a]}}\n")
+        }),
+        ("requires scope", &|k| {
+            format!(
+                "actions:\n  a:\n    requires:\n      - capability: c\n        scope:\n          ? {k}\n          : v\n"
+            )
+        }),
+        ("arguments properties", &|k| {
+            format!(
+                "actions:\n  a:\n    arguments:\n      type: object\n      properties:\n        ? {k}\n        : {{type: string}}\n"
+            )
+        }),
+        ("arguments 25 objects deep", &nested),
+    ];
+    for (place, body) in places {
+        for (n, reads) in [(1022, true), (1023, false)] {
+            let key = "k".repeat(n);
+            let protocol = model::parse(&format!("{HEADER}{}", body(&key)))
+                .unwrap_or_else(|error| panic!("{place}: parse refuses the source: {error}"));
+            let text = write(&protocol);
+            assert!(text.contains(&format!("\"{key}\": ")), "{place}: {n}");
+            assert_eq!(
+                model::parse(&text).is_ok_and(|read| read == protocol),
+                reads,
+                "{place}: a key of {n} bytes as written"
+            );
+        }
+    }
+}
+
+/// "Depth": a predicate 500 deep is written on a 2 MiB stack in a debug build. The case of D4
+/// nests `not`; `all` and `any` take more stack per level (`predicate`, then `predicates`), so
+/// they are the shape that overflows first. Measured on 2026-11-21, debug build, rustc 1.99.1:
+/// `all` holds 808 levels and overflows at 809, `not` holds 1152.
+#[test]
+fn a_predicate_of_all_nested_500_deep_is_written_on_a_thread_with_a_2_mib_stack() {
+    let written = std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(|| {
+            let mut predicate = Predicate::All(Vec::new());
+            for _ in 0..500 {
+                predicate = Predicate::All(vec![predicate]);
+            }
+            let protocol = with_claim("c", predicate);
+            let text = write(&protocol);
+            // The model is not dropped here: the case is about `write`, not about `Drop`.
+            std::mem::forget(protocol);
+            text
+        })
+        .expect("the thread starts")
+        .join()
+        .expect("write returns on the 2 MiB stack");
+    assert!(written.ends_with("}\n"));
+    assert_eq!(written.matches("\"all\"").count(), 501);
+}
