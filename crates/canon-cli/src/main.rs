@@ -9,6 +9,7 @@ mod check;
 mod conform;
 mod diff;
 mod evaluate;
+mod floor;
 mod generate;
 
 use std::path::{Path, PathBuf};
@@ -59,6 +60,7 @@ fn main() -> ExitCode {
             at.as_deref(),
         ),
         Command::Diff { from, to } => diff::run(&from, &to),
+        Command::Floor { floor, ir } => floor::run(&floor, &ir),
         Command::Check {
             path,
             properties,

@@ -22,13 +22,15 @@ pub const EXIT_STATUSES: [(u8, &str); 4] = [
     (
         0,
         "Success: the document is valid or compiled, the case was evaluated, every conformance \
-         scenario ran and passed, a check found nothing, or the scenarios were generated.",
+         scenario ran and passed, a check found nothing, the scenarios were generated, or a \
+         protocol stays above its floor.",
     ),
     (
         REJECTED,
         "Rejected: a document was read and rejected, an evaluation or a check was refused, a \
          conformance scenario failed or was unreadable, no scenario ran, a requirement check \
-         failed, a check found something, or generation was refused.",
+         failed, a check found something, generation was refused, or a protocol is below its \
+         floor.",
     ),
     (
         UNREADABLE,
@@ -177,6 +179,22 @@ pub enum Command {
         /// The later revision, as `canon compile` prints it.
         #[arg(long)]
         to: PathBuf,
+    },
+    /// Check that a compiled protocol stays above a compiled organization floor: every change from
+    /// the floor to the protocol, classified as `canon diff` classifies it, is a `TIGHTENING`, an
+    /// `EXPANSION` or `NO SEMANTIC CHANGE`. Prints `floor: holds` and the three counts and exits 0;
+    /// otherwise prints `floor: breached` and each `RELAXATION` and `BREAKING` change, naming the
+    /// identifiers it touches, and exits 1. The floor and the protocol keep their own ids,
+    /// revisions and descriptions, which are not compared. The protocol does not name its floor;
+    /// pass a compiled import as the floor to check that a refinement only tightens it.
+    Floor {
+        /// The organization's floor, a `protocol/1` document compiled as `canon compile` prints it.
+        #[arg(long)]
+        floor: PathBuf,
+        /// The protocol checked, `canon-ir/1` as `canon compile` prints it; compile a protocol
+        /// that imports others with its `--import` documents first.
+        #[arg(long)]
+        ir: PathBuf,
     },
     /// Conformance scenarios.
     Conform {
