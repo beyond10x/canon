@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T20:31:34Z",
+  "actor": "human:timo",
+  "artifact": "story:canon-mutate",
+  "kind": "story",
+  "revision": 18,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "finding 2, crates/canon/src/mutate/mod.rs:415, mutant: removing the read-back guard left the unit's tests green; the adversary case mutate_reports_a_mutant_that_does_not_read_back_as_unwritable fails on that mutant; the code was right",
+    "reference": "d43716d1",
+    "review": "review-result:adversary-canon-mutate-pass-1",
+    "outcome": "fixed"
+  }
+}

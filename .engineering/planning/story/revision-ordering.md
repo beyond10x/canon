@@ -51,7 +51,7 @@ scope:
   path: ess/domains/protocol.yaml
 - confidence: cited
   path: fixtures/investigation/revision-ordering.yaml
-revision: 33
+revision: 34
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T20:58:28Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 - {from: "proposed", to: "active", at: "2026-11-20T20:58:28Z", actor: "human:timo", revision: 5, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
@@ -193,3 +193,43 @@ Atlas ADR 0084 (accepted 2026-10-04; on Atlas `main`, commit `38266148c` is an a
 `759e16472`) § Decision 3 (`0084-protocols-express-step-order.md:41-43`) and § Open (`:54`); aep
 `principles/development/test-driven.yaml:50`; draft `canon-stories-step-order.md`; Atlas ADR 0080;
 rescope of 2026-11-20 (`approval-record:accept-drafts-2026-11-20`).
+
+## Decided by the unit, accepted 2026-11-21
+
+Option A and the key `item` left five points to the unit. It decided them before its first commit,
+and the session that requested the story (`sdc`) accepted them as built on 2026-11-21, before the
+adversary pass.
+
+- **F1. The form** is `{descended: {first: {kind, result}, then: {kind, result}, subject?}}`,
+  struct `canon.protocol.EvidenceDescended`; `first` and `then` are `LaterRecord`s. Not taken:
+  fields that name a kind only, which cannot say failed and passed; an item named in the form.
+- **F2. Which revisions count.** The later record is on the current revision of its subject. The
+  earlier record is on a revision the case lists in that artifact's `descends_from`. A record on
+  any other revision, the current one included for the earlier record, takes no part.
+- **F3. `item`** is opaque text, compared for equality only, checked as an identifier. The form
+  names no item. A record without an item takes no part.
+- **F4. The value.** TRUE when a later record has an earlier record. Otherwise UNKNOWN when there
+  is no later record, or when the case gives no `descends_from` for the subject of one. Otherwise
+  FALSE. The ten-row table is in the comment of `canon.protocol.EvidenceDescended` in
+  `ess/domains/protocol.yaml`.
+- **F5. Refusals.** In `descends_from`: `invalid-identifier`, `duplicate-identifier` and the new
+  code `self-descent` (it lists the current revision). The form with an undeclared kind or subject,
+  and in an obligation's discharge or applicability, as every order form. `canon simulate` refuses
+  a protocol with it (`ordered-evidence`).
+
+Two consequences were put to `sdc` with the table. Its answer, verbatim: "accepted as built: the
+name `descended`, the fields and the value table. My use is the bug-fix protocol's "red first": the
+reproducing test failed on an ancestor revision and passes on the current one; one item is what
+that claim is about, and the other tests are a separate claim, so point (1) is right for it. Point
+(2) (the same item failed and passed on the current revision is TRUE) is acceptable with a second
+predicate; put that sentence and the two-predicate pattern into the reference comment of
+canon.protocol.EvidenceDescended so a protocol author meets it there."
+
+- **F6.** One item is enough for TRUE; what other items did is another claim.
+- **F7.** An item that failed on an ancestor, passed on the current revision and also failed on
+  the current revision is TRUE. The comment of `canon.protocol.EvidenceDescended` gains that
+  sentence and the pattern of a second predicate that excludes it; the unit writes both in its
+  correction pass.
+- **F8.** `Predicate` stays 96 bytes: the variant is `Descended(Box<EvidenceDescended>)`, because
+  three tests of deep nesting overflowed the stack at 120 bytes. A later variant larger than that
+  is boxed too.

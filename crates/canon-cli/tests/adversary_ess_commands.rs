@@ -111,10 +111,10 @@ fn named<'a>(commands: &'a mut [Value], name: &str) -> &'a mut Value {
 fn an_ess_command_sharing_a_wire_is_named() {
     let (passed, output) = parity_on("shared-wire", |commands| {
         commands.push(command(
-            "name: canon.cli.Floor
+            "name: canon.cli.Unclaimed
 naming:
   wire: validate
-  display: Floor
+  display: Unclaimed
   summary: Not a canon subcommand.
 input:
   - name: path
@@ -131,8 +131,8 @@ outcomes:
         ));
     });
     assert!(
-        !passed && output.contains("canon.cli.Floor"),
-        "ESS declares canon.cli.Floor (wire `validate`, input `budget`), which is no canon \
+        !passed && output.contains("canon.cli.Unclaimed"),
+        "ESS declares canon.cli.Unclaimed (wire `validate`, input `budget`), which is no canon \
          subcommand, and the parity test passed without naming it:\n{output}"
     );
 }
@@ -142,10 +142,10 @@ outcomes:
 fn an_ess_command_with_its_own_wire_is_named() {
     let (passed, output) = parity_on("own-wire", |commands| {
         commands.push(command(
-            "name: canon.cli.Floor
+            "name: canon.cli.Unclaimed
 naming:
-  wire: floor
-  display: Floor
+  wire: unclaimed
+  display: Unclaimed
   summary: Not a canon subcommand.
 input:
   - name: path
@@ -160,7 +160,9 @@ outcomes:
         ));
     });
     assert!(
-        !passed && output.contains("canon.cli.Floor") && output.contains("not a canon subcommand"),
+        !passed
+            && output.contains("canon.cli.Unclaimed")
+            && output.contains("not a canon subcommand"),
         "{output}"
     );
 }

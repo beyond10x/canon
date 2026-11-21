@@ -1,0 +1,32 @@
+format: canon-conformance/1
+id: adversary-consumer-both-checks
+covers: []
+fixture: fixtures/mutate-adversary/import/consumer.yaml
+# The consumer, with shared as its import: both checks recorded, both outcomes legitimate. Its
+# fixture is not the protocol `canon mutate` is given; it reads that protocol only as an import.
+imports:
+  - fixtures/mutate-adversary/import/shared.yaml
+steps:
+  - id: both-checks
+    evaluate:
+      case:
+        format: canon-case/1
+        id: c
+        protocol: consumer
+        artifacts:
+          item: {revision: r1}
+      evidence:
+        - {format: canon-evidence/1, id: e1, kind: first_check, subject: item, subject_revision: r1}
+        - {format: canon-evidence/1, id: e2, kind: second_check, subject: item, subject_revision: r1}
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "accepted": {
+              "status": "legitimate"
+            },
+            "ready": {
+              "status": "legitimate"
+            }
+          }
+        }

@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T18:31:57Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-floor",
+  "kind": "story",
+  "revision": 28,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "finding 1, crates/canon-cli/tests/floor.rs:159, mutant: no fixture made a NO SEMANTIC CHANGE change, so a floor that refuses one passed the unit's test; the adversary case a_protocol_that_only_rewrites_descriptions_holds_and_counts_them fails on that mutant; the code was right",
+    "reference": "4df0f19a",
+    "review": "review-result:adversary-protocol-floor-pass-1",
+    "outcome": "fixed"
+  }
+}

@@ -242,3 +242,13 @@ items:
     story: story:simulate-revise-step
     detail: "canon simulate lets an admissible action move the artifacts it declares in revises to a new revision, one step per non-empty subset, alone or with one record or one group it may produce, printed as action x revises a. A revision removes the current records about the artifact, keeps a child's outcome about it as an earlier record a children form still reads, and turns a record with that artifact upstream into one observed before it moved, which its invalidation rules set aside; the case revision never moves, so a denial lasts. A cycle now asks only that every record step return the state, and one a revision leads out of says so: every revision by action x leads to a state no outcome is reachable from. A protocol without revises walks as before."
     href: /docs/reference/cli#canon-simulate
+  - label: Protocol floor
+    area: Analysis
+    story: story:protocol-floor
+    detail: canon floor --floor --ir checks that a compiled protocol stays above an organization floor, a protocol/1 document of its own id and revision; it classifies every change from the floor to the protocol as canon diff does, prints floor holds and the counts when each is tightening, expansion or no semantic change, and otherwise prints each relaxation and breaking change and exits 1.
+    href: /docs/reference/cli#canon-floor
+  - label: canon mutate
+    area: Analysis
+    story: story:canon-mutate
+    detail: "canon mutate --path <protocol> --scenarios <dir> measures how strong a scenario set is: five operators (drop a member of an all, all to any, remove a precondition, remove a capability requirement, change an evidence result to another the protocol names for that kind) make each mutant from the parsed model, written with model::write; each runs against the scenarios that name the protocol file and is classified with the semantic diff. A mutant some scenario fails is killed, one none fails survived, and a survivor whose diff holds a RELAXATION is a weak point; a mutant the compiler refuses is invalid with its codes. Exit 1 when a weak point is reported, 0 otherwise; a set in which no scenario names the protocol file, or that fails on the protocol itself, is refused. Mutants come in a fixed order, so two runs give the same bytes."
+    href: /docs/reference/cli#canon-mutate

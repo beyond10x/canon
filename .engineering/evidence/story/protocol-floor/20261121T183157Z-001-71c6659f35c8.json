@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T18:31:57Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-floor",
+  "kind": "story",
+  "revision": 28,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "finding 2, crates/canon-cli/tests/floor.rs:195, mutant: every breached fixture printed one line, so changes below the floor printed out of the classifier's order passed the unit's test; the adversary case several_changes_below_the_floor_print_in_the_classifiers_order fails on that mutant; the code was right",
+    "reference": "4df0f19a",
+    "review": "review-result:adversary-protocol-floor-pass-1",
+    "outcome": "fixed"
+  }
+}

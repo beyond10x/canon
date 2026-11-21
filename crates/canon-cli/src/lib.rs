@@ -22,14 +22,16 @@ pub const EXIT_STATUSES: [(u8, &str); 4] = [
     (
         0,
         "Success: the document is valid or compiled, the case was evaluated, every conformance \
-         scenario ran and passed, a check or a simulation found nothing, or the scenarios were \
-         generated.",
+         scenario ran and passed, a check or a simulation found nothing, the scenarios were \
+         generated, a protocol stays above its floor, or a mutation run reported no weak \
+         point.",
     ),
     (
         REJECTED,
-        "Rejected: a document was read and rejected, an evaluation, a check or a simulation was \
-         refused, a conformance scenario failed or was unreadable, no scenario ran, a requirement \
-         check failed, a check or a simulation found something, or generation was refused.",
+        "Rejected: a document was read and rejected, an evaluation, a check, a simulation or a \
+         mutation run was refused, a conformance scenario failed or was unreadable, no scenario \
+         ran, a requirement check failed, a check or a simulation found something, generation was \
+         refused, a protocol is below its floor, or a mutation run reported a weak point.",
     ),
     (
         UNREADABLE,
@@ -243,6 +245,45 @@ pub enum Command {
         /// The later revision, as `canon compile` prints it.
         #[arg(long)]
         to: PathBuf,
+    },
+    /// Check that a compiled protocol stays above a compiled organization floor: every change from
+    /// the floor to the protocol, classified as `canon diff` classifies it, is a `TIGHTENING`, an
+    /// `EXPANSION` or `NO SEMANTIC CHANGE`. Prints `floor: holds` and the three counts and exits 0;
+    /// otherwise prints `floor: breached` and each `RELAXATION` and `BREAKING` change, naming the
+    /// identifiers it touches, and exits 1. The floor and the protocol keep their own ids,
+    /// revisions and descriptions, which are not compared. The protocol does not name its floor;
+    /// pass a compiled import as the floor to check that a refinement only tightens it.
+    Floor {
+        /// The organization's floor, a `protocol/1` document compiled as `canon compile` prints it.
+        #[arg(long)]
+        floor: PathBuf,
+        /// The protocol checked, `canon-ir/1` as `canon compile` prints it; compile a protocol
+        /// that imports others with its `--import` documents first.
+        #[arg(long)]
+        ir: PathBuf,
+    },
+    /// Measure how strong a scenario set is: apply five mutation operators to a `protocol/1`
+    /// document (drop a member of an `all`, turn an `all` into an `any`, remove an action's
+    /// precondition, remove one of its capability requirements, change the result an evidence
+    /// match names to another result the protocol names for that kind), run each mutant against
+    /// the `canon-conformance/1` scenarios of the directory whose fixture is the protocol file,
+    /// handed in as that fixture (a scenario that names the protocol only as an import pins it by
+    /// digest and is not run), and classify it with the semantic difference from the protocol
+    /// (`canon diff`). Prints one line per mutant: `killed` with the first scenario that fails,
+    /// `survived`, `weak point` for a survivor whose difference holds a `RELAXATION`, or
+    /// `invalid` with the code of each problem when the mutant does not compile; each compiled
+    /// mutant with its categories, then a summary line. Exits 1 when at least one weak point is
+    /// reported, and 0 otherwise. Refused, exit 1, running nothing: no scenario names the protocol
+    /// file as its fixture, a scenario file does not parse, the protocol does not compile, or a
+    /// scenario whose fixture it is does not pass on the protocol itself.
+    Mutate {
+        /// The protocol document to mutate, the fixture of the scenarios that test it.
+        #[arg(long)]
+        path: PathBuf,
+        /// The directory of scenarios each mutant runs against; every `*.yaml` file in it is one
+        /// scenario.
+        #[arg(long)]
+        scenarios: PathBuf,
     },
     /// Conformance scenarios.
     Conform {

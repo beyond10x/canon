@@ -1,0 +1,29 @@
+format: protocol/1
+
+protocol:
+  id: investigation.strict
+  revision: 3
+  description: An investigation composed from the floor, which also requires an independent replication before an explanation is supported.
+
+imports:
+  floor.investigation:
+    revision: 1
+    digest: sha256:de2c95f1f23052294d159242f5e7292d47dfdfbe51b3097659936b07f6150003
+    refines: [explanation.supported]
+
+evidence_kinds:
+  independent_replication:
+    description: An independent reproduction of the observation the explanation rests on.
+
+claims:
+  explanation.supported:
+    description: The explanation is supported by observation and has survived falsification.
+    true_when:
+      all:
+        - evidence:
+            kind: supporting_observation
+        - evidence:
+            kind: falsification_attempt
+            result: survived
+        - evidence:
+            kind: independent_replication

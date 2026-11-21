@@ -34,7 +34,7 @@ scope:
   path: ess/domains/cli.yaml
 - confidence: cited
   path: fixtures/investigation/floor/
-revision: 28
+revision: 29
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":4}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 - {from: "proposed", to: "active", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":4}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
@@ -179,3 +179,13 @@ the capability `finding.publish` to publish a finding:
 
 https://github.com/beyond10x/canon/issues/5 (gap 3); Atlas ADR 0086 § Decision 2 and § Open ("The
 `floor` construct"); `docs/design/canon-protocol-calculus-design.md` § 31.
+
+## Decided in review, after adversary pass 1
+
+The coordinator of wave 2026-11-20-w9 decided these on 2026-11-21, from the unit's report on bringing its wave 3 branch up to the wave branch and from `review-result:adversary-protocol-floor-pass-1`.
+
+- **D1. The pass's verdict is red, and no code changes.** The adversary found no case in which `canon floor` says something other than the classifier of `canon diff`: 35 forms compared with exact bytes, all equal, among them the forms the language gained after the unit was built (`records_together`, `revises`, `decided_by`, `supplied_by`, `max_age`, `independent_on`, action arguments, `case_open`, `children`, order forms, case inputs, invalidation rules, capability scope, `applicable_when`). Its three findings are mutants of the floor that the unit's test left green: a floor that refuses a `NO SEMANTIC CHANGE`, one that counts it as an `EXPANSION`, and one that prints the changes below the floor out of the classifier's order. The pass's three cases in `crates/canon-cli/tests/adversary_floor.rs` fail on each (`4df0f19a`). They stay in the repository; that is the fix the findings name.
+- **D2. No second pass.** Nothing changed after the pass but its own test file. The pass ran the unit's five gate steps with its cases in: 164 test summaries, 1240 passed, 0 failed, 3 ignored.
+- **D3. The shared header hides nothing.** The header of `canon-ir/1` holds `id`, `revision` and `description` today, and the classifier ignores the first two, so giving the protocol the floor's header drops no change of meaning. If the header gains a field with meaning, the floor module must compare it; the module docs of `crates/canon/src/floor/mod.rs` name the three.
+- **D4. Three fixtures need an import** (`composed`, `refines-conjunct`, `refines-alternative`). The tests over every investigation fixture read them without it: the generation test expects `MissingImport`, the check's fixture test skips them, and the validator's and the writer's corpus tests parse them. Only `crates/canon-cli/tests/floor.rs` composes them. That is as the unit built it in wave 3.
+- **D5. Not compared by the floor:** decisions and their grounds are records of a case, not declarations of a protocol, so neither `canon diff` nor `canon floor` reads them.
