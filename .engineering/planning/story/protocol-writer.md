@@ -22,7 +22,7 @@ scope:
   path: crates/canon/tests/protocol_write.rs
 - confidence: cited
   path: ess/domains/protocol.yaml
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T23:28:16Z", actor: "human:timo", revision: 7, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T23:28:16Z", actor: "human:timo", revision: 8, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
@@ -156,3 +156,39 @@ Request 9 (prompt), `$HOME/beyond10x/sdc/docs/canon-requests.md:48-58`, `$HOME/b
 ## Decided
 
 Option A of § Decision needed: the canonical JSON writer `model::write` only. A builder waits for a story whose consumer names its API. Decided on 2026-11-21 by the wave coordinator on the drafter's recommendation; the operator accepted the story without choosing (`approval-record:accept-sdc-requests-9-11-2026-11-21`). The unit builds this option and does not reopen the choice.
+
+## Decided in review, after adversary pass 1
+
+The adversary pass (`review-result:adversary-protocol-writer-pass-1`) was red: four findings, all
+introduced by the unit, six red cases and four green cases that kill mutants the unit's suite let
+through. Decided on 2026-11-21 by the wave coordinator; the session the operator named
+orchestrator of this plan may overrule it.
+
+- **D1, the round trip holds for keys of at most 1022 bytes as written.** The YAML reader behind
+  `parse` drops a simple key whose text runs more than 1024 bytes before its `:`, the two quotes
+  included. `parse` itself gives longer keys: a plain key of 1023 or 1024 bytes, an explicit `?`
+  key of any length, and a key whose escapes grow it past the limit when written. JSON has one
+  spelling for a key, so no JSON text reads such a key back through `parse`. The three ways out
+  were: narrow the guarantee, have `parse` refuse such keys, or write those keys in a YAML form
+  that is not JSON. The second changes which `protocol/1` documents `parse` accepts, one day
+  after 0.10.0; the third gives up § Decided option A. The guarantee is narrowed. § Outcome reads
+  from now on: `parse(&write(&p)) == Ok(p)` for every `p` that `parse` gives in which every
+  key, as written with its escapes, is at most 1022 bytes; this holds for identifiers and for
+  property names inside `arguments`. For a longer key `write` still returns JSON that
+  `serde_json` reads with the key intact, and `parse` refuses that text. The module docs state
+  the limit in bytes of written text, not in characters, and no longer say `parse` gives no such
+  key. Tests pin both sides of the limit (1022 reads back, 1023 does not) for a plain key, a key
+  grown by escapes and a property name inside `arguments`, and that the text for a longer key is
+  JSON holding the key.
+- **D2, `write` recurses once per nesting level, and the docs say so.** A predicate or an
+  `arguments` value built in Rust and nested 5000 deep overflows a 2 MiB stack inside `write`.
+  `parse` gives at most 123 levels of predicate and 125 of `arguments`, so no parsed model
+  reaches it. The writer stays recursive: an explicit stack would change every function of a
+  769-line file for a model no reader of protocol text can produce. § Outcome's "total" reads from
+  now on: `write` returns for every model whose nesting the calling thread's stack holds; it
+  uses stack in proportion to the nesting depth. The module docs drop the sentence that a model
+  nested deeper than `parse` reads "is still written" and state this instead. A test holds a
+  model built in Rust at 1000 levels on a thread with a 2 MiB stack.
+- **D3, the adversary's cases.** The four green cases stay as they are. The six red cases are
+  rewritten by the correction to pin D1 and D2: each keeps its input and asserts the behaviour
+  decided above. The case at 5000 levels becomes the case at 1000 levels.
