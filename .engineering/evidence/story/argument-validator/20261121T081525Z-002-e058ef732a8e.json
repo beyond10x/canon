@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T08:15:25Z",
+  "actor": "human:timo",
+  "artifact": "story:argument-validator",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "blocker: with arbitrary_precision 1e400 became NaN and passed every bound and enum: numbers are compared as exact decimals where the text is held (D2); the adversary's cases are green in both builds",
+    "reference": "impl/argument-validator e33bfcd",
+    "review": "review-result:adversary-argument-validator-pass-1",
+    "outcome": "fixed"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T08:15:27Z",
+  "actor": "human:timo",
+  "artifact": "story:argument-validator",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "the Numbers section contradicted itself: rewritten for D4, D5 and the corrected D2; the adversary read it against the code",
+    "reference": "impl/argument-validator 37f889c, 665ea4c",
+    "review": "review-result:adversary-argument-validator-pass-2",
+    "outcome": "fixed"
+  }
+}

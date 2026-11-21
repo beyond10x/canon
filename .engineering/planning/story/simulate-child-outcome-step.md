@@ -27,7 +27,7 @@ scope:
   path: ess/domains/cli.yaml
 - confidence: inferred
   path: fixtures/investigation/child-outcome/
-revision: 11
+revision: 13
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T05:02:20Z", actor: "human:timo", revision: 9, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
 - {from: "proposed", to: "active", at: "2026-11-21T05:02:20Z", actor: "human:timo", revision: 10, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
@@ -184,3 +184,79 @@ The story was accepted under the operator's standing grant (`approval-record:acc
 ## Fixture rule, 2026-11-21
 
 Decided by the wave coordinator on 2026-11-21, from `AGENTS.md` ("Canon contains no engineering vocabulary"), which is a rule of this repository: a protocol of the SDC prototype does not enter the repository unchanged, and no file names it as a source. Where this story takes such a protocol as a fixture, the unit builds the fixture by a structure-preserving rename: every identifier and every description is replaced by a neutral one, the declarations, predicates and their order stay, and the relative order of identifiers within a section is kept wherever the output depends on it. The unit shows once, in its scratch directory and not in the repository, that `canon simulate` gives the same counts on the original and on the renamed protocol, and quotes the summary lines in its report. The figures of § Acceptance then apply to the renamed fixtures.
+
+## Decided in review, after adversary pass 1
+
+The first adversary pass (`review-result:adversary-simulate-child-outcome-step-pass-1`) showed
+that option A as written breaks the claim "no dead end goes unreported". The mark is never
+cleared, so a child-outcome step is offered from every marked state for good: an only child that
+has ended can "end again" with another outcome, a state a real case cannot leave counts as
+waiting, and the walk exits 0 where the base exited 1 (fixture `ended-once`). The same rule
+prints a state holding two outcomes of the one child of an opening taken once (`either-once`),
+and the sentence that says so stands only in the module docs. "Why both claims still hold" in
+§ Outcome is withdrawn. Decided on 2026-11-21 by the wave coordinator; the session the operator
+named orchestrator of this plan may overrule each.
+
+- **D1, the mark counts the children of an opening action that have not ended: none, one, or two
+  or more.**
+  - A step of the opening action raises it: none to one, one to two-or-more, two-or-more stays.
+    A step of that action is offered wherever the action is admissible and the step changes the
+    state, and the mark is part of the state: a step that adds no record and raises the mark is a
+    step.
+  - The child-outcome step of that action is offered while its mark is one or two-or-more. A
+    record of class `open` leaves the mark as it is. A record of any other class lowers it: one
+    to none; two-or-more to one and, as a second successor, to two-or-more (two-or-more children
+    less one is one or more). The successor in which the class replaces `open` lowers it the same
+    way. A record of a class the state already holds is a step when it lowers the mark.
+  - With the mark at none no child outcome arrives until the action is taken again.
+  - A state writes `` action `a` opened a child `` for one and `` action `a` opened 2 or more
+    children `` for two-or-more. R5 containment orders the marks none < one < two-or-more;
+    `size` counts one for one and two for two-or-more.
+  - The bound: at most 3^k × (states without marks), counted under `check::STATE_BOUND` as
+    before; no partial walk.
+- **D2, why not a mark that a child's end clears (the adversary's proposal).** With a yes/no
+  mark, an action taken twice before either child ends, and no longer admissible after the first
+  child ended, leaves a second child whose outcome the walk never lets arrive: a state a real
+  case reaches is not walked. The count of D1 walks it.
+- **D3, the limit that stays is stated where a reader sees it.** One step of the walk adds one
+  record (story:canon-simulate), so one taking of an opening action that may produce two records
+  is two steps and raises the mark to two-or-more: the walk then lets a second child's outcome
+  arrive where a real case has one child. story:simulate-record-groups (wave 7) removes this for
+  records declared together. Until then the sentence stands in the `Simulate` clap doc,
+  `ess/domains/cli.yaml` and the generated reference, in words a protocol author understands,
+  and a test holds the smallest protocol that shows it.
+- **D4.** The unit shows for D1, before it writes code: for `ended-once`, `either-once`, the six
+  fixtures of § Acceptance and a protocol of its own in which an action is taken twice and then
+  closes, which states a real case reaches (checked with `canon evaluate` on hand-built cases)
+  and that the walk under D1 prints a finding for every dead end among them and no state a real
+  case cannot reach, D3's limit apart. If D1 fails either claim on one of them, the unit stops
+  and reports the case; it does not adjust the rule on its own.
+- The figures of § Acceptance 1 to 6 change with D1. The unit derives the new figures, checks
+  each printed state by hand as it did, and reports old and new side by side.
+
+## Decided in review, D5: an `open` record is a child that has not ended
+
+The unit checked D1 on paper before writing code, as D4 asks, and stopped: D1 as written prints
+a state no real case reaches in 8 of 9 protocols. From a state holding `open` with the mark at
+one, the successor in which an ending outcome joins `open` lowers the mark to none and leaves
+`open` standing: one child with two records, which the evaluator refuses as
+`duplicate-child-case`. No dead end went unreported in any of the 9. Decided on 2026-11-21 by the
+wave coordinator on the unit's finding; the session the operator named orchestrator of this plan
+may overrule it.
+
+- **D5.** A state that holds a `case_outcome` record of class `open`, current or held as
+  expired, holds at least one mark above none: an `open` record is a child that has not ended.
+  A successor of the child-outcome step that would keep `open` with every mark at none is not a
+  successor. With one opening action this leaves, from `open` at mark one, only the successor in
+  which the ending outcome replaces `open`. With several opening actions the walk cannot tell
+  whose child recorded `open`, so the condition is on the marks together; story:child-outcome-subject
+  (step 2 of its correction) binds a record about an artifact to the action that opens children
+  about it, which narrows this to the marks of those actions.
+- The unit's emulation of D1 with D5 on the 9 protocols (`ended-once`, `either-once`, the six of
+  § Acceptance, and `twice`, an action taken twice and then closed): every printed finding is
+  true of a real case and every real dead end is reported. Figures, states / terminable /
+  waiting / findings (states in findings): ended-once 16/4/6/1 (1); either-once 6/2/2/1 (1);
+  closed 5/2/2/0; ends-open 5/1/2/1 (1); repeat 20/13/3/0; denied 7/2/2/1 (1); the larger
+  renamed fixture 78/43/6/4 (14); the smaller 122/69/13/5 (25); twice 39/13/6/0. They are
+  emulated; the binary must repeat them, and where it does not the unit finds out which is right.
+- `twice` becomes a fixture of the unit with its report pinned.
