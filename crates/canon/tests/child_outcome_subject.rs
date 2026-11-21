@@ -342,3 +342,132 @@ fn check_reads_only_the_subject_when_every_form_names_it() {
         "checked: protocol `orchestrate` revision 1: 72 states, 0 properties, 0 findings\n"
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// Correction 1, after adversary pass 1: D1, a child's record is about the artifact its opening
+// action's `case_open` names, so `canon check` binds each opening action to the `case_outcome`
+// dimension about that artifact, or to the one without a subject; D3; and the cases behind the
+// adversary's mutants m2, m3 and m4.
+
+/// A protocol of two artifacts, `intake` and `wave`: `ideas.open` opens children about
+/// `ideas_about` and needs no authority, `stories.open` opens children about `wave` and requires
+/// `dispatch`, and `wave.done` requires `requirement`.
+fn openers(ideas_about: &str, requirement: &str) -> String {
+    format!(
+        "format: protocol/1\nprotocol: {{id: p, revision: 1}}\n\
+         artifacts: {{intake: {{}}, wave: {{}}}}\nevidence_kinds: {{case_outcome: {{}}}}\n\
+         actions:\n\
+         \x20\x20ideas.open: {{case_open: {{protocol: idea, subject: {ideas_about}}}}}\n\
+         \x20\x20stories.open: {{requires: [{{capability: dispatch}}], \
+         case_open: {{protocol: story, subject: wave}}}}\n\
+         outcomes:\n\x20\x20wave.done: {{requires: {requirement}}}\n"
+    )
+}
+
+fn checked(source: &str) -> String {
+    check(&compiled(source), None)
+        .unwrap_or_else(|refusal| panic!("{}: {refusal}", refusal.code()))
+        .to_string()
+}
+
+/// D1: only `stories.open`, which requires `dispatch`, opens children about `wave`, so no state
+/// that takes no authority decision holds a record `wave.done` reads that an action could have
+/// produced: no `authority-bypass`. When `ideas.open` opens children about `wave` too, the record
+/// is produced without authority and the bypass is reported; and with a form without `subject`,
+/// which reads the one dimension every opening action produces, as before the key existed.
+#[test]
+fn check_binds_a_childs_record_to_the_artifact_it_was_opened_about() {
+    let wave_form = "{children: {in: [passed], subject: wave}}";
+    assert_eq!(
+        checked(&openers("intake", wave_form)),
+        "checked: protocol `p` revision 1: 216 states, 0 properties, 0 findings\n"
+    );
+    for (source, why) in [
+        (openers("wave", wave_form), "a free opening about wave"),
+        (
+            openers("intake", "{children: {in: [passed]}}"),
+            "a form without subject",
+        ),
+    ] {
+        let report = checked(&source);
+        assert!(
+            report.starts_with(
+                "authority-bypass: outcome `wave.done` is legitimate without authority in state {"
+            ) && report.ends_with("216 states, 0 properties, 1 finding\n"),
+            "{why}: {report}"
+        );
+    }
+}
+
+/// D3: no action opens a child about `wave`, yet `canon check` takes `wave.done` as reachable: a
+/// state holds any combination of records, and production decides only which states witness a
+/// bypass. `unproduced-evidence` is decided per kind, and `ideas.open` produces `case_outcome`, so
+/// nothing is reported. 72 states: the dimension about `wave` and its history.
+#[test]
+fn check_reports_nothing_for_a_subject_no_child_is_opened_about() {
+    let source = openers("intake", "{children: {in: [passed], subject: wave}}").replacen(
+        "  stories.open: {requires: [{capability: dispatch}], case_open: {protocol: story, subject: wave}}\n",
+        "",
+        1,
+    );
+    assert!(!source.contains("stories.open"), "{source}");
+    assert_eq!(
+        checked(&source),
+        "checked: protocol `p` revision 1: 72 states, 0 properties, 0 findings\n"
+    );
+}
+
+/// Behind m2 (`reads_in` giving every form of a predicate the first form's subject): two forms of
+/// two subjects in one requirement read two dimensions, 72 values each with its history, and the
+/// outcome is reachable; one form also says `revision: current`.
+#[test]
+fn check_reads_each_forms_own_subject_in_one_predicate() {
+    let source = openers(
+        "intake",
+        "{all: [{children: {in: [passed], subject: intake}}, \
+         {children: {in: [passed], subject: wave, revision: current}}]}",
+    );
+    assert_eq!(
+        checked(&source),
+        "checked: protocol `p` revision 1: 15552 states, 0 properties, 0 findings\n"
+    );
+}
+
+/// Behind m3 (`reads_in` keeping the subject only with `revision: current`): a form naming
+/// `wave` without `revision` reads only the dimension about `wave`, and the outcome is reachable.
+#[test]
+fn check_reads_the_subject_of_a_form_without_revision() {
+    let source = openers("intake", "{children: {in: [passed], subject: wave}}").replacen(
+        "requires: [{capability: dispatch}], ",
+        "",
+        1,
+    );
+    assert_eq!(
+        checked(&source),
+        "checked: protocol `p` revision 1: 72 states, 0 properties, 0 findings\n"
+    );
+}
+
+/// Behind m4 (`normalize` dropping the subject of a form under `not`): the compiled requirement
+/// keeps it, and `canon check` reads the dimensions about both artifacts.
+#[test]
+fn check_and_compile_keep_the_subject_of_a_form_under_not() {
+    let source = openers(
+        "intake",
+        "{all: [{not: {children: {in: [passed], subject: wave}}}, \
+         {children: {in: [passed], subject: intake}}]}",
+    )
+    .replacen("requires: [{capability: dispatch}], ", "", 1);
+    let value: Value = serde_json::from_str(&compiled(&source).canonical_json()).expect("JSON");
+    assert_eq!(
+        value["outcomes"]["wave.done"]["requires"],
+        json!({"all": [
+            {"children": {"in": ["passed"], "subject": "intake"}},
+            {"not": {"children": {"in": ["passed"], "subject": "wave"}}},
+        ]})
+    );
+    assert_eq!(
+        checked(&source),
+        "checked: protocol `p` revision 1: 5184 states, 0 properties, 0 findings\n"
+    );
+}
