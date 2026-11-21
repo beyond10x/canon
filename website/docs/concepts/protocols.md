@@ -133,7 +133,9 @@ precondition is `TRUE` and every required capability is granted. A status other 
 An action may declare one argument schema, `arguments`: a JSON Schema saying what arguments the
 action is called with. A runner reads it from the protocol it loads and validates each call's
 arguments against it. Absent: the action takes no arguments; a runner accepts only `{}`. Canon
-itself never validates arguments: it evaluates no call.
+evaluates no call, but its library function `b10x_canon::validate::check_arguments` checks one
+call's arguments against the schema, reporting every refusal, and a runner may use it or any
+2020-12 validator.
 
 ```yaml
 actions:

@@ -237,9 +237,9 @@ pub struct Action {
     #[serde(default, deserialize_with = "present::defaulted")]
     pub may_produce: Vec<EvidenceProduction>,
     /// The JSON Schema, in Canon's argument-schema dialect, that the action's arguments satisfy.
-    /// Absent: the action takes no arguments; a runner accepts only `{}`. Canon never validates
-    /// arguments at run time: the runner that calls the action validates them against the
-    /// schema, and `canon validate` holds the schema to the dialect (`action-arguments`).
+    /// Absent: the action takes no arguments; a runner accepts only `{}`. Canon evaluates no call:
+    /// `canon validate` holds the schema to the dialect (`action-arguments`), and a runner checks
+    /// a call's arguments with `validate::check_arguments` or any 2020-12 validator.
     #[serde(default, deserialize_with = "present::optional_json")]
     pub arguments: Option<Json>,
     /// The child case the action opens (story:case-composition): a case governed by another
