@@ -19,6 +19,7 @@ Generated from the clap definition of the `canon` command line in [`crates/canon
 | [`canon check`](#canon-check) | Check a `protocol/1` document over its whole finite state space: report outcomes no state reaches, actions whose precondition holds in no state, claims, obligations, preconditions and outcome requirements that read evidence no action produces, outcomes that rest on evidence an authority-requiring action may produce yet hold without any authority decision, and each declared property that fails, with a counterexample. A state is a set of evidence records, authority decisions and explicit decisions; a record an invalidation rule can keep from a claim is there in any combination of observed before and after each upstream artifact moved, one record each. Evidence an order form reads (`first`, `before`, `after`, `since`) is also there with earlier records at a superseded revision, or with no known instant, in every order of first observations; evidence an `after` or a `since` compares with its result also with a later record of that result, placed anywhere in that order or at no known instant; and evidence a `since` reads as its last kind also with a last record at a superseded revision, placed in that order on its own, with or just after its own first observations or a later record it is compared with. Evidence an evidence match demanding independence reads (`independent_on`) is there from a producer independent on exactly each demand, in every combination of demands met, and without a producer when something that demands nothing reads it. Evidence a `children` form reads (`case_outcome`) is also there with earlier records at a superseded revision, each record the outcome of a child case of its own, and with no place in the order, which the form does not read; an action that opens a child case (`case_open`) counts as producing `case_outcome`; and a protocol that reads `case_outcome` with both a `children` form and an order form is refused (`ordered-child-outcomes`). Each outcome, action and property is decided over the evidence, authority, decisions and case inputs it reads (its slice), with the findings and witness states the whole state space gives, and the summary counts the whole state space; a check in which one slice holds more than 65536 states is refused, naming that outcome, action or property and the slice's dimensions, and a whole state space too large to count is refused naming the whole state space and its dimensions |
 | [`canon generate`](#canon-generate) | Generate `canon-conformance/1` scenarios into an empty directory: one minimal witness per declared outcome and per action blocked in some state, over the whole state space that `canon check` covers. Each names the protocol path, as given, as its fixture, so `canon conform run` runs them from the working directory `canon generate` ran in. Refused, writing nothing: a protocol path that resolves outside the working directory, an outcome no state reaches, a protocol that yields no scenario, an outcome or action identifier holding a character a file name cannot hold (`/ \ : * ? " < > \|` or a control character), two scenario file names equal up to letter case or Unicode normalisation, a protocol with imports (a scenario names one fixture), a non-empty `--out`, and a whole state space of more than 65536 states, which `canon check` may still decide slice by slice. On failure, nothing this run created is left |
 | [`canon diff`](#canon-diff) | The semantic difference between two compiled revisions of one protocol: every change, each classified as `TIGHTENING`, `RELAXATION`, `BREAKING`, `EXPANSION` or `NO SEMANTIC CHANGE` and naming the identifiers it touches. Two revisions of different protocols are refused |
+| [`canon floor`](#canon-floor) | Check that a compiled protocol stays above a compiled organization floor: every change from the floor to the protocol, classified as `canon diff` classifies it, is a `TIGHTENING`, an `EXPANSION` or `NO SEMANTIC CHANGE`. Prints `floor: holds` and the three counts and exits 0; otherwise prints `floor: breached` and each `RELAXATION` and `BREAKING` change, naming the identifiers it touches, and exits 1. The floor and the protocol keep their own ids, revisions and descriptions, which are not compared. The protocol does not name its floor; pass a compiled import as the floor to check that a refinement only tightens it |
 | [`canon conform`](#canon-conform) | Conformance scenarios |
 | [`canon conform run`](#canon-conform-run) | Run every `canon-conformance/1` scenario of a registry directory and report each |
 
@@ -192,6 +193,31 @@ Options:
           Print help
 ```
 
+## `canon floor`
+
+Check that a compiled protocol stays above a compiled organization floor: every change from the floor to the protocol, classified as `canon diff` classifies it, is a `TIGHTENING`, an `EXPANSION` or `NO SEMANTIC CHANGE`. Prints `floor: holds` and the three counts and exits 0; otherwise prints `floor: breached` and each `RELAXATION` and `BREAKING` change, naming the identifiers it touches, and exits 1. The floor and the protocol keep their own ids, revisions and descriptions, which are not compared. The protocol does not name its floor; pass a compiled import as the floor to check that a refinement only tightens it
+
+| Option | Required | Default | Meaning |
+|---|---|---|---|
+| `--floor <FLOOR>` | yes | none | The organization's floor, a `protocol/1` document compiled as `canon compile` prints it |
+| `--ir <IR>` | yes | none | The protocol checked, `canon-ir/1` as `canon compile` prints it; compile a protocol that imports others with its `--import` documents first |
+
+```text
+Check that a compiled protocol stays above a compiled organization floor: every change from the floor to the protocol, classified as `canon diff` classifies it, is a `TIGHTENING`, an `EXPANSION` or `NO SEMANTIC CHANGE`. Prints `floor: holds` and the three counts and exits 0; otherwise prints `floor: breached` and each `RELAXATION` and `BREAKING` change, naming the identifiers it touches, and exits 1. The floor and the protocol keep their own ids, revisions and descriptions, which are not compared. The protocol does not name its floor; pass a compiled import as the floor to check that a refinement only tightens it
+
+Usage: canon floor --floor <FLOOR> --ir <IR>
+
+Options:
+      --floor <FLOOR>
+          The organization's floor, a `protocol/1` document compiled as `canon compile` prints it
+
+      --ir <IR>
+          The protocol checked, `canon-ir/1` as `canon compile` prints it; compile a protocol that imports others with its `--import` documents first
+
+  -h, --help
+          Print help
+```
+
 ## `canon conform`
 
 Conformance scenarios
@@ -243,7 +269,7 @@ Options:
 
 | Status | Meaning |
 |---|---|
-| `0` | Success: the document is valid or compiled, the case was evaluated, every conformance scenario ran and passed, a check found nothing, or the scenarios were generated. |
-| `1` | Rejected: a document was read and rejected, an evaluation or a check was refused, a conformance scenario failed or was unreadable, no scenario ran, a requirement check failed, a check found something, or generation was refused. |
+| `0` | Success: the document is valid or compiled, the case was evaluated, every conformance scenario ran and passed, a check found nothing, the scenarios were generated, or a protocol stays above its floor. |
+| `1` | Rejected: a document was read and rejected, an evaluation or a check was refused, a conformance scenario failed or was unreadable, no scenario ran, a requirement check failed, a check found something, generation was refused, or a protocol is below its floor. |
 | `2` | Unreadable: an input file or directory could not be read, or an output file could not be written. |
 | `64` | Usage error: the command line was not understood (an unknown command or option, a missing required option, or a value that cannot be parsed); nothing was read. |

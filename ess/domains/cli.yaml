@@ -307,7 +307,8 @@ commands:
       - name: compared
         returns: true
 
-  # read from: .engineering/planning/story/protocol-floor.md:44-70
+  # read from: crates/canon-cli/src/lib.rs:183-198
+  # read from: crates/canon-cli/src/floor.rs:12-51
   - name: canon.cli.Floor
     naming:
       wire: floor
@@ -317,31 +318,32 @@ commands:
         the protocol is a tightening, an expansion or no semantic change.
     input:
       # The organization's floor, a protocol/1 document compiled as `canon compile` prints it.
-      # read from: .engineering/planning/story/protocol-floor.md:44-47
+      # read from: crates/canon-cli/src/lib.rs:191-193
       - name: floor
         type: String
       # The protocol checked, as `canon compile` prints it; a composed protocol is compiled with
       # its imports first.
-      # read from: .engineering/planning/story/protocol-floor.md:44-49
+      # read from: crates/canon-cli/src/lib.rs:194-197
       - name: ir
         type: String
     response:
       # `floor: holds` and the counts of tightening, expansion and no semantic change.
-      # read from: .engineering/planning/story/protocol-floor.md:61-64
+      # read from: crates/canon-cli/src/floor.rs:39
       - name: output
         type: String
     outcomes:
-      # read from: .engineering/planning/story/protocol-floor.md:44-47
+      # read from: crates/canon-cli/src/floor.rs:19
       - name: unreadable
         external: the floor or the protocol cannot be read
         error: canon.cli.Unreadable
-      # read from: .engineering/planning/story/protocol-floor.md:51-53
+      # read from: crates/canon-cli/src/floor.rs:20-27
+      # read from: crates/canon-cli/src/floor.rs:42-49
       - name: rejected
         external: >-
           the floor or the protocol is not canon-ir/1, or the protocol is below the floor: a change
           from the floor to it is a relaxation or breaking
         error: canon.cli.Rejected
-      # read from: .engineering/planning/story/protocol-floor.md:61-64
+      # read from: crates/canon-cli/src/floor.rs:38-41
       - name: holds
         returns: true
 
