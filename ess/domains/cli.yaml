@@ -412,7 +412,7 @@ commands:
       - name: compared
         returns: true
 
-  # read from: crates/canon-cli/src/lib.rs:183-198
+  # read from: crates/canon-cli/src/lib.rs:247-262
   # read from: crates/canon-cli/src/floor.rs:12-51
   - name: canon.cli.Floor
     naming:
@@ -423,12 +423,12 @@ commands:
         the protocol is a tightening, an expansion or no semantic change.
     input:
       # The organization's floor, a protocol/1 document compiled as `canon compile` prints it.
-      # read from: crates/canon-cli/src/lib.rs:191-193
+      # read from: crates/canon-cli/src/lib.rs:255-257
       - name: floor
         type: String
       # The protocol checked, as `canon compile` prints it; a composed protocol is compiled with
       # its imports first.
-      # read from: crates/canon-cli/src/lib.rs:194-197
+      # read from: crates/canon-cli/src/lib.rs:258-261
       - name: ir
         type: String
     response:
