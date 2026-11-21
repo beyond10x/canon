@@ -1,0 +1,208 @@
+format: protocol/1
+protocol:
+  id: festival.event
+  revision: 3
+  description: >-
+    Hold one event of the accepted programme. The event case opens child cases in order, each once every earlier child ended settled: festival.script (the event's script, written, reused or rebuilt, until the inspection clears it), festival.lineup (the performers), one festival.segment case per segment (opened together), then festival.premiere. No action is admissible before the programme is accepted, and none after the script stage before the inspection clears the current script revision. The case ends held once the premiere case ended settled and the inspection still clears, or cancelled on an explicit decision.
+artifacts:
+  programme:
+    description: the programme the event belongs to
+  event:
+    description: the event
+  script:
+    description: the event's script; its revision is its text's digest
+evidence_kinds:
+  programme_approval:
+    description: a person's acceptance of a programme revision; its result is accepted
+  inspection:
+    description: >-
+      the inspection of a script revision: the venue, the safety plan, the timing and the staffing, looked at in one visit; cleared only when all four are in order, refused otherwise
+  case_outcome:
+    description: >-
+      the outcome of one child case, one record per child: settled or another outcome of the child's protocol, open while the child runs
+  script_opened:
+    description: the record that the script case was opened for an event revision
+  lineup_opened:
+    description: the record that the lineup case was opened for an event revision
+  segments_opened:
+    description: the record that one segment case per segment was opened for an event revision
+  premiere_opened:
+    description: the record that the premiere case was opened for an event revision
+claims:
+  programme.accepted:
+    description: the current programme revision is accepted
+    true_when:
+      evidence:
+        kind: programme_approval
+        result: accepted
+        subject: programme
+  programme.copied:
+    description: a programme acceptance record about the current programme revision is in this case, whatever its result
+    true_when:
+      evidence:
+        kind: programme_approval
+        subject: programme
+  inspection.met:
+    description: the inspection clears the current script revision
+    true_when:
+      evidence:
+        kind: inspection
+        result: cleared
+        subject: script
+  inspection.logged:
+    description: an inspection is recorded about the current script revision, whatever its result
+    true_when:
+      evidence:
+        kind: inspection
+        subject: script
+  children.settled:
+    description: every child case ended settled
+    true_when:
+      children:
+        in: [settled]
+  script.opened:
+    description: the script case was opened for the current event revision
+    true_when:
+      evidence:
+        kind: script_opened
+        subject: event
+  lineup.opened:
+    description: the lineup case was opened for the current event revision
+    true_when:
+      evidence:
+        kind: lineup_opened
+        subject: event
+  segments.opened:
+    description: the segment cases were opened for the current event revision
+    true_when:
+      evidence:
+        kind: segments_opened
+        subject: event
+  premiere.opened:
+    description: the premiere case was opened for the current event revision
+    true_when:
+      evidence:
+        kind: premiere_opened
+        subject: event
+obligations:
+  programme.required:
+    description: the programme is accepted
+    discharged_when:
+      claim: programme.accepted
+  inspection.required:
+    description: the inspection clears the current script revision
+    discharged_when:
+      claim: inspection.met
+  premiere.required:
+    description: the premiere case was opened and every child ended settled
+    discharged_when:
+      all:
+        - claim: premiere.opened
+        - claim: children.settled
+actions:
+  programme.read:
+    description: >-
+      copy the programme acceptance record of the draft case into this case, unchanged; it accepts nothing, and the record keeps the person and programme revision it was accepted with. Only while this case holds no programme acceptance record about the current programme revision: a second copy with another result would leave programme.accepted unknown for good. A new programme revision sets the old record aside and makes it admissible again
+    effect: read
+    precondition:
+      claim: programme.copied
+      is: unknown
+    may_produce:
+      - evidence: programme_approval
+  script.open:
+    description: open the festival.script case for the event
+    effect: write
+    precondition:
+      all:
+        - claim: programme.accepted
+        - claim: script.opened
+          is: unknown
+    case_open:
+      protocol: festival.script
+      subject: script
+    may_produce:
+      - evidence: script_opened
+  script.inspect:
+    description: >-
+      inspect the current script revision; only while no inspection is recorded about it: a second record with another result would leave inspection.met unknown for good
+    effect: read
+    precondition:
+      all:
+        - claim: programme.accepted
+        - claim: inspection.logged
+          is: unknown
+    may_produce:
+      - evidence: inspection
+  lineup.open:
+    description: open the festival.lineup case once the script case ended settled
+    effect: write
+    precondition:
+      all:
+        - claim: programme.accepted
+        - claim: inspection.met
+        - claim: script.opened
+        - claim: children.settled
+        - claim: lineup.opened
+          is: unknown
+    case_open:
+      protocol: festival.lineup
+      subject: event
+    may_produce:
+      - evidence: lineup_opened
+  segments.open:
+    description: open one festival.segment case per segment, once the lineup case ended settled
+    effect: write
+    precondition:
+      all:
+        - claim: programme.accepted
+        - claim: inspection.met
+        - claim: lineup.opened
+        - claim: children.settled
+        - claim: segments.opened
+          is: unknown
+    case_open:
+      protocol: festival.segment
+      subject: script
+    may_produce:
+      - evidence: segments_opened
+    arguments:
+      type: object
+      properties:
+        segments:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            minLength: 1
+      required: [segments]
+      additionalProperties: false
+  premiere.open:
+    description: open the festival.premiere case once every segment case ended settled
+    effect: write
+    precondition:
+      all:
+        - claim: programme.accepted
+        - claim: inspection.met
+        - claim: segments.opened
+        - claim: children.settled
+        - claim: premiere.opened
+          is: unknown
+    case_open:
+      protocol: festival.premiere
+      subject: event
+    may_produce:
+      - evidence: premiere_opened
+outcomes:
+  held:
+    description: >-
+      the premiere case was opened, every child ended settled, and the inspection clears the current script revision
+    requires:
+      all:
+        - claim: programme.accepted
+        - claim: inspection.met
+        - claim: premiere.opened
+        - claim: children.settled
+  cancelled:
+    description: the event was explicitly cancelled
+    requires:
+      decision: explicitly_cancelled

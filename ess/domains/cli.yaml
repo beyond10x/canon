@@ -232,17 +232,20 @@ commands:
         returns: true
 
   # Walks every state a case can reach from the empty case, one step at a time
-  # (story:canon-simulate), modelled on canon.cli.Check.
+  # (story:canon-simulate), modelled on canon.cli.Check; a child case's outcome arrives at any step
+  # after the action that opened the child was taken (story:simulate-child-outcome-step).
   # read from: .engineering/planning/story/canon-simulate.md:44-80
   # read from: .engineering/planning/story/canon-simulate.md:125
+  # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Outcome", 1 to 5
   - name: canon.cli.Simulate
     naming:
       wire: simulate
       display: Simulate
       summary: >-
-        Walk every state a case of a protocol/1 document can reach from the empty case and report
-        the states no sequence of steps gets out of (stuck states and cycles, one per smallest
-        state), dead actions and unreached outcomes.
+        Walk every state a case of a protocol/1 document can reach from the empty case, a child
+        case's outcome arriving at any step after the action that opened the child, and report the
+        states no sequence of steps gets out of (stuck states and cycles, one per smallest state),
+        dead actions and unreached outcomes.
     input:
       # The protocol/1 document to simulate.
       # read from: .engineering/planning/story/canon-simulate.md:44
@@ -250,15 +253,15 @@ commands:
         type: String
     response:
       # The walk's summary line, which found nothing: the reachable states, the terminable ones
-      # per outcome, the open states with no action to take (waiting on supplied evidence or
-      # expiry) when the protocol declares a supplied or an expiring kind, and 0 findings.
-      # When an action opens a child case (case_open), one line starting `limit:` comes after the
-      # findings and before the summary: a child case's outcome is walked only as a step of its
-      # opening action, so a stuck-state or cycle in a state that waits for a child's outcome may
-      # not be one in a real case. It changes neither the exit status nor the count of findings.
+      # per outcome, the open states with no action to take, and 0 findings. The open states with
+      # no action to take are counted as waiting on supplied evidence or expiry when the protocol
+      # declares a supplied or an expiring kind and no action that opens a child case, and as
+      # waiting on supplied evidence, a child outcome or expiry when an action opens a child case
+      # (case_open). A state names each opening action taken on its way, `action a opened a
+      # child`.
       # read from: .engineering/planning/story/canon-simulate.md:67
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R3 and R5
-      # read from: .engineering/planning/story/canon-simulate.md, section "Known limit on child outcomes, stated by the tool", R7
+      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Outcome", 1 and 4
       - name: output
         type: String
     outcomes:
@@ -266,15 +269,18 @@ commands:
       - name: unreadable
         external: the protocol cannot be read
         error: canon.cli.Unreadable
-      # A stuck state or a cycle is a state that is not open: no sequence of action, authority,
-      # supplied and expiry steps leads from it to a legitimate outcome. Each is printed once per
-      # smallest state, with the decisions that would make an outcome legitimate and the number
-      # of other such states that contain it. A case_outcome record that expires stays read by
-      # every children form: with no evidence match reading case_outcome it has no expiry step,
-      # otherwise it is held as expired, absent to every evidence match.
+      # A stuck state or a cycle is a state that is not open: no sequence of action, supplied,
+      # child-outcome, expiry and authority steps leads from it to a legitimate outcome. A
+      # child-outcome step is offered once an action that opens a child case was taken, and is no
+      # action step, so it never makes a state a cycle. Each is printed once per smallest state,
+      # with the decisions that would make an outcome legitimate and the number of other such
+      # states that contain it. A case_outcome record that expires stays read by every children
+      # form: with no evidence match reading case_outcome it has no expiry step, otherwise it is
+      # held as expired, absent to every evidence match.
       # read from: .engineering/planning/story/canon-simulate.md:69-80
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R1 to R5
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 2", R2a
+      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Outcome", 3 and 4
       - name: rejected
         external: >-
           the document is rejected, the walk is refused (an order form, or more than 65536

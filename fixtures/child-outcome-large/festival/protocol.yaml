@@ -1,0 +1,154 @@
+format: protocol/1
+protocol:
+  id: festival
+  revision: 6
+  description: >-
+    Bring a festival from a first concept to a running programme. The case stores no stage: where it stands is what its facts make true. The festival case holds no work of its own. It opens child cases, each run by another party: festival.inquiry (who comes, what they ask for), then festival.draft (the venue, the schedule and the programme, each accepted), then one festival.event case per event of the programme, once the programme is accepted. Every child reports settled when it succeeds. The case ends running once every event of the accepted programme ended settled, or cancelled on an explicit decision. A revised concept makes the inquiry and the draft openable again; a revised programme makes its events openable again.
+artifacts:
+  budget:
+    description: >-
+      the budget the festival is given when it starts; an input only: no claim reads it, so a revised budget sets no record aside and reopens no child
+  concept:
+    description: the concept of the festival as its organisers gave it
+  programme:
+    description: the accepted programme and the events it names
+evidence_kinds:
+  case_outcome:
+    description: >-
+      the outcome of one child case this case opened, one record per child: settled, cancelled or another outcome of the child's protocol, open while the child runs
+  draft_opened:
+    description: the record that the draft case was opened for a concept revision
+  events_opened:
+    description: the record that one event case per programme event was opened for a programme revision
+  inquiry_opened:
+    description: the record that the inquiry case was opened for a concept revision
+  programme_approval:
+    description: >-
+      a person's acceptance of a programme revision, recorded by the draft case under the organisers' authority; its result is accepted
+claims:
+  inquiry.opened:
+    description: the inquiry case was opened for the current concept revision
+    true_when:
+      evidence:
+        kind: inquiry_opened
+        subject: concept
+  draft.opened:
+    description: the draft case was opened for the current concept revision
+    true_when:
+      evidence:
+        kind: draft_opened
+        subject: concept
+  events.opened:
+    description: the event cases were opened for the current programme revision
+    true_when:
+      evidence:
+        kind: events_opened
+        subject: programme
+  programme.accepted:
+    description: the current programme revision is accepted
+    true_when:
+      evidence:
+        kind: programme_approval
+        result: accepted
+        subject: programme
+  programme.copied:
+    description: a programme acceptance record about the current programme revision is in this case, whatever its result
+    true_when:
+      evidence:
+        kind: programme_approval
+        subject: programme
+  children.settled:
+    description: every child case ended settled
+    true_when:
+      children:
+        in: [settled]
+obligations:
+  inquiry.required:
+    description: the inquiry case was opened for the current concept
+    discharged_when:
+      claim: inquiry.opened
+  draft.required:
+    description: the current programme is accepted
+    discharged_when:
+      claim: programme.accepted
+  events.required:
+    description: the event cases of the current programme were opened and every child ended settled
+    discharged_when:
+      all:
+        - claim: events.opened
+        - claim: children.settled
+actions:
+  programme.read:
+    description: >-
+      copy the programme acceptance record of the draft case into this case, unchanged; it accepts nothing, and the record keeps the person and programme revision it was accepted with. Only while this case holds no programme acceptance record about the current programme revision: a second copy with another result would leave programme.accepted unknown for good. A new programme revision sets the old record aside and makes it admissible again
+    effect: read
+    precondition:
+      claim: programme.copied
+      is: unknown
+    may_produce:
+      - evidence: programme_approval
+  inquiry.open:
+    description: open the festival.inquiry case for the current concept revision
+    effect: write
+    precondition:
+      claim: inquiry.opened
+      is: unknown
+    case_open:
+      protocol: festival.inquiry
+      subject: concept
+    may_produce:
+      - evidence: inquiry_opened
+  draft.open:
+    description: open the festival.draft case once the inquiry case ended settled
+    effect: write
+    precondition:
+      all:
+        - claim: inquiry.opened
+        - claim: children.settled
+        - claim: draft.opened
+          is: unknown
+    case_open:
+      protocol: festival.draft
+      subject: concept
+    may_produce:
+      - evidence: draft_opened
+  events.open:
+    description: >-
+      open one festival.event case per event of the accepted programme, once the inquiry and the draft ended settled; no event is opened before the programme is accepted
+    effect: write
+    precondition:
+      all:
+        - claim: draft.opened
+        - claim: children.settled
+        - claim: programme.accepted
+        - claim: events.opened
+          is: unknown
+    case_open:
+      protocol: festival.event
+      subject: programme
+    may_produce:
+      - evidence: events_opened
+    arguments:
+      type: object
+      properties:
+        events:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            minLength: 1
+      required: [events]
+      additionalProperties: false
+outcomes:
+  running:
+    description: >-
+      the current programme is accepted, its event cases were opened, and every child case ended settled
+    requires:
+      all:
+        - claim: programme.accepted
+        - claim: events.opened
+        - claim: children.settled
+  cancelled:
+    description: the festival was explicitly cancelled
+    requires:
+      decision: explicitly_cancelled
