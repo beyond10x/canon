@@ -180,8 +180,10 @@ types:
       - name: may_produce
         type: List<canon.protocol.EvidenceProduction>
       # The one argument schema the action declares (story:action-arguments). Absent: the action
-      # takes no arguments; a runner accepts only `{}`. Canon never validates arguments at run
-      # time: the runner that calls the action validates them against this schema. The schema is a JSON
+      # takes no arguments; a runner accepts only `{}`. Canon evaluates no call and never calls an
+      # action. The library function b10x_canon::validate::check_arguments (story:argument-validator)
+      # checks one call's arguments against this schema with JSON Schema 2020-12 meaning, reporting
+      # every refusal; a runner uses it or any 2020-12 validator. The schema is a JSON
       # Schema in Canon's argument-schema dialect, a subset of JSON Schema 2020-12 with the same
       # meaning and no reference at all: every schema, the top level and each nested one, names
       # exactly one `type` (object, array, string, integer, number, boolean or null), the top level
@@ -197,6 +199,7 @@ types:
       # Pointer. Json here, not a typed schema: the dialect is checked by Canon's validator and its
       # conformance tests, like every other validation rule.
       # read from: .engineering/planning/story/action-arguments.md:36-72
+      # read from: .engineering/planning/story/argument-validator.md:39-64
       - name: arguments
         type: Optional<Json>
       # The child case the action opens (story:case-composition, the action case.open of Atlas
