@@ -1,0 +1,57 @@
+format: protocol/1
+
+protocol:
+  id: orchestrate
+  revision: 1
+  description: Turn an intake into ideas and a wave into stories, each a child case; the wave is done once its stories passed the wave as it stands.
+
+artifacts:
+  intake:
+    description: The intake; each idea child case is opened about it.
+  wave:
+    description: The wave; each story child case is opened about it.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child case, one record per child, about the artifact the child was opened about, at the revision its outcome was computed against; open from the moment the child is opened while it runs.
+
+claims:
+  wave.passed:
+    description: Every child case about the wave's current revision ended passed.
+    true_when:
+      children:
+        in: [passed]
+        subject: wave
+        revision: current
+  all.passed:
+    description: Every child case about the current revision of its artifact ended passed, whatever the artifact.
+    true_when:
+      children:
+        in: [passed]
+        revision: current
+
+actions:
+  ideas.open:
+    description: Open an idea child case about the intake.
+    case_open:
+      protocol: idea
+      subject: intake
+
+  stories.open:
+    description: Open a story child case about the wave.
+    case_open:
+      protocol: story
+      subject: wave
+
+  wave.close:
+    description: Close the wave once its stories, or every child case, passed at the current revision.
+    precondition:
+      any:
+        - children: {in: [passed], subject: wave, revision: current}
+        - children: {in: [passed], revision: current}
+
+outcomes:
+  wave.done:
+    description: The wave is done; every story opened about it as it stands passed.
+    requires:
+      claim: wave.passed

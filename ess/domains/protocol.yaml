@@ -474,16 +474,16 @@ types:
   # the value where there is one. canon-ir/1 writes it
   # `{"input": {"id": <id>, "in": [...]}}`, its values each once, in identifier order.
   # read from: .engineering/planning/story/case-inputs.md:77-81
-  # read from: crates/canon/src/model/predicate.rs:351-358
+  # read from: crates/canon/src/model/predicate.rs:359-366
   - name: canon.protocol.InputTest
     kind: struct
     fields:
       # read from: .engineering/planning/story/case-inputs.md:77
-      # read from: crates/canon/src/model/predicate.rs:355
+      # read from: crates/canon/src/model/predicate.rs:363
       - name: input
         type: canon.protocol.InputId
       # read from: .engineering/planning/story/case-inputs.md:77-78
-      # read from: crates/canon/src/model/predicate.rs:356-357
+      # read from: crates/canon/src/model/predicate.rs:364-365
       - name: in
         type: List<canon.protocol.InputValue>
 
@@ -795,14 +795,21 @@ types:
   # and does not declare the evidence kind case_outcome (undeclared-evidence-kind). A set:
   # canon-ir/1 writes `{"children": {"in": [...]}}`, each outcome once, in code-point order. What
   # it means is CANON-COMPOSE-001 (conformance/scenarios/case-composition.yaml), not this file.
+  # The form counts only the records it is given: Canon reads no record that a child was opened,
+  # so a child with no record takes no part. Canon does not write the records; the runner that
+  # opens the child cases does (story:child-outcome-subject), with two duties beside the one on
+  # ChildRevision: a case_outcome record's subject is the case_open subject of the action that
+  # opened the child, and the runner writes a record with result `open` when it opens a child.
   # read from: .engineering/planning/story/case-composition.md:58-67
-  # read from: crates/canon/src/model/predicate.rs:273-292
+  # read from: .engineering/planning/story/child-outcome-subject.md:51
+  # read from: .engineering/planning/story/child-outcome-subject.md:64-70
+  # read from: crates/canon/src/model/predicate.rs:273-300
   - name: canon.protocol.ChildOutcomes
     kind: struct
     fields:
       # The outcomes a child case may have ended with: not empty, each once, never `open`.
       # read from: .engineering/planning/story/case-composition.md:64-67
-      # read from: crates/canon/src/model/predicate.rs:283-286
+      # read from: crates/canon/src/model/predicate.rs:286-289
       - name: in
         type: List<String>
       # Which records the form reads (story:child-outcome-revision): absent or `any`, every
@@ -818,9 +825,29 @@ types:
       # read from: .engineering/planning/story/child-outcome-revision.md:51-64
       # read from: .engineering/planning/story/child-outcome-revision.md:109
       # read from: .engineering/planning/story/child-outcome-revision.md:126-128
-      # read from: crates/canon/src/model/predicate.rs:287-291
+      # read from: crates/canon/src/model/predicate.rs:290-294
       - name: revision
         type: Optional<canon.protocol.ChildRevision>
+      # The declared artifact the records are about (story:child-outcome-subject): absent, every
+      # case_outcome record, about whatever artifact; named, only those whose subject is that
+      # artifact, and with `revision: current` too, only those among them whose subject_revision
+      # is the case snapshot's current revision of it. A record about another artifact is then not
+      # read: it neither establishes nor contradicts the form and is not listed in
+      # excluded_evidence. canon validate refuses an artifact the protocol does not declare
+      # (undeclared-artifact), naming the declaration the form is written in, after the evidence
+      # kind case_outcome, as for an evidence match's subject. canon-ir/1 writes `"subject"` only
+      # when the form names one, so the IR of a protocol without the key is unchanged; two forms
+      # that differ only in it are two members, no subject first. A blocked action's or outcome's
+      # reason and the explanation name the form with `"subject"` the same way, two forms that
+      # differ only in it being two reasons, no subject first and then in subject order. What it
+      # means is CANON-COMPOSE-003 (conformance/scenarios/child-outcome-subject.yaml), not this
+      # file.
+      # read from: .engineering/planning/story/child-outcome-subject.md:51
+      # read from: .engineering/planning/story/child-outcome-subject.md:81
+      # read from: .engineering/planning/story/child-outcome-subject.md:133-144
+      # read from: crates/canon/src/model/predicate.rs:295-299
+      - name: subject
+        type: Optional<canon.protocol.ArtifactId>
 
   # Which case_outcome records a `children` form reads (story:child-outcome-revision): `any`, every
   # one the evidence check accepted; `current`, only one whose subject_revision is the case
@@ -831,20 +858,20 @@ types:
   # compares only that revision with the snapshot's.
   # read from: .engineering/planning/story/child-outcome-revision.md:126-128
   # read from: .engineering/planning/story/child-outcome-revision.md:263-276
-  # read from: crates/canon/src/model/predicate.rs:294-309
+  # read from: crates/canon/src/model/predicate.rs:302-317
   - name: canon.protocol.ChildRevision
     kind: enum
     variants: ["any", "current"]
 
-  # Source text may leave `is` out; it then reads as true (crates/canon/src/model/predicate.rs:574).
-  # read from: crates/canon/src/model/predicate.rs:344-349
+  # Source text may leave `is` out; it then reads as true (crates/canon/src/model/predicate.rs:582).
+  # read from: crates/canon/src/model/predicate.rs:352-357
   - name: canon.protocol.ClaimTest
     kind: struct
     fields:
-      # read from: crates/canon/src/model/predicate.rs:347
+      # read from: crates/canon/src/model/predicate.rs:355
       - name: claim
         type: canon.protocol.ClaimId
-      # read from: crates/canon/src/model/predicate.rs:348
+      # read from: crates/canon/src/model/predicate.rs:356
       - name: is
         type: canon.protocol.Truth
 
