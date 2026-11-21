@@ -177,3 +177,13 @@ items:
     story: story:supplied-evidence
     detail: An evidence kind may name, as supplied_by, another protocol whose cases produce its records; canon check counts it as produced, without authority, and a record of it copied unchanged from the supplier's case may name upstream artifacts only the supplier declares, carried and not read; the protocol's own id is refused as self-supplied-evidence; scenario CANON-SUPPLY-001.
     href: /docs/reference/protocol
+  - label: Child outcomes bound to the current revision
+    area: Language
+    story: story:child-outcome-revision
+    detail: "The children predicate takes revision: current, and then reads only the case_outcome records about the case's current revision of their subject. A record about an earlier revision neither establishes nor contradicts it, so a parent whose subject is revised after its children ended falls back to UNKNOWN until a child about the new revision ends. Without the key, or with revision: any, every record counts as before, and canon-ir/1 is unchanged; scenario CANON-COMPOSE-002."
+    href: /docs/reference/protocol#childrevision
+  - label: Missing evidence
+    area: Evaluation
+    story: story:missing-evidence
+    detail: canon-decision/1 may carry a missing_evidence section that maps each admissible action whose may_produce is not empty to the kinds of that list with no applicable record, in kind order; a record is applicable when the revision-binding and freshness stages leave it and no claim lists it in excluded_evidence, whatever its result and whether or not its kind declares supplied_by, and the section is absent when no action qualifies; scenario CANON-FRONTIER-001.
+    href: /docs/reference/documents#decision

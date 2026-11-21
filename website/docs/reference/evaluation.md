@@ -249,7 +249,8 @@ declares no obligation has no `obligations` key, and likewise for actions and ou
   or `{"evidence": <kind>, "present": <whether a record the match reads applies>}`, with
   `"subject": <artifact>` added when the match names one (a record about another artifact
   is not read by it), then each input test that decides it, `{"input": <id>, "value": <the case's value>}`, then each order form that decides it, `{"after": <kind>, "then": <kind>, "result": <result>, "value": <its value>}`, `{"before": <kind>, "then": <kind>, "value": <its value>}`, `{"first": <kind>, "result": <result>, "value": <its value>}` or `{"since": <kind>, "then": <kind>, "result": <result>, "value": <its value>}`, with `"subject"` added
-  when it names one, then each form over the child cases that decides it, `{"children": [<outcome>, ...], "value": <its value>}`, or
+  when it names one, then each form over the child cases that decides it, `{"children": [<outcome>, ...], "value": <its value>}`, with `"revision": "current"` added when the form
+  reads only the current revision (story:child-outcome-revision), or
   `{"requirement": "unsatisfiable"}` when none does. `blocked` too when the precondition is
   `true` and the authority decisions deny a requirement of the action, each a reason
   `{"capability": <id>, "decision": "denied"}`. `approval-required` when the precondition is
