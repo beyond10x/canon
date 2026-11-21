@@ -91,7 +91,7 @@ fn the_real_registry_with_the_flag_is_the_plain_report_and_one_line() {
     assert_eq!(
         out(&checked),
         format!(
-            "{}requirements: 21 implemented, 21 covered, 0 planned\n",
+            "{}requirements: 22 implemented, 22 covered, 0 planned\n",
             out(&plain)
         )
     );

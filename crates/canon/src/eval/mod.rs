@@ -204,7 +204,9 @@
 //!    and forms over the child cases over every record accepted), each with the case's input
 //!    values, which every input test reads. The invalidation stage keeps a record from claims
 //!    only, so these predicates' own evidence matches read it. An outcome that requires an explicit
-//!    decision is decided by the explicit decisions instead.
+//!    decision is decided by the explicit decisions instead. The `actions` section reads only the
+//!    authority decisions that apply at the case snapshot's `revision`
+//!    (`authority::Authority::applying_at`); the explanation records every decision given.
 //!
 //! Revision binding excludes a record bound to another revision as `revision_mismatch`, and
 //! freshness a record older than its kind's `max_age` at the evaluation instant as `expired`,
@@ -248,8 +250,8 @@
 //!   "decision": "none"}`. A requirement with a scope adds `"scope": {<key>: <value>, ...}` to its
 //!   reason. `admissible` when the precondition is `true` and every requirement is granted
 //!   (CANON-AUTHORITY-001). A requirement is decided by the decisions on its capability that
-//!   cover its scope, `denied` over `require_approval` over `granted`, as `actions.rs` says
-//!   (CANON-SCOPE-001).
+//!   apply at the case snapshot's `revision` and cover its scope, `denied` over `require_approval`
+//!   over `granted`, as `actions.rs` says (CANON-SCOPE-001, CANON-AUTHORITY-002).
 //! - `outcomes` maps each declared outcome to `{"status": "legitimate"}` when its `requires`
 //!   predicate is `true` over the claim values and the evidence left, and otherwise to
 //!   `{"status": "blocked", "reasons": [...]}`. Its reasons follow the one rule an action
@@ -270,15 +272,20 @@
 //! # Authority decisions
 //!
 //! `--authority` names a `canon-authority/1` document: a YAML (or JSON) list of decisions, each a
-//! capability, the scope it covers (optional: absent, every scope) and the decision,
-//! `- {capability: metrics.read, scope: {cluster: prod-eu}, decision: granted}` (or
-//! `require_approval`, or `denied`). An empty list decides nothing. Canon grants nothing and
-//! resolves no identity: the caller decides and passes the decisions in. Refused, in this order:
-//! text that is not such a list, or an entry with another key, another decision or a missing
-//! key, as `malformed-input`, naming the entry by its position, counting from 1, and a missing key
-//! by name (`` entry 2: missing field `capability` ``); then, entry by entry, a capability, scope
-//! key or scope value that is not an identifier as `invalid-identifier`, and a capability decided
-//! a second time at an equal scope as `duplicate-identifier` (`authority.rs`).
+//! capability, the scope it covers (optional: absent, every scope), the decision and, optionally,
+//! the principal who took it and the case revision it was taken at,
+//! `- {capability: metrics.read, scope: {cluster: prod-eu}, decision: granted, principal: ops-lead,
+//! case_revision: c2}` (or `require_approval`, or `denied`). An empty list decides nothing. Canon
+//! grants nothing and resolves no identity: the caller decides and passes the decisions in, and a
+//! principal is recorded as given and changes no decision. A decision with a case revision, whatever
+//! it decides, applies only while that revision is the case snapshot's `revision`, and to nothing
+//! when the snapshot has none; one without applies at every case revision (CANON-AUTHORITY-002).
+//! Refused, in this order: text that is not such a list, or an entry with another key, another
+//! decision or a missing key, as `malformed-input`, naming the entry by its position, counting
+//! from 1, and a missing key by name (`` entry 2: missing field `capability` ``); then, entry by
+//! entry, a capability, scope key, scope value, principal or case revision that is not an
+//! identifier as `invalid-identifier`, and an entry equal to an earlier one in capability, scope,
+//! case revision and principal as `duplicate-identifier` (`authority.rs`).
 //!
 //! # Explicit decisions
 //!
@@ -441,7 +448,12 @@ pub fn evaluate_with(
         };
         let values = claims::values(ir, sets, &invalidated, &case_inputs)?;
         let obligations = obligations::section(ir, &values, &case_inputs);
-        let actions = actions::section(ir, &values, &case_inputs, sets, authority.as_ref());
+        // Only the authority decisions that apply at the case revision decide a requirement; the
+        // explanation records every decision as given.
+        let applying = authority
+            .as_ref()
+            .map(|authority| authority.applying_at(case.revision.as_ref()));
+        let actions = actions::section(ir, &values, &case_inputs, sets, applying.as_ref());
         let outcomes =
             outcomes::section(ir, case, &values, &case_inputs, sets, decisions.as_ref())?;
         let record_of: BTreeMap<&EvidenceId, &EvidenceRecord> =

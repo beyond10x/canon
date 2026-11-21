@@ -47,8 +47,14 @@
 //! - `admissible`, when the precondition is `true` and every requirement is granted. An action
 //!   with no precondition and no requirement is always admissible.
 //!
-//! A requirement is a capability at a scope, or without one (story:capability-scope). The
-//! authority decisions on its capability that cover it decide it: a decision covers it when the
+//! A requirement is a capability at a scope, or without one (story:capability-scope). Only the
+//! authority decisions that apply at the case snapshot's `revision` take part
+//! (story:authority-revision-binding): one bound to a case revision applies only while the
+//! snapshot is at it, and to nothing when the snapshot has no revision; one bound to none applies
+//! at every revision. The caller (`super::evaluate_with`) passes only those, so a requirement
+//! covered only by decisions that do not apply is not decided, and its reason is
+//! `{"capability": <id>, "decision": "none"}`. A decision's principal changes nothing here. Of
+//! those, the decisions on its capability that cover it decide it: a decision covers it when the
 //! requirement gives every scope key the decision gives a value for that same value. So a key the
 //! decision leaves out covers every value of it, a decision without a scope covers every
 //! requirement of its capability, and coverage never widens inwards: a decision for `{cluster:
@@ -74,7 +80,8 @@ use crate::model::{
 
 /// The section, or `None` to leave the slot empty. `evidence` is what the claims were evaluated
 /// over (what the exclusion stages left, and the history the order forms read); a precondition is
-/// evaluated over it and `claims` with `super::claims::predicate`.
+/// evaluated over it and `claims` with `super::claims::predicate`. `authority` is the decisions
+/// that apply at the case revision ([`Authority::applying_at`]): every one it holds takes part.
 pub(super) fn section(
     ir: &Ir,
     claims: &BTreeMap<ClaimId, Truth>,

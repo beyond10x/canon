@@ -4,67 +4,113 @@
 //!
 //! # The `canon-authority/1` input
 //!
-//! A YAML (or JSON) list of decisions, each a capability, the scope it covers and the decision:
+//! A YAML (or JSON) list of decisions, each a capability, the scope it covers, the decision and,
+//! optionally, who took it and the case revision it was taken at:
 //!
 //! ```yaml
 //! - capability: metrics.read
 //!   scope: {cluster: prod-eu}  # optional: absent, the decision covers every scope
 //!   decision: granted          # or require_approval, or denied
+//!   principal: ops-lead        # optional: who took it, recorded as given
+//!   case_revision: c2          # optional: absent, the decision applies at every case revision
 //! ```
 //!
 //! The entry type is [`crate::model::AuthorityDecision`]. An empty list (`[]`) decides nothing; an
 //! empty document is not a list. A capability no action requires may be decided; it changes no
-//! action. One capability may be decided at several scopes; two decisions on it with equal scopes
-//! (the same keys with the same values, in any order) are a duplicate. Refused, in this order: text
+//! action. One capability may be decided at several scopes and at several case revisions; two
+//! entries equal in capability, scope (the same keys with the same values, in any order), case
+//! revision and principal are a duplicate, whatever their decisions. Refused, in this order: text
 //! that is not such a list (a scope that names a key twice included), or an entry with another
 //! key, another decision or a missing key, as `malformed-input` (`` `--authority` is not a
 //! canon-authority/1 document: entry <n>: <why> ``, counting entries from 1, where a missing key is
 //! named: `` missing field `capability` ``); then, entry by entry in the order given, a capability
 //! that is not an identifier as `invalid-identifier`, then a scope key or value that is not one,
-//! in the order written, as `invalid-identifier`, then a capability decided a second time at an
-//! equal scope as `duplicate-identifier` (`` `--authority` decides capability `<c>` more than once
-//! ``, or `` … capability `<c>` at scope {<key>: <value>, …} more than once `` when the scope is
-//! not empty, its keys in code-point order).
+//! in the order written, then a principal, then a case revision, each as `invalid-identifier`,
+//! then an entry equal to an earlier one as `duplicate-identifier` (`` `--authority` decides
+//! capability `<c>` more than once ``, with `` at scope {<key>: <value>, …} `` after the
+//! capability when the scope is not empty, its keys in code-point order, then `` at case revision
+//! `<r>` `` and `` by `<p>` `` when those are given).
 //!
-//! [`Authority::decide`] decides one requirement from these decisions.
+//! An entry with a case revision is bound to it (story:authority-revision-binding): whatever its
+//! decision, it applies only while the case snapshot's `revision` equals it, and to nothing when
+//! the snapshot has no revision, the rule an explicit decision follows (`decisions.rs`). An entry
+//! without one applies at every case revision. The principal is recorded as given and matched
+//! against nothing: Canon resolves no identity (design § 23), so it does not change admissibility.
+//! [`Authority::applying_at`] keeps the entries that apply; [`Authority::decide`] then decides one
+//! requirement from those alone, so an entry that does not apply takes part in neither coverage
+//! nor precedence.
 
 use std::collections::BTreeMap;
 
 use super::read::{entries, malformed, yaml};
 use super::{Refusal, identifier};
 use crate::ir::Scope;
-use crate::model::{AuthorityDecision, CapabilityId, Grant, one_line};
+use crate::model::{AuthorityDecision, CapabilityId, Grant, Principal, Revision, one_line};
 
 /// How the input is named in a refusal: the flag that gives it.
 const INPUT: &str = "`--authority`";
 
-/// The authority decisions, read from the text given as `--authority`, keyed by capability and
-/// then by scope.
+/// What tells two entries apart: capability, scope, case revision (none first) and principal
+/// (none first), ordered in that order.
+type Key = (CapabilityId, Scope, Option<Revision>, Option<Principal>);
+
+/// The authority decisions, read from the text given as `--authority`, keyed by capability, then
+/// by scope, then by case revision and then by principal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Authority {
-    decisions: BTreeMap<(CapabilityId, Scope), Grant>,
+    decisions: BTreeMap<Key, Grant>,
+}
+
+/// One decision as given, what the explanation records.
+pub(crate) struct Given<'a> {
+    pub(crate) capability: &'a CapabilityId,
+    pub(crate) scope: &'a Scope,
+    pub(crate) case_revision: Option<&'a Revision>,
+    pub(crate) principal: Option<&'a Principal>,
+    /// `"granted"`, `"require_approval"` or `"denied"`.
+    pub(crate) decision: &'static str,
 }
 
 impl Authority {
+    /// The decisions that apply at the case revision `current` (the case snapshot's `revision`):
+    /// every unbound one, and each bound one whose case revision equals `current`. With no
+    /// current revision, only the unbound ones.
+    pub(super) fn applying_at(&self, current: Option<&Revision>) -> Authority {
+        let decisions = self
+            .decisions
+            .iter()
+            .filter(|((_, _, bound, _), _)| bound.is_none() || bound.as_ref() == current)
+            .map(|(key, grant)| (key.clone(), *grant))
+            .collect();
+        Authority { decisions }
+    }
+
     /// The decision that applies to a requirement of `capability` at `scope` (empty: a requirement
     /// without a scope): of the decisions on `capability` that cover it ([`covers`]), the one
     /// [`Grant::precedence`] ranks highest, so `denied` over `require_approval` over `granted`.
-    /// `None` when none covers it: the requirement is not granted (default deny).
+    /// `None` when none covers it: the requirement is not granted (default deny). It reads every
+    /// decision it holds, so the evaluator asks the decisions [`Authority::applying_at`] keeps.
     pub(super) fn decide(&self, capability: &CapabilityId, scope: &Scope) -> Option<Grant> {
         self.decisions
             .iter()
-            .filter(|((decided, covered), _)| decided == capability && covers(covered, scope))
+            .filter(|((decided, covered, _, _), _)| decided == capability && covers(covered, scope))
             .map(|(_, grant)| *grant)
             .max_by_key(|grant| grant.precedence())
     }
 
-    /// Every decision as given, `(capability, scope, "granted" | "require_approval" | "denied")`,
-    /// in capability order and then scope order (none first): what the explanation records
-    /// (`crate::explain`), so it and the evaluator read one value.
-    pub(crate) fn decisions(&self) -> impl Iterator<Item = (&CapabilityId, &Scope, &'static str)> {
-        self.decisions
-            .iter()
-            .map(|((capability, scope), grant)| (capability, scope, grant.as_str()))
+    /// Every decision as given, in capability order, then scope order (none first), then case
+    /// revision order (none first), then principal order (none first): what the explanation
+    /// records (`crate::explain`), so it and the evaluator read one value.
+    pub(crate) fn decisions(&self) -> impl Iterator<Item = Given<'_>> {
+        self.decisions.iter().map(
+            |((capability, scope, case_revision, principal), grant)| Given {
+                capability,
+                scope,
+                case_revision: case_revision.as_ref(),
+                principal: principal.as_ref(),
+                decision: grant.as_str(),
+            },
+        )
     }
 }
 
@@ -107,24 +153,43 @@ pub(super) fn read(text: Option<&str>) -> Result<Option<Authority>, Refusal> {
             identifier("authority scope key", key.as_str())?;
             identifier("authority scope value", value.as_str())?;
         }
+        if let Some(principal) = &entry.principal {
+            identifier("authority principal", principal.as_str())?;
+        }
+        if let Some(case_revision) = &entry.case_revision {
+            identifier("authority case revision", case_revision.as_str())?;
+        }
         // The YAML reader refuses a key written twice in one mapping, so each key is here once.
         let scope: Scope = entry
             .scope
             .iter()
             .map(|(key, value)| (key.clone(), value.clone()))
             .collect();
-        let key = (entry.capability, scope);
+        let key = (
+            entry.capability,
+            scope,
+            entry.case_revision,
+            entry.principal,
+        );
         if decisions.contains_key(&key) {
-            let (capability, scope) = key;
-            let at_scope = if scope.is_empty() {
-                String::new()
-            } else {
-                format!(" at scope {}", shown(&scope))
-            };
+            let (capability, scope, case_revision, principal) = key;
+            let mut at = String::new();
+            if !scope.is_empty() {
+                at.push_str(&format!(" at scope {}", shown(&scope)));
+            }
+            if let Some(case_revision) = case_revision {
+                at.push_str(&format!(
+                    " at case revision `{}`",
+                    one_line(case_revision.as_str())
+                ));
+            }
+            if let Some(principal) = principal {
+                at.push_str(&format!(" by `{}`", one_line(principal.as_str())));
+            }
             return Err(Refusal::new(
                 "duplicate-identifier",
                 format!(
-                    "{INPUT} decides capability `{}`{at_scope} more than once",
+                    "{INPUT} decides capability `{}`{at} more than once",
                     one_line(capability.as_str())
                 ),
             ));
@@ -315,7 +380,13 @@ mod tests {
         .expect("given");
         let listed: Vec<(&str, Scope, &str)> = authority
             .decisions()
-            .map(|(capability, scope, decision)| (capability.as_str(), scope.clone(), decision))
+            .map(|given| {
+                (
+                    given.capability.as_str(),
+                    given.scope.clone(),
+                    given.decision,
+                )
+            })
             .collect();
         assert_eq!(
             listed,
@@ -342,6 +413,145 @@ mod tests {
             refused.to_string(),
             "`--authority` decides capability `m` more than once"
         );
+    }
+
+    /// A bound decision applies only at its case revision, whatever it decides, and none applies
+    /// without a current revision; an unbound one applies at every revision. Only those that apply
+    /// take part in precedence: a stale denial no longer outranks a grant.
+    #[test]
+    fn a_bound_decision_applies_only_at_its_case_revision() {
+        let authority = read(Some(
+            "- {capability: m, decision: granted}\n\
+             - {capability: m, decision: denied, case_revision: c1}\n\
+             - {capability: n, decision: granted, case_revision: c2, principal: p}\n",
+        ))
+        .expect("reads")
+        .expect("given");
+        let none = Scope::new();
+        let at = |revision: Option<&str>, capability: &str| {
+            let revision = revision.map(Revision::new);
+            authority
+                .applying_at(revision.as_ref())
+                .decide(&capability.into(), &none)
+        };
+        assert_eq!(at(Some("c1"), "m"), Some(Grant::Denied));
+        assert_eq!(
+            at(Some("c2"), "m"),
+            Some(Grant::Granted),
+            "the c1 denial lapsed"
+        );
+        assert_eq!(at(None, "m"), Some(Grant::Granted));
+        assert_eq!(at(Some("c2"), "n"), Some(Grant::Granted));
+        assert_eq!(at(Some("c1"), "n"), None);
+        assert_eq!(
+            at(None, "n"),
+            None,
+            "no current revision: no bound decision"
+        );
+        assert_eq!(
+            authority.applying_at(None).decisions().count(),
+            1,
+            "only the unbound decision applies without a revision"
+        );
+        assert_eq!(authority.decisions().count(), 3, "every decision as given");
+    }
+
+    /// Entries are told apart by capability, scope, case revision and principal, and listed in
+    /// that order, none first in each; the decision does not tell them apart.
+    #[test]
+    fn an_entry_is_decided_once_at_each_case_revision_and_principal() {
+        let authority = read(Some(
+            "- {capability: m, decision: granted, case_revision: c2, principal: q}\n\
+             - {capability: m, decision: granted, case_revision: c2, principal: p}\n\
+             - {capability: m, decision: granted, case_revision: c2}\n\
+             - {capability: m, decision: denied, case_revision: c1}\n\
+             - {capability: m, decision: granted, principal: p}\n\
+             - {capability: m, decision: granted}\n",
+        ))
+        .expect("reads")
+        .expect("given");
+        let listed: Vec<(Option<&str>, Option<&str>)> = authority
+            .decisions()
+            .map(|given| {
+                (
+                    given.case_revision.map(Revision::as_str),
+                    given.principal.map(Principal::as_str),
+                )
+            })
+            .collect();
+        assert_eq!(
+            listed,
+            [
+                (None, None),
+                (None, Some("p")),
+                (Some("c1"), None),
+                (Some("c2"), None),
+                (Some("c2"), Some("p")),
+                (Some("c2"), Some("q")),
+            ]
+        );
+        let refused = refusal(
+            "- {capability: m, scope: {cluster: a}, decision: granted, case_revision: c2, principal: p}\n\
+             - {capability: m, scope: {cluster: a}, decision: denied, principal: p, case_revision: c2}\n",
+        );
+        assert_eq!(refused.code(), "duplicate-identifier", "{refused}");
+        assert_eq!(
+            refused.to_string(),
+            "`--authority` decides capability `m` at scope {cluster: a} at case revision `c2` by \
+             `p` more than once"
+        );
+        let refused = refusal(
+            "- {capability: m, decision: granted, case_revision: c2}\n\
+             - {capability: m, decision: denied, case_revision: c2}\n",
+        );
+        assert_eq!(
+            refused.to_string(),
+            "`--authority` decides capability `m` at case revision `c2` more than once"
+        );
+        let refused = refusal(
+            "- {capability: m, decision: granted, principal: p}\n\
+             - {capability: m, decision: granted, principal: p}\n",
+        );
+        assert_eq!(
+            refused.to_string(),
+            "`--authority` decides capability `m` by `p` more than once"
+        );
+    }
+
+    /// A principal and a case revision are identifiers, checked after the scope, the principal
+    /// first; written as null, each is malformed rather than absent.
+    #[test]
+    fn a_principal_and_a_case_revision_are_identifiers() {
+        let refused = refusal("[{capability: m, decision: granted, principal: 'a b'}]");
+        assert_eq!(refused.code(), "invalid-identifier", "{refused}");
+        assert_eq!(
+            refused.to_string(),
+            "authority principal `a b` is empty or contains whitespace or a control character"
+        );
+        let refused = refusal("[{capability: m, decision: granted, case_revision: ''}]");
+        assert_eq!(
+            refused.to_string(),
+            "authority case revision `` is empty or contains whitespace or a control character"
+        );
+        let refused = refusal(
+            "[{capability: m, scope: {cluster: ''}, decision: granted, principal: '', case_revision: ''}]",
+        );
+        assert!(
+            refused.to_string().starts_with("authority scope value"),
+            "{refused}"
+        );
+        let refused =
+            refusal("[{capability: m, decision: granted, principal: '', case_revision: ''}]");
+        assert!(
+            refused.to_string().starts_with("authority principal"),
+            "{refused}"
+        );
+        for text in [
+            "[{capability: m, decision: granted, principal: ~}]",
+            "[{capability: m, decision: granted, case_revision: ~}]",
+        ] {
+            assert_eq!(refusal(text).code(), "malformed-input", "{text}");
+        }
     }
 
     /// A scope's keys and values are identifiers, and a key is named once in an entry: the YAML
