@@ -10,6 +10,7 @@ mod conform;
 mod diff;
 mod evaluate;
 mod generate;
+mod simulate;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -64,6 +65,7 @@ fn main() -> ExitCode {
             properties,
             import,
         } => check::run(&path, properties.as_deref(), &import),
+        Command::Simulate { path } => simulate::run(&path),
         Command::Generate { path, out } => generate::run(&path, &out),
     }
 }

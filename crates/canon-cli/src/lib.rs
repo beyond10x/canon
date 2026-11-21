@@ -22,13 +22,14 @@ pub const EXIT_STATUSES: [(u8, &str); 4] = [
     (
         0,
         "Success: the document is valid or compiled, the case was evaluated, every conformance \
-         scenario ran and passed, a check found nothing, or the scenarios were generated.",
+         scenario ran and passed, a check or a simulation found nothing, or the scenarios were \
+         generated.",
     ),
     (
         REJECTED,
-        "Rejected: a document was read and rejected, an evaluation or a check was refused, a \
-         conformance scenario failed or was unreadable, no scenario ran, a requirement check \
-         failed, a check found something, or generation was refused.",
+        "Rejected: a document was read and rejected, an evaluation, a check or a simulation was \
+         refused, a conformance scenario failed or was unreadable, no scenario ran, a requirement \
+         check failed, a check or a simulation found something, or generation was refused.",
     ),
     (
         UNREADABLE,
@@ -149,6 +150,24 @@ pub enum Command {
         /// Repeat it once per document, in any order; the protocol is checked composed with them.
         #[arg(long)]
         import: Vec<PathBuf>,
+    },
+    /// Walk every state a case of a `protocol/1` document can reach from the empty case, one step
+    /// at a time, and report: each stuck state (no outcome legitimate and no action admissible or
+    /// approval-required) with the shortest path that reaches it, each cycle (no outcome
+    /// legitimate, no action approval-required, and every step of every admissible action returns
+    /// the same state), each action admissible in no reachable state, and each outcome legitimate
+    /// in no reachable state. A step adds one current record an admissible action may produce,
+    /// grants or denies one capability some action requires, or takes one decision some outcome
+    /// requires; no action runs. A record of a kind that declares `supplied_by` may arrive at any
+    /// step, and a state that waits only on one is counted as waiting, not reported as stuck. The
+    /// summary counts the reachable states and, per outcome, those in which it is legitimate. A
+    /// protocol with an order form (`first`, `before`, `after`, `since`) is refused
+    /// (`ordered-evidence`), and so is a walk that would visit more than 65536 states
+    /// (`reachable-state-bound`), which reports nothing of what it saw.
+    Simulate {
+        /// The protocol document to simulate.
+        #[arg(long)]
+        path: PathBuf,
     },
     /// Generate `canon-conformance/1` scenarios into an empty directory: one minimal witness per
     /// declared outcome and per action blocked in some state, over the whole state space that
