@@ -278,6 +278,14 @@
 //!   § 37), and why each claim that is not `true`, each open obligation, each action that is not
 //!   admissible and each blocked outcome has its status, down to the evidence records that applied
 //!   or were excluded. Its shape is given by `crate::explain` (CANON-EXPLAIN-001).
+//! - `missing_evidence` maps each `admissible` action whose `may_produce` is not empty to the kinds
+//!   of that list that have no applicable record, in kind-identifier order; an empty list means
+//!   every kind it may produce has one. A record is applicable when the revision-binding and
+//!   freshness stages leave it and no claim lists it in `excluded_evidence` (`missing.rs`,
+//!   `applicable`). It is written only when some action is listed: an action that is `blocked` or
+//!   `approval-required`, and one with an empty `may_produce`, is not. It reads `may_produce` and
+//!   the records, so a kind that declares `supplied_by` is listed like any other, and it claims
+//!   nothing about running the action (CANON-FRONTIER-001).
 //!
 //! # Authority decisions
 //!
@@ -328,6 +336,7 @@ mod freshness;
 mod independence;
 mod invalidation;
 mod json;
+mod missing;
 mod obligations;
 mod order;
 mod outcomes;
@@ -488,16 +497,25 @@ pub fn evaluate_with(
                 (id.clone(), entry)
             })
             .collect();
+        let claims = Declarations::new(claims);
+        // The records the binding and freshness stages left, less those a claim lists.
+        let missing_evidence = missing::section(
+            ir,
+            actions.as_ref(),
+            &applicable,
+            claims.iter().map(|(_, entry)| entry),
+        );
         let mut decision = Decision {
             format: DECISION_FORMAT.to_owned(),
             case: case.id.clone(),
             protocol: ir.protocol.id.clone(),
             protocol_revision: ir.protocol.revision,
-            claims: Declarations::new(claims),
+            claims,
             obligations,
             actions,
             outcomes,
             explanation: None,
+            missing_evidence,
         };
         let inputs = crate::explain::Inputs {
             authority: authority.as_ref(),

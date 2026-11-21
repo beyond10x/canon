@@ -274,6 +274,10 @@ and `canon evaluate --ir investigation.ir.json --case case.yaml --evidence evide
     }
   },
   "format": "canon-decision/1",
+  "missing_evidence": {
+    "attempt_falsification": [],
+    "inspect": []
+  },
   "outcomes": {
     "supported": {
       "status": "legitimate"

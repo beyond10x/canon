@@ -2,15 +2,16 @@
 //! [`crate::model::Decision`]; this file is its one serialization, canonical JSON (`json.rs`).
 //!
 //! The document's top-level keys are its sections: `format`, `case`, `protocol`,
-//! `protocol_revision`, `claims`, and the slots `obligations`, `actions`, `outcomes` and
-//! `explanation`. A slot that is absent is not written, and neither is a claim's
+//! `protocol_revision`, `claims`, the slots `obligations`, `actions`, `outcomes` and
+//! `explanation`, and the typed section `missing_evidence` (an action's id to a list of evidence
+//! kinds). A slot that is absent is not written, and neither is a claim's
 //! `excluded_evidence` list when it is empty, so a decision that fills no slot is written exactly
 //! as `canon-decision/1` was before the slots existed.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::json::Value;
-use crate::model::{ClaimDecision, Decision};
+use crate::model::{ActionId, ClaimDecision, Decision, Declarations, EvidenceKindId};
 
 /// Every section the decision carries, keyed by its name.
 fn sections(decision: &Decision) -> BTreeMap<&'static str, Value> {
@@ -39,7 +40,25 @@ fn sections(decision: &Decision) -> BTreeMap<&'static str, Value> {
             sections.insert(name, Value::json(value));
         }
     }
+    // The typed sections follow the untyped slots, one `if let` each.
+    if let Some(missing) = &decision.missing_evidence {
+        sections.insert("missing_evidence", missing_evidence(missing));
+    }
     sections
+}
+
+/// The `missing_evidence` section: each action's id, in code-point order, to its kinds in the
+/// order the decision holds them.
+fn missing_evidence(missing: &Declarations<ActionId, Vec<EvidenceKindId>>) -> Value {
+    Value::Object(
+        missing
+            .iter()
+            .map(|(action, kinds)| {
+                let kinds = kinds.iter().map(|kind| Value::string(kind.as_str()));
+                (action.as_str().to_owned(), Value::Array(kinds.collect()))
+            })
+            .collect(),
+    )
 }
 
 fn claim(entry: &ClaimDecision) -> Value {
@@ -85,8 +104,7 @@ pub fn render_sections(decision: &Decision, listed: &BTreeSet<String>) -> String
 mod tests {
     use super::*;
     use crate::model::{
-        CaseId, ClaimId, Declarations, EvidenceExclusion, EvidenceId, ExclusionReason, ProtocolId,
-        Truth,
+        CaseId, ClaimId, EvidenceExclusion, EvidenceId, ExclusionReason, ProtocolId, Truth,
     };
 
     fn decision() -> Decision {
@@ -106,6 +124,7 @@ mod tests {
             actions: None,
             outcomes: None,
             explanation: None,
+            missing_evidence: None,
         }
     }
 
@@ -134,6 +153,27 @@ mod tests {
         assert_eq!(
             render(&decision),
             "{\n  \"case\": \"C\",\n  \"claims\": {\n    \"c\": {\n      \"excluded_evidence\": [\n        {\n          \"evidence\": \"e1\",\n          \"reason\": \"revision_mismatch\"\n        }\n      ],\n      \"value\": \"unknown\"\n    }\n  },\n  \"explanation\": [],\n  \"format\": \"canon-decision/1\",\n  \"outcomes\": {\n    \"supported\": \"blocked\"\n  },\n  \"protocol\": \"p\",\n  \"protocol_revision\": 2\n}\n"
+        );
+    }
+
+    #[test]
+    fn the_missing_evidence_section_is_written_in_code_point_order_and_only_when_present() {
+        let mut decision = decision();
+        decision.missing_evidence = Some(Declarations::new(vec![
+            (
+                ActionId::new("probe"),
+                vec![EvidenceKindId::new("a"), EvidenceKindId::new("b")],
+            ),
+            (ActionId::new("inspect"), Vec::new()),
+        ]));
+        assert_eq!(
+            render(&decision),
+            "{\n  \"case\": \"C\",\n  \"claims\": {\n    \"c\": {\n      \"value\": \"unknown\"\n    }\n  },\n  \"format\": \"canon-decision/1\",\n  \"missing_evidence\": {\n    \"inspect\": [],\n    \"probe\": [\n      \"a\",\n      \"b\"\n    ]\n  },\n  \"protocol\": \"p\",\n  \"protocol_revision\": 2\n}\n"
+        );
+        let listed = |names: &[&str]| names.iter().map(|name| (*name).to_owned()).collect();
+        assert_eq!(
+            render_sections(&decision, &listed(&["missing_evidence"])),
+            "{\n  \"missing_evidence\": {\n    \"inspect\": [],\n    \"probe\": [\n      \"a\",\n      \"b\"\n    ]\n  }\n}\n"
         );
     }
 
