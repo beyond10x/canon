@@ -11,6 +11,15 @@ fixture: fixtures/investigation/supplied-evidence/supplied.yaml
 # which keeps a review made against an earlier dataset revision from `peer.approved`. The
 # supplier declares, besides, an artifact `guideline` this protocol does not: a record copied from
 # its case names it in `upstream_revisions`.
+# A scenario has compile and evaluate steps only, so it does not hold the rules of canon validate
+# and canon check for supplied_by. These tests do: the refusal of the protocol's own id
+# (self-supplied-evidence) is expectation 8 of
+# crates/canon-cli/tests/supplied_evidence.rs::supplied_evidence_is_produced_outside and
+# crates/canon/src/validate/mod.rs::tests::a_supplier_is_another_protocol_named_by_an_identifier;
+# the check rule (a supplied kind is produced, without authority, and stays governed when an
+# action requiring a capability may produce it) is expectations 4 to 7 of that test and
+# crates/canon/src/check/tests.rs::a_supplied_kind_is_produced_without_authority_in_every_slice
+# and ::a_supplied_kind_an_authority_action_produces_stays_governed.
 steps:
   # The compiled evidence kind carries `supplied_by` when it is set, after its other members; a
   # kind without it compiles without the key, as before.

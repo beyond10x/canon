@@ -263,7 +263,8 @@ fn supplied_evidence_is_produced_outside() {
     // 9. An evaluation reads whether a kind has a supplier (expectation 11), so introducing one
     // is not NO SEMANTIC CHANGE: it admits records once refused and changes no other decision,
     // which the tree classes `EXPANSION` (a value added to a case input); removing one refuses
-    // them again, `BREAKING`. Another supplier changes no evaluation: `NO SEMANTIC CHANGE`.
+    // them again, `BREAKING`. Another supplier changes no evaluation, but it is a name the runner
+    // acts on and nothing resolves, as a `case_open` protocol is, so it is `BREAKING` too.
     let diff = |from: &Path, to: &Path| {
         succeeded(&canon(&["diff", "--from", path(from), "--to", path(to)]))
     };
@@ -291,7 +292,7 @@ fn supplied_evidence_is_produced_outside() {
     assert_eq!(
         diff(&supplied_at, &resupplied_at),
         "diff: protocol `investigation.publication` revision 1 to 1\n\
-         NO SEMANTIC CHANGE: evidence kind `peer_review` supplier changed from protocol \
+         BREAKING: evidence kind `peer_review` supplier changed from protocol \
          `investigation.review` to protocol `investigation.audit`\n"
     );
 

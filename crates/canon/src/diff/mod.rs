@@ -23,7 +23,7 @@
 //! | maximum age rewritten with the same length (`60m`, `1h`) | `NO SEMANTIC CHANGE` |
 //! | supplier (`supplied_by`) introduced (a record of the kind may then name upstream artifacts the protocol does not declare) | `EXPANSION` |
 //! | supplier removed (such a record is refused again) | `BREAKING` |
-//! | supplier changed to another protocol (nothing resolves the name) | `NO SEMANTIC CHANGE` |
+//! | supplier changed to another protocol (a name the runner acts on and nothing resolves, as a changed `case_open` protocol) | `BREAKING` |
 //! | claim added | `EXPANSION` |
 //! | claim removed | `BREAKING` |
 //! | claim's predicate changed | by implication, in the direction the protocol reads the claim (below) |
@@ -907,7 +907,9 @@ fn max_age(changes: &mut Changes, id: &str, from: &Option<Age>, to: &Option<Age>
 /// is one: a record of a supplied kind may name upstream artifacts the protocol does not declare.
 /// Introduced, a record set once refused is read, and every set read before decides as it did, as
 /// when a case input gains a value (`EXPANSION`); removed, such a record is refused again, as when
-/// one loses a value (`BREAKING`); another supplier changes no evaluation (`NO SEMANTIC CHANGE`).
+/// one loses a value (`BREAKING`). Another supplier changes no evaluation, but it is a name the
+/// runner acts on and nothing resolves, like the protocol of a `case_open`, whose change is
+/// `BREAKING`; so is this one.
 fn supplier(changes: &mut Changes, id: &str, from: &Option<ProtocolId>, to: &Option<ProtocolId>) {
     const SECTION: &str = "evidence kind";
     let shown = |supplier: &ProtocolId| one_line(supplier.as_str());
@@ -923,7 +925,7 @@ fn supplier(changes: &mut Changes, id: &str, from: &Option<ProtocolId>, to: &Opt
         ),
         (Some(from), Some(to)) if from == to => return,
         (Some(from), Some(to)) => (
-            Category::NoSemanticChange,
+            Category::Breaking,
             format!(
                 "supplier changed from protocol `{}` to protocol `{}`",
                 shown(from),
@@ -1307,10 +1309,10 @@ mod tests {
     }
 
     /// A supplier introduced admits records once refused and changes no other decision
-    /// (`EXPANSION`), one removed refuses them again (`BREAKING`), and another supplier changes no
-    /// evaluation (`NO SEMANTIC CHANGE`); each after the kind's maximum age.
+    /// (`EXPANSION`), one removed refuses them again (`BREAKING`), and another supplier
+    /// is `BREAKING`, as a changed `case_open` protocol is; each after the kind's maximum age.
     #[test]
-    fn a_supplier_introduced_expands_removed_breaks_and_changed_is_no_change() {
+    fn a_supplier_introduced_expands_and_removed_or_changed_breaks() {
         let none = ir("evidence_kinds: {a: {max_age: 1h}}\n");
         let parent = ir("evidence_kinds: {a: {max_age: 2h, supplied_by: parent}}\n");
         let sibling = ir("evidence_kinds: {a: {max_age: 2h, supplied_by: sibling}}\n");
@@ -1331,7 +1333,7 @@ mod tests {
         assert_eq!(
             lines(&parent, &sibling),
             [
-                "NO SEMANTIC CHANGE: evidence kind `a` supplier changed from protocol `parent` to protocol `sibling`"
+                "BREAKING: evidence kind `a` supplier changed from protocol `parent` to protocol `sibling`"
             ]
         );
         assert!(lines(&parent, &parent).is_empty());

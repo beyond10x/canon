@@ -146,10 +146,9 @@ requirements:
   CANON-SUPPLY-001:
     status: implemented
     statement: >-
-      An evidence kind MAY name, as supplied_by, another protocol whose cases produce its records;
-      naming the protocol's own id MUST be refused. A record of such a kind MUST be read as given,
-      a claim reading the kind MUST be UNKNOWN while no record is given, and the record MAY name
-      upstream artifacts the protocol does not declare, which MUST NOT be read; an undeclared
-      upstream artifact on a record of any other kind MUST still be refused. canon check MUST count
-      such a kind as produced, without authority.
+      An evidence kind MAY name, as supplied_by, another protocol whose cases produce its records,
+      and its compiled canon-ir/1 entry MUST carry that name. A record of such a kind MAY name
+      upstream artifacts the protocol does not declare, and MUST then be evaluated to the decision
+      the same record without those entries gives. The same record under a kind without
+      supplied_by MUST be refused as undeclared-artifact.
     source: story:supplied-evidence

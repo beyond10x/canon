@@ -188,8 +188,11 @@ pub struct EvidenceKind {
     pub max_age: Option<Age>,
     /// The protocol whose cases produce records of this kind (story:supplied-evidence): any
     /// protocol but this one, named and never resolved. A runner copies such a record unchanged
-    /// from a case under that protocol; `canon check` counts the kind as produced. Absent: the
-    /// protocol's own actions produce the kind, or nothing does.
+    /// from a case under that protocol; `canon check` counts the kind as produced. It counts as
+    /// produced without authority and stays governed when an action that requires a capability
+    /// may also produce it, so `canon check` reports `authority-bypass` on an outcome a supplied
+    /// record alone makes legitimate. Absent: the protocol's own actions produce the kind, or
+    /// nothing does.
     #[serde(default, deserialize_with = "present::optional")]
     pub supplied_by: Option<ProtocolId>,
 }

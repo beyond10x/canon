@@ -304,6 +304,9 @@
 //!   kind, kinds in identifier order. A kind that declares `supplied_by` is produced, by another
 //!   protocol's cases (story:supplied-evidence): no finding names it, and for `authority-bypass`
 //!   it is produced without authority, its supplier's authority being that protocol's to check.
+//!   A kind that declares `supplied_by` counts as produced without authority and stays governed
+//!   when an action that requires a capability may also produce it, so `canon check` reports
+//!   `authority-bypass` on an outcome a supplied record alone makes legitimate.
 //!   Production reads no state, so the slices, their sizes and the states are those of the
 //!   protocol without `supplied_by`; it decides only which states witness a bypass.
 //! - `authority-bypass`: an outcome that reads governed evidence where its presence helps it hold,
@@ -754,7 +757,9 @@ pub(crate) fn check_by(
         .flat_map(|action| produces(ir, action))
         .collect();
     // A supplied kind is produced without authority in this protocol: its supplier's authority is
-    // checked in the supplier's protocol, so a state where it is present can be a witness.
+    // checked in the supplier's protocol, so a state where it is present can be a witness. It is
+    // not taken out of `governed`: an action requiring a capability that may produce it keeps it
+    // governed, and a supplied record alone can then witness a bypass.
     let free: BTreeSet<&EvidenceKindId> = ir
         .actions
         .values()
