@@ -23,7 +23,8 @@ naming:
 
 errors:
   # Exit status 1: a document was read and rejected, an evaluation or a check was refused, a
-  # conformance scenario failed, a check found something, or generation was refused.
+  # conformance scenario failed, a check found something, generation was refused, or a mutation
+  # run was refused or found a weak point.
   # read from: crates/canon-cli/src/lib.rs:12-13
   # read from: crates/canon-cli/src/lib.rs:27-32
   - name: canon.cli.Rejected
@@ -409,6 +410,54 @@ commands:
         error: canon.cli.Rejected
       # read from: crates/canon-cli/src/diff.rs:37-40
       - name: compared
+        returns: true
+
+  # Measures how strong a scenario set is (story:canon-mutate): five mutation operators applied to
+  # the protocol, each mutant run against the scenarios that name the protocol file and classified
+  # with the semantic diff of canon.cli.Diff. A weakening mutant no scenario fails is a weak point.
+  # read from: .engineering/planning/story/canon-mutate.md, section "Outcome"
+  # read from: .engineering/planning/story/canon-mutate.md, section "Acceptance"
+  - name: canon.cli.Mutate
+    naming:
+      wire: mutate
+      display: Mutate
+      summary: >-
+        Apply five mutation operators to a protocol/1 document, run each mutant against the
+        canon-conformance/1 scenarios of a directory, and report each mutant killed, survived or
+        invalid with its semantic-diff categories, a weakening survivor as a weak point.
+    input:
+      # The protocol/1 document to mutate; a scenario names it as its fixture.
+      # read from: .engineering/planning/story/canon-mutate.md, section "Outcome"
+      - name: path
+        type: String
+      # The directory of canon-conformance/1 scenarios each mutant runs against; every *.yaml file
+      # in it is one scenario.
+      # read from: .engineering/planning/story/canon-mutate.md, section "Outcome"
+      - name: scenarios
+        type: String
+    response:
+      # One line per mutant (killed, survived, weak point or invalid, the operator, the site, the
+      # categories of its semantic diff and the scenario that failed) and a summary line, with no
+      # weak point.
+      # read from: .engineering/planning/story/canon-mutate.md, section "Outcome"
+      # read from: fixtures/investigation/mutate/complete.txt
+      - name: output
+        type: String
+    outcomes:
+      # read from: .engineering/planning/story/canon-mutate.md, section "Outcome"
+      - name: unreadable
+        external: the protocol, the scenario directory or a scenario file cannot be read
+        error: canon.cli.Unreadable
+      # read from: .engineering/planning/story/canon-mutate.md, section "Outcome", "Decided by the rescope"
+      # read from: fixtures/investigation/mutate/lacking.txt
+      # read from: fixtures/investigation/mutate/unnamed.txt
+      - name: rejected
+        external: >-
+          the protocol is rejected, no scenario names the protocol file as its fixture, a scenario
+          does not parse or fails on the protocol itself, or at least one weak point is reported
+        error: canon.cli.Rejected
+      # read from: .engineering/planning/story/canon-mutate.md, section "Outcome", "Decided by the rescope"
+      - name: no-weak-point
         returns: true
 
   # The clap path `conform run`.

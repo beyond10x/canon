@@ -1,0 +1,45 @@
+format: canon-conformance/1
+id: investigation-supported
+covers: []
+fixture: fixtures/investigation/mutate/protocol.yaml
+# A supporting observation and a falsification attempt the explanation survived: `supported` is
+# legitimate and `refuted` is blocked.
+steps:
+  - id: supported
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "refuted": {
+              "reasons": [
+                {
+                  "claim": "explanation.refuted",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            },
+            "supported": {
+              "status": "legitimate"
+            }
+          }
+        }
