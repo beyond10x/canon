@@ -714,9 +714,10 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         }
     }
 
+    let reaching = reaching_evidence(protocol);
     for (id, rule) in protocol.invalidation.iter() {
         for claim in &rule.invalidates {
-            if protocol.claims.contains(claim) && !reaches_evidence(protocol, claim) {
+            if protocol.claims.contains(claim) && !reaching.contains(claim) {
                 problems.push(Problem::InertInvalidation {
                     rule: id.clone(),
                     claim: claim.clone(),
@@ -734,29 +735,38 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
     }
 }
 
-/// Whether `claim` reaches an evidence match: in its own predicate, or in a claim it tests through
-/// any number of claim references. Each claim is visited once, so a cycle ends.
-fn reaches_evidence(protocol: &Protocol, claim: &ClaimId) -> bool {
-    let mut visited = BTreeSet::new();
-    let mut pending = vec![claim];
-    while let Some(next) = pending.pop() {
-        if !visited.insert(next) {
-            continue;
-        }
-        let Some(declared) = protocol.claims.get(next) else {
-            continue;
-        };
+/// The declared claims that reach an evidence match: in their own predicate, or in a claim they test
+/// through any number of claim references. A claim declared twice is read in its first
+/// declaration, as `Declarations::get` reads it. The claims whose predicate holds a match are found
+/// first, then every claim testing one found, each once, so a cycle ends and the work grows with
+/// the size of the predicates, not with the number of rules times the length of a chain.
+fn reaching_evidence(protocol: &Protocol) -> BTreeSet<&ClaimId> {
+    let mut declared: BTreeMap<&ClaimId, &Predicate> = BTreeMap::new();
+    for (id, claim) in protocol.claims.iter() {
+        declared.entry(id).or_insert(&claim.true_when);
+    }
+    let mut testers: BTreeMap<&ClaimId, Vec<&ClaimId>> = BTreeMap::new();
+    let mut reaching = BTreeSet::new();
+    let mut pending = Vec::new();
+    for (&id, &predicate) in &declared {
         let mut found = false;
-        declared.true_when.visit(&mut |node| match node {
+        predicate.visit(&mut |node| match node {
             Predicate::Evidence(_) => found = true,
-            Predicate::Claim(test) => pending.push(&test.claim),
+            Predicate::Claim(test) => testers.entry(&test.claim).or_default().push(id),
             _ => {}
         });
-        if found {
-            return true;
+        if found && reaching.insert(id) {
+            pending.push(id);
         }
     }
-    false
+    while let Some(next) = pending.pop() {
+        for &tester in testers.get(next).into_iter().flatten() {
+            if reaching.insert(tester) {
+                pending.push(tester);
+            }
+        }
+    }
+    reaching
 }
 
 /// Every evidence match, order form and `children` form in an obligation's discharge or
