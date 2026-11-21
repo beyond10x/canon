@@ -205,16 +205,37 @@
     },
     {
       "label": "ESS specification of the command surface",
-      "status": "decided",
+      "status": "shipped",
       "detail": "Every canon subcommand is an ESS command and every flag an input, in the domain canon.cli; a test fails when the clap definition and ess/ differ in either direction.",
       "href": "/docs/reference/cli",
       "area": "Language"
     },
     {
       "label": "Scoped capabilities",
-      "status": "decided",
+      "status": "shipped",
       "detail": "Capability requirements and authority decisions carry a scope; default deny, coverage from the wildcard outwards, denied over require_approval over granted; scenario CANON-SCOPE-001.",
       "href": "/docs/reference/evaluation#sections",
+      "area": "Evaluation"
+    },
+    {
+      "label": "Protocol imports",
+      "status": "decided",
+      "detail": "A protocol imports others, each pinned to a revision and the sha256 digest of its compiled canon-ir/1, and compiles with exactly the documents passed with --import into one closed canon-ir/1 that names the root only; a redeclaration replaces an imported declaration only when the import lists it under refines, and a missing or unused document, a pin mismatch, a cycle and two differing declarations are refused; scenario CANON-IMPORT-001.",
+      "href": "/docs/reference/canon-ir",
+      "area": "Language"
+    },
+    {
+      "label": "canon check over subject slices",
+      "status": "planned",
+      "detail": "Each outcome, action and property is decided over the dimensions it reads, so the bound of 65536 states holds each slice, not the whole product; the report is byte-identical to the whole product's, and a slice above the bound refuses the check naming its subject.",
+      "href": "/docs/reference/cli#canon-check",
+      "area": "Analysis"
+    },
+    {
+      "label": "Evaluation cost under invalidation rules",
+      "status": "planned",
+      "detail": "Evaluating claims kept apart by invalidation rules is at most quadratic in the claim count, and validating them linear; a chain of 4000 claims evaluates within a time budget in the test suite, with every decision byte-identical to before.",
+      "href": "/docs/reference/evaluation",
       "area": "Evaluation"
     }
   ]
