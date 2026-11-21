@@ -611,3 +611,54 @@ fn simulate_reports_an_outcome_over_a_subject_no_child_is_opened_about() {
          stuck or cycle state)\n"
     );
 }
+
+/// `beta.open` is admissible while some child about `alpha` has a record and none has ended
+/// outside `passed` or all passed: an `alpha` child's `open` record lets the first `beta` child be
+/// opened. A `beta` child that ends replaces the `open` record about `beta` only; were it to
+/// replace the one about `alpha` too, the walk would reach a state holding a record about `beta`
+/// and none about `alpha`, which no case reaches (373 states instead of 343).
+const RELAY: &str = "format: protocol/1\nprotocol: {id: relay, revision: 1}\n\
+    artifacts: {alpha: {}, beta: {}}\nevidence_kinds: {case_outcome: {}}\n\
+    claims:\n  \
+    alpha.heard: {true_when: {evidence: {kind: case_outcome, subject: alpha}}}\n  \
+    alpha.passed: {true_when: {children: {in: [passed], subject: alpha}}}\n  \
+    beta.passed: {true_when: {children: {in: [passed], subject: beta}}}\n\
+    actions:\n  \
+    alpha.open:\n    case_open: {protocol: q, subject: alpha}\n  \
+    beta.open:\n    \
+    precondition: {all: [{claim: alpha.heard}, {claim: alpha.passed, is: unknown}]}\n    \
+    case_open: {protocol: q, subject: beta}\n\
+    outcomes:\n  done:\n    requires: {all: [{claim: alpha.passed}, {claim: beta.passed}]}\n";
+
+#[test]
+fn simulate_replaces_an_open_record_only_in_its_own_dimension() {
+    assert_eq!(
+        simulated(RELAY),
+        "cycle: state {evidence `case_outcome` about `alpha`, action `alpha.open` opened 2 or \
+         more children}: no outcome is legitimate, no action is approval-required, and every step \
+         of action `alpha.open` returns this state; path: action `alpha.open` produces nothing, \
+         then action `alpha.open` produces nothing, then a child of action `alpha.open` records \
+         evidence `case_outcome` about `alpha`; 79 other cycle states contain it\n\
+         cycle: state {evidence `case_outcome` about `alpha` result `open`, evidence \
+         `case_outcome` about `beta`, action `alpha.open` opened 2 or more children, action \
+         `beta.open` opened 2 or more children}: no outcome is legitimate, no action is \
+         approval-required, and every step of action `alpha.open`, action `beta.open` returns \
+         this state; path: action `alpha.open` produces nothing, then action `alpha.open` \
+         produces nothing, then a child of action `alpha.open` records evidence `case_outcome` \
+         about `alpha` result `open`, then action `beta.open` produces nothing, then action \
+         `beta.open` produces nothing, then a child of action `beta.open` records evidence \
+         `case_outcome` about `beta`; 15 other cycle states contain it\n\
+         cycle: state {evidence `case_outcome` about `alpha` result `passed`, evidence \
+         `case_outcome` about `beta`, action `alpha.open` opened 2 or more children}: no outcome \
+         is legitimate, no action is approval-required, and every step of action `alpha.open` \
+         returns this state; path: action `alpha.open` produces nothing, then action \
+         `alpha.open` produces nothing, then a child of action `alpha.open` records evidence \
+         `case_outcome` about `alpha` result `open`, then action `beta.open` produces nothing, \
+         then a child of action `alpha.open` records evidence `case_outcome` about `alpha` result \
+         `passed`, replacing result `open`, then a child of action `beta.open` records evidence \
+         `case_outcome` about `beta`; 33 other cycle states contain it\n\
+         simulated: protocol `relay` revision 1: 343 reachable states, 9 terminable (outcome \
+         `done` 9), 16 waiting on supplied evidence, a child outcome or expiry, 3 findings (98 \
+         stuck or cycle states)\n"
+    );
+}
