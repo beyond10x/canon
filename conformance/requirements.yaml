@@ -202,3 +202,14 @@ requirements:
       one taken at another revision MUST NOT. A list with no entry MUST be left out. The section
       MUST NOT change any other section.
     source: story:pending-decisions
+  CANON-EVIDENCE-004:
+    status: implemented
+    statement: >-
+      An evidence record given more than once in one evaluation MUST count once when every copy
+      equals the first in its kind, result, subject, subject revision, observed_at as written,
+      producer, child case and upstream revisions, the upstream revisions in any order. The
+      decision MUST then be byte-identical to the one without the copy, explanation included,
+      wherever the copy stands in the list, and an equal copy of a case_outcome record MUST NOT be
+      refused. A copy that differs in any of them MUST be refused as duplicate-identifier;
+      observed_at MUST be compared as written text, so that 12:00:00Z and 12:00:00.000Z differ.
+    source: story:evidence-redelivery
