@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:decision-condition
 kind: story
-status: draft
+status: proposed
 title: Let an outcome's explicit decision carry an optional `when` predicate, so the decision counts only while the predicate is true
 tags:
 - from-request
@@ -55,7 +55,9 @@ scope:
   path: fixtures/investigation/decision-condition.yaml
 - confidence: inferred
   path: fixtures/investigation/decision-condition/
-revision: 20
+revision: 21
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-21T12:57:52Z", actor: "human:timo", revision: 21}
 ---
 ## Outcome
 
