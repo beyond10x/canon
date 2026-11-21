@@ -1,9 +1,10 @@
 //! The `canon-decision/1` document: which protocol revision applied to which case, the
 //! three-valued value of every claim the protocol declares (design § 8, § 14), and one optional
-//! slot per further section: obligations, actions, outcomes and the explanation.
+//! slot per further section: obligations, actions, outcomes and the explanation, and the typed
+//! section `missing_evidence`.
 
 use super::Declarations;
-use super::ids::{CaseId, ClaimId, EvidenceId, ProtocolId};
+use super::ids::{ActionId, CaseId, ClaimId, EvidenceId, EvidenceKindId, ProtocolId};
 use super::predicate::Truth;
 
 /// The decision format the evaluator writes.
@@ -43,6 +44,13 @@ pub struct Decision {
     /// applied or were excluded, and what the decision was computed from (`computed_from`); the
     /// evaluator writes it on every decision. Its shape is fixed by CANON-EXPLAIN-001.
     pub explanation: Option<Json>,
+    /// For each admissible action whose `may_produce` is not empty, the evidence kinds of that
+    /// list that have no applicable record, in kind-identifier order; an empty list means every
+    /// kind it may produce has one. Written only when some action qualifies. An action that is
+    /// blocked or approval-required, and one whose `may_produce` is empty, is not listed. A record
+    /// is applicable by the rule of `eval::missing::applicable`. Its shape is fixed by
+    /// CANON-FRONTIER-001.
+    pub missing_evidence: Option<Declarations<ActionId, Vec<EvidenceKindId>>>,
 }
 
 /// One claim's entry in a decision.

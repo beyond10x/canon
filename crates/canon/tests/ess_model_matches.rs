@@ -189,7 +189,8 @@ fn compiled_ir(root: &Path) -> Value {
     serde_yaml_ng::from_slice(&output.stdout).expect("compiled IR is JSON")
 }
 
-/// Map key types as authored: `(owner, field) -> key`, for every `Map<K, V>` field.
+/// Map key types as authored: `(owner, field) -> key`, for every `Map<K, V>` and
+/// `Optional<Map<K, V>>` field.
 fn authored_map_keys(root: &Path) -> BTreeMap<(String, String), String> {
     let mut keys = BTreeMap::new();
     let spec = root.join("ess");
@@ -213,6 +214,11 @@ fn authored_map_keys(root: &Path) -> BTreeMap<(String, String), String> {
                 let owner = local(declaration["name"].as_str().unwrap_or_default());
                 for field in declaration["fields"].as_sequence().into_iter().flatten() {
                     let ty = field["type"].as_str().unwrap_or_default().trim();
+                    // `Optional<Map<K, V>>` has the key of the map it wraps.
+                    let ty = ty
+                        .strip_prefix("Optional<")
+                        .and_then(|t| t.strip_suffix('>'))
+                        .unwrap_or(ty);
                     if let Some(args) = ty.strip_prefix("Map<").and_then(|t| t.strip_suffix('>')) {
                         let key = split_top(args)[0].trim().to_owned();
                         let name = field["name"].as_str().unwrap_or_default().to_owned();
@@ -242,7 +248,7 @@ fn ir_ty(value: &Value, map_key: Option<&String>) -> Ty {
     match value["kind"].as_str().expect("type ref has a kind") {
         "primitive" => Ty::Primitive(name()),
         "declared" => Ty::Declared(name()),
-        "optional" => Ty::Optional(Box::new(ir_ty(&value["of"], None))),
+        "optional" => Ty::Optional(Box::new(ir_ty(&value["of"], map_key))),
         "list" => Ty::List(Box::new(ir_ty(&value["of"], None))),
         "map" => {
             let compiled = value["key"].as_str().expect("map key").to_owned();
