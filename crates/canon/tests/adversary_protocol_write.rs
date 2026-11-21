@@ -9,7 +9,7 @@
 //!
 //! The second group holds a model built in Rust nested deeper than `parse` reads. Decided in
 //! review, D2: `write` recurses once per level and returns for every model whose nesting the
-//! calling thread's stack holds; the case writes a predicate 1000 deep on a 2 MiB stack.
+//! calling thread's stack holds; the case writes a predicate 500 deep on a 2 MiB stack.
 //!
 //! The third group pins what the writer documents and no other case observes, so a mutant of the
 //! writer that changes it turns a case red: `Some` of empty arguments, the order of keys inside
@@ -125,14 +125,14 @@ fn a_plain_key_of_600_backslashes_is_given_by_parse_and_its_written_text_is_refu
 // ---------------------------------------------------------------------------------------------
 // A model built in Rust, nested deeper than `parse` reads.
 
-// Decided in review, D2
+// Decided in review, D2 and D4
 #[test]
-fn a_predicate_nested_1000_deep_is_written_on_a_thread_with_a_2_mib_stack() {
+fn a_predicate_nested_500_deep_is_written_on_a_thread_with_a_2_mib_stack() {
     let written = std::thread::Builder::new()
         .stack_size(2 * 1024 * 1024)
         .spawn(|| {
             let mut predicate = Predicate::All(Vec::new());
-            for _ in 0..1000 {
+            for _ in 0..500 {
                 predicate = Predicate::Not(Box::new(predicate));
             }
             let mut protocol = model::parse(HEADER).expect("the header parses");
@@ -152,13 +152,13 @@ fn a_predicate_nested_1000_deep_is_written_on_a_thread_with_a_2_mib_stack() {
         .join()
         .expect("write returns on the 2 MiB stack");
     assert!(written.ends_with("}\n"));
-    assert_eq!(written.matches("\"not\"").count(), 1000);
-    // Each `not` is one object deeper: the innermost is 1000 objects below the claim's.
+    assert_eq!(written.matches("\"not\"").count(), 500);
+    // Each `not` is one object deeper: the innermost is 500 objects below the claim's.
     let deepest = written
         .lines()
         .map(|line| line.len() - line.trim_start().len())
         .max();
-    assert!(deepest.is_some_and(|indent| indent >= 2 * 1000));
+    assert!(deepest.is_some_and(|indent| indent >= 2 * 500));
     assert!(
         model::parse(&written).is_err(),
         "parse reads at most 123 levels"

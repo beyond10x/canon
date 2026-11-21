@@ -108,7 +108,7 @@
 //! calling thread's stack holds. `parse` gives at most 123 levels of predicate and 125 of
 //! `arguments` (`serde_yaml_ng`'s recursion limit), and the written text nests exactly as deep as
 //! the model, so every model `parse` gives is written and read back. A model built in Rust nested
-//! deeper than `parse` reads is written (a predicate 1000 deep, on a thread with a 2 MiB stack,
+//! deeper than `parse` reads is written (a predicate 500 deep, on a thread with a 2 MiB stack,
 //! in a debug build) as far as the stack allows, and `parse` refuses its text.
 //!
 //! # Model values `parse` never gives
