@@ -1628,4 +1628,267 @@ mod tests {
             })
         );
     }
+
+    /// The oracle: whether `claim` reaches an evidence match, found by walking from it alone, as
+    /// the inert-invalidation check did for each claim a rule names before it found the claims
+    /// that reach evidence once for every rule. Each claim is visited once, so a cycle ends.
+    fn reaches_evidence_by_walking(protocol: &Protocol, claim: &ClaimId) -> bool {
+        let mut visited = BTreeSet::new();
+        let mut pending = vec![claim];
+        while let Some(next) = pending.pop() {
+            if !visited.insert(next) {
+                continue;
+            }
+            let Some(declared) = protocol.claims.get(next) else {
+                continue;
+            };
+            let mut found = false;
+            declared.true_when.visit(&mut |node| match node {
+                Predicate::Evidence(_) => found = true,
+                Predicate::Claim(test) => pending.push(&test.claim),
+                _ => {}
+            });
+            if found {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Each rule and claim the oracle finds inert, in rule order and then the order the rule names
+    /// its claims.
+    fn inert_by_walking(protocol: &Protocol) -> Vec<(InvalidationRuleId, ClaimId)> {
+        let mut inert = Vec::new();
+        for (id, rule) in protocol.invalidation.iter() {
+            for claim in &rule.invalidates {
+                if protocol.claims.contains(claim) && !reaches_evidence_by_walking(protocol, claim)
+                {
+                    inert.push((id.clone(), claim.clone()));
+                }
+            }
+        }
+        inert
+    }
+
+    /// Each `inert-invalidation` problem `validate` reports, in its order.
+    fn inert_reported(protocol: &Protocol) -> Vec<(InvalidationRuleId, ClaimId)> {
+        validate(protocol)
+            .err()
+            .into_iter()
+            .flatten()
+            .filter_map(|problem| match problem {
+                Problem::InertInvalidation { rule, claim } => Some((rule, claim)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Every protocol under `fixtures/` that parses, with its path.
+    fn fixture_protocols() -> Vec<(std::path::PathBuf, Protocol)> {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures");
+        let mut pending = vec![root];
+        let mut found = Vec::new();
+        while let Some(directory) = pending.pop() {
+            let mut entries: Vec<std::path::PathBuf> = std::fs::read_dir(&directory)
+                .expect("fixtures directory reads")
+                .map(|entry| entry.expect("fixture entry reads").path())
+                .collect();
+            entries.sort();
+            for path in entries {
+                if path.is_dir() {
+                    pending.push(path);
+                } else if path
+                    .extension()
+                    .is_some_and(|ext| ext == "yaml" || ext == "yml")
+                {
+                    let text = std::fs::read_to_string(&path).expect("fixture reads");
+                    if let Ok(protocol) = crate::model::parse(&text) {
+                        found.push((path, protocol));
+                    }
+                }
+            }
+        }
+        found
+    }
+
+    /// A fixed-seed xorshift generator: the same protocols on every run.
+    struct Rng(u64);
+
+    impl Rng {
+        fn below(&mut self, n: usize) -> usize {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            (self.0 % n as u64) as usize
+        }
+    }
+
+    /// A protocol of `claims` claims, each testing up to two others (itself and later claims
+    /// included, so cycles occur) through `all`, `any` or `not`, some reading evidence, with rules
+    /// naming declared claims and a claim no section declares.
+    fn generated(rng: &mut Rng, claims: usize) -> String {
+        let mut source = String::from(
+            "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {up: {}}\n\
+             evidence_kinds: {k: {}}\nclaims:\n",
+        );
+        for at in 0..claims {
+            let mut members: Vec<String> = (0..rng.below(3))
+                .map(|_| format!("{{claim: c{}}}", rng.below(claims)))
+                .collect();
+            if rng.below(4) == 0 {
+                members.push("{evidence: {kind: k}}".to_owned());
+            }
+            let predicate = match (rng.below(3), members.len()) {
+                (_, 0) => "{all: []}".to_owned(),
+                (0, 1) => format!("{{not: {}}}", members[0]),
+                (1, _) => format!("{{any: [{}]}}", members.join(", ")),
+                _ => format!("{{all: [{}]}}", members.join(", ")),
+            };
+            source.push_str(&format!("  c{at}: {{true_when: {predicate}}}\n"));
+        }
+        source.push_str("invalidation:\n");
+        for rule in 0..claims / 2 {
+            let named: Vec<String> = (0..1 + rng.below(3))
+                .map(|_| match rng.below(8) {
+                    0 => "undeclared".to_owned(),
+                    _ => format!("c{}", rng.below(claims)),
+                })
+                .collect();
+            source.push_str(&format!(
+                "  r{rule}: {{upstream: up, invalidates: [{}]}}\n",
+                named.join(", ")
+            ));
+        }
+        source
+    }
+
+    /// The claims that reach evidence, found once for every rule, give every `inert-invalidation`
+    /// problem the walk from each named claim gave, in the same order: over every protocol fixture,
+    /// cycles, a claim declared twice (its first declaration counts), a rule naming an undeclared
+    /// claim, evidence reached only through `not` or `any`, and generated protocols.
+    #[test]
+    fn inert_invalidation_is_reported_as_the_walk_from_each_named_claim_reports_it() {
+        let mut protocols: Vec<(String, Protocol)> = fixture_protocols()
+            .into_iter()
+            .map(|(path, protocol)| (path.display().to_string(), protocol))
+            .collect();
+        assert!(protocols.len() >= 20, "fixtures found: {}", protocols.len());
+        let written = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            artifacts: {up: {}}\nevidence_kinds: {k: {}}\n\
+            claims:\n\
+            \x20 e: {true_when: {evidence: {kind: k}}}\n\
+            \x20 through_not: {true_when: {not: {claim: e}}}\n\
+            \x20 through_any: {true_when: {any: [{all: []}, {not: {claim: through_not}}]}}\n\
+            \x20 bare: {true_when: {all: []}}\n\
+            \x20 loop_a: {true_when: {claim: loop_b}}\n\
+            \x20 loop_b: {true_when: {not: {claim: loop_a}}}\n\
+            \x20 ring_a: {true_when: {claim: ring_b}}\n\
+            \x20 ring_b: {true_when: {any: [{claim: ring_a}, {evidence: {kind: k}}]}}\n\
+            \x20 self: {true_when: {all: [{claim: self}]}}\n\
+            \x20 twice: {true_when: {all: []}}\n\
+            invalidation:\n\
+            \x20 r1: {upstream: up, invalidates: [through_not, bare, nowhere, through_any]}\n\
+            \x20 r2: {upstream: up, invalidates: [loop_a, ring_a, self, loop_b, ring_b]}\n\
+            \x20 r3: {upstream: up, invalidates: [twice, e, bare]}\n";
+        let protocol = crate::model::parse(written).expect("parses");
+        // `twice` declared again, reaching evidence: the first declaration, which does not, counts.
+        let mut declared_twice = protocol.clone();
+        declared_twice.claims = crate::model::Declarations::new(
+            protocol
+                .claims
+                .iter()
+                .map(|(id, claim)| (id.clone(), claim.clone()))
+                .chain([(
+                    ClaimId::new("twice"),
+                    crate::model::Claim {
+                        description: None,
+                        true_when: Predicate::Claim(crate::model::ClaimTest {
+                            claim: ClaimId::new("e"),
+                            is: crate::model::Truth::True,
+                        }),
+                    },
+                )])
+                .collect(),
+        );
+        // And the other way round: the first declaration reaches evidence.
+        let mut reversed = declared_twice.clone();
+        let mut entries: Vec<(ClaimId, crate::model::Claim)> = declared_twice
+            .claims
+            .iter()
+            .map(|(id, claim)| (id.clone(), claim.clone()))
+            .collect();
+        entries.reverse();
+        reversed.claims = crate::model::Declarations::new(entries);
+        protocols.push(("written".to_owned(), protocol));
+        protocols.push(("declared twice".to_owned(), declared_twice));
+        protocols.push(("declared twice, reversed".to_owned(), reversed));
+        let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
+        for at in 0..200 {
+            let source = generated(&mut rng, 2 + at % 30);
+            let protocol = crate::model::parse(&source).expect("generated protocol parses");
+            protocols.push((source, protocol));
+        }
+        let mut inert = 0;
+        for (name, protocol) in &protocols {
+            let expected = inert_by_walking(protocol);
+            inert += expected.len();
+            assert_eq!(inert_reported(protocol), expected, "{name}");
+        }
+        assert_eq!(
+            inert_reported(&protocols[protocols.len() - 203].1),
+            [
+                ("r1", "bare"),
+                ("r2", "loop_a"),
+                ("r2", "self"),
+                ("r2", "loop_b"),
+                ("r3", "twice"),
+                ("r3", "bare"),
+            ]
+            .map(|(rule, claim)| (InvalidationRuleId::new(rule), ClaimId::new(claim)))
+        );
+        assert!(inert > 200, "inert problems compared: {inert}");
+    }
+
+    /// A chain of 4000 claims, each testing the next and named by a rule of its own, validates in
+    /// under 10 s: the claims that reach evidence are found once, not once for each rule.
+    #[test]
+    fn a_chain_of_4000_claims_with_a_rule_each_validates_within_budget() {
+        let claims = 4000;
+        let mut source = String::from(
+            "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {up: {}}\n\
+             evidence_kinds: {k: {}}\nclaims:\n",
+        );
+        for at in 0..claims - 1 {
+            source.push_str(&format!(
+                "  c{at:05}: {{true_when: {{claim: c{:05}}}}}\n",
+                at + 1
+            ));
+        }
+        source.push_str(&format!(
+            "  c{:05}: {{true_when: {{evidence: {{kind: k}}}}}}\ninvalidation:\n",
+            claims - 1
+        ));
+        for at in 0..claims {
+            source.push_str(&format!(
+                "  r{at:05}: {{upstream: up, invalidates: [c{at:05}]}}\n"
+            ));
+        }
+        let protocol = crate::model::parse(&source).expect("parses");
+        let budget = std::time::Duration::from_secs(10);
+        let (sent, received) = std::sync::mpsc::channel();
+        std::thread::Builder::new()
+            .name("validate-chain".to_owned())
+            .stack_size(64 << 20)
+            .spawn(move || {
+                let started = std::time::Instant::now();
+                let valid = validate(&protocol).is_ok();
+                let _ = sent.send((started.elapsed(), valid));
+            })
+            .expect("a worker thread starts");
+        let (took, valid) = received.recv_timeout(budget).unwrap_or_else(|_| {
+            panic!("validating a chain of {claims} claims took more than {budget:?}")
+        });
+        eprintln!("validated a chain of {claims} claims in {took:?}");
+        assert!(valid, "the chain is valid");
+    }
 }
