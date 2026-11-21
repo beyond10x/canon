@@ -1,0 +1,290 @@
+format: canon-conformance/1
+id: CANON-AUTHORITY-002
+covers: [CANON-AUTHORITY-002]
+fixture: fixtures/investigation/capability-scope.yaml
+# Action `inspect` has no precondition and requires `metrics.read` at the scope `{cluster: prod-eu,
+# namespace: foo}`. A canon-authority/1 entry may give the case revision it was taken at
+# (`case_revision`) and the principal who took it (`principal`). An entry with a case revision is
+# bound to it: whatever its decision, it applies only while the case snapshot's `revision` equals
+# it, and to nothing when the snapshot has no revision, the rule canon-decisions/1 follows. An entry
+# without one applies at every case revision, as before. Only the entries that apply take part in
+# coverage and precedence (CANON-SCOPE-001), so a requirement covered only by entries that do not
+# apply is not decided. The principal is recorded as given and changes no decision. Two entries
+# equal in capability, scope, case revision and principal are refused as `duplicate-identifier`.
+# The case snapshot is at revision c2 unless a step says otherwise.
+steps:
+  # Expectation 1. A grant taken at c1 does not apply at c2: nothing covers the requirement, so
+  # approval is required, naming it as not decided.
+  - id: grant-at-an-earlier-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-1
+        protocol: metrics
+        revision: c2
+        artifacts: {}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-eu}
+          decision: granted
+          case_revision: c1
+    expect:
+      decision: |
+        {
+          "actions": {
+            "inspect": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }
+
+  # Expectation 2. The same grant taken at c2 applies at c2: admissible.
+  - id: grant-at-the-current-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-1
+        protocol: metrics
+        revision: c2
+        artifacts: {}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-eu}
+          decision: granted
+          case_revision: c2
+    expect:
+      decision: |
+        {
+          "actions": {
+            "inspect": {
+              "status": "admissible"
+            }
+          }
+        }
+
+  # Expectation 3. An unbound grant that names its principal applies at every case revision, and
+  # the principal changes nothing: admissible, the same `actions` bytes as the grant without it
+  # (CANON-SCOPE-001 expectation 2).
+  - id: unbound-grant-with-a-principal
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-1
+        protocol: metrics
+        revision: c2
+        artifacts: {}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-eu}
+          decision: granted
+          principal: p
+    expect:
+      decision: |
+        {
+          "actions": {
+            "inspect": {
+              "status": "admissible"
+            }
+          }
+        }
+
+  # Expectation 4. A denial bound to c1 does not apply at c2, whatever its decision, so it takes no
+  # part in precedence: the unbound grant decides, admissible.
+  - id: stale-deny-takes-no-part
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-1
+        protocol: metrics
+        revision: c2
+        artifacts: {}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-eu}
+          decision: granted
+        - capability: metrics.read
+          decision: denied
+          case_revision: c1
+    expect:
+      decision: |
+        {
+          "actions": {
+            "inspect": {
+              "status": "admissible"
+            }
+          }
+        }
+
+  # Expectation 5. A denial bound to c2 applies at c2 and wins over the unbound grant for the exact
+  # scope: blocked, naming the denied capability with its scope.
+  - id: current-deny-wins
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-1
+        protocol: metrics
+        revision: c2
+        artifacts: {}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          decision: denied
+          case_revision: c2
+        - capability: metrics.read
+          scope: {cluster: prod-eu, namespace: foo}
+          decision: granted
+    expect:
+      decision: |
+        {
+          "actions": {
+            "inspect": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "denied",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 6. A snapshot without a revision has no current revision, so a bound grant applies
+  # to nothing: approval is required.
+  - id: bound-grant-without-a-case-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-1
+        protocol: metrics
+        artifacts: {}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-eu}
+          decision: granted
+          case_revision: c2
+    expect:
+      decision: |
+        {
+          "actions": {
+            "inspect": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }
+
+  # Expectation 7, first half. The same capability at the same scope granted at c1 and at c2 is
+  # normal input and is read; the grant taken at c2 applies: admissible.
+  - id: one-scope-at-two-revisions
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-1
+        protocol: metrics
+        revision: c2
+        artifacts: {}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-eu}
+          decision: granted
+          case_revision: c1
+        - capability: metrics.read
+          scope: {cluster: prod-eu}
+          decision: granted
+          case_revision: c2
+    expect:
+      decision: |
+        {
+          "actions": {
+            "inspect": {
+              "status": "admissible"
+            }
+          }
+        }
+
+  # Expectation 7, second half. Two entries equal in capability, scope, case revision and principal
+  # are refused, whatever their decisions.
+  - id: duplicate-entry
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-1
+        protocol: metrics
+        revision: c2
+        artifacts: {}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-eu}
+          decision: granted
+          principal: p
+          case_revision: c2
+        - capability: metrics.read
+          scope: {cluster: prod-eu}
+          decision: denied
+          principal: p
+          case_revision: c2
+    expect:
+      refusal: duplicate-identifier
+
+  # The story's duplicate key, beyond the seven expectations. Two principals deciding one capability
+  # at one scope and one case revision are two entries, not a duplicate: read, admissible.
+  - id: two-principals-at-one-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-1
+        protocol: metrics
+        revision: c2
+        artifacts: {}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-eu}
+          decision: granted
+          principal: p
+          case_revision: c2
+        - capability: metrics.read
+          scope: {cluster: prod-eu}
+          decision: granted
+          principal: q
+          case_revision: c2
+    expect:
+      decision: |
+        {
+          "actions": {
+            "inspect": {
+              "status": "admissible"
+            }
+          }
+        }
