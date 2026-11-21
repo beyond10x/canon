@@ -1009,7 +1009,7 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
             "ordered-evidence",
             format!(
                 "{protocol}: {reader} reads evidence with an order form (`first`, `before`, \
-                 `after` or `since`), which canon simulate does not walk"
+                 `after`, `since` or `descended`), which canon simulate does not walk"
             ),
         ));
     }
