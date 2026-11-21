@@ -250,7 +250,7 @@
           }
         },
         "arguments": {
-          "description": "The JSON Schema, in Canon's argument-schema dialect, that the action's arguments satisfy. Absent: the action takes no arguments; a runner accepts only `{}`. Canon never validates arguments at run time: the runner that calls the action validates them against the schema, and `canon validate` holds the schema to the dialect (`action-arguments`)."
+          "description": "The JSON Schema, in Canon's argument-schema dialect, that the action's arguments satisfy. Absent: the action takes no arguments; a runner accepts only `{}`. Canon evaluates no call: `canon validate` holds the schema to the dialect (`action-arguments`), and a runner checks a call's arguments with `validate::check_arguments` or any 2020-12 validator."
         },
         "case_open": {
           "description": "The child case the action opens (story:case-composition): a case governed by another protocol, about a declared artifact. Absent: the action opens no case. Canon opens nothing itself; whoever takes the action opens the child case. A case has one commission, and a second party works through a child case: this is the one primitive by which a case hands work to another party (D207).",

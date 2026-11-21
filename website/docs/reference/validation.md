@@ -122,6 +122,41 @@ missing or not one of the seven has its other keywords checked only for being in
 since which apply depends on the type. Problems come in document order, the keys of every
 object in code-point order, and the walk keeps a stack of its own, never recursing.
 
+### Checking a call (story:argument-validator)
+
+`check_arguments` checks one call's arguments against an action's schema. It is a pure
+function: it reads nothing but its two arguments, evaluates no call and takes no decision. A
+runner that holds an `ir::Action` passes `action.arguments.as_ref()`; one that holds
+`canon-ir/1` as JSON passes `ir["actions"][id]["arguments"]`, `None` when the key is absent.
+
+- An absent schema is `{"type": "object", "additionalProperties": false}`: the action takes
+  only `{}`.
+- A schema outside the dialect, which only a caller-built IR can hold, is returned as
+  `ArgumentsRefused::Schema`, the pairs of JSON Pointer inside the schema and reason that
+  `check` gives `canon validate`, unchanged; no argument is checked.
+- Otherwise every refusal is reported as `ArgumentsRefused::Arguments`, each an
+  `ArgumentRefusal`: the RFC 6901 pointer into the arguments (`""` for the whole document),
+  the keyword that refused and one line of text. Meaning is that of JSON Schema 2020-12.
+- `type`: an `integer` is any number with no fractional part, so `1.0` is an integer. When
+  `type` refuses at a location, no other keyword of that schema is checked there.
+- `enum`: values are equal when they are equal in JSON Schema's sense, numbers by exact value:
+  `1` and `1.0` are one value, and two integers a double cannot tell apart are two.
+- `required`: a missing name is refused at the object's pointer, the reason naming it, in the
+  order the schema lists the names.
+- `additionalProperties: false`: an undeclared member is refused at the member's pointer.
+- `properties` and `items` descend into the members and items a schema describes, and only
+  those, so the depth reached is at most `MAX_SCHEMA_DEPTH`.
+- `minItems`, `maxItems` count the array's items; `minLength`, `maxLength` count the string's
+  Unicode code points.
+- `minimum`, `maximum` compare exactly: an integer is never compared through a double, and a
+  fractional number is compared by its exact value. A number the JSON text writes beyond the
+  range of a 64-bit integer is the double `serde_json` reads it as.
+- `title` and `description` never refuse.
+
+Refusals come in document order: a location's own refusals first, its keywords in code-point
+order (`enum`, the maximums, the minimums, then `required`), then its members in code-point
+order of their names, or its items in order. The same input gives the same refusals.
+
 ## Problem codes
 
 | Code | Meaning |
