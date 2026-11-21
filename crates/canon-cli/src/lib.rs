@@ -159,7 +159,11 @@ pub enum Command {
     /// in no reachable state, and each outcome legitimate in no reachable state. A step adds one
     /// current record an admissible action may produce (`may_produce`), or one of each kind of a
     /// group the action records together (`records_together`), never one of those kinds alone,
-    /// adds one record of a kind that declares `supplied_by` (at any step), adds one child case's
+    /// moves a non-empty subset of the artifacts an admissible action declares in `revises` to a
+    /// new revision, alone or with one such record or group added at the new revision (a revise
+    /// step, tried after the action's record steps, subsets in order of their sorted ids,
+    /// written `action x revises a` or `action x revises a and produces …`), adds one record of
+    /// a kind that declares `supplied_by` (at any step), adds one child case's
     /// `case_outcome` record, lets one record class of a kind that declares `max_age` expire,
     /// grants or denies one capability some action requires, or takes one decision some outcome
     /// requires; no action runs. Since a step adds one record outside a group, where an action's
@@ -178,13 +182,24 @@ pub enum Command {
     /// (`action a opened a child`, `action a opened 2 or more children`). An expired
     /// `case_outcome` record still counts for a `children` form: with no evidence match reading
     /// `case_outcome` it does not expire, and otherwise it is held as expired, absent to every
-    /// evidence match. A state is open when action, supplied, child-outcome, expiry and authority
-    /// steps lead from it to a legitimate outcome; decisions do not count. A state that is not
-    /// open is a stuck state when no action is admissible or approval-required, and a cycle when
-    /// no action is approval-required and every step of every admissible action returns the same
-    /// state. Each is printed once, at its smallest state, with the shortest path that reaches
-    /// it, each decision that would make an outcome legitimate there, and how many other such
-    /// states contain it; an open state with nothing to do is counted as waiting. The summary
+    /// evidence match. A revision of an artifact removes the current records about it, except
+    /// that a `case_outcome` record a `children` form reads becomes an earlier record (written
+    /// `earlier`), which a `children` form without `revision: current` still reads, and turns a
+    /// record with that artifact upstream into one observed before it moved (written `observed
+    /// before upstream a moved`), which its invalidation rules keep from their claims. A state
+    /// holds no revision number, and the case revision never moves: capability and taken
+    /// decisions stay, so a denial lasts. The records of a kind no match names an artifact for
+    /// are taken to be about the first artifact no match of the kind names. An action without
+    /// `revises` has no revise step. A state is open when action (record and revise), supplied,
+    /// child-outcome, expiry and authority steps lead from it to a legitimate outcome; decisions
+    /// do not count. A state that is not open is a stuck state when no action is admissible or
+    /// approval-required, and a cycle when no action is approval-required and every record step
+    /// of every admissible action returns the same state; when a revise step leads out of a
+    /// cycle, it says every record step and ends `every revision by action x leads to a state no
+    /// outcome is reachable from`. Each is printed once, at its smallest state, with the shortest
+    /// path that reaches it, each decision that would make an outcome legitimate there, and how
+    /// many other such states contain it; an open state in which every step of every admissible
+    /// action, record or revise, returns the state is counted as waiting. The summary
     /// counts the reachable states, per outcome those in which it is legitimate, the waiting
     /// states, the findings and the stuck and cycle states they stand for. A protocol with an
     /// order form (`first`, `before`, `after`, `since`) is refused (`ordered-evidence`), and so is
