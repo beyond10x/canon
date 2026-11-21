@@ -491,61 +491,90 @@ fn compiled(schema: &str) -> (Value, String) {
 }
 
 /// D4: a protocol number whose double is an integer in the 64-bit range, and whose shortest text
-/// is another value, is held as that integer. `1152921504606846976.0` is 2^60 exactly, and its
-/// shortest text `1.152921504606847e+18` is not: the schema holds 2^60, the IR writes it, and the
-/// arguments 2^60 are its `enum` value in both builds.
+/// is another value, is compared as that integer. `1152921504606846976.0` is 2^60 exactly; the IR
+/// writes its shortest text `1.152921504606847e+18`, unchanged, and in both builds the arguments
+/// 2^60 are its `enum` value and 1152921504606847000 is not.
 #[test]
 fn a_protocol_number_a_double_holds_exactly_is_that_integer() {
-    let (schema, ir) =
-        compiled("{type: object, properties: {n: {type: number, enum: [1152921504606846976.0]}}}");
-    assert_eq!(
-        schema["properties"]["n"]["enum"][0],
-        json!(1_152_921_504_606_846_976_u64)
-    );
-    assert!(ir.contains("1152921504606846976"), "{ir}");
-    assert_eq!(
-        check_arguments(Some(&schema), &json!({"n": 1_152_921_504_606_846_976_u64})),
-        Ok(())
-    );
-    let (schema, _) = compiled(
-        "{type: object, properties: {n: {type: integer, minimum: -9223372036854775808.0, \
-         enum: [1152921504606846976.0, 18446744073709549568.0]}}}",
-    );
-    assert_eq!(
-        schema["properties"]["n"],
-        json!({"type": "integer", "minimum": i64::MIN,
-               "enum": [1_152_921_504_606_846_976_u64, 18_446_744_073_709_549_568_u64]})
-    );
-}
-
-/// D4 changes no number whose shortest text is its value: integers up to 2^53, fractions, and the
-/// doubles above 2^53 whose shortest text is exact keep the IR text they had.
-#[test]
-fn a_protocol_number_whose_shortest_text_is_exact_keeps_it() {
-    let (_, ir) = compiled(
+    let (schema, ir) = compiled(
         "{type: object, properties: {n: {type: number, \
-         enum: [3.0, -0.0, 1.5, 9007199254740992.0, 9007199254740994.0, 1e19]}}}",
+         enum: [1152921504606846976.0, -1152921504606846976.0, 18446744073709549568.0]}}}",
     );
-    let written = "[\n              3.0,\n              -0.0,\n              1.5,\n              \
-                   9007199254740992.0,\n              9007199254740994.0,\n              1e+19\n";
-    assert!(ir.contains(written), "{ir}");
+    assert!(ir.contains("1.152921504606847e+18,"), "{ir}");
+    for text in [
+        "1152921504606846976",
+        "1152921504606846976.0",
+        "-1152921504606846976",
+        "18446744073709549568",
+    ] {
+        let arguments = read_n(text).expect("JSON");
+        assert_eq!(check_arguments(Some(&schema), &arguments), Ok(()), "{text}");
+    }
+    let arguments = read_n("1152921504606847000").expect("JSON");
+    assert_eq!(
+        refusals(Some(&schema), &arguments),
+        pairs(&[("/n", "enum")])
+    );
 }
 
-/// A number a caller makes with `Number::from_f64` is not read from a protocol, so D4 does not
-/// reach it: it is the double where the text is not held, and its shortest text where it is (2^60
-/// is written `1.152921504606847e+18`, which is not 2^60). The module docs name this difference.
+/// D5: a protocol double beyond the 64-bit range is its shortest text where the text is held, and
+/// the double where it is not. `1e30` is the double 1000000000000000019884624838656.
 #[test]
-fn a_number_a_caller_makes_from_a_double_is_the_double_or_its_shortest_text() {
-    let double = serde_json::Number::from_f64(1_152_921_504_606_846_976.0).expect("finite");
-    let schema =
-        json!({"type": "object", "properties": {"n": {"type": "number", "enum": [double]}}});
-    let found = refusals(Some(&schema), &json!({"n": 1_152_921_504_606_846_976_u64}));
+fn a_protocol_double_beyond_64_bits_is_its_shortest_text_where_the_text_is_held() {
+    let (schema, _) = compiled("{type: object, properties: {n: {type: number, enum: [1e30]}}}");
+    let exact = read_n("1000000000000000019884624838656").expect("JSON");
     let expected = if holds_text() {
         pairs(&[("/n", "enum")])
     } else {
         Vec::new()
     };
-    assert_eq!(found, expected);
+    assert_eq!(refusals(Some(&schema), &exact), expected);
+    let written = read_n("1000000000000000000000000000000").expect("JSON");
+    assert_eq!(check_arguments(Some(&schema), &written), Ok(()));
+}
+
+/// D4 in the duplicate check: 2^60 and the shortest text of the double 2^60 are one value in both
+/// builds.
+#[test]
+fn an_integer_and_the_shortest_text_of_its_double_are_one_enum_value() {
+    let schema =
+        with_n(r#"{"type": "number", "enum": [1152921504606846976, 1.152921504606847e18]}"#);
+    assert_eq!(
+        check_arguments(Some(&schema), &json!({})),
+        Err(ArgumentsRefused::Schema(vec![(
+            "/properties/n/enum/1".to_owned(),
+            "`1.152921504606847e+18` is listed more than once".to_owned(),
+        )]))
+    );
+}
+
+/// D4 changes no IR byte: integers up to 2^53, fractions, the doubles above 2^53 whose shortest
+/// text is exact, and those whose shortest text is not, keep the IR text they had.
+#[test]
+fn a_protocol_number_whose_shortest_text_is_exact_keeps_it() {
+    let (_, ir) = compiled(
+        "{type: object, properties: {n: {type: number, \
+         enum: [3.0, -0.0, 1.5, 9007199254740992.0, 9007199254740994.0, 1e19, \
+         1152921504606846976.0]}}}",
+    );
+    let written = "[\n              3.0,\n              -0.0,\n              1.5,\n              \
+                   9007199254740992.0,\n              9007199254740994.0,\n              1e+19,\n\
+                   \u{20}             1.152921504606847e+18\n";
+    assert!(ir.contains(written), "{ir}");
+}
+
+/// A schema number a caller makes with `Number::from_f64` is read as D4 reads a protocol's: the
+/// double 2^60 is 2^60 in both builds, though where the text is held it is written
+/// `1.152921504606847e+18`.
+#[test]
+fn a_schema_number_a_caller_makes_from_a_double_is_that_double() {
+    let double = serde_json::Number::from_f64(1_152_921_504_606_846_976.0).expect("finite");
+    let schema =
+        json!({"type": "object", "properties": {"n": {"type": "number", "enum": [double]}}});
+    assert_eq!(
+        check_arguments(Some(&schema), &json!({"n": 1_152_921_504_606_846_976_u64})),
+        Ok(())
+    );
 }
 
 /// A bound or an `integer` `enum` value written `-0` is the integer 0 where the text is held, and

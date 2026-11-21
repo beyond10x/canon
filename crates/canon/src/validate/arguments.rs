@@ -71,44 +71,53 @@
 //!
 //! # Numbers
 //!
-//! Two numbers are the same when their values are equal exactly, and one is above the other when
-//! its value is. One comparison decides `minimum`, `maximum`, `enum` and `type: integer` in
-//! [`check_arguments`], the duplicate `enum` value `canon validate` refuses, and the `enum` values
-//! `canon diff` finds added or removed. No value goes through a double that cannot hold it.
+//! Two numbers are the same when the values Canon reads for them are equal exactly, and one is
+//! above the other when its value is. Which value Canon reads for a number depends on how
+//! `serde_json` is built, and is stated below; a protocol's number is first read by the YAML
+//! reader, which may already have rounded it. One comparison decides `minimum`, `maximum`, `enum`
+//! and `type: integer` in [`check_arguments`], the duplicate `enum` value `canon validate`
+//! refuses, and the `enum` values `canon diff` finds added or removed. No comparison goes through
+//! a double that cannot hold the value read.
 //!
-//! Which value that is depends on how `serde_json` is built. Cargo builds it once per build with
-//! the features of every crate that uses it, and this crate cannot see them at compile time, so it
-//! reads once at run time whether `serde_json` writes `0.10` back as `0.10` (the text is held) or
-//! as `0.1` (a double is held).
+//! Cargo builds `serde_json` once per build with the features of every crate in it, and this crate
+//! cannot see them at compile time, so it reads once at run time whether `serde_json` writes `0.10`
+//! back as `0.10` (the text is held) or as `0.1` (a double is held).
 //!
-//! - **Text held** (`serde_json`'s `arbitrary_precision`, which `b10x-canon-expr` turns on, so a
-//!   build that includes that crate has it, such as `cargo build --workspace` or
-//!   `cargo test --workspace`, and `cargo build -p canon-cli` does not): the value is the decimal
-//!   the text writes, its sign, digits and exponent, of any length. `9007199254740992.5` is above
-//!   `maximum: 9007199254740992` and not an integer; `-9223372036854775809` is below
-//!   `minimum: -9223372036854775808`. `1e400`, which has no finite double, is above every finite
-//!   bound and below none, an integer, and the same only as a number of the same value (`10e399`);
-//!   `-1e400` likewise below. `1e-400` is above `0` and not an integer.
-//! - **Double held** (no `arbitrary_precision`, as in `cargo test -p b10x-canon` or a runner whose
-//!   `serde_json` lacks it): the value is the 64-bit integer or finite double `serde_json` read,
-//!   compared exactly, so an integer is never rounded to a double. A literal with a fraction or an
-//!   exponent is the nearest double: `9007199254740993.0` is 2^53. An integer literal beyond the
-//!   64-bit range, below -2^63 or above 2^64 - 1, is the nearest double as well:
-//!   `-9223372036854775809` is -2^63 and meets `minimum: -9223372036854775808`. A literal beyond
-//!   the double range, such as `1e400`, is refused by `serde_json`, so no caller holds one; `1e-400`
-//!   is the double 0.
+//! - **Text held**: `serde_json` has `arbitrary_precision`, which `b10x-canon-expr` turns on. A
+//!   build of the workspace has it: `cargo build --workspace`, and every command-line test of the
+//!   gate. A number's value is the decimal its text writes, its sign, digits and exponent, of any
+//!   length: `9007199254740992.5` is above `maximum: 9007199254740992` and not an integer;
+//!   `-9223372036854775809` is below `minimum: -9223372036854775808`; `1e400`, which has no
+//!   finite double, is above every finite bound and below none, an integer, and the same only as a
+//!   number of the same value (`10e399`), and `-1e400` likewise below; `1e-400` is above `0` and
+//!   not an integer. One exception, for a schema's number only (D4): `serde_json` writes a double
+//!   as the shortest text that reads back as it, and a schema number whose text is that of a
+//!   double which is an integer an `i64` or a `u64` holds, and which the text does not write
+//!   exactly, is that integer. A protocol's `1152921504606846976.0` is the double 2^60, written
+//!   `1.152921504606847e+18`, and is compared as 2^60. A document's number is never read so.
+//! - **Double held**: no `arbitrary_precision`. The binary a user installs with
+//!   `cargo install --locked --git … canon-cli` holds doubles, and so does
+//!   `cargo test -p b10x-canon`. A number's value is the 64-bit integer or finite double
+//!   `serde_json` read, compared exactly, so an integer is never rounded to a double. A literal
+//!   with a fraction or an exponent is the nearest double: `9007199254740993.0` is 2^53. An integer
+//!   literal beyond the 64-bit range, below -2^63 or above 2^64 - 1, is the nearest double as well:
+//!   `-9223372036854775809` is -2^63 and meets `minimum: -9223372036854775808`. A literal beyond the
+//!   double range, such as `1e400`, is refused by `serde_json`, so no caller holds one; `1e-400` is
+//!   the double 0.
 //!
-//! The two builds answer differently in these cases only:
+//! A runner's `check_arguments` reads what its own `serde_json` holds. The two builds answer
+//! differently in these cases only:
 //!
 //! - a literal that is not exactly the integer or double read without `arbitrary_precision`, as in
-//!   each example above;
-//! - a number made from a double (`Number::from_f64`, or a number with a fraction or an exponent
-//!   in a protocol's YAML): with `arbitrary_precision` it holds the shortest text that reads back
-//!   as that double. Against another such number and against every integer from -2^53 to 2^53
-//!   that text orders as the double does; against a larger integer it can differ, since 2^60 is
-//!   written `1152921504606847000`;
-//! - a bound or an `integer` `enum` value written `-0`: the integer 0 with `arbitrary_precision`,
-//!   and without it the double -0.0, which `canon validate` refuses as not an integer.
+//!   each example above, in the arguments, or in a schema a caller builds unless D4 reads it;
+//! - a protocol literal the YAML reader rounds (D5): `9007199254740993.0` in a protocol reads as the
+//!   double 2^53, and Canon compares what it read, so the arguments `9007199254740993.0` are
+//!   another value where the text is held and the same value where a double is;
+//! - a schema double that is an integer beyond the 64-bit range (D5): where the text is held it is
+//!   its shortest text (a protocol's `1e30` is 10^30), where a double is held the double
+//!   (1000000000000000019884624838656);
+//! - a bound or an `integer` `enum` value written `-0`: the integer 0 where the text is held, and
+//!   where a double is held the double -0.0, which `canon validate` refuses as not an integer.
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -429,14 +438,54 @@ fn of_type(value: &Value, ty: &str) -> bool {
     }
 }
 
-/// JSON Schema's equality of two scalars: numbers by exact value, so `1` and `1.0` are one value
-/// and two integers a double cannot tell apart are two. `canon validate`'s duplicate check, `canon
-/// diff`'s `enum` comparison and [`check_arguments`]'s `enum` all use it.
+/// JSON Schema's equality of two scalars of a schema, each number read as [`schema_number`]
+/// reads it: numbers by exact value, so `1` and `1.0` are one value and two integers a double
+/// cannot tell apart are two. `canon validate`'s duplicate check and `canon diff`'s `enum`
+/// comparison use it.
 pub(crate) fn same(left: &Value, right: &Value) -> bool {
     match (left, right) {
-        (Value::Number(left), Value::Number(right)) => compare(left, right) == Ordering::Equal,
+        (Value::Number(left), Value::Number(right)) => {
+            compare(&schema_number(left), &schema_number(right)) == Ordering::Equal
+        }
         _ => left == right,
     }
+}
+
+/// Whether a document's value is a schema's `enum` value: [`same`], with the document's number read
+/// as written.
+fn is_value(schema: &Value, doc: &Value) -> bool {
+    match (schema, doc) {
+        (Value::Number(schema), Value::Number(doc)) => {
+            compare(&schema_number(schema), doc) == Ordering::Equal
+        }
+        _ => schema == doc,
+    }
+}
+
+/// A schema's number as it is compared (story:argument-validator, D4). Where `serde_json` holds
+/// number text, a schema number whose text is the shortest text of a double, that double an integer
+/// in the 64-bit range and the text another value, is that integer: `1.152921504606847e+18` is
+/// how `serde_json` writes the double 2^60 that a protocol's `1152921504606846976.0` reads as, and
+/// 1152921504606847000 is not 2^60. Every other number is as it is, and where `serde_json` holds
+/// doubles every number is the double or integer it holds.
+fn schema_number(number: &Number) -> Number {
+    if holds_text()
+        && let Some(value) = number.as_f64()
+        && value.fract() == 0.0
+        && (-9_223_372_036_854_775_808.0..18_446_744_073_709_551_616.0).contains(&value)
+        && let Some(shortest) = Number::from_f64(value)
+        && shortest == *number
+    {
+        let integer = if value < 0.0 {
+            Number::from(value as i64)
+        } else {
+            Number::from(value as u64)
+        };
+        if Decimal::read(&integer) != Decimal::read(number) {
+            return integer;
+        }
+    }
+    number.clone()
 }
 
 /// Whether this build's `serde_json` holds a number's text, as its `arbitrary_precision` feature
@@ -885,7 +934,7 @@ impl Walk {
             return;
         }
         if let Some(Value::Array(values)) = schema.get("enum")
-            && !values.iter().any(|value| same(value, doc))
+            && !values.iter().any(|value| is_value(value, doc))
         {
             self.refuse(
                 "enum",
