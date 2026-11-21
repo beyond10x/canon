@@ -1021,6 +1021,7 @@ types:
       # invalid-identifier. Grounds do not tell two entries apart.
       # read from: .engineering/planning/story/decision-grounds.md:58-61
       # read from: .engineering/planning/story/decision-grounds.md:65-79
+      # read from: crates/canon/src/model/explicit.rs:41-45
       - name: ground_revisions
         type: Map<canon.protocol.ArtifactId, canon.protocol.Revision>
       # The evidence records the decision rested on, by id (story:decision-grounds). Optional:
@@ -1032,6 +1033,7 @@ types:
       # read from: .engineering/planning/story/decision-grounds.md:60
       # read from: .engineering/planning/story/decision-grounds.md:62-64
       # read from: .engineering/planning/story/decision-grounds.md:69-73
+      # read from: crates/canon/src/model/explicit.rs:46-50
       - name: ground_evidence
         type: List<canon.protocol.EvidenceId>
 
@@ -1055,7 +1057,7 @@ types:
   # revision, each as invalid-identifier, then an entry equal to an earlier one as
   # duplicate-identifier.
   # read from: crates/canon/src/eval/authority.rs:1-41
-  # read from: crates/canon/src/model/authority.rs:35-59
+  # read from: crates/canon/src/model/authority.rs:37-73
   # read from: .engineering/planning/story/review-hardening-w7.md:28
   # read from: .engineering/planning/story/review-hardening-w7.md:31
   # read from: .engineering/planning/story/capability-scope.md:74-76
@@ -1065,23 +1067,23 @@ types:
     kind: struct
     fields:
       # The capability decided, an identifier an action's `requires` may name.
-      # read from: crates/canon/src/model/authority.rs:41-42
+      # read from: crates/canon/src/model/authority.rs:43-45
       - name: capability
         type: canon.protocol.CapabilityId
       # The scope the decision covers: one value for each key it names, each key once. It covers
       # a requirement of its capability when the requirement gives each of those keys the same
       # value; a key it leaves out covers every value of it. Absent or empty, it covers every
       # scope of the capability (canon.protocol.CapabilityRequirement).
-      # read from: crates/canon/src/model/authority.rs:43-47
+      # read from: crates/canon/src/model/authority.rs:46-50
       - name: scope
         type: Map<canon.protocol.ScopeKey, canon.protocol.ScopeValue>
       # Whether it is granted.
-      # read from: crates/canon/src/model/authority.rs:48-49
+      # read from: crates/canon/src/model/authority.rs:51-52
       - name: decision
         type: canon.protocol.Grant
       # Who took the decision, an identifier. Canon records it as given and matches it against
       # nothing, since it resolves no identity (design § 23): it does not change admissibility.
-      # read from: crates/canon/src/model/authority.rs:50-53
+      # read from: crates/canon/src/model/authority.rs:53-56
       # read from: .engineering/planning/story/authority-revision-binding.md:49
       # read from: .engineering/planning/story/authority-revision-binding.md:57
       - name: principal
@@ -1090,7 +1092,7 @@ types:
       # case snapshot's revision (Case.revision): the decision applies only at that revision, as an
       # explicit decision does (ExplicitDecision.case_revision). Absent, it applies at every case
       # revision. A grant does not hold at a later revision descended from it.
-      # read from: crates/canon/src/model/authority.rs:54-58
+      # read from: crates/canon/src/model/authority.rs:57-61
       # read from: .engineering/planning/story/authority-revision-binding.md:50-56
       - name: case_revision
         type: Optional<canon.protocol.Revision>
@@ -1106,6 +1108,7 @@ types:
       # invalid-identifier. Grounds do not tell two entries apart.
       # read from: .engineering/planning/story/decision-grounds.md:58-61
       # read from: .engineering/planning/story/decision-grounds.md:65-79
+      # read from: crates/canon/src/model/authority.rs:62-67
       - name: ground_revisions
         type: Map<canon.protocol.ArtifactId, canon.protocol.Revision>
       # The evidence records the decision rested on, by id (story:decision-grounds). Optional:
@@ -1117,19 +1120,20 @@ types:
       # read from: .engineering/planning/story/decision-grounds.md:60
       # read from: .engineering/planning/story/decision-grounds.md:62-64
       # read from: .engineering/planning/story/decision-grounds.md:69-73
+      # read from: crates/canon/src/model/authority.rs:68-72
       - name: ground_evidence
         type: List<canon.protocol.EvidenceId>
 
   # A key of a capability scope (cluster, namespace): what the scope narrows the capability to. An
   # identifier: not empty, no whitespace, control or Unicode format characters.
-  # read from: crates/canon/src/model/authority.rs:23-27
+  # read from: crates/canon/src/model/authority.rs:27-31
   # read from: .engineering/planning/story/capability-scope.md:155
   - name: canon.protocol.ScopeKey
     kind: newtype
     of: String
 
   # The value a capability scope gives one key (prod-eu). An identifier, as a scope key is.
-  # read from: crates/canon/src/model/authority.rs:28-31
+  # read from: crates/canon/src/model/authority.rs:32-35
   # read from: .engineering/planning/story/capability-scope.md:155
   - name: canon.protocol.ScopeValue
     kind: newtype
@@ -1141,7 +1145,7 @@ types:
   # true is admissible when every requirement is granted; blocked when one is denied, naming each
   # denied requirement; and approval-required when none is denied and one requires approval or is
   # not decided, naming each such requirement (CANON-AUTHORITY-001, CANON-SCOPE-001).
-  # read from: crates/canon/src/model/authority.rs:50-64
+  # read from: crates/canon/src/model/authority.rs:75-89
   # read from: crates/canon/src/eval/actions.rs:41-59
   # read from: .engineering/planning/story/capability-scope.md:65-72
   - name: canon.protocol.Grant

@@ -10,6 +10,8 @@
 //!   decision: granted          # or require_approval, or denied
 //!   principal: ops-lead        # optional: who took it, recorded as given
 //!   case_revision: c2          # optional: absent, the decision applies at every case revision
+//!   ground_revisions: {spec: r2}  # optional: the artifact revisions it rested on
+//!   ground_evidence: [e1]         # optional: the evidence records it rested on
 //! ```
 
 use std::fmt;
@@ -17,7 +19,7 @@ use std::fmt;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use super::Declarations;
-use super::ids::{CapabilityId, Principal, Revision};
+use super::ids::{ArtifactId, CapabilityId, EvidenceId, Principal, Revision};
 
 /// The authority decisions format the evaluator reads.
 pub const AUTHORITY_FORMAT: &str = "canon-authority/1";
@@ -33,7 +35,8 @@ identifier!(
 );
 
 /// One entry of a `canon-authority/1` document: a capability, the scope the decision covers, the
-/// decision and, optionally, who took it and the case revision it was taken at.
+/// decision and, optionally, who took it, the case revision it was taken at and the grounds it
+/// rested on.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AuthorityDecision {
@@ -56,6 +59,17 @@ pub struct AuthorityDecision {
     /// applies at every case revision.
     #[serde(default, deserialize_with = "super::present::optional")]
     pub case_revision: Option<Revision>,
+    /// The artifact revisions the decision rested on, keyed by artifact, each key once
+    /// (story:decision-grounds): a ground holds while its revision is the case snapshot's current
+    /// revision of the artifact, compared for equality. The decision applies only while every
+    /// ground holds, whatever it decided. Absent or empty, it rests on no artifact.
+    #[serde(default, deserialize_with = "super::present::defaulted")]
+    pub ground_revisions: Declarations<ArtifactId, Revision>,
+    /// The evidence records the decision rested on, by id: a ground holds while a record with
+    /// that id is applicable (`missing_evidence`'s rule). An id no record has does not hold and is
+    /// not refused. Absent or empty, it rests on no record.
+    #[serde(default, deserialize_with = "super::present::defaulted")]
+    pub ground_evidence: Vec<EvidenceId>,
 }
 
 /// An authority decision on one capability at one scope. Among the decisions covering a

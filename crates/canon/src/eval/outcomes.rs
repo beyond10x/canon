@@ -36,7 +36,10 @@
 //!   empty `all`), and gives `{"requirement": "unsatisfiable"}`. An outcome that requires an
 //!   explicit decision and has none applying states the one reason
 //!   `{"decision": <name>, "present": false}`: no decision was given, or each one given for it was
-//!   taken at a superseded case revision.
+//!   taken at a superseded case revision or set aside because a ground it rested on no longer
+//!   holds (story:decision-grounds). When one taken at the case snapshot's `revision` was set
+//!   aside by its grounds, the reason adds `"stale_grounds"`, the failed grounds in the order and
+//!   form `grounds.rs` gives; one taken at another revision adds none.
 //!
 //! A case snapshot whose `termination` names an outcome the protocol does not declare is refused
 //! as `undeclared-outcome`, naming the outcome; so, after it, is an explicit decision taken for an
@@ -61,7 +64,9 @@ use crate::model::{Case, ClaimId, Json, OutcomeRequirement, Predicate, Truth, on
 /// The section, or `None` to leave the slot empty; or a refusal of the case snapshot. `evidence`
 /// is what the claims were evaluated over (what the exclusion stages left, and the history the
 /// order forms read); a requirement is evaluated over it and `claims` with
-/// `super::claims::predicate`.
+/// `super::claims::predicate`. `decisions` is every explicit decision as read, which the refusals
+/// check at any case revision; `applying` is those that apply ([`Decisions::applying_at`]), which
+/// alone decide an outcome, and whose set-aside entries name their failed grounds.
 pub(super) fn section(
     ir: &Ir,
     case: &Case,
@@ -69,6 +74,7 @@ pub(super) fn section(
     inputs: &Inputs,
     evidence: EvidenceSets<'_>,
     decisions: Option<&Decisions>,
+    applying: Option<&Decisions>,
 ) -> Result<Option<Json>, Refusal> {
     if let Some(outcome) = &case.termination
         && !ir.outcomes.contains_key(outcome)
@@ -112,7 +118,7 @@ pub(super) fn section(
     for (id, outcome) in &ir.outcomes {
         let decided_by = match &outcome.requires {
             OutcomeRequirement::Predicate(_) => None,
-            OutcomeRequirement::Decision(name) => decisions
+            OutcomeRequirement::Decision(name) => applying
                 .map(|decisions| decisions.decided_by(name, id, case.revision.as_ref()))
                 .filter(|principals| !principals.is_empty())
                 .map(|principals| (name, principals)),
@@ -147,7 +153,14 @@ pub(super) fn section(
                 "reasons": match &outcome.requires {
                     OutcomeRequirement::Predicate(requires) => reasons(requires, claims, inputs, evidence),
                     OutcomeRequirement::Decision(name) => {
-                        vec![serde_json::json!({"decision": name.as_str(), "present": false})]
+                        let mut reason = serde_json::json!({"decision": name.as_str(), "present": false});
+                        let stale = applying
+                            .map(|decisions| decisions.stale_grounds(name, id))
+                            .unwrap_or_default();
+                        if let Some(stale) = super::grounds::stale_grounds(&stale) {
+                            reason["stale_grounds"] = stale;
+                        }
+                        vec![reason]
                     }
                 },
             })
