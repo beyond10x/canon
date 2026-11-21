@@ -55,7 +55,7 @@ scope:
   path: fixtures/investigation/decision-condition.yaml
 - confidence: inferred
   path: fixtures/investigation/decision-condition/
-revision: 23
+revision: 24
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T12:57:52Z", actor: "human:timo", revision: 21}
 - {from: "proposed", to: "active", at: "2026-11-21T17:02:28Z", actor: "human:timo", revision: 23}
@@ -288,6 +288,6 @@ What the four choices fix:
 
 One consequence the same session asked the story and the reference to state in one sentence: **a decision counts when `when` is TRUE at the evaluation, whenever it was taken.** With D1 A and D3 A, a decision supplied while `when` was not TRUE is ignored at that evaluation, and the same supplied decision counts at a later evaluation once `when` is TRUE. A caller that wants "taken after the condition held" enforces that itself. The unit writes the sentence in the comment of `canon.protocol.DecisionRequirement` in `ess/domains/protocol.yaml`, from which the reference page is generated, and pins it with one scenario: the same decisions document, `when` not TRUE at one evaluation and TRUE at the next.
 
-The question that session attached when it proposed the story, whether `when` breaks a `protocol/1` document valid under 0.10.0: it does not. The binary built at `997c3997`, which prints `canon 0.10.0`, refuses a `when` key beside `decision` (`error[parse]: outcomes.inconclusive.requires: unknown field `when`, expected one of `decision`, `all`, …`, exit 1) and accepts the same fixture without the key, so no document valid under 0.10.0 holds the key. That a requirement written without `when` gives the same bytes is acceptance the unit must show over every `protocol/1` file under `fixtures/` and `conformance/`. A document that uses `when` is refused by a 0.10.0 binary with the parse error above; story:protocol-floor is the story for that direction.
+The question that session attached when it proposed the story, whether `when` breaks a `protocol/1` document valid under 0.10.0: it does not. The binary built at `997c3997`, which prints `canon 0.10.0`, refuses a `when` key beside `decision` (`error[parse]: outcomes.inconclusive.requires: unknown field `when`, expected one of `decision`, `all`, …`, exit 1) and accepts the same fixture without the key, so no document valid under 0.10.0 holds the key. That a requirement written without `when` gives the same bytes is acceptance the unit must show over every `protocol/1` file under `fixtures/` and `conformance/`. A document that uses `when` is refused by a 0.10.0 binary with the parse error above. No story covers that direction: the coordinator found no field in `ess/domains/protocol.yaml` by which a `protocol/1` document states the lowest Canon version that reads it. (This section first named story:protocol-floor for it. That was wrong: that story compares a protocol with an organization's floor protocol. Corrected at the close of wave 8.)
 
 Accepted under the operator's standing grant (`approval-record:accept-sdc-request-17-2026-11-21`). Order: after wave 9, in the wave of story:child-outcome-recovery; with D3 A and D4 B the two stories share no file under `crates/canon/src/simulate/`.
