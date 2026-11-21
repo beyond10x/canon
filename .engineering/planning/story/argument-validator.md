@@ -31,7 +31,7 @@ scope:
   path: ess/domains/protocol.yaml
 - confidence: cited
   path: website/docs/concepts/protocols.md
-revision: 13
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 12, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 13, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
@@ -185,3 +185,13 @@ The `b10x-canon` library exports a pure function that checks one call's argument
   - `docs/plan/wave-plan-2026-11-20.md:120-160`
   - stories action-arguments, protocol-floor, protocol-imports, revision-ordering, canon-mutate, capability-scope
 - Date: 2026-11-20.
+
+## Decided in review, 2026-11-21
+
+Adversary pass 1 (`review-result:adversary-argument-validator-pass-1`) was red: 9 red cases, 1 blocker, 3 warnings, 3 notes. The wave coordinator decides on 2026-11-21; the session working on the SDC prototype, which orchestrates this plan, may overrule.
+
+**D1. One exact comparison of numbers, everywhere in the argument-schema code.** The unit made the helper that decides whether two JSON numbers are the same value exact, where it compared through a double before. Two outputs changed for numbers above 2^53: `canon validate` and `canon compile` now accept an `enum` such as `[9007199254740993, 9007199254740992.0]`, which they refused as listing one value twice, and `canon diff` now reports a change of `enum` from `[9007199254740992.0]` to `[9007199254740993]` as `BREAKING`, where it printed `NO SEMANTIC CHANGE`. The new outputs are the ones JSON Schema 2020-12 gives; the old ones were a defect of the comparison through a double. The exact comparison stays. No fixture in the repository has such an enum, so no existing protocol's output changes. The adversary's two cases that pin the old outputs are re-pinned to the new ones in its second pass.
+
+**D2. The comparison is exact however `serde_json` is built.** `crates/canon-expr` turns on `serde_json`'s `arbitrary_precision`, and Cargo unifies features across a workspace build, so the `canon` binary and `cargo test --workspace` hold a number as its decimal text, while `cargo test -p b10x-canon` holds it as an integer or a double. The function must give the right answer in both builds: a number is compared by its exact decimal value when the text is held, a number with no finite double (`1e400`) is above every finite maximum and below none, and no comparison goes through a double that cannot hold the value. The module documentation states which value is compared in each build. The unit's tests run green in both builds, and the report quotes both runs.
+
+**D3. The sentence "no allocation beyond its result" of § Outcome is withdrawn.** The function allocates a pointer buffer, a sorted list of member names and the escaped tokens. That is not a defect; the sentence was the draft's.

@@ -27,7 +27,7 @@ scope:
   path: ess/domains/cli.yaml
 - confidence: inferred
   path: fixtures/investigation/child-outcome/
-revision: 10
+revision: 11
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T05:02:20Z", actor: "human:timo", revision: 9, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
 - {from: "proposed", to: "active", at: "2026-11-21T05:02:20Z", actor: "human:timo", revision: 10, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
@@ -180,3 +180,7 @@ Option A of § Decision needed: one mark per opening action, a child-outcome ste
 The session working on the SDC prototype, which the operator named the orchestrator of this plan, asked for this story as its request 16 and for its acceptance on arrival; it did not choose among the options and may overrule this choice until the unit merges. It fixed the order: this story, then story:simulate-record-groups, then story:simulate-revise-step.
 
 The story was accepted under the operator's standing grant (`approval-record:accept-sdc-request-16-2026-11-21`). The unit builds option A and does not reopen the choice. The figures of § Acceptance come from the drafter's Python walk; where the Rust binary gives another figure, the unit finds out which is right, reports it and does not adjust the walk to the expected number.
+
+## Fixture rule, 2026-11-21
+
+Decided by the wave coordinator on 2026-11-21, from `AGENTS.md` ("Canon contains no engineering vocabulary"), which is a rule of this repository: a protocol of the SDC prototype does not enter the repository unchanged, and no file names it as a source. Where this story takes such a protocol as a fixture, the unit builds the fixture by a structure-preserving rename: every identifier and every description is replaced by a neutral one, the declarations, predicates and their order stay, and the relative order of identifiers within a section is kept wherever the output depends on it. The unit shows once, in its scratch directory and not in the repository, that `canon simulate` gives the same counts on the original and on the renamed protocol, and quotes the summary lines in its report. The figures of § Acceptance then apply to the renamed fixtures.

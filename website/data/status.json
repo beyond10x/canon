@@ -268,21 +268,21 @@
     },
     {
       "label": "Judgement marks",
-      "status": "planned",
+      "status": "shipped",
       "detail": "An action may declare author (program or judgement, absent program) and revises, the declared artifacts it may move to a new revision; each may_produce entry may declare decided_by, absent the action's author. canon validate refuses an undeclared artifact in revises as undeclared-artifact, canon-ir/1 writes each field only when it marks judgement or lists an artifact, so every existing IR is unchanged, and canon diff classifies author and decided_by turning to judgement as TIGHTENING and an artifact added to revises as RELAXATION. No evaluation meaning: canon evaluate, check and generate give the same bytes with or without them.",
       "href": "/docs/reference/protocol#author",
       "area": "Language"
     },
     {
       "label": "Pending decisions",
-      "status": "planned",
+      "status": "shipped",
       "detail": "canon-decision/1 may carry a pending_decisions section listing the decisions the evaluation waits on: under authority, one entry per requirement an approval-required action names as none or require_approval, with the case revision and the options granted and denied, by action, capability and scope; under decisions, one entry per outcome blocked for want of an explicit decision, with the option taken, or none for a snapshot without a revision. Computed from the actions and outcomes sections and the case revision; a blocked action has no entry, and the section is absent when nothing is pending; scenario CANON-PENDING-001.",
       "href": "/docs/reference/documents#decision",
       "area": "Evaluation"
     },
     {
       "label": "canon simulate",
-      "status": "planned",
+      "status": "shipped",
       "detail": "A breadth-first walk over every state a case can reach from the empty case, by steps that add one record an admissible action may produce or a supplied record, let a record of a kind with max_age expire (an expired child outcome still counts for a children form), grant or deny a capability, or take a decision; it reports each stuck state and cycle once at its smallest state with the shortest path, the decisions that would end it and how many such states contain it, plus dead actions and unreached outcomes, counts states waiting on supplied evidence or expiry, states on its own line that a child case's outcome is walked only as a step of its opening action, and refuses order forms and a walk above 65536 reachable states.",
       "href": "/docs/reference/cli#canon-simulate",
       "area": "Analysis"

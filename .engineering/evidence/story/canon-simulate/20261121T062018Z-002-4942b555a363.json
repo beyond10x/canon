@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T06:20:18Z",
+  "actor": "human:timo",
+  "artifact": "story:canon-simulate",
+  "kind": "story",
+  "revision": 21,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "the word cycle misleads: kept by decision (R6); the module documentation and the help text say what a cycle is",
+    "reference": "impl/canon-simulate 4b36d52",
+    "review": "review-result:adversary-canon-simulate-pass-1",
+    "outcome": "fixed"
+  }
+}

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:canon-simulate
 kind: story
-status: active
+status: implemented
 title: Find stuck states, cycles and dead actions by walking reachable states with canon simulate
 tags:
 - from-request
@@ -24,6 +24,8 @@ scope:
   path: crates/canon-cli/src/simulate.rs
 - confidence: cited
   path: crates/canon-cli/tests/canon_simulate.rs
+- confidence: cited
+  path: crates/canon/src/check/mod.rs
 - confidence: inferred
   path: crates/canon/src/check/space.rs
 - confidence: cited
@@ -31,13 +33,18 @@ scope:
 - confidence: inferred
   path: crates/canon/src/simulate/mod.rs
 - confidence: cited
+  path: crates/canon/src/simulate/tests.rs
+- confidence: cited
+  path: crates/canon/tests/adversary_simulate.rs
+- confidence: cited
   path: ess/domains/cli.yaml
 - confidence: inferred
   path: fixtures/investigation/simulate/
-revision: 16
+revision: 22
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 13, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 14, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "active", to: "implemented", at: "2026-11-21T06:20:18Z", actor: "human:timo", revision: 22, decided_on: {"recorded":{"test_result":1,"review_outcome":8,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
 ---
 ## Outcome
 
@@ -225,3 +232,30 @@ Found on 2026-11-21 while classifying the walk's findings on the SDC protocols (
 The session working on the SDC prototype, which orchestrates this plan, decided on 2026-11-21 that the fix is a separate story (its request 16, a `case_outcome` step that may arrive after the opening action was taken) and that this story merges with the limit stated, in its words: "story:canon-simulate merges in wave 5 with the limit stated in its reference text AND in the tool's output: until request 16 lands, `canon simulate` prints a line naming the limit whenever a protocol has an opening action, so nobody reads those four as defects."
 
 **R7.** When the compiled protocol has at least one action that declares `case_open`, `canon simulate` prints one line naming the limit, before the summary line and after the findings: a child case's outcome is walked only as a step of its opening action, so a `stuck-state` or `cycle` in a state that waits for a child's outcome may not be one in a real case. The line does not change the exit status or the count of findings. The reference text of the command and `ess/domains/cli.yaml` state the same limit. A protocol with no such action gets no such line and the same bytes as before.
+
+## Refined after adversary pass 2, 2026-11-21
+
+Adversary pass 2 (`review-result:adversary-canon-simulate-pass-2`) found one case where rule R2 as built prints a false finding: the evaluator's `children` form reads every accepted `case_outcome` record, expired ones too (an expiry does not undo a child's outcome), and the expiry step removed the record from the state. The wave coordinator decides on 2026-11-21:
+
+**R2a. An expired `case_outcome` record still counts for a `children` form.** The state after an expiry step must evaluate as the real case does past the record's `max_age`: every evidence match loses the record, every `children` form keeps reading it. So:
+- when no evidence match reads `case_outcome`, there is no expiry step for it: the step would change nothing the evaluator reads;
+- when an evidence match reads it too, the walk holds the record as expired for the matches and present for the `children` forms; if the walk's state cannot hold that, the walk refuses the protocol with a refusal of its own name and prints no finding, because a finding it cannot stand behind is worse than none (`UNKNOWN` is not `FALSE`).
+
+The same pass measured the cost of rule R5: the search for the smallest states compares stuck states pairwise, 157.7 s for 65,536 stuck states of which none contains another, against 12.4 s for 65,536 states without a finding. No SDC protocol is near it (the slowest takes 2.6 s). The unit reduces it where a change contained in that search does so, and the module documentation states the cost that remains.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w5 from the implementor's three reports, the two adversary reports (`review-result:adversary-canon-simulate-pass-1`, `-pass-2`) and the merge of `impl/canon-simulate` (`04184e2`). The three sections above ("Refined after adversary pass 1", "Known limit on child outcomes", "Refined after adversary pass 2") hold the rules as decided; this section says how they are built and where the body is no longer true.
+
+- § Outcome's sentences "A state is a state of the space `canon check` enumerates" and "Every step only adds" no longer hold. A walk state is the space's state for case inputs, capabilities and decisions, followed by the walk's own records: one set of producer profiles per evidence dimension and class, as bits (`Layout` in `crates/canon/src/simulate/mod.rs`). The walk never reads a dimension's value table, which is what R1 needed. Each state is evaluated by Canon's evaluator through `check::evaluate_records`.
+- Step order as built: action records, records of supplied kinds, expiry, capabilities, decisions.
+- Expiry (R2): the check's space has no notion of time, so an expired record is an absent one; the expiry step removes the record class. For `case_outcome` (R2a): no expiry step when no evidence match reads the kind; when a match and a `children` form both read it, the record is held as expired by one more bit per class and handed to the evaluator at a superseded revision of its artifact, which every match ignores and every `children` form reads. No protocol is refused for it.
+- Open states (R3) are found backwards from the states with a legitimate outcome over action, supplied, expiry and authority steps. The summary prints `N waiting on supplied evidence or expiry` only when the protocol has a supplied kind or a kind with `max_age`.
+- Output wording: a finding ends `` ; decision `d` taken makes outcome `o` legitimate `` (R4) and `` ; N other stuck states contain it `` or `cycle states` (R5); the summary ends `F findings (S stuck or cycle states)`. With an action that declares `case_open`, one line starting `limit:` comes after the findings and before the summary (R7, the constant `CHILD_OUTCOME_LIMIT`).
+- Cost of R5 after the second correction, release build, measured on a loaded workstation: 65,536 stuck states with case inputs of their own 9.0 s (157.7 s before); 65,536 states and no finding 12.4 to 14.5 s. Within one group of equal case inputs the search is still quadratic. The slowest SDC protocol walks in under 4 s.
+- Refused: order forms (`ordered-evidence`), `predicate-too-deep`, `claim-cycle`, more than 65,536 reachable states or initial states (`reachable-state-bound`).
+- A cycle the walk prints for a child that ended with an outcome a `children` form does not list is true of a real case: nothing undoes that record. The adversary confirmed it with the evaluator.
+- Known limits, stated in the module documentation and the reference: no artifact is revised (story:simulate-revise-step); a child's outcome is walked only as a step of its opening action (story:simulate-child-outcome-step); one step adds one record (story:simulate-record-groups).
+- On the SDC protocols as they were on 2026-11-21 before their own fix, every protocol gives one finding (sdc.plan 1 cycle standing for 514 states). After that fix (`f364b6b` of beyond10x/sdc) the eight protocols give 87 findings, classified in story:simulate-revise-step.
+- Not in § Scope and edited: `crates/canon/src/check/mod.rs` (visibility of `produces`, `supplied` and `witness`, and a split of `evaluate`), `crates/canon/src/simulate/tests.rs`. `crates/canon/src/check/space.rs` gained items at its end only. `canon check` prints what it printed.
+- Added by the adversary: `crates/canon/tests/adversary_simulate.rs` (4 cases).

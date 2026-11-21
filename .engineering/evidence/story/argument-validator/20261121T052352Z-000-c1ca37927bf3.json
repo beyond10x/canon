@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T05:23:52Z",
+  "actor": "human:timo",
+  "artifact": "story:argument-validator",
+  "kind": "story",
+  "revision": 13,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "on 963c99b (specification comment and test only): the test argument_validation does not build, error[E0432] unresolved imports check_arguments, ArgumentRefusal, ArgumentsRefused; on 60c1162: workspace 1028 passed, 0 failed, conform 24 passed, 25 covered; VERIFIED by the coordinator from the unit's logs",
+    "reference": "w5/argument-validator/red.log vs gate logs (session scratch)"
+  }
+}

@@ -36,7 +36,7 @@ scope:
   path: ess/domains/protocol.yaml
 - confidence: inferred
   path: fixtures/investigation/record-group/
-revision: 15
+revision: 16
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T04:43:47Z", actor: "human:timo", revision: 13, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
 - {from: "proposed", to: "active", at: "2026-11-21T04:43:47Z", actor: "human:timo", revision: 14, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
@@ -233,3 +233,7 @@ The story was accepted under the operator's standing grant (`approval-record:acc
 ## Correction, 2026-11-21
 
 § Outcome 2 says `canon diff` reports a change of a group as `NO SEMANTIC CHANGE` "as it does for `supplied_by`". That precedent is wrong: since the review of story:supplied-evidence, adding `supplied_by` is `EXPANSION` and removing or replacing it is `BREAKING`, because the evaluator reads it. The class `NO SEMANTIC CHANGE` for `records_together` stands on its own reason: `canon evaluate`, `canon check` and `canon generate` read nothing of it. Noted by the drafter of story:artifact-revised-by and recorded here by the wave coordinator.
+
+## Fixture rule, 2026-11-21
+
+Decided by the wave coordinator on 2026-11-21, from `AGENTS.md` ("Canon contains no engineering vocabulary"), which is a rule of this repository: a protocol of the SDC prototype does not enter the repository unchanged, and no file names it as a source. Where this story takes such a protocol as a fixture, the unit builds the fixture by a structure-preserving rename: every identifier and every description is replaced by a neutral one, the declarations, predicates and their order stay, and the relative order of identifiers within a section is kept wherever the output depends on it. The unit shows once, in its scratch directory and not in the repository, that `canon simulate` gives the same counts on the original and on the renamed protocol, and quotes the summary lines in its report. The figures of § Acceptance then apply to the renamed fixtures.

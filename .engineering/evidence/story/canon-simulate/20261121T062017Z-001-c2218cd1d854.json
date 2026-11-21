@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T06:20:17Z",
+  "actor": "human:timo",
+  "artifact": "story:canon-simulate",
+  "kind": "story",
+  "revision": 21,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "records never expired, so an action admissible after max_age was reported dead: an expiry step (R2, 8fb960c), checked against the evaluator at a later instant",
+    "reference": "impl/canon-simulate 8fb960c",
+    "review": "review-result:adversary-canon-simulate-pass-1",
+    "outcome": "fixed"
+  }
+}
