@@ -34,9 +34,10 @@
 //! states it reaches without marks. A protocol with no opening action has no mark.
 //!
 //! A state that holds a `case_outcome` record of the class `open`, current or held as expired,
-//! holds some mark above none ("Decided in review, D5"): an `open` record is a child that has not
-//! ended, and with every mark at none no child is left to end, so no later outcome could replace
-//! it. A child-outcome successor that would break this is not a successor.
+//! holds some mark above none ("Decided in review, D5") on an action whose children record in
+//! that record's dimension (story:child-outcome-subject): an `open` record is a child that has not
+//! ended, and with every such mark at none no child is left to end, so no later outcome could
+//! replace it. A child-outcome successor that would break this is not a successor.
 //!
 //! # Steps
 //!
@@ -55,7 +56,10 @@
 //!   cases (story:supplied-evidence), and no action step produces it: a record of it may arrive at
 //!   any step, from any state, by the combinations an action step takes.
 //! - **Child-outcome step.** For each opening action whose mark is above none, one current record
-//!   of `case_outcome` arrives from one of its children, by the combinations an action step
+//!   of `case_outcome` arrives from one of its children, in the one dimension `canon check` counts
+//!   its action as producing (story:child-outcome-subject): the one about its `case_open` subject
+//!   when a form names that artifact, otherwise the one without a subject, and none when neither
+//!   exists, since nothing reads the child's record then, by the combinations an action step
 //!   takes: a runner records a child's outcome when the child ends, whether the opening action's
 //!   guard is still open or not. Canon runs nothing; the step says that a runner may record it
 //!   between two evaluations. A record of the class `open` keeps the mark: the child has not
@@ -182,9 +186,6 @@
 //! No artifact is revised. A kind read with `result:` that an action may produce twice with
 //! different results gives a `cycle`, because mixed results leave the match `unknown` and the
 //! walk cannot set the mixed records aside by a revision.
-//!
-//! A child-outcome step may add a class of a dimension no child of the marked action is recorded
-//! in.
 //!
 //! # Cost
 //!
@@ -830,11 +831,26 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         .collect();
     let supplied_kinds: BTreeSet<&EvidenceKindId> = check::supplied(ir).collect();
     let supplied_records = records(&of_kinds(&supplied_kinds));
-    let child_records = records(
-        &(0..dimensions.len())
-            .filter(|at| is_case_outcome(&dimensions[*at]))
-            .collect::<Vec<usize>>(),
-    );
+    // A child of an opening action records only in the `case_outcome` dimension its action
+    // produces (`Space::produced_by`, story:child-outcome-subject D1): the one about its
+    // `case_open` subject, or the one without a subject. Opener `i` is `layout.openers[i]`.
+    let produced: Vec<Vec<usize>> = layout
+        .openers
+        .iter()
+        .map(|action| {
+            let action = ir
+                .actions
+                .values()
+                .nth(*action)
+                .expect("an opener is an action");
+            space
+                .produced_by(ir, action)
+                .into_iter()
+                .filter(|at| is_case_outcome(&dimensions[*at]))
+                .collect()
+        })
+        .collect();
+    let child_records: Vec<Vec<Added>> = produced.iter().map(|at| records(at)).collect();
     // For each dimension, the position of its class `open`, which a child that ends replaces.
     let open_class: Vec<Option<usize>> = dimensions
         .iter()
@@ -845,14 +861,18 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
                 .position(|class| *class == Some(OPEN_OUTCOME))
         })
         .collect();
-    // Whether a state holds a `case_outcome` record of the class `open`, current or held as
-    // expired (D5).
-    let holds_open = |state: &State| {
-        (0..dimensions.len()).any(|dimension| {
-            is_case_outcome(&dimensions[dimension])
-                && open_class[dimension].is_some_and(|open| {
-                    layout.present(state, dimension, open)
-                        || layout.held_expired(state, dimension, open)
+    // Whether every `case_outcome` record of the class `open` in `state`, current or held as
+    // expired, has a child that has not ended (D5): a mark above none on an action that produces
+    // the record's dimension.
+    let open_held = |state: &State| {
+        (0..dimensions.len()).all(|dimension| {
+            !is_case_outcome(&dimensions[dimension])
+                || open_class[dimension].is_none_or(|open| {
+                    !(layout.present(state, dimension, open)
+                        || layout.held_expired(state, dimension, open))
+                        || produced.iter().enumerate().any(|(opener, at)| {
+                            at.contains(&dimension) && layout.mark(state, opener) > 0
+                        })
                 })
         })
     };
@@ -943,7 +963,7 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
             }
         }
         for (at, action, mark) in layout.raised(&state) {
-            for record in &child_records {
+            for record in &child_records[at] {
                 let Added {
                     dimension,
                     class,
@@ -980,10 +1000,8 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
                     for lowered in lowered {
                         let walked = layout.marked(&added, at, *lowered);
                         // D5: a state that holds an `open` record holds a child that has not
-                        // ended, so it keeps some mark above none.
-                        if walked == state
-                            || (holds_open(&walked) && layout.raised(&walked).is_empty())
-                        {
+                        // ended, so it keeps a mark above none on an action that produces it.
+                        if walked == state || !open_held(&walked) {
                             continue;
                         }
                         successors.push((

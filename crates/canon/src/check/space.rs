@@ -1340,7 +1340,7 @@ impl<'a> Space<'a> {
     /// D1): a child's record is about the artifact the child was opened about. A protocol whose
     /// `children` forms and evidence matches name no subject has one `case_outcome` dimension,
     /// which every opening action produces, as before the key existed.
-    pub(super) fn produced_by(&self, ir: &Ir, action: &crate::ir::Action) -> BTreeSet<usize> {
+    pub(crate) fn produced_by(&self, ir: &Ir, action: &crate::ir::Action) -> BTreeSet<usize> {
         let opened = action.case_open.as_ref().zip(case_outcome(ir));
         let named = |kind: &EvidenceKindId, artifact: &ArtifactId| {
             readers(ir)
