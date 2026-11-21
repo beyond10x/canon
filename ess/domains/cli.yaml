@@ -257,11 +257,11 @@ commands:
       # no action to take are counted as waiting on supplied evidence or expiry when the protocol
       # declares a supplied or an expiring kind and no action that opens a child case, and as
       # waiting on supplied evidence, a child outcome or expiry when an action opens a child case
-      # (case_open). A state names each opening action taken on its way, `action a opened a
-      # child`.
+      # (case_open). A state names each opening action whose children have not all ended: `action
+      # a opened a child` for one, `action a opened 2 or more children` for more.
       # read from: .engineering/planning/story/canon-simulate.md:67
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R3 and R5
-      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Outcome", 1 and 4
+      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 1", D1
       - name: output
         type: String
     outcomes:
@@ -270,17 +270,25 @@ commands:
         external: the protocol cannot be read
         error: canon.cli.Unreadable
       # A stuck state or a cycle is a state that is not open: no sequence of action, supplied,
-      # child-outcome, expiry and authority steps leads from it to a legitimate outcome. A
-      # child-outcome step is offered once an action that opens a child case was taken, and is no
-      # action step, so it never makes a state a cycle. Each is printed once per smallest state,
-      # with the decisions that would make an outcome legitimate and the number of other such
-      # states that contain it. A case_outcome record that expires stays read by every children
-      # form: with no evidence match reading case_outcome it has no expiry step, otherwise it is
-      # held as expired, absent to every evidence match.
+      # child-outcome, expiry and authority steps leads from it to a legitimate outcome. The walk
+      # counts, per action that opens a child case, its children that have not ended: none, one,
+      # or two or more. A step of the action raises the count; a child's outcome arrives while the
+      # count is above none, an outcome other than open lowers it and replaces an open record, and
+      # a child-outcome step is no action step, so it never makes a state a cycle. A state holding
+      # an open record, current or held as expired, keeps some count above none, because an open
+      # record is a child that has not ended. A stuck state or cycle is printed once per smallest
+      # state, with the decisions that would make an outcome legitimate and the number of other
+      # such states that contain it. A case_outcome
+      # record that expires stays read by every children form: with no evidence match reading
+      # case_outcome it has no expiry step, otherwise it is held as expired, absent to every
+      # evidence match. Limit: one step adds one record, so an opening action that records two
+      # things in one taking is walked as taken twice, with two children, and a stuck state or
+      # cycle reached through the second child's outcome may not be one in a real case.
       # read from: .engineering/planning/story/canon-simulate.md:69-80
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R1 to R5
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 2", R2a
-      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Outcome", 3 and 4
+      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 1", D1 and D3
+      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, D5: an `open` record is a child that has not ended"
       - name: rejected
         external: >-
           the document is rejected, the walk is refused (an order form, or more than 65536

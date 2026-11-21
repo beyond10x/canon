@@ -9,13 +9,19 @@
 //! `adversary_scenario_generation.rs`: their spaces (4608 and 36864 states) add more than two
 //! minutes to that test in a debug build.
 //!
+//! The figures are those of the story's rule as decided in review (D1: a mark counts the children
+//! of an opening action that have not ended, none, one or two-or-more; D5: a state holding an
+//! `open` record holds a mark above none), derived before the code by a walk in the unit's scratch
+//! directory and checked against bounded real cases there.
+//!
 //! 1. `closed`, one child opened by an action whose guard closes once it was opened, exits 0 and
-//!    prints only the summary line, with 3 states waiting on supplied evidence, a child outcome
+//!    prints only the summary line, with 2 states waiting on supplied evidence, a child outcome
 //!    or expiry.
 //! 2. `ends-open`, the same with only the accepted outcome: exactly one `stuck-state`, whose state
-//!    holds `` evidence `case_outcome` `` without a result and `` action `open` opened a child ``;
-//!    no printed state holds `` result `open` ``, since a child that ends replaces its open record.
-//! 3. `repeat`, an opening action that records nothing: exit 0, 9 reachable states, 3 waiting.
+//!    holds `` evidence `case_outcome` `` without a result and no mark, since its only child
+//!    ended; no printed state holds `` result `open` ``, since a child that ends replaces its open
+//!    record.
+//! 3. `repeat`, an opening action that records nothing: exit 0, 20 reachable states, 3 waiting.
 //! 4. `denied`, an opening action under a capability: exactly one finding, the stuck state of the
 //!    denial, and no path in which a child records its outcome before a step of `open`.
 //! 5. `festival`, a parent case opening three kinds of child: its summary; no printed state holds
@@ -31,6 +37,13 @@
 //!    fixture give identical bytes.
 //! 8. No Python file is tracked, and no file under `crates/` names the prototype the two large
 //!    fixtures were renamed from.
+//!
+//! Two more fixtures are pinned by their bytes. `twice`: the opening action is taken twice and
+//! then closed, and both children's outcomes arrive after it closed (D2); exit 0. `two-records`
+//! is the stated limit of D3, not a claim about a real case: one step adds one record, so the walk
+//! reads `open` producing `booked` and then `briefed` as two takings, two children, and its path
+//! lets two children of `open` record outcomes; a runner that records both in one taking has one
+//! child, for which that path is not a real one.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -45,11 +58,13 @@ const LARGE: &str = "fixtures/child-outcome-large";
 const SIMULATE: &str = "fixtures/investigation/simulate";
 
 /// Every fixture directory, its family and the exit status `canon simulate` gives it.
-const CASES: [(&str, &str, i32); 6] = [
+const CASES: [(&str, &str, i32); 8] = [
     (FIXTURES, "closed", 0),
     (FIXTURES, "ends-open", 1),
     (FIXTURES, "repeat", 0),
     (FIXTURES, "denied", 1),
+    (FIXTURES, "twice", 0),
+    (FIXTURES, "two-records", 1),
     (LARGE, "festival", 1),
     (LARGE, "event", 1),
 ];
@@ -167,8 +182,8 @@ fn simulate_lets_a_child_outcome_arrive_after_its_opening() {
 
     // 1: `closed` prints only its summary.
     let closed = &reports["closed"];
-    let summary = "simulated: protocol `child.closed` revision 1: 9 reachable states, 5 terminable \
-                   (outcome `declined` 4, outcome `done` 1), 3 waiting on supplied evidence, a \
+    let summary = "simulated: protocol `child.closed` revision 1: 5 reachable states, 2 terminable \
+                   (outcome `declined` 1, outcome `done` 1), 2 waiting on supplied evidence, a \
                    child outcome or expiry, 0 findings (0 stuck or cycle states)\n";
     if closed != summary {
         failures.push(format!("closed: expected only {summary:?}, got {closed:?}"));
@@ -185,11 +200,13 @@ fn simulate_lets_a_child_outcome_arrive_after_its_opening() {
     if stuck.len() != 1
         || states.len() != 1
         || !holds(states[0], "evidence `case_outcome`")
-        || !holds(states[0], "action `open` opened a child")
+        || items(states[0])
+            .iter()
+            .any(|item| item.starts_with("action "))
     {
         failures.push(format!(
-            "ends-open: expected one stuck state holding `evidence `case_outcome`` and the mark of \
-             `open`, got {ends_open:?}"
+            "ends-open: expected one stuck state holding `evidence `case_outcome`` and no mark, \
+             got {ends_open:?}"
         ));
     }
     if states.iter().any(|state| state.contains("result `open`")) {
@@ -198,15 +215,15 @@ fn simulate_lets_a_child_outcome_arrive_after_its_opening() {
         ));
     }
 
-    // 3: `repeat` is clean, with 9 reachable states and 3 waiting.
+    // 3: `repeat` is clean, with 20 reachable states and 3 waiting.
     let repeat = &reports["repeat"];
     let summary = last_line(repeat);
     if repeat.lines().count() != 1
-        || !summary.contains(": 9 reachable states, ")
+        || !summary.contains(": 20 reachable states, ")
         || !summary.contains(", 3 waiting on supplied evidence, a child outcome or expiry, ")
     {
         failures.push(format!(
-            "repeat: expected only a summary with 9 reachable states and 3 waiting, got {repeat:?}"
+            "repeat: expected only a summary with 20 reachable states and 3 waiting, got {repeat:?}"
         ));
     }
 
@@ -238,9 +255,9 @@ fn simulate_lets_a_child_outcome_arrive_after_its_opening() {
 
     // 5: `festival`.
     let festival = &reports["festival"];
-    let summary = "simulated: protocol `festival` revision 6: 86 reachable states, 44 terminable \
-                   (outcome `cancelled` 43, outcome `running` 2), 5 waiting on supplied evidence, \
-                   a child outcome or expiry, 2 findings (19 stuck or cycle states)";
+    let summary = "simulated: protocol `festival` revision 6: 78 reachable states, 43 terminable \
+                   (outcome `cancelled` 39, outcome `running` 8), 6 waiting on supplied evidence, \
+                   a child outcome or expiry, 4 findings (14 stuck or cycle states)";
     if last_line(festival) != summary {
         failures.push(format!(
             "festival: expected the summary {summary:?}, got {:?}",
@@ -277,9 +294,9 @@ fn simulate_lets_a_child_outcome_arrive_after_its_opening() {
 
     // 6: `event`.
     let event = &reports["event"];
-    let summary = "simulated: protocol `festival.event` revision 3: 82 reachable states, 42 \
-                   terminable (outcome `cancelled` 41, outcome `held` 2), 6 waiting on supplied \
-                   evidence, a child outcome or expiry, 3 findings (19 stuck or cycle states)";
+    let summary = "simulated: protocol `festival.event` revision 3: 122 reachable states, 69 \
+                   terminable (outcome `cancelled` 61, outcome `held` 16), 13 waiting on supplied \
+                   evidence, a child outcome or expiry, 5 findings (25 stuck or cycle states)";
     if last_line(event) != summary {
         failures.push(format!(
             "event: expected the summary {summary:?}, got {:?}",

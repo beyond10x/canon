@@ -1,1 +1,1 @@
-simulated: protocol `child.closed` revision 1: 9 reachable states, 5 terminable (outcome `declined` 4, outcome `done` 1), 3 waiting on supplied evidence, a child outcome or expiry, 0 findings (0 stuck or cycle states)
+simulated: protocol `child.closed` revision 1: 5 reachable states, 2 terminable (outcome `declined` 1, outcome `done` 1), 2 waiting on supplied evidence, a child outcome or expiry, 0 findings (0 stuck or cycle states)
