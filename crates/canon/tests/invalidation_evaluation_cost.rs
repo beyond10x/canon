@@ -10,8 +10,9 @@
 //!
 //! The record moved by `r_i` is invalidated for `c_0` to `c_i`, so the excluded evidence the
 //! decision lists has `n (n + 1) / 2` entries: the output alone is quadratic, which is the bound
-//! asserted. The two timing tests hold the evaluator to it; the pinned decision holds every output
-//! byte for byte while the cost changes.
+//! asserted. The two chain timing tests hold the evaluator to it; a diamond of the same rules holds
+//! it to reusing a claim's value within a walk; the pinned decision holds every output byte for
+//! byte while the cost changes.
 
 use std::sync::Mutex;
 use std::sync::mpsc;
@@ -48,6 +49,29 @@ struct Chain {
 }
 
 fn invalidated_chain(claims: usize) -> Chain {
+    invalidated(claims, |at| format!("{{claim: {}}}", claim(at + 1)))
+}
+
+/// A diamond of `claims` claims kept apart by one invalidation rule each: `c_i` tests `c_{i+1}` and
+/// `c_{i+2}`, so a walk that does not reuse a claim's value reaches the last claims a Fibonacci
+/// number of times.
+fn invalidated_diamond(claims: usize) -> Chain {
+    invalidated(claims, |at| {
+        if at + 2 < claims {
+            format!(
+                "{{all: [{{claim: {}}}, {{claim: {}}}]}}",
+                claim(at + 1),
+                claim(at + 2)
+            )
+        } else {
+            format!("{{claim: {}}}", claim(at + 1))
+        }
+    })
+}
+
+/// Claims `c_0` to `c_{n-1}`, each but the last true when `tests(i)` holds, the last reading kind
+/// `k`, with rule `r_i` invalidating `c_i` and one record moved per rule.
+fn invalidated(claims: usize, tests: impl Fn(usize) -> String) -> Chain {
     let mut source =
         String::from("format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts:\n  a: {}\n");
     for at in 0..claims {
@@ -55,11 +79,7 @@ fn invalidated_chain(claims: usize) -> Chain {
     }
     source.push_str("evidence_kinds: {k: {}}\nclaims:\n");
     for at in 0..claims - 1 {
-        source.push_str(&format!(
-            "  {}: {{true_when: {{claim: {}}}}}\n",
-            claim(at),
-            claim(at + 1)
-        ));
+        source.push_str(&format!("  {}: {{true_when: {}}}\n", claim(at), tests(at)));
     }
     source.push_str(&format!(
         "  {}: {{true_when: {{evidence: {{kind: k}}}}}}\n",
@@ -237,6 +257,69 @@ fn a_chain_at_the_depth_bound_evaluates_within_budget() {
     assert!(
         took < budget,
         "a chain of {claims} claims took {took:?}, over {budget:?}"
+    );
+}
+
+/// A diamond of 500 claims, each with a rule of its own, so that every walk has a context of its
+/// own and reuses values only through its per-walk memo. Reused, the work is quadratic and takes well
+/// under a second in a debug build; not reused, the last claims are reached a Fibonacci number of
+/// times (about 10^104 for 500 claims) and the walk never ends. The budget is 30 s in a debug build
+/// and 5 s in a release build, on a worker thread with the budget as its deadline. Every claim is
+/// `true` and lists exactly the records moved by its own rule and the rules of the claims below it.
+#[test]
+fn a_diamond_of_claims_kept_apart_by_invalidation_rules_evaluates_within_budget() {
+    let _alone = timed_alone();
+    let budget = if cfg!(debug_assertions) {
+        Duration::from_secs(30)
+    } else {
+        Duration::from_secs(5)
+    };
+    let claims = 500;
+    let (sent, received) = mpsc::channel();
+    let (built, built_rx) = mpsc::channel();
+    thread::Builder::new()
+        .name("invalidated-diamond".to_owned())
+        .spawn(move || {
+            let diamond = invalidated_diamond(claims);
+            if built.send(()).is_err() {
+                return;
+            }
+            let started = Instant::now();
+            let decision = diamond.evaluate();
+            let took = started.elapsed();
+            let mut decided = 0;
+            let mut wrong = Vec::new();
+            for (at, (id, entry)) in decision.claims.iter().enumerate() {
+                decided += 1;
+                let listed: Vec<String> = entry
+                    .excluded_evidence
+                    .iter()
+                    .map(|exclusion| {
+                        assert_eq!(exclusion.reason, model::ExclusionReason::Invalidated);
+                        exclusion.evidence.as_str().to_owned()
+                    })
+                    .collect();
+                let expected: Vec<String> =
+                    (at..claims).map(|moved| format!("e{moved:05}")).collect();
+                if id.as_str() != claim(at) || entry.value != Truth::True || listed != expected {
+                    wrong.push(format!("{id}: {:?}, {} listed", entry.value, listed.len()));
+                }
+            }
+            drop(decision);
+            drop(diamond);
+            let _ = sent.send((took, decided, wrong));
+        })
+        .expect("a worker thread starts");
+    built_rx.recv().expect("the diamond builds");
+    let (took, decided, wrong) = received.recv_timeout(budget).unwrap_or_else(|_| {
+        panic!("a diamond of {claims} claims took more than {budget:?} to evaluate")
+    });
+    eprintln!("invalidated diamond: {claims} claims {took:?}");
+    assert_eq!(decided, claims);
+    assert!(wrong.is_empty(), "claims decided otherwise: {wrong:?}");
+    assert!(
+        took < budget,
+        "a diamond of {claims} claims took {took:?}, over {budget:?}"
     );
 }
 
