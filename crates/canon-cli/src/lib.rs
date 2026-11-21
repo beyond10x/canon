@@ -22,14 +22,15 @@ pub const EXIT_STATUSES: [(u8, &str); 4] = [
     (
         0,
         "Success: the document is valid or compiled, the case was evaluated, every conformance \
-         scenario ran and passed, a check or a simulation found nothing, or the scenarios were \
-         generated.",
+         scenario ran and passed, a check or a simulation found nothing, the scenarios were \
+         generated, or a mutation run reported no weak point.",
     ),
     (
         REJECTED,
-        "Rejected: a document was read and rejected, an evaluation, a check or a simulation was \
-         refused, a conformance scenario failed or was unreadable, no scenario ran, a requirement \
-         check failed, a check or a simulation found something, or generation was refused.",
+        "Rejected: a document was read and rejected, an evaluation, a check, a simulation or a \
+         mutation run was refused, a conformance scenario failed or was unreadable, no scenario \
+         ran, a requirement check failed, a check or a simulation found something, generation was \
+         refused, or a mutation run reported a weak point.",
     ),
     (
         UNREADABLE,
@@ -242,6 +243,28 @@ pub enum Command {
         /// The later revision, as `canon compile` prints it.
         #[arg(long)]
         to: PathBuf,
+    },
+    /// Measure how strong a scenario set is: apply five mutation operators to a `protocol/1`
+    /// document (drop a member of an `all`, turn an `all` into an `any`, remove an action's
+    /// precondition, remove one of its capability requirements, change the result an evidence
+    /// match names to another result the protocol names for that kind), run each mutant against
+    /// the `canon-conformance/1` scenarios of the directory that name the protocol file as their
+    /// fixture or an import, and classify it with the semantic difference from the protocol
+    /// (`canon diff`). Prints one line per mutant: `killed` with the first scenario that fails,
+    /// `survived`, `weak point` for a survivor whose difference holds a `RELAXATION`, or
+    /// `invalid` with the code of each problem when the mutant does not compile; each compiled
+    /// mutant with its categories, then a summary line. Exits 1 when at least one weak point is
+    /// reported, and 0 otherwise. Refused, exit 1, running nothing: no scenario names the protocol
+    /// file as its fixture, a scenario file does not parse, the protocol does not compile, or a
+    /// scenario that reads it does not pass on the protocol itself.
+    Mutate {
+        /// The protocol document to mutate, the fixture of the scenarios that test it.
+        #[arg(long)]
+        path: PathBuf,
+        /// The directory of scenarios each mutant runs against; every `*.yaml` file in it is one
+        /// scenario.
+        #[arg(long)]
+        scenarios: PathBuf,
     },
     /// Conformance scenarios.
     Conform {
