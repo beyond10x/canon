@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T09:01:01Z",
+  "actor": "human:timo",
+  "artifact": "story:decision-grounds",
+  "kind": "story",
+  "revision": 20,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "the rule that an entry set aside by its case revision adds none of its grounds was the unit's own: confirmed as D2 by the coordinator and by the session the operator named orchestrator; the story's outcome sentence is restated in Decided in review and the requirement text gives the rule with its reason",
+    "reference": "story:decision-grounds, Decided in review; impl/decision-grounds 01a7b79",
+    "review": "review-result:adversary-decision-grounds-pass-1",
+    "outcome": "fixed"
+  }
+}

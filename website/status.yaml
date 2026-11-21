@@ -202,3 +202,18 @@ items:
     story: story:canon-simulate
     detail: A breadth-first walk over every state a case can reach from the empty case, by steps that add one record an admissible action may produce or a supplied record, let a record of a kind with max_age expire (an expired child outcome still counts for a children form), grant or deny a capability, or take a decision; it reports each stuck state and cycle once at its smallest state with the shortest path, the decisions that would end it and how many such states contain it, plus dead actions and unreached outcomes, counts states waiting on supplied evidence or expiry, states on its own line that a child case's outcome is walked only as a step of its opening action, and refuses order forms and a walk above 65536 reachable states.
     href: /docs/reference/cli#canon-simulate
+  - label: Check a call's arguments
+    area: Language
+    story: story:argument-validator
+    detail: The library function b10x_canon::validate::check_arguments checks one call's arguments against an action's argument schema with JSON Schema 2020-12 meaning, reports every refusal at its JSON Pointer in document order and compares minimum and maximum exactly; a schema outside the dialect is returned as canon validate reports it. Canon still evaluates no call.
+    href: /docs/reference/validation#the-argument-schema-dialect
+  - label: Re-delivered evidence
+    area: Evaluation
+    story: story:evidence-redelivery
+    detail: "An evidence record given more than once in one evaluation counts once when every copy equals the first (kind, result, subject, subject revision, observed_at as written text, producer, child case and upstream revisions as the same pairs in any order), so a runner that delivers at least once can evaluate its stored inputs again and the decision, explanation included, is byte-identical to the one without the copy. A copy that differs is refused as duplicate-identifier, naming the record and, in canon evaluate, every file holding it. No field, command or flag changes, and the duplicate rules for decisions and authority entries stay; scenario CANON-EVIDENCE-004."
+    href: /docs/concepts/evaluation
+  - label: Decision grounds
+    area: Evaluation
+    story: story:decision-grounds
+    detail: "An entry of canon-authority/1 or canon-decisions/1 may name ground_revisions, the artifact revisions it rested on, and ground_evidence, the evidence records it rested on. canon evaluate applies the entry only while every ground holds: an artifact still at that revision, a record still applicable as missing_evidence defines it, so expiry and invalidation reach a decision through its records. A requirement or outcome left undecided by set-aside entries keeps its existing reason and lists the failed grounds under stale_grounds; a set-aside denial lapses too. computed_from records the grounds as given; an undeclared ground artifact is refused as undeclared-artifact; scenario CANON-GROUND-001."
+    href: /docs/reference/documents#authoritydecision
