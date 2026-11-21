@@ -1,6 +1,6 @@
 //! story:child-outcome-subject against the library: what `canon validate` refuses of a `children`
 //! form's `subject`, the canon-ir/1 form and its read-back, the reasons and the explanation, the
-//! semantic diff and `canon check`. CANON-COMPOSE-003
+//! semantic diff, `canon check` and `canon simulate`. CANON-COMPOSE-003
 //! (conformance/scenarios/child-outcome-subject.yaml) states the values; this file states the
 //! rest. Every case gives the two artifacts two different revisions (`intake` at `n1`, `wave` at
 //! `w2`) and holds children about both.
@@ -12,6 +12,7 @@ use b10x_canon::diff::{Category, diff};
 use b10x_canon::eval;
 use b10x_canon::ir::{self, Ir};
 use b10x_canon::model::{self, ClaimId, EvidenceRecord, Truth};
+use b10x_canon::simulate::simulate;
 use b10x_canon::validate::validate;
 use serde_json::{Value, json};
 
@@ -469,5 +470,144 @@ fn check_and_compile_keep_the_subject_of_a_form_under_not() {
     assert_eq!(
         checked(&source),
         "checked: protocol `p` revision 1: 5184 states, 0 properties, 0 findings\n"
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Correction 2, after story:simulate-child-outcome-step merged: D1 in `canon simulate`. A child
+// of an opening action records only in the `case_outcome` dimension that action produces, the
+// replacing successor replaces `open` in that dimension only, and an `open` record keeps a mark
+// above none on an action that produces its dimension (D5 narrowed).
+
+fn simulated(source: &str) -> String {
+    simulate(&compiled(source))
+        .unwrap_or_else(|refusal| panic!("{}: {refusal}", refusal.code()))
+        .to_string()
+}
+
+/// The fixture: `ideas.open`'s children record in the dimension without a subject, standing for
+/// `intake`, and `stories.open`'s in the one about `wave`. Unbound, the walk reached 528 states, 68
+/// of them terminable, some through an idea child recorded about `wave`.
+#[test]
+fn simulate_over_the_fixture_records_each_child_about_its_opening() {
+    assert_eq!(
+        simulated(&fixture()),
+        "cycle: state {evidence `case_outcome` about `wave`, action `ideas.open` opened 2 or more \
+         children, action `stories.open` opened 2 or more children}: no outcome is legitimate, no \
+         action is approval-required, and every step of action `ideas.open`, action \
+         `stories.open` returns this state; path: action `ideas.open` produces nothing, then \
+         action `ideas.open` produces nothing, then action `stories.open` produces nothing, then \
+         action `stories.open` produces nothing, then a child of action `stories.open` records \
+         evidence `case_outcome` about `wave`; 31 other cycle states contain it\n\
+         simulated: protocol `orchestrate` revision 1: 400 reachable states, 60 terminable \
+         (outcome `wave.done` 60), 24 waiting on supplied evidence, a child outcome or expiry, 1 \
+         finding (32 stuck or cycle states)\n"
+    );
+}
+
+/// Only `stories.open`, which requires `dispatch`, opens children about `wave`. Unbound, a child
+/// of the free `ideas.open` recorded about `wave` too: 108 states, 15 terminable, among them
+/// `{evidence `case_outcome` about `wave` result `passed`}` with no capability decided, which no
+/// case reaches. Bound, `wave.done` is legitimate only after `dispatch` is granted.
+#[test]
+fn simulate_reaches_an_outcome_only_through_a_child_about_its_subject() {
+    let text = simulated(&openers(
+        "intake",
+        "{children: {in: [passed], subject: wave}}",
+    ));
+    assert!(
+        !text.contains("a child of action `ideas.open` records"),
+        "{text}"
+    );
+    assert_eq!(
+        text,
+        "cycle: state {capability `dispatch` denied, action `ideas.open` opened 2 or more \
+         children}: no outcome is legitimate, no action is approval-required, and every step of \
+         action `ideas.open` returns this state; path: action `ideas.open` produces nothing, then \
+         action `ideas.open` produces nothing, then capability `dispatch` denied\n\
+         cycle: state {evidence `case_outcome` about `wave`, capability `dispatch` granted, action \
+         `ideas.open` opened 2 or more children, action `stories.open` opened 2 or more \
+         children}: no outcome is legitimate, no action is approval-required, and every step of \
+         action `ideas.open`, action `stories.open` returns this state; path: action `ideas.open` \
+         produces nothing, then action `ideas.open` produces nothing, then capability `dispatch` \
+         granted, then action `stories.open` produces nothing, then action `stories.open` \
+         produces nothing, then a child of action `stories.open` records evidence `case_outcome` \
+         about `wave`; 3 other cycle states contain it\n\
+         simulated: protocol `p` revision 1: 66 reachable states, 9 terminable (outcome \
+         `wave.done` 9), 3 waiting on supplied evidence, a child outcome or expiry, 2 findings (5 \
+         stuck or cycle states)\n"
+    );
+}
+
+/// Two opening actions about two artifacts, each read by a form naming it: `beta.open` is
+/// admissible once the children about `alpha` passed, and `alpha.open` while they are unknown.
+/// An `open` record about `alpha` needs a mark on `alpha.open`: a state holding it with a mark
+/// only on `beta.open` (an `alpha` child that ended beside its own `open` record) is no state.
+const PAIR: &str = "format: protocol/1\nprotocol: {id: pair, revision: 1}\n\
+    artifacts: {alpha: {}, beta: {}}\nevidence_kinds: {case_outcome: {}}\n\
+    claims:\n  \
+    alpha.passed: {true_when: {children: {in: [passed], subject: alpha}}}\n  \
+    beta.passed: {true_when: {children: {in: [passed], subject: beta}}}\n\
+    actions:\n  \
+    alpha.open:\n    precondition: {claim: alpha.passed, is: unknown}\n    \
+    case_open: {protocol: q, subject: alpha}\n  \
+    beta.open:\n    precondition: {claim: alpha.passed}\n    \
+    case_open: {protocol: q, subject: beta}\n\
+    outcomes:\n  done:\n    requires: {all: [{claim: alpha.passed}, {claim: beta.passed}]}\n";
+
+#[test]
+fn simulate_keeps_an_open_record_only_with_a_mark_on_its_producer() {
+    assert_eq!(
+        simulated(PAIR),
+        "stuck-state: state {evidence `case_outcome` about `alpha`}: no outcome is legitimate and \
+         no action is admissible or approval-required; path: action `alpha.open` produces \
+         nothing, then a child of action `alpha.open` records evidence `case_outcome` about \
+         `alpha`; 104 other stuck states contain it\n\
+         cycle: state {evidence `case_outcome` about `alpha` result `passed`, evidence \
+         `case_outcome` about `beta`, action `beta.open` opened 2 or more children}: no outcome \
+         is legitimate, no action is approval-required, and every step of action `beta.open` \
+         returns this state; path: action `alpha.open` produces nothing, then a child of action \
+         `alpha.open` records evidence `case_outcome` about `alpha` result `passed`, then action \
+         `beta.open` produces nothing, then action `beta.open` produces nothing, then a child of \
+         action `beta.open` records evidence `case_outcome` about `beta`; 15 other cycle states \
+         contain it\n\
+         cycle: state {evidence `case_outcome` about `alpha` result `open`, evidence \
+         `case_outcome` about `alpha` result `passed`, evidence `case_outcome` about `beta`, \
+         action `alpha.open` opened 2 or more children}: no outcome is legitimate, no action is \
+         approval-required, and every step of action `alpha.open` returns this state; path: \
+         action `alpha.open` produces nothing, then action `alpha.open` produces nothing, then a \
+         child of action `alpha.open` records evidence `case_outcome` about `alpha` result \
+         `passed`, then action `beta.open` produces nothing, then a child of action `alpha.open` \
+         records evidence `case_outcome` about `alpha` result `open`, then a child of action \
+         `beta.open` records evidence `case_outcome` about `beta`; 9 other cycle states contain \
+         it\n\
+         simulated: protocol `pair` revision 1: 210 reachable states, 9 terminable (outcome \
+         `done` 9), 21 waiting on supplied evidence, a child outcome or expiry, 3 findings (127 \
+         stuck or cycle states)\n"
+    );
+}
+
+/// D3 in the walk: no action opens a child about `wave`, and the form names it, so no dimension
+/// `ideas.open` produces is read: its children add no record. Every finding is true: `wave.done`
+/// is legitimate in no case, and a case that took `ideas.open` twice has nothing left to change.
+#[test]
+fn simulate_reports_an_outcome_over_a_subject_no_child_is_opened_about() {
+    let source = openers("intake", "{children: {in: [passed], subject: wave}}").replacen(
+        "  stories.open: {requires: [{capability: dispatch}], case_open: {protocol: story, subject: wave}}\n",
+        "",
+        1,
+    );
+    assert_eq!(
+        simulated(&source),
+        "cycle: state {action `ideas.open` opened 2 or more children}: no outcome is legitimate, \
+         no action is approval-required, and every step of action `ideas.open` returns this \
+         state; path: action `ideas.open` produces nothing, then action `ideas.open` produces \
+         nothing\n\
+         unreached-outcome: outcome `wave.done` is legitimate in no reachable state\n\
+         no-outcome-reachable: protocol `p` revision 1 reaches no state in which an outcome is \
+         legitimate\n\
+         simulated: protocol `p` revision 1: 3 reachable states, 0 terminable (outcome \
+         `wave.done` 0), 0 waiting on supplied evidence, a child outcome or expiry, 3 findings (1 \
+         stuck or cycle state)\n"
     );
 }
