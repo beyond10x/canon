@@ -662,6 +662,7 @@ impl<'d, 'a> Layout<'d, 'a> {
     }
 
     /// The layout in which each dimension `holds` marks keeps a record held as expired.
+    #[cfg(test)]
     fn holding(dimensions: &'d [Walked<'a>], base: usize, holds: &[bool]) -> Self {
         Self::revising(dimensions, base, holds, vec![Vec::new(); dimensions.len()])
     }
