@@ -429,20 +429,115 @@ fn a_child_that_ended_outside_the_list_keeps_the_children_form_false() {
     }
 }
 
-/// R7: a protocol with an action that opens a child case prints the limit on child outcomes
-/// after the findings and before the summary; one without such an action does not.
+/// story:simulate-child-outcome-step, which replaces R7: no line names a limit on child outcomes.
+/// With an action that opens a child case the summary counts the states waiting on supplied
+/// evidence, a child outcome or expiry; without one it is the summary of story:canon-simulate.
 #[test]
-fn a_protocol_that_opens_child_cases_states_the_limit() {
+fn a_protocol_that_opens_child_cases_states_no_limit() {
     let text = report(HELD);
-    let lines: Vec<&str> = text.lines().collect();
-    assert_eq!(lines[lines.len() - 2], CHILD_OUTCOME_LIMIT);
-    assert_eq!(
-        text.matches(CHILD_OUTCOME_LIMIT).count(),
-        1,
-        "one limit line:\n{text}"
+    assert!(!text.contains("limit:"), "{text}");
+    assert!(
+        text.lines().last().is_some_and(|summary| summary
+            .contains(" waiting on supplied evidence, a child outcome or expiry, ")),
+        "{text}"
     );
     let without = report(&HELD.replace(", case_open: {protocol: q, subject: findings}", ""));
     assert!(!without.contains("limit:"), "{without}");
+    assert!(
+        without
+            .lines()
+            .last()
+            .is_some_and(|summary| summary.contains(" waiting on supplied evidence or expiry, ")),
+        "{without}"
+    );
+}
+
+/// story:simulate-child-outcome-step: a record of the class `open` held as expired (R2a) is an
+/// open child, and a child that ends replaces it as it replaces a current one. In `HELD`, the
+/// state in which the only child is open and its record expired lets `open_change` open another
+/// child and nothing else, and leads out only when that open child ends accepted, replacing its
+/// expired record: `lock`, then `done`. Without that successor it would be printed as a `cycle`
+/// a real case does not have. `replace` drops exactly the records it names.
+#[test]
+fn a_child_that_ends_replaces_its_open_record_held_as_expired() {
+    let text = report(HELD);
+    let dead: Vec<&str> = text
+        .lines()
+        .filter(|line| line.starts_with("stuck-state: ") || line.starts_with("cycle: "))
+        .collect();
+    assert!(
+        !dead.is_empty()
+            && dead
+                .iter()
+                .all(|line| !line.contains("result `open` expired")),
+        "{text}"
+    );
+
+    let ir = compiled(HELD);
+    let space = Space::new(&ir);
+    let dimensions = space.walked();
+    let base = space.initial_states().remove(0);
+    let holds: Vec<bool> = dimensions
+        .iter()
+        .map(|walked| walked.kind.as_str() == CASE_OUTCOME)
+        .collect();
+    let layout = Layout::holding(&dimensions, base.len(), &holds);
+    let mut empty = base.clone();
+    empty.resize(layout.length(), 0);
+    let outcome = dimensions
+        .iter()
+        .position(|walked| walked.kind.as_str() == CASE_OUTCOME)
+        .expect("a case_outcome dimension");
+    let class = |name: &str| {
+        dimensions[outcome]
+            .classes
+            .iter()
+            .position(|class| *class == Some(name))
+            .expect("the class")
+    };
+    let open = class(OPEN_OUTCOME);
+    let held = layout.expire(&layout.add(&empty, outcome, open, 0), outcome, open);
+    let both = layout.add(&held, outcome, open, 0);
+    assert!(layout.held_expired(&both, outcome, open) && layout.present(&both, outcome, open));
+    let replaced =
+        |current, expired| layout.replace(&both, outcome, open, Replacing { current, expired });
+    assert_eq!(replaced(false, true), layout.add(&empty, outcome, open, 0));
+    assert_eq!(replaced(true, false), held);
+    assert_eq!(replaced(true, true), empty);
+}
+
+/// A mark is a part of the state (R1 counts it): three opening actions admissible everywhere,
+/// which record nothing, reach the eight sets of their marks, and each of the seven that is not
+/// empty again with the one class of `case_outcome` a child may record, 15 states; without
+/// `case_open` the one empty state, each action's step returning it. The child-outcome step is
+/// no action step: the state with every mark and a child's outcome is still a `cycle`.
+#[test]
+fn every_set_of_marks_is_a_state_of_its_own() {
+    let source = format!(
+        "{HEAD}\
+         evidence_kinds: {{case_outcome: {{description: The outcome of a child case.}}}}\n\
+         actions:\n\
+         \x20 a: {{description: Open one., case_open: {{protocol: q, subject: doc}}}}\n\
+         \x20 b: {{description: Open one., case_open: {{protocol: q, subject: doc}}}}\n\
+         \x20 c: {{description: Open one., case_open: {{protocol: q, subject: doc}}}}\n"
+    );
+    let walked = simulate(&compiled(&source)).expect("walked");
+    assert_eq!(walked.states, 15, "{walked}");
+    assert_eq!(
+        walked.to_string(),
+        "cycle: state {action `a` opened a child, action `b` opened a child, action `c` opened a \
+         child}: no outcome is legitimate, no action is approval-required, and every step of \
+         action `a`, action `b`, action `c` returns this state; path: action `a` produces \
+         nothing, then action `b` produces nothing, then action `c` produces nothing; 1 other \
+         cycle state contains it\n\
+         simulated: protocol `p` revision 1: 15 reachable states, 0 terminable, 0 waiting on \
+         supplied evidence, a child outcome or expiry, 1 finding (2 stuck or cycle states)\n"
+    );
+    let without = simulate(&compiled(
+        &source.replace(", case_open: {protocol: q, subject: doc}", ""),
+    ))
+    .expect("walked");
+    assert_eq!(without.states, 1, "{without}");
 }
 
 /// The walk is a pure function: the same IR gives the same report, and a protocol with its

@@ -254,9 +254,12 @@ fn an_expired_child_outcome_still_counts_for_the_children_form() {
     );
 
     // Re-pinned after the R2a correction: what this case means is that no finding rests on an
-    // expired child outcome. The one finding left is a true cycle: a child that ended outside the
-    // listed outcomes keeps the `children` form false for good, past every `max_age`, and
-    // `open_change` only adds another child.
+    // expired child outcome. The findings left are true: a child that ended outside the listed
+    // outcomes keeps the `children` form false for good, past every `max_age`. Re-pinned again by
+    // story:simulate-child-outcome-step, under which a child's outcome arrives after its opening
+    // whether `open_change` is admissible or not: the smallest such states are now the `cycle`
+    // with the unlisted outcome alone, where `open_change` only opens another child, and the
+    // `stuck-state` after `lock`, where nothing is admissible.
     let report = simulate::simulate(&ir).expect("walked");
     let dead: Vec<(&simulate::Dead, bool)> = report
         .findings
@@ -275,16 +278,18 @@ fn an_expired_child_outcome_still_counts_for_the_children_form() {
     let lock_reported = dead
         .iter()
         .any(|(dead, _)| dead.state == "{evidence `lock`}");
-    let only_the_cycle = matches!(
+    let only_the_unlisted = matches!(
         dead.as_slice(),
-        [(only, true)] if only.state
-            == "{evidence `case_outcome` result `accepted`, evidence `case_outcome` result \
-                `open`, evidence `case_outcome`}"
+        [(stuck, false), (cycle, true)] if stuck.state
+            == "{evidence `case_outcome` result `accepted`, evidence `case_outcome`, evidence \
+                `lock`, action `open_change` opened a child}"
+            && cycle.state
+                == "{evidence `case_outcome`, action `open_change` opened a child}"
     );
     assert!(
-        !expired_child && !lock_reported && only_the_cycle,
+        !expired_child && !lock_reported && only_the_unlisted,
         "expected no finding whose path has an expiry of `case_outcome`, no finding at \
-         `{{evidence lock}}`, and one finding, the cycle at the state holding an accepted, an \
-         open and an unlisted child outcome; whole report:\n{report}"
+         `{{evidence lock}}`, and two findings, both at a state holding an unlisted child \
+         outcome: the stuck state after `lock` and the cycle before it; whole report:\n{report}"
     );
 }
