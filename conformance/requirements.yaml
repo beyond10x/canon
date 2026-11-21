@@ -53,6 +53,14 @@ requirements:
       An outcome that requires an explicit decision MUST be legitimate only with a decision of that
       name, for that outcome, taken at the case snapshot's current revision.
     source: story:decision-outcomes
+  CANON-OUTCOME-003:
+    status: implemented
+    statement: >-
+      An outcome that requires an explicit decision with a condition MUST count the decision only
+      while the condition is TRUE at the evaluation, whenever the decision was taken; while it is
+      FALSE or UNKNOWN the outcome MUST be blocked by the condition's reasons, and the decision
+      MUST be neither counted nor refused.
+    source: story:decision-condition
   CANON-INVALIDATION-001:
     status: implemented
     statement: >-

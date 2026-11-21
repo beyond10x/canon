@@ -385,7 +385,35 @@ types:
       # read from: crates/canon/src/model/mod.rs:129
       predicate: canon.protocol.Predicate
       # read from: docs/design/canon-protocol-calculus-design.md:662
-      decision: canon.protocol.DecisionName
+      # read from: .engineering/planning/story/decision-condition.md
+      decision: canon.protocol.DecisionRequirement
+
+  # An outcome's explicit decision with its optional condition (story:decision-condition). Source
+  # text writes `requires: {decision: d, when: <predicate>}`; `when` beside no `decision` is
+  # refused. The decision counts toward the outcome only while `when` is TRUE. A decision counts
+  # when `when` is TRUE at the evaluation, whenever it was taken: a decision supplied while `when`
+  # is not TRUE is ignored at that evaluation, neither counted nor refused, and the same supplied
+  # decision counts at a later evaluation once `when` is TRUE. A caller that wants "taken after
+  # the condition held" enforces that itself. With `when` TRUE and a decision applying, the
+  # outcome is legitimate, with `decided_by`. With `when` TRUE and no decision applying it is
+  # blocked with {decision, present: false}, and pending decisions list it as today. With `when`
+  # FALSE or UNKNOWN it is blocked by the reasons a precondition that is not true gives, and no
+  # pending decision is listed (CANON-OUTCOME-003). `when` holds claims and case inputs only, as
+  # `applicable_when` does: an evidence match, an order form or a `children` form is refused as
+  # evidence-in-decision-condition, naming the outcome. canon-ir/1 writes "when" only when it is
+  # present, normalized as `requires` is. canon diff: adding, removing or changing `when` is
+  # BREAKING, `outcome `o` requirement changed`.
+  # read from: .engineering/planning/story/decision-condition.md
+  # read from: crates/canon/src/model/requirement.rs:30-50
+  - name: canon.protocol.DecisionRequirement
+    kind: struct
+    fields:
+      # read from: crates/canon/src/model/requirement.rs:37
+      - name: decision
+        type: canon.protocol.DecisionName
+      # read from: crates/canon/src/model/requirement.rs:41
+      - name: when
+        type: Optional<canon.protocol.Predicate>
 
   # The name of an explicit decision an outcome requires (explicitly_inconclusive). An identifier:
   # not empty, no whitespace, control or Unicode format characters.

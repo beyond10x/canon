@@ -1,0 +1,343 @@
+format: canon-conformance/1
+id: CANON-OUTCOME-003
+covers: [CANON-OUTCOME-003]
+fixture: fixtures/investigation/decision-condition.yaml
+# `withdrawn` requires the explicit decision `withdraw` and the condition `when: {claim: refused}`
+# (story:decision-condition). The decision counts toward the outcome only while `when` is TRUE at
+# the evaluation, whenever the decision was taken. While `when` is FALSE or UNKNOWN the outcome is
+# blocked by the reasons a precondition that is not true gives, a decision supplied is ignored (not
+# counted, not refused), and no pending decision is listed. While `when` is TRUE the outcome is as
+# CANON-OUTCOME-002 has it: legitimate with `decided_by` when a decision applies at the case
+# revision, else blocked naming the decision and listed as pending. `refused` is true only with a
+# `publication` record of result `refused`; a record about a superseded revision of the artifact is
+# excluded, which leaves the claim UNKNOWN. The case is at revision c1 unless a step says otherwise.
+# Steps `decision-given-while-unknown` and `decided-once-refused` give the same decisions document:
+# `when` is UNKNOWN at the one evaluation and TRUE at the next, and the decision counts at the
+# second only. That the section `pending_decisions` is absent while `when` is not TRUE is held by
+# crates/canon-cli/tests/decision_condition.rs, as the runner compares no section a step does not
+# list.
+steps:
+  # No evidence and no decision: `when` is UNKNOWN, so `withdrawn` is blocked by the claim `refused`, and no decision is named.
+  - id: nothing-given
+    evaluate:
+      case:
+        format: canon-case/1
+        id: PUB-1
+        protocol: publication
+        revision: c1
+        artifacts:
+          a: {revision: r1}
+      evidence: []
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "published": {
+              "reasons": [
+                {
+                  "claim": "accepted",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "withdrawn": {
+              "reasons": [
+                {
+                  "claim": "refused",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # The decision at c1 is supplied while `when` is UNKNOWN: neither counted nor refused, the same blocked outcome and reasons.
+  - id: decision-given-while-unknown
+    evaluate:
+      case:
+        format: canon-case/1
+        id: PUB-1
+        protocol: publication
+        revision: c1
+        artifacts:
+          a: {revision: r1}
+      evidence: []
+      decisions:
+        - decision: withdraw
+          outcome: withdrawn
+          principal: p
+          case_revision: c1
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "published": {
+              "reasons": [
+                {
+                  "claim": "accepted",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "withdrawn": {
+              "reasons": [
+                {
+                  "claim": "refused",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # A `refused` record and no decision: `when` is TRUE, so `withdrawn` is blocked naming the decision, and the decision is pending.
+  - id: refused-no-decision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: PUB-1
+        protocol: publication
+        revision: c1
+        artifacts:
+          a: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: pub-1
+          kind: publication
+          result: refused
+          subject: a
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "published": {
+              "reasons": [
+                {
+                  "claim": "accepted",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            },
+            "withdrawn": {
+              "reasons": [
+                {
+                  "decision": "withdraw",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "pending_decisions": {
+            "decisions": [
+              {
+                "case_revision": "c1",
+                "decision": "withdraw",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "withdrawn"
+              }
+            ]
+          }
+        }
+
+  # The same decisions document as `decision-given-while-unknown`, now with `when` TRUE: the decision counts, and `withdrawn` is legitimate, recording who decided.
+  - id: decided-once-refused
+    evaluate:
+      case:
+        format: canon-case/1
+        id: PUB-1
+        protocol: publication
+        revision: c1
+        artifacts:
+          a: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: pub-1
+          kind: publication
+          result: refused
+          subject: a
+          subject_revision: r1
+      decisions:
+        - decision: withdraw
+          outcome: withdrawn
+          principal: p
+          case_revision: c1
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "published": {
+              "reasons": [
+                {
+                  "claim": "accepted",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            },
+            "withdrawn": {
+              "decided_by": {
+                "decision": "withdraw",
+                "principals": [
+                  "p"
+                ]
+              },
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # The decision names the superseded case revision c0: it does not apply, as with no decision.
+  - id: decided-at-superseded-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: PUB-1
+        protocol: publication
+        revision: c1
+        artifacts:
+          a: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: pub-1
+          kind: publication
+          result: refused
+          subject: a
+          subject_revision: r1
+      decisions:
+        - decision: withdraw
+          outcome: withdrawn
+          principal: p
+          case_revision: c0
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "published": {
+              "reasons": [
+                {
+                  "claim": "accepted",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            },
+            "withdrawn": {
+              "reasons": [
+                {
+                  "decision": "withdraw",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "pending_decisions": {
+            "decisions": [
+              {
+                "case_revision": "c1",
+                "decision": "withdraw",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "withdrawn"
+              }
+            ]
+          }
+        }
+
+  # The `refused` record is about a superseded revision of `a`, so it is excluded and `when` is UNKNOWN again: the decision at c1 is ignored.
+  - id: refused-record-superseded
+    evaluate:
+      case:
+        format: canon-case/1
+        id: PUB-1
+        protocol: publication
+        revision: c1
+        artifacts:
+          a: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: pub-1
+          kind: publication
+          result: refused
+          subject: a
+          subject_revision: r0
+      decisions:
+        - decision: withdraw
+          outcome: withdrawn
+          principal: p
+          case_revision: c1
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "published": {
+              "reasons": [
+                {
+                  "claim": "accepted",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "withdrawn": {
+              "reasons": [
+                {
+                  "claim": "refused",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # An `accepted` record makes `refused` FALSE, and `published` legitimate: the decision supplied is ignored, and `withdrawn` is blocked by the claim `refused` with value false.
+  - id: condition-false
+    evaluate:
+      case:
+        format: canon-case/1
+        id: PUB-1
+        protocol: publication
+        revision: c1
+        artifacts:
+          a: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: pub-1
+          kind: publication
+          result: accepted
+          subject: a
+          subject_revision: r1
+      decisions:
+        - decision: withdraw
+          outcome: withdrawn
+          principal: p
+          case_revision: c1
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "published": {
+              "status": "legitimate"
+            },
+            "withdrawn": {
+              "reasons": [
+                {
+                  "claim": "refused",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }

@@ -1,0 +1,53 @@
+format: protocol/1
+
+protocol:
+  id: publication
+  revision: 1
+  description: Submit a publication, and withdraw it by an explicit decision only once it was refused.
+
+artifacts:
+  a:
+    description: The artifact submitted for publication.
+
+evidence_kinds:
+  publication:
+    description: The outcome of a submission; its result is accepted or refused.
+
+claims:
+  refused:
+    description: The publication was refused.
+    true_when:
+      evidence:
+        kind: publication
+        result: refused
+  accepted:
+    description: The publication was accepted.
+    true_when:
+      evidence:
+        kind: publication
+        result: accepted
+
+actions:
+  submit:
+    description: Submit the artifact, while neither result is known.
+    precondition:
+      all:
+        - claim: refused
+          is: unknown
+        - claim: accepted
+          is: unknown
+    may_produce:
+      - evidence: publication
+
+outcomes:
+  published:
+    description: The publication was accepted.
+    requires:
+      claim: accepted
+
+  withdrawn:
+    description: The submission is withdrawn by an explicit decision.
+    requires:
+      claim: refused
+      when:
+        claim: refused
