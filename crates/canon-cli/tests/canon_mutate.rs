@@ -1,7 +1,7 @@
 //! Acceptance for story:canon-mutate: `canon mutate --path <protocol> --scenarios <dir>` applies
 //! five mutation operators to the protocol, runs each mutant against the scenarios that name the
-//! protocol file, classifies each with the semantic diff and reports a weakening survivor as a weak
-//! point of the scenario set.
+//! protocol file as their fixture, classifies each with the semantic diff and reports a weakening
+//! survivor as a weak point of the scenario set.
 //!
 //! Five expectations, over `fixtures/investigation/mutate/`:
 //!

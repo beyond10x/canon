@@ -41,6 +41,19 @@ fn scenario(id: &str, evidence: &str, decision: &str) -> ScenarioFile {
     }
 }
 
+/// A scenario file whose fixture is `q.yaml`, importing `p.yaml`: it reads the protocol only as an
+/// import. The test reader cannot read `q.yaml`, so the scenario fails wherever it runs.
+fn importer(id: &str) -> ScenarioFile {
+    ScenarioFile {
+        path: format!("{id}.yaml"),
+        text: Ok(format!(
+            "format: canon-conformance/1\nid: {id}\ncovers: []\nfixture: q.yaml\n\
+             imports: [p.yaml]\nsteps:\n  - id: compile\n    compile: {{}}\n    expect:\n      \
+             canon-ir: x\n"
+        )),
+    }
+}
+
 fn record(kind: &str, result: &str) -> String {
     format!(
         "{{format: canon-evidence/1, id: {kind}-{result}, kind: {kind}, result: {result}, \
@@ -235,6 +248,40 @@ fn an_emptied_all_compiles() {
          survived: all-to-any claim `c` true_when: NO SEMANTIC CHANGE; no scenario fails\n\
          mutate: 2 mutants, 1 killed, 1 survived (0 weak points), 0 invalid\n"
     );
+}
+
+/// Rule 3 of the correction after adversary pass 1: a set in which the protocol is only ever an
+/// import is refused as `no-scenario`, and only a scenario's fixture is asked about.
+#[test]
+fn a_protocol_named_only_as_an_import_is_refused() {
+    let mut asked = Vec::new();
+    let refusal = mutate(
+        SOURCE,
+        &[importer("imports-p")],
+        |path| {
+            asked.push(path.to_owned());
+            path == "p.yaml"
+        },
+        |_| Err(FixtureError::Unreadable("not read".to_owned())),
+    )
+    .expect_err("refused");
+    assert_eq!(refusal, Refusal::NoScenario);
+    assert_eq!(asked, ["q.yaml"]);
+}
+
+/// Rule 2: a scenario that reads the protocol only as an import runs neither in the baseline nor
+/// against a mutant, so it neither refuses the set nor kills a mutant: the weak points stay.
+#[test]
+fn a_scenario_importing_the_protocol_does_not_run() {
+    let legitimate = scenario(
+        "both",
+        &format!("{}, {}", record("k", "x"), record("l", "x")),
+        LEGITIMATE,
+    );
+    let alone = run(SOURCE, std::slice::from_ref(&legitimate)).expect("runs");
+    let with_importer = run(SOURCE, &[importer("a-importer"), legitimate]).expect("runs");
+    assert_eq!(with_importer, alone);
+    assert_eq!(with_importer.weak_points(), 3);
 }
 
 #[test]

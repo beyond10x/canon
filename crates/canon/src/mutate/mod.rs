@@ -3,7 +3,7 @@
 //! caller.
 //!
 //! [`mutate`] makes every mutant of a `protocol/1` document by the five operators below, runs each
-//! mutant against the `canon-conformance/1` scenarios that read the protocol, and classifies each
+//! mutant against the `canon-conformance/1` scenarios whose fixture is the protocol, and classifies each
 //! with the semantic diff ([`diff::diff`]) from the protocol to the mutant. A mutant some scenario
 //! fails is **killed**; one no scenario fails **survived**. A mutant is made by changing the parsed
 //! model and writing it with [`model::write`], so a mutant is a `protocol/1` document by
@@ -52,15 +52,18 @@
 //!
 //! # Which scenarios run
 //!
-//! A scenario reads the protocol when [`mutate`]'s `names_protocol` says its `fixture`, or one of
-//! its `imports`, is the protocol file. The mutated file is that file only: every read of it
-//! returns the mutant's text, and every other fixture and import is read unchanged through the
-//! caller's `read_fixture`, once, and the same text is handed to every run. A protocol that imports
-//! others is composed with the imports listed by the first scenario, in file order, that names the
-//! protocol as its fixture, both to compile it and to compile each mutant; its imports are never
-//! mutated. The scenarios that do not read the protocol give the same verdict for every mutant and
-//! are not run. Each scenario that reads the protocol runs through [`conform::run_registry`], one
-//! file at a time in the order given, and a mutant is killed by the first that does not pass.
+//! A scenario runs against the mutants when [`mutate`]'s `names_protocol` says its `fixture` is the
+//! protocol file. The mutant's text is handed in for that fixture only; every import, and every
+//! other fixture, is read unchanged through the caller's `read_fixture`, once, and the same text is
+//! handed to every run. A scenario that names the protocol only under `imports` is not run: an
+//! import is pinned by the digest of its compiled `canon-ir/1`, so such a scenario fails on
+//! `import-digest-mismatch` for every mutant that changes the IR, whatever the mutant means, and
+//! would hide every weak point. Rewriting that pin is not done here. A protocol that imports others
+//! is composed with the imports listed by the first scenario, in file order, whose fixture is the
+//! protocol, both to compile it and to compile each mutant; its imports are never mutated. The
+//! scenarios whose fixture is another file give the same verdict for every mutant and are not run.
+//! Each scenario whose fixture is the protocol runs through [`conform::run_registry`], one file at a
+//! time in the order given, and a mutant is killed by the first that does not pass.
 //!
 //! # Classification
 //!
@@ -100,7 +103,7 @@
 //! scenario file cannot be read or does not parse as a scenario (`scenario-unreadable`); no
 //! scenario names the protocol as its fixture (`no-scenario`); an import the first such scenario
 //! lists cannot be read or does not parse (`import-unreadable`); the protocol, composed with those
-//! imports, does not compile (each problem's own code); or a scenario that reads the protocol does
+//! imports, does not compile (each problem's own code); or a scenario whose fixture is the protocol does
 //! not pass on the protocol itself (`scenario-fails`), since every mutant would then be killed by
 //! it.
 
@@ -274,7 +277,7 @@ pub enum Refusal {
     ImportUnreadable { path: String, why: String },
     /// The protocol, composed with its imports, does not compile.
     Protocol(Vec<Problem>),
-    /// A scenario that reads the protocol does not pass on the protocol itself: its report line.
+    /// A scenario whose fixture is the protocol does not pass on the protocol itself: its report line.
     ScenarioFails { line: String },
 }
 
@@ -308,7 +311,7 @@ impl Refusal {
     }
 }
 
-/// Mutates `protocol` (its text), runs every mutant against the scenarios of `files` that read it,
+/// Mutates `protocol` (its text), runs every mutant against the scenarios of `files` whose fixture it is,
 /// and classifies each (see the module docs). `names_protocol` says whether a path a scenario
 /// names is the protocol file; `read_fixture` returns the text of any other fixture or import a
 /// scenario names, as for [`conform::run_registry`]. Neither is called twice with one path.
@@ -324,7 +327,7 @@ where
 {
     let model = model::parse(protocol).map_err(Refusal::Parse)?;
 
-    // The scenarios that read the protocol, in file order, each with its file.
+    // The scenarios whose fixture is the protocol, in file order, each with its file.
     let mut is_protocol: BTreeMap<String, bool> = BTreeMap::new();
     let mut reading: Vec<(conform::Scenario, &ScenarioFile)> = Vec::new();
     for file in files {
@@ -339,22 +342,18 @@ where
             path: file.path.clone(),
             why: error.to_string(),
         })?;
-        // Every path the scenario names is decided, so the runs below look each one up.
-        let mut reads = false;
-        for path in std::iter::once(&scenario.fixture).chain(&scenario.imports) {
-            let named = *is_protocol
-                .entry(path.clone())
-                .or_insert_with(|| names_protocol(path));
-            reads |= named;
-        }
+        // Only a scenario's fixture is decided: a scenario that names the protocol only as an
+        // import pins it by digest, so it fails on every mutant that changes the IR, whatever the
+        // mutant means, and is not run.
+        let fixture = &scenario.fixture;
+        let reads = *is_protocol
+            .entry(fixture.clone())
+            .or_insert_with(|| names_protocol(fixture));
         if reads {
             reading.push((scenario, file));
         }
     }
-    let Some((first, _)) = reading
-        .iter()
-        .find(|(scenario, _)| is_protocol[&scenario.fixture])
-    else {
+    let Some((first, _)) = reading.first() else {
         return Err(Refusal::NoScenario);
     };
 
@@ -382,8 +381,10 @@ where
     }
     let original = compiled(&model, &imports).map_err(Refusal::Protocol)?;
 
-    // The protocol itself must pass every scenario that reads it, all together, as `canon conform
-    // run` runs them.
+    // The protocol itself must pass every scenario whose fixture it is, all together, as `canon
+    // conform run` runs them. `is_protocol` holds fixture paths only, so the text is handed in for
+    // a fixture; an import is the protocol under the same spelling only in a scenario whose fixture
+    // is the protocol too, which imports itself and fails here.
     let scenario_files: Vec<ScenarioFile> =
         reading.iter().map(|(_, file)| (*file).clone()).collect();
     let baseline = conform::run_registry(&scenario_files, |path: &str| {
@@ -446,7 +447,7 @@ where
         let mut verdict = Verdict::Survived;
         for (scenario, file) in &reading {
             let report = conform::run_registry(std::slice::from_ref(*file), |path: &str| {
-                if is_protocol.get(path).copied().unwrap_or(false) {
+                if path == scenario.fixture {
                     reader.get(path).map(|_| text.clone())
                 } else {
                     reader.get(path)

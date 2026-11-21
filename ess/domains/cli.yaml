@@ -13,10 +13,9 @@
 domain: canon.cli
 
 summary: >-
-  The canon command line: validate, compile, evaluate, check, simulate, generate, diff, floor and
-  conform
-  run, each reading files named by its flags and printing its result, or refusing with exit status
-  1 when a document is rejected and 2 when an input cannot be read.
+  The canon command line: validate, compile, evaluate, check, simulate, generate, diff, floor,
+  mutate and conform run, each reading files named by its flags and printing its result, or
+  refusing with exit status 1 when a document is rejected and 2 when an input cannot be read.
 
 naming:
   wire: cli
@@ -454,8 +453,9 @@ commands:
         returns: true
 
   # Measures how strong a scenario set is (story:canon-mutate): five mutation operators applied to
-  # the protocol, each mutant run against the scenarios that name the protocol file and classified
-  # with the semantic diff of canon.cli.Diff. A weakening mutant no scenario fails is a weak point.
+  # the protocol, each mutant run against the scenarios whose fixture is the protocol file (one that
+  # names it only as an import pins it by digest and is not run) and classified with the semantic
+  # diff of canon.cli.Diff. A weakening mutant no scenario fails is a weak point.
   # read from: .engineering/planning/story/canon-mutate.md, section "Outcome"
   # read from: .engineering/planning/story/canon-mutate.md, section "Acceptance"
   - name: canon.cli.Mutate

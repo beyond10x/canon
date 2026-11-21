@@ -265,15 +265,16 @@ pub enum Command {
     /// document (drop a member of an `all`, turn an `all` into an `any`, remove an action's
     /// precondition, remove one of its capability requirements, change the result an evidence
     /// match names to another result the protocol names for that kind), run each mutant against
-    /// the `canon-conformance/1` scenarios of the directory that name the protocol file as their
-    /// fixture or an import, and classify it with the semantic difference from the protocol
+    /// the `canon-conformance/1` scenarios of the directory whose fixture is the protocol file,
+    /// handed in as that fixture (a scenario that names the protocol only as an import pins it by
+    /// digest and is not run), and classify it with the semantic difference from the protocol
     /// (`canon diff`). Prints one line per mutant: `killed` with the first scenario that fails,
     /// `survived`, `weak point` for a survivor whose difference holds a `RELAXATION`, or
     /// `invalid` with the code of each problem when the mutant does not compile; each compiled
     /// mutant with its categories, then a summary line. Exits 1 when at least one weak point is
     /// reported, and 0 otherwise. Refused, exit 1, running nothing: no scenario names the protocol
     /// file as its fixture, a scenario file does not parse, the protocol does not compile, or a
-    /// scenario that reads it does not pass on the protocol itself.
+    /// scenario whose fixture it is does not pass on the protocol itself.
     Mutate {
         /// The protocol document to mutate, the fixture of the scenarios that test it.
         #[arg(long)]
