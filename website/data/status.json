@@ -314,6 +314,13 @@
       "detail": "canon simulate lets a child case's outcome arrive at any step after the action that opened the child was taken, as a step of its own that no action takes; a terminal outcome replaces the child's open record, a state names each opening action taken on its way, states waiting on a child outcome are counted with those waiting on supplied evidence or expiry, and the line naming the earlier limit on child outcomes is gone.",
       "href": "/docs/reference/cli#canon-simulate",
       "area": "Analysis"
+    },
+    {
+      "label": "Child outcomes about one artifact",
+      "status": "planned",
+      "detail": "The children predicate takes subject: <artifact>, and then reads only the case_outcome records about that artifact, with revision: current only those at its current revision. A record about another artifact neither establishes nor contradicts it, so children opened about different artifacts no longer mix in one form. canon validate refuses an undeclared subject as undeclared-artifact; without the key every record counts as before and canon-ir/1 is unchanged; scenario CANON-COMPOSE-003.",
+      "href": "/docs/reference/protocol#childoutcomes",
+      "area": "Language"
     }
   ]
 }

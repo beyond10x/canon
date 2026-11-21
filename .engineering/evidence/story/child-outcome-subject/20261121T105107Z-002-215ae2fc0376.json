@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T10:51:07Z",
+  "actor": "human:timo",
+  "artifact": "story:child-outcome-subject",
+  "kind": "story",
+  "revision": 20,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "a children form with subject read every case_outcome dimension, so a protocol of 72 states per slice was refused as state-space-bound: evidence_reached and positive_reads return the form's subject (step 1, 5995d549); the adversary's case is green at 373248 states with 0 findings",
+    "reference": "impl/child-outcome-subject 5995d549",
+    "review": "review-result:adversary-child-outcome-subject-pass-1",
+    "outcome": "fixed"
+  }
+}

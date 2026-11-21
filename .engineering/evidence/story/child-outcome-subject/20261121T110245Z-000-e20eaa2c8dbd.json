@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T11:02:45Z",
+  "actor": "human:timo",
+  "artifact": "story:child-outcome-subject",
+  "kind": "story",
+  "revision": 20,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "the canon simulate help said nothing of the dimension a child's outcome arrives in or of D5 narrowed to the actions that produce it: two sentences added, website/docs/reference/cli.md regenerated",
+    "reference": "impl/child-outcome-subject cbb14deb",
+    "review": "review-result:adversary-child-outcome-subject-pass-2",
+    "outcome": "fixed"
+  }
+}

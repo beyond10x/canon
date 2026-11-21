@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T10:51:07Z",
+  "actor": "human:timo",
+  "artifact": "story:child-outcome-subject",
+  "kind": "story",
+  "revision": 20,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "canon simulate let an action that opens children about one artifact record case_outcome about another: a child of an opening action records only in the dimension Space::produced_by gives that action (D1, step 2, 6a4825be); the adversary's two simulate cases are green and its second pass agrees with real cases on 15 of 15 protocols",
+    "reference": "impl/child-outcome-subject 6a4825be",
+    "review": "review-result:adversary-child-outcome-subject-pass-1",
+    "outcome": "fixed"
+  }
+}
