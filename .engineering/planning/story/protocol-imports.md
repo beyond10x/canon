@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:protocol-imports
 kind: story
-status: active
+status: implemented
 title: Compose protocols from pinned imports into one closed canon-ir/1
 refs:
 - provider: atlas
@@ -33,9 +33,17 @@ scope:
 - confidence: cited
   path: crates/canon-cli/src/main.rs
 - confidence: cited
+  path: crates/canon-cli/tests/adversary_conformance_suite_cli.rs
+- confidence: cited
+  path: crates/canon-cli/tests/adversary_ess_commands.rs
+- confidence: cited
+  path: crates/canon-cli/tests/conform_requirements.rs
+- confidence: cited
   path: crates/canon-cli/tests/imports.rs
 - confidence: cited
   path: crates/canon/src/conform/mod.rs
+- confidence: cited
+  path: crates/canon/src/eval/read.rs
 - confidence: inferred
   path: crates/canon/src/ir/imports.rs
 - confidence: cited
@@ -44,16 +52,25 @@ scope:
   path: crates/canon/src/model/mod.rs
 - confidence: cited
   path: crates/canon/src/validate/mod.rs
+- confidence: cited
+  path: crates/canon/tests/adversary2_ir_order.rs
+- confidence: cited
+  path: crates/canon/tests/adversary_protocol_imports.rs
+- confidence: cited
+  path: crates/canon/tests/adversary_scenario_generation.rs
+- confidence: cited
+  path: crates/canon/tests/ess_model_matches.rs
 - confidence: inferred
   path: ess/domains/cli.yaml
 - confidence: cited
   path: ess/domains/protocol.yaml
 - confidence: cited
   path: fixtures/investigation/imports/
-revision: 47
+revision: 57
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 10, decided_on: {"recorded":{"review_outcome":4}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 - {from: "proposed", to: "active", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 11, decided_on: {"recorded":{"review_outcome":4}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
+- {from: "active", to: "implemented", at: "2026-11-21T00:58:57Z", actor: "human:timo", revision: 57, decided_on: {"recorded":{"test_result":1,"review_outcome":5,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 ---
 ## Outcome
 
@@ -253,3 +270,31 @@ asserted; the confinement of a scenario's `imports` paths has no expectation.
 
 https://github.com/beyond10x/canon/issues/5 (gap 1); `docs/design/canon-protocol-calculus-design.md`
 § 39.5; Atlas ADR 0086 § Decision 1 and § Open; Atlas ADR 0080 (spec first, then red).
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w2 from the implementor's reports
+and the merge `6f44325`. It corrects § Scope where the two differ.
+
+- The composition is `ir::compose(root, &[Protocol]) -> Result<Protocol, Vec<Problem>>` in the new
+  file `crates/canon/src/ir/imports.rs`, with a hand-written SHA-256 (no new dependency).
+- `--import` is declared in `ess/domains/cli.yaml` as `Optional<List<String>>` on `compile`,
+  `validate` and `check`; a `canon conform run` scenario names its imports in the scenario file.
+- Not in § Scope and edited: `crates/canon/src/eval/read.rs` (one line: the IR read-back builds a
+  `Protocol`, which gained the `imports` field).
+- Tests re-pinned because behaviour changed: `crates/canon-cli/tests/conform_requirements.rs` and
+  `crates/canon-cli/tests/adversary_conformance_suite_cli.rs` (requirement count 20 to 21),
+  `crates/canon-cli/tests/adversary_ess_commands.rs` and `crates/canon/tests/ess_model_matches.rs`
+  (the new field and flag), `crates/canon/tests/adversary2_ir_order.rs` (it builds a `Protocol` in
+  Rust), `crates/canon/tests/adversary_scenario_generation.rs` (`canon generate` refuses the import
+  fixtures before compiling).
+- Added by the adversary: `crates/canon/tests/adversary_protocol_imports.rs` (4 cases).
+
+Settled in review:
+
+- **Identical means identical `canon-ir/1`.** Two imports that declare one identifier conflict only
+  when their compiled IR entries differ (`c6ba21b`). The first implementation compared source
+  declarations and refused two spellings of one declaration; § Outcome 4 is read this way.
+- A root redeclaration listed under `refines` settles two imports that conflict; a test pins it
+  (`a_refined_redeclaration_settles_two_imports_that_conflict`).
+- An import that does not compile on its own is refused as `invalid-import` before any comparison.

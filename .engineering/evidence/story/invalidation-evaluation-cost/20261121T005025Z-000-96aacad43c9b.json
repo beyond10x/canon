@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T00:50:25Z",
+  "actor": "human:timo",
+  "artifact": "story:invalidation-evaluation-cost",
+  "kind": "story",
+  "revision": 10,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "no test failed when the per-walk memo store at eval/claims.rs:290 was removed; 102b896 adds a 500-claim diamond test that fails on that mutant (30 s budget) and passes in 177 ms; diff read by the coordinator",
+    "reference": "impl/invalidation-evaluation-cost 102b896",
+    "review": "review-result:adversary-invalidation-evaluation-cost-pass-1",
+    "outcome": "fixed"
+  }
+}

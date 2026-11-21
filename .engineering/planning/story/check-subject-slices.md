@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:check-subject-slices
 kind: story
-status: active
+status: implemented
 title: Check a protocol beyond 65,536 states by deciding each subject over the dimensions it reads
 tags:
 - from-request
@@ -14,6 +14,12 @@ relations:
 - serves: vision:O2
 - serves: vision:governed-autonomy
 scope:
+- confidence: cited
+  path: crates/canon-cli/src/check.rs
+- confidence: cited
+  path: crates/canon-cli/src/lib.rs
+- confidence: cited
+  path: crates/canon-cli/tests/adversary_check_slices_cli.rs
 - confidence: cited
   path: crates/canon-cli/tests/canon_check.rs
 - confidence: cited
@@ -31,17 +37,22 @@ scope:
 - confidence: cited
   path: crates/canon/tests/adversary2_invalidation.rs
 - confidence: cited
+  path: crates/canon/tests/adversary_check_slices.rs
+- confidence: cited
   path: crates/canon/tests/adversary_check_space.rs
+- confidence: cited
+  path: crates/canon/tests/adversary_scenario_generation.rs
 - confidence: inferred
   path: fixtures/investigation/check/sliced/
 - confidence: cited
   path: fixtures/investigation/check/state-space-bound/
 - confidence: inferred
   path: fixtures/investigation/check/unread-dimension/
-revision: 22
+revision: 29
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 21, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 22, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "active", to: "implemented", at: "2026-11-21T00:58:57Z", actor: "human:timo", revision: 29, decided_on: {"recorded":{"test_result":1,"review_outcome":3,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 ---
 ## Outcome
 
@@ -181,3 +192,32 @@ The test is red on that commit because today's check refuses `sliced` and `unrea
 ## Decided
 
 Option A of § Decision needed: one slice per subject, and the whole check is refused when any slice exceeds the bound. Options B to E are out of this story. Decided on 2026-11-20 by the wave coordinator on the drafter's recommendation, after the operator accepted the story without choosing (`approval-record:accept-sdc-requests-2026-11-20`). The unit builds this option and does not reopen the choice.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w2 from the implementor's reports
+and the merge `d0ad5fc`. It corrects the body where the two differ.
+
+- **§ Outcome item 1 was wrong.** A slice keeps the whole space's classes and profiles; only the
+  dimensions a subject does not read are fixed to their least value. The test
+  `a_slice_keeps_the_classes_and_profiles_of_the_whole_space` pins this.
+- **Probe states.** Before it enumerates slices, the check evaluates a short list of states of the
+  whole product: the least state, and each state with one dimension off its least value
+  (`Space::probes`). Every refusal an evaluation of the whole product raised is then still raised,
+  with the same text, when no subject reads the offending declaration. 12 evaluation refusals are
+  covered by 9 tests. The count of probes is linear in the sum of the dimension sizes; the
+  196,608-state `sliced` fixture has 9. Added in review (`903d41d`, `4ede7ec`).
+- A whole product too large to count is refused naming the whole state space, not a subject.
+- `canon generate` keeps the whole-product bound of 65,536 states.
+- Not in § Scope and edited: `crates/canon-cli/src/check.rs` (module and `run` docs),
+  `crates/canon/src/generate/mod.rs` (one doc line), `crates/canon-cli/src/lib.rs` (the help text
+  of `Check` and `Generate`, applied by the coordinator at the merge from the unit's patch, because
+  that file was story:protocol-imports' in this wave).
+- Tests re-pinned because behaviour changed: `crates/canon/tests/adversary_scenario_generation.rs`
+  (`canon generate` refuses the two sliced fixtures), and `check/tests.rs`,
+  `adversary_check_space.rs`, `adversary2_check.rs`, `adversary2_invalidation.rs` (a subject added
+  so that each still reaches the bound; the adversary checked that none lost an assertion).
+- Added by the adversary: `crates/canon/tests/adversary_check_slices.rs` (14 cases) and
+  `crates/canon-cli/tests/adversary_check_slices_cli.rs` (1 case).
+- Of the four SDC limitation protocols above the old bound, three now check; the fourth
+  (`four-gate-kinds`) is refused because one slice is above the bound, as the implementor ran them.

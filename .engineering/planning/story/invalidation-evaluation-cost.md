@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:invalidation-evaluation-cost
 kind: story
-status: active
+status: implemented
 title: Evaluation under invalidation rules is at most quadratic in the claim count
 relations:
 - decomposes: epic:canon-kernel
@@ -19,13 +19,16 @@ scope:
 - confidence: cited
   path: crates/canon/src/explain/mod.rs
 - confidence: cited
+  path: crates/canon/src/validate/mod.rs
+- confidence: cited
   path: crates/canon/tests/adversary2_review_hardening.rs
 - confidence: inferred
   path: crates/canon/tests/invalidation_evaluation_cost.rs
-revision: 10
+revision: 13
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 2, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 - {from: "proposed", to: "active", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
+- {from: "active", to: "implemented", at: "2026-11-21T00:58:57Z", actor: "human:timo", revision: 13, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 ---
 ## Outcome
 
@@ -142,3 +145,28 @@ The release budget is checked with
 
 `review-result:adversary-w14-canon-review-hardening-w7-pass-2`; scoping of 2026-11-20
 (`approval-record:accept-drafts-2026-11-20`).
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w2 from the implementor's reports
+and the merge `ecc64cf`. It corrects § Scope where the two differ.
+
+- **Four causes, not three.** Beside the three the story names, the cycle check scanned every claim
+  still being decided on each evaluation, `excluded_for` rebuilt the evidence index per claim, the
+  invalidated sets were sets of string ids, and the memo was a hash table. Measured on a 400-claim
+  chain in a debug build, one run each: the fixpoint rescan cost 7.0 s, the memo key copies 21.0 s,
+  the per-record walk of `lists` 22.4 s, the unnamed ones 3.6 s; 54.2 s before, 59 ms after.
+- **The invariant the change rests on:** a claim tested by another never has more records
+  invalidated than the claim testing it, so one context holds for a whole walk. A unit test checks
+  it, and a 500-claim diamond test fails when the per-walk memo is removed (`102b896`).
+- `invalidated_claims` keeps its signature; `crates/canon/src/check/space.rs` is not edited.
+- **Not in § Scope and edited: `crates/canon/src/validate/mod.rs`.** `reaches_evidence` walked the
+  claim chain once per rule, which made validating the story's own 4000-claim test chain take
+  275.4 s in a debug build. `validate` now finds the claims that reach evidence once (0.70 s), with
+  the same problems in the same order; the old function is the oracle of a comparison test. The
+  coordinator assigned the file to the unit after story:protocol-imports had merged.
+- The unit edited its own first-commit test once (`5017add`): the worker frees the 4000-claim
+  decision before the timing lock is released. No bound or assertion changed.
+- Differential check by the adversary against a binary built before the merge: 7900 generated
+  protocols, 14778 evaluations, 213 fixture runs, 0 differences.
+- Not exercised: the explanation of every claim at 4000 claims (millions of entries).
