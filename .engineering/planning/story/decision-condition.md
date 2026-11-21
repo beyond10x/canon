@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:decision-condition
 kind: story
-status: proposed
+status: active
 title: Let an outcome's explicit decision carry an optional `when` predicate, so the decision counts only while the predicate is true
 tags:
 - from-request
@@ -55,9 +55,10 @@ scope:
   path: fixtures/investigation/decision-condition.yaml
 - confidence: inferred
   path: fixtures/investigation/decision-condition/
-revision: 21
+revision: 23
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T12:57:52Z", actor: "human:timo", revision: 21}
+- {from: "proposed", to: "active", at: "2026-11-21T17:02:28Z", actor: "human:timo", revision: 23}
 ---
 ## Outcome
 
@@ -271,3 +272,22 @@ The case is at `revision: c1`.
   - `aep plan artifact show story:<slug>`
   - `target/debug/canon validate`, `compile`, `diff`, `simulate`, `check` and `evaluate` on probe protocols in the scratch directory: `both.yaml`, `when.yaml`, `nested.yaml`, `today.yaml`
 - **Date:** 2026-11-21.
+
+## Decided
+
+D1 A, D2 A, D3 A and D4 B of § Decision needed. Decided on 2026-11-21 by the session working on the SDC prototype, which the operator named the orchestrator of this plan. Its words:
+
+> story:decision-condition, my choices: D1 A, D2 A, D3 A, D4 B, your defaults; accept it and place it as you propose (after wave 9, in the wave of story:child-outcome-recovery). D4 B fits my use: "only after the publication was refused" as `when: {claim: publication.refused}` with the claim's `true_when` reading the evidence.
+
+What the four choices fix:
+
+- **D1 A.** A decision supplied while `when` is not TRUE is ignored at that evaluation: not counted, not refused.
+- **D2 A.** While `when` is not TRUE the outcome's reasons name only `when`, and `pending_decisions` holds no entry for the decision.
+- **D3 A.** `canon simulate` offers the decision step in every state where the decision is not taken, as today. `crates/canon/src/simulate/mod.rs` is not edited.
+- **D4 B.** `when` holds claims and case inputs only, as `applicable_when` does. An evidence match, an order form or a `children` form inside it is refused by validation as `evidence-in-decision-condition`, naming the outcome.
+
+One consequence the same session asked the story and the reference to state in one sentence: **a decision counts when `when` is TRUE at the evaluation, whenever it was taken.** With D1 A and D3 A, a decision supplied while `when` was not TRUE is ignored at that evaluation, and the same supplied decision counts at a later evaluation once `when` is TRUE. A caller that wants "taken after the condition held" enforces that itself. The unit writes the sentence in the comment of `canon.protocol.DecisionRequirement` in `ess/domains/protocol.yaml`, from which the reference page is generated, and pins it with one scenario: the same decisions document, `when` not TRUE at one evaluation and TRUE at the next.
+
+The question that session attached when it proposed the story, whether `when` breaks a `protocol/1` document valid under 0.10.0: it does not. The binary built at `997c3997`, which prints `canon 0.10.0`, refuses a `when` key beside `decision` (`error[parse]: outcomes.inconclusive.requires: unknown field `when`, expected one of `decision`, `all`, …`, exit 1) and accepts the same fixture without the key, so no document valid under 0.10.0 holds the key. That a requirement written without `when` gives the same bytes is acceptance the unit must show over every `protocol/1` file under `fixtures/` and `conformance/`. A document that uses `when` is refused by a 0.10.0 binary with the parse error above; story:protocol-floor is the story for that direction.
+
+Accepted under the operator's standing grant (`approval-record:accept-sdc-request-17-2026-11-21`). Order: after wave 9, in the wave of story:child-outcome-recovery; with D3 A and D4 B the two stories share no file under `crates/canon/src/simulate/`.
