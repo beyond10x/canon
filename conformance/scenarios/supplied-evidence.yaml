@@ -1,0 +1,326 @@
+format: canon-conformance/1
+id: CANON-SUPPLY-001
+covers: [CANON-SUPPLY-001]
+fixture: fixtures/investigation/supplied-evidence/supplied.yaml
+# Supplied evidence (story:supplied-evidence). The fixture is the protocol
+# `investigation.publication`, whose outcome `published` needs an observation consistent with the
+# explanation and a peer's approval. No action of it produces `peer_review`: the kind declares
+# `supplied_by: investigation.review`, the protocol whose cases record peer reviews, and a runner
+# copies such a record unchanged from a case under it. Nothing resolves the name. The protocol
+# declares the artifacts `explanation` and `dataset`, and the invalidation rule `dataset.revised`,
+# which keeps a review made against an earlier dataset revision from `peer.approved`. The
+# supplier declares, besides, an artifact `guideline` this protocol does not: a record copied from
+# its case names it in `upstream_revisions`.
+steps:
+  # The compiled evidence kind carries `supplied_by` when it is set, after its other members; a
+  # kind without it compiles without the key, as before.
+  - id: compile
+    compile: {}
+    expect:
+      canon-ir: |
+        {
+          "actions": {
+            "inspect": {
+              "description": "Look for observations bearing on the explanation.",
+              "effect": null,
+              "may_produce": [
+                {
+                  "evidence": "observation"
+                }
+              ],
+              "precondition": {
+                "all": []
+              },
+              "requires": []
+            }
+          },
+          "artifacts": {
+            "dataset": {
+              "description": "The observations the explanation is tested against."
+            },
+            "explanation": {
+              "description": "The explanation under investigation."
+            }
+          },
+          "claims": {
+            "explanation.supported": {
+              "description": "Observation is consistent with the explanation.",
+              "true_when": {
+                "evidence": {
+                  "kind": "observation",
+                  "result": "consistent"
+                }
+              }
+            },
+            "peer.approved": {
+              "description": "A peer approved the finding.",
+              "true_when": {
+                "evidence": {
+                  "kind": "peer_review",
+                  "result": "approved"
+                }
+              }
+            }
+          },
+          "evidence_kinds": {
+            "observation": {
+              "description": "An observation bearing on the explanation; its result is consistent or inconsistent."
+            },
+            "peer_review": {
+              "description": "A peer's review of the finding, recorded in an investigation.review case and copied here unchanged; its result is approved or rejected.",
+              "supplied_by": "investigation.review"
+            }
+          },
+          "format": "canon-ir/1",
+          "invalidation": {
+            "dataset.revised": {
+              "description": "A review of the finding made against an earlier dataset revision no longer approves it.",
+              "invalidates": [
+                "peer.approved"
+              ],
+              "upstream": "dataset"
+            }
+          },
+          "obligations": {},
+          "outcomes": {
+            "published": {
+              "description": "The finding is published, supported by observation and approved by a peer.",
+              "requires": {
+                "all": [
+                  {
+                    "claim": {
+                      "id": "explanation.supported",
+                      "is": "true"
+                    }
+                  },
+                  {
+                    "claim": {
+                      "id": "peer.approved",
+                      "is": "true"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "protocol": {
+            "description": "Publish a finding observation supports once a peer approved it in the review case.",
+            "id": "investigation.publication",
+            "revision": 1
+          }
+        }
+  # No peer review has been supplied: the claim that reads the supplied kind is UNKNOWN, not FALSE,
+  # and the outcome is blocked on it.
+  - id: no-record-supplied
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-41
+        protocol: investigation.publication
+        artifacts:
+          explanation: {revision: r1}
+          dataset: {revision: d2}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: observation
+          result: consistent
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "claims": {
+            "explanation.supported": {
+              "value": "true"
+            },
+            "peer.approved": {
+              "value": "unknown"
+            }
+          },
+          "outcomes": {
+            "published": {
+              "reasons": [
+                {
+                  "claim": "peer.approved",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+  # A supplied record is read as given, like any other record: the claim is TRUE.
+  - id: record-supplied
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-41
+        protocol: investigation.publication
+        artifacts:
+          explanation: {revision: r1}
+          dataset: {revision: d2}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: observation
+          result: consistent
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: peer-review-1
+          kind: peer_review
+          result: approved
+          subject: explanation
+          subject_revision: r1
+          observed_at: 2026-11-20T12:06:00Z
+          producer: reviewer
+          upstream_revisions:
+            dataset: d2
+    expect:
+      decision: |
+        {
+          "claims": {
+            "explanation.supported": {
+              "value": "true"
+            },
+            "peer.approved": {
+              "value": "true"
+            }
+          },
+          "outcomes": {
+            "published": {
+              "status": "legitimate"
+            }
+          }
+        }
+  # The same record copied byte for byte from the supplier's case, naming the upstream artifact
+  # `guideline` only the supplier declares. A record of a kind that declares `supplied_by` may
+  # name it: the entry is carried, and neither checked nor read, so the decision is the one of
+  # the step before, whose record leaves it out.
+  - id: copied-record-names-an-undeclared-upstream
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-41
+        protocol: investigation.publication
+        artifacts:
+          explanation: {revision: r1}
+          dataset: {revision: d2}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: observation
+          result: consistent
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: peer-review-1
+          kind: peer_review
+          result: approved
+          subject: explanation
+          subject_revision: r1
+          observed_at: 2026-11-20T12:06:00Z
+          producer: reviewer
+          upstream_revisions:
+            dataset: d2
+            guideline: g7
+    expect:
+      decision: |
+        {
+          "claims": {
+            "explanation.supported": {
+              "value": "true"
+            },
+            "peer.approved": {
+              "value": "true"
+            }
+          },
+          "outcomes": {
+            "published": {
+              "status": "legitimate"
+            }
+          }
+        }
+  # The declared upstream entry of the copied record is bound and read by the invalidation rule
+  # as from any other record: the dataset moved since the review, so the rule keeps it from
+  # `peer.approved`. The undeclared entry moves nothing; the decision is the one a record without
+  # it gives.
+  - id: copied-record-invalidated-on-a-declared-upstream
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-41
+        protocol: investigation.publication
+        artifacts:
+          explanation: {revision: r1}
+          dataset: {revision: d2}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: observation
+          result: consistent
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: peer-review-1
+          kind: peer_review
+          result: approved
+          subject: explanation
+          subject_revision: r1
+          observed_at: 2026-11-20T12:06:00Z
+          producer: reviewer
+          upstream_revisions:
+            dataset: d1
+            guideline: g7
+    expect:
+      decision: |
+        {
+          "claims": {
+            "explanation.supported": {
+              "value": "true"
+            },
+            "peer.approved": {
+              "excluded_evidence": [
+                {
+                  "evidence": "peer-review-1",
+                  "reason": "invalidated"
+                }
+              ],
+              "value": "unknown"
+            }
+          },
+          "outcomes": {
+            "published": {
+              "reasons": [
+                {
+                  "claim": "peer.approved",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+  # A record of a kind without `supplied_by` naming an undeclared upstream artifact is refused,
+  # as before.
+  - id: unsupplied-kind-names-an-undeclared-upstream
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-41
+        protocol: investigation.publication
+        artifacts:
+          explanation: {revision: r1}
+          dataset: {revision: d2}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: observation
+          result: consistent
+          subject: explanation
+          subject_revision: r1
+          upstream_revisions:
+            guideline: g7
+    expect:
+      refusal: undeclared-artifact

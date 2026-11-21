@@ -143,3 +143,13 @@ requirements:
       action, naming the denied capability, and one requiring approval MUST make it
       approval-required.
     source: story:capability-scope
+  CANON-SUPPLY-001:
+    status: implemented
+    statement: >-
+      An evidence kind MAY name, as supplied_by, another protocol whose cases produce its records;
+      naming the protocol's own id MUST be refused. A record of such a kind MUST be read as given,
+      a claim reading the kind MUST be UNKNOWN while no record is given, and the record MAY name
+      upstream artifacts the protocol does not declare, which MUST NOT be read; an undeclared
+      upstream artifact on a record of any other kind MUST still be refused. canon check MUST count
+      such a kind as produced, without authority.
+    source: story:supplied-evidence
