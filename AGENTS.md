@@ -131,7 +131,15 @@ a test pins it: `conformance/scenarios/explanation.yaml`, `pending-decisions.yam
 one with `git grep -n '"canon": "' -- conformance crates`. Keep their other exact-output
 expectations unchanged.
 Land the bot-authored preparation on main with `task check` and CI green, then create an annotated
-bot tag on that exact commit and its GitHub Release through `b10x-gates`. Verify the peeled tag,
+bot tag on that exact commit and its GitHub Release through `b10x-gates`. Merge the pull request
+as the bot with a merge commit through the API: `b10x-gates api --method PUT --path
+/repos/beyond10x/canon/pulls/<n>/merge --input <file> --output <file>`, the input being
+`{"merge_method": "merge", "sha": "<head>", "commit_title": "Merge #<n>: <what>; release Canon
+<version>", "commit_message": "<the pull request's title>"}`. `gh pr merge` refuses ("the base
+branch policy prohibits the merge"): it reads the merge state without the bot's bypass of the
+ruleset that reserves `main` to the bot. `b10x-gates gh` runs `gh` in the repository's directory
+and refuses an argument that holds a home path: give `gh release download` a relative `--dir`
+and move the archives out of the tree afterwards. Verify the peeled tag,
 required source checks, Release and downloadable source archives. There is no binary packaging
 workflow or crates.io publication. Documentation delivery runs asynchronously; report it pending
 unless its live publication has been verified. A source release does not include Atlas, Website
