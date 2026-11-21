@@ -8,7 +8,8 @@
 //! - `computed_from`: the protocol id and revision (`protocol`, `protocol_revision`), the Canon
 //!   semantics that applied (`semantics`: `{"canon": <the Canon crate version>, "format":
 //!   "canon-decision/1"}`), the case snapshot as given (`case`: its `format`, `id`, `protocol`,
-//!   `artifacts` with each artifact's `revision`, `revision` and `termination` when given,
+//!   `artifacts` with each artifact's `revision` and, when the case gives it, its
+//!   `descends_from` as written (`[]` when given empty), `revision` and `termination` when given,
 //!   `inputs`, each case input's value, when the case gives any, and `independence`, each producer
 //!   with the dimensions it is independent on, in identifier order, when the case lists any),
 //!   the ids of the evidence set (`evidence`), and, each only when supplied, the authority
@@ -344,10 +345,14 @@ fn case_snapshot(case: &Case) -> Value {
         .artifacts
         .iter()
         .map(|(id, artifact)| {
-            (
-                id.as_str().to_owned(),
-                json!({"revision": artifact.revision.as_str()}),
-            )
+            let mut entry = Map::new();
+            entry.insert("revision".to_owned(), json!(artifact.revision.as_str()));
+            if let Some(ancestors) = &artifact.descends_from {
+                let written: Vec<&str> =
+                    ancestors.iter().map(|revision| revision.as_str()).collect();
+                entry.insert("descends_from".to_owned(), json!(written));
+            }
+            (id.as_str().to_owned(), Value::Object(entry))
         })
         .collect();
     let mut snapshot = Map::new();
@@ -860,5 +865,66 @@ mod tests {
                 "semantics"
             ]
         );
+    }
+
+    /// The descent a case gives decides a `descended` form over the same evidence, so it is part
+    /// of what the decision was computed from: the adversary's rows t04 (`[r1, r0]`, true), x04
+    /// (`[]`, false) and t09 (not given, unknown) carry three different `computed_from`.
+    #[test]
+    fn the_descent_the_case_gives_is_recorded_as_written() {
+        let ir = crate::ir::compile(
+            &crate::model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 artifacts: {a: {}}\nevidence_kinds: {k: {}}\n\
+                 claims:\n  c: {true_when: {descended: {first: {kind: k, result: failed}, \
+                 then: {kind: k, result: passed}, subject: a}}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let evidence: Vec<EvidenceRecord> = [("e1", "failed", "r1"), ("e2", "passed", "r2")]
+            .iter()
+            .map(|(id, result, revision)| {
+                read_evidence(&format!(
+                    "format: canon-evidence/1\nid: {id}\nkind: k\nresult: {result}\n\
+                     subject: a\nsubject_revision: {revision}\nitem: t\n"
+                ))
+                .expect("a canon-evidence/1 record")
+            })
+            .collect();
+        let mut seen = Vec::new();
+        for (artifact, value, recorded) in [
+            (
+                "{revision: r2, descends_from: [r1, r0]}",
+                Truth::True,
+                json!({"descends_from": ["r1", "r0"], "revision": "r2"}),
+            ),
+            (
+                "{revision: r2, descends_from: []}",
+                Truth::False,
+                json!({"descends_from": [], "revision": "r2"}),
+            ),
+            ("{revision: r2}", Truth::Unknown, json!({"revision": "r2"})),
+        ] {
+            let case = read_case(&format!(
+                "format: canon-case/1\nid: C-1\nprotocol: p\nartifacts: {{a: {artifact}}}\n"
+            ))
+            .expect("a canon-case/1 snapshot");
+            let decision =
+                evaluate_with(&ir, &case, &evidence, Supplied::default()).expect("decides");
+            let (_, claim) = decision
+                .claims
+                .iter()
+                .find(|(id, _)| id.as_str() == "c")
+                .expect("claim c");
+            assert_eq!(claim.value, value, "{artifact}");
+            let from = decision.explanation.expect("an explanation")["computed_from"].clone();
+            assert_eq!(from["case"]["artifacts"]["a"], recorded, "{artifact}");
+            assert!(
+                !seen.contains(&from),
+                "{artifact}: computed_from repeats an earlier row"
+            );
+            seen.push(from);
+        }
     }
 }
