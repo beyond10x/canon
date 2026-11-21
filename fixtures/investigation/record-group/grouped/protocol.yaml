@@ -1,0 +1,48 @@
+format: protocol/1
+protocol:
+  id: probe.pair
+  revision: 1
+  description: one action records two kinds in one run
+artifacts:
+  doc:
+    description: the document checked
+evidence_kinds:
+  shape:
+    description: shape check
+  fit:
+    description: fit check
+claims:
+  shaped:
+    description: a shape record exists
+    true_when:
+      evidence:
+        kind: shape
+        subject: doc
+  fitted:
+    description: a fit record exists
+    true_when:
+      evidence:
+        kind: fit
+        subject: doc
+outcomes:
+  done:
+    description: both checked
+    requires:
+      all:
+        - claim: shaped
+        - claim: fitted
+actions:
+  check:
+    description: records both kinds in one run, only while neither is recorded
+    effect: read
+    precondition:
+      all:
+        - claim: shaped
+          is: unknown
+        - claim: fitted
+          is: unknown
+    may_produce:
+      - evidence: shape
+      - evidence: fit
+    records_together:
+      - kinds: [fit, shape]

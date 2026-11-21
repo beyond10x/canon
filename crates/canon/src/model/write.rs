@@ -29,8 +29,9 @@
 //!
 //! # What is left out
 //!
-//! An absent `Option` and an empty defaulted section (`requires`, `may_produce`, `revises`,
-//! `scope`, `refines`, `inputs` and each top-level declaration section) are left out, because
+//! An absent `Option` and an empty defaulted section (`requires`, `may_produce`,
+//! `records_together`, `revises`, `scope`, `refines`, `inputs` and each top-level declaration
+//! section) are left out, because
 //! `parse` reads a left-out key as the default and refuses an explicit `null`. `Some` of an empty
 //! value is written (`case: {}`, `independent_on: []`), because the model tells it apart from
 //! `None`. A required key is always written, empty or not (`values: []`, `invalidates: []`).
@@ -103,13 +104,14 @@
 //!
 //! # Depth
 //!
-//! `write` recurses per level of nesting of a predicate or of an `arguments` value, one call per level and two per level of `all` or `any`, so it
-//! uses stack in proportion to the nesting depth and returns for every model whose nesting the
-//! calling thread's stack holds. `parse` gives at most 123 levels of predicate and 125 of
-//! `arguments` (`serde_yaml_ng`'s recursion limit), and the written text nests exactly as deep as
-//! the model, so every model `parse` gives is written and read back. A model built in Rust nested
-//! deeper than `parse` reads is written (a predicate 400 deep, of any form, on a thread with a 2 MiB stack,
-//! in a debug build) as far as the stack allows, and `parse` refuses its text.
+//! `write` recurses per level of nesting of a predicate or of an `arguments` value, one call per
+//! level and two per level of `all` or `any`, so it uses stack in proportion to the nesting depth
+//! and returns for every model whose nesting the calling thread's stack holds. `parse` gives at
+//! most 123 levels of predicate and 125 of `arguments` (`serde_yaml_ng`'s recursion limit), and
+//! the written text nests exactly as deep as the model, so every model `parse` gives is written
+//! and read back. A model built in Rust nested deeper than `parse` reads is written (a predicate
+//! 400 deep, of any form, on a thread with a 2 MiB stack, in a debug build) as far as the stack
+//! allows, and `parse` refuses its text.
 //!
 //! # Model values `parse` never gives
 //!
@@ -129,7 +131,7 @@ use super::{
     ChildOutcomes, Claim, ClaimTest, Declarations, EvidenceAfter, EvidenceKind, EvidenceMatch,
     EvidenceOrder, EvidenceProduction, EvidenceSince, FirstResult, Import, IndependenceDimension,
     InputTest, InvalidationRule, LaterRecord, Obligation, Outcome, OutcomeRequirement, Predicate,
-    Protocol, ProtocolHeader,
+    Protocol, ProtocolHeader, RecordGroup,
 };
 
 /// The members of one object, each value already written one level deeper than its key.
@@ -415,6 +417,7 @@ fn action(depth: usize, action: &Action) -> String {
         requires,
         effect,
         may_produce,
+        records_together,
         arguments,
         case_open,
         author: who,
@@ -455,6 +458,17 @@ fn action(depth: usize, action: &Action) -> String {
             may_produce
                 .iter()
                 .map(|production| evidence_production(depth + 2, production))
+                .collect(),
+        ),
+    );
+    put_unless_empty(
+        &mut members,
+        "records_together",
+        list(
+            depth + 1,
+            records_together
+                .iter()
+                .map(|group| record_group(depth + 2, group))
                 .collect(),
         ),
     );
@@ -503,6 +517,13 @@ fn evidence_production(depth: usize, production: &EvidenceProduction) -> String 
     let mut members = Members::new();
     put(&mut members, "evidence", quote(evidence.as_str()));
     put_some(&mut members, "decided_by", decided_by.map(author));
+    object(depth, members)
+}
+
+fn record_group(depth: usize, group: &RecordGroup) -> String {
+    let RecordGroup { kinds } = group;
+    let mut members = Members::new();
+    put(&mut members, "kinds", names(depth + 1, kinds));
     object(depth, members)
 }
 

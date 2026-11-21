@@ -1,0 +1,36 @@
+format: protocol/1
+protocol:
+  id: probe.pair
+  revision: 1
+  description: a group that names the kind a child case of the action records
+artifacts:
+  doc:
+    description: the document checked
+evidence_kinds:
+  shape:
+    description: shape check
+  case_outcome:
+    description: the outcome of a child case
+claims:
+  shaped:
+    description: a shape record exists
+    true_when:
+      evidence:
+        kind: shape
+        subject: doc
+outcomes:
+  done:
+    description: shape checked
+    requires:
+      claim: shaped
+actions:
+  check:
+    description: opens a child case and records the shape
+    case_open:
+      protocol: probe.child
+      subject: doc
+    may_produce:
+      - evidence: shape
+      - evidence: case_outcome
+    records_together:
+      - kinds: [case_outcome, shape]

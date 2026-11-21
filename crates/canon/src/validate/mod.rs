@@ -66,7 +66,13 @@
 //!    precondition, then each evidence kind it may produce, then each artifact it `revises`
 //!    (story:judgement-marking), `undeclared-artifact`, once for every listing, in the order
 //!    listed, then the subject of the case it opens, `undeclared-artifact`, then an opening under
-//!    the protocol's own id, `self-opened-case`, every one naming the action), then those in
+//!    the protocol's own id, `self-opened-case`, then each group of its `records_together`
+//!    (story:simulate-record-groups), in the order written, `invalid-record-group`: a group with
+//!    fewer than two distinct kinds, then for each kind it names, once, in the order named:
+//!    `case_outcome` on an action that opens a child case (a child's outcome arrives when the
+//!    child ends, never with a record of the run that opened it), or else a kind its
+//!    `may_produce` does not list, and then a kind an earlier group of the action names, every
+//!    one naming the action and the group, counted from 1), then those in
 //!    outcomes, then those in invalidation rules (the upstream
 //!    artifact, then each claim the rule invalidates); within a section, in the order its
 //!    declarations are written, and within a declaration, in the order its references are
@@ -167,6 +173,20 @@ impl fmt::Display for Referrer {
             }
         }
     }
+}
+
+/// Why a group of an action's `records_together` is refused (`invalid-record-group`).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RecordGroupFault {
+    /// The group names fewer than two distinct kinds: it groups nothing.
+    FewerThanTwo,
+    /// The group names `case_outcome` on an action that opens a child case: a child's outcome
+    /// arrives when the child ends, never with a record of the run that opened it.
+    ChildOutcome,
+    /// The group names a kind the action's `may_produce` does not list.
+    NotProduced(EvidenceKindId),
+    /// The group names a kind an earlier group of the action names.
+    InEarlierGroup(EvidenceKindId),
 }
 
 /// One reason a protocol document is invalid.
@@ -283,6 +303,13 @@ pub enum Problem {
         action: ActionId,
         protocol: ProtocolId,
     },
+    /// A group of an action's `records_together` (story:simulate-record-groups) is not one run's
+    /// records: `group` counts the action's groups from 1, in the order written.
+    InvalidRecordGroup {
+        action: ActionId,
+        group: usize,
+        fault: RecordGroupFault,
+    },
     /// An evidence kind names the protocol's own id as the protocol that supplies its records
     /// (story:supplied-evidence): records of it come from outside the protocol, or from its own
     /// actions, never from a case of the same protocol through `supplied_by`.
@@ -391,6 +418,7 @@ impl Problem {
             Problem::DuplicateChildOutcome { .. } => "duplicate-child-outcome",
             Problem::OpenChildOutcome { .. } => "open-child-outcome",
             Problem::SelfOpenedCase { .. } => "self-opened-case",
+            Problem::InvalidRecordGroup { .. } => "invalid-record-group",
             Problem::SelfSuppliedEvidence { .. } => "self-supplied-evidence",
             Problem::ClaimCycle { .. } => "claim-cycle",
             Problem::ActionArguments { .. } => "action-arguments",
@@ -575,6 +603,36 @@ impl fmt::Display for Problem {
                 one_line(action.as_str()),
                 one_line(protocol.as_str())
             ),
+            Problem::InvalidRecordGroup {
+                action,
+                group,
+                fault,
+            } => {
+                write!(
+                    f,
+                    "action `{}` records_together group {group} names ",
+                    one_line(action.as_str())
+                )?;
+                match fault {
+                    RecordGroupFault::FewerThanTwo => {
+                        f.write_str("fewer than two distinct evidence kinds")
+                    }
+                    RecordGroupFault::ChildOutcome => write!(
+                        f,
+                        "evidence kind `{CASE_OUTCOME}`, which a child case the action opens records"
+                    ),
+                    RecordGroupFault::NotProduced(kind) => write!(
+                        f,
+                        "evidence kind `{}`, which its may_produce does not list",
+                        one_line(kind.as_str())
+                    ),
+                    RecordGroupFault::InEarlierGroup(kind) => write!(
+                        f,
+                        "evidence kind `{}`, which an earlier group names",
+                        one_line(kind.as_str())
+                    ),
+                }
+            }
             Problem::SelfSuppliedEvidence { kind, protocol } => write!(
                 f,
                 "evidence kind `{}` is supplied by protocol `{}`, the protocol's own id",
@@ -964,6 +1022,7 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
                 });
             }
         }
+        record_groups(id, action, &mut problems);
     }
     for (id, outcome) in protocol.outcomes.iter() {
         if let Some(requires) = outcome.requires.predicate() {
@@ -1102,6 +1161,45 @@ fn evidence_at(root: &str, predicate: &Predicate) -> Vec<(EvidenceKindId, String
         }
     }
     found
+}
+
+/// The groups of `action`'s `records_together`, in the order written: one with fewer than two
+/// distinct kinds, then for each kind it names, once, in the order named: `case_outcome` on an
+/// action that opens a child case, or else a kind `may_produce` does not list, and then a kind an
+/// earlier group names.
+fn record_groups(id: &ActionId, action: &crate::model::Action, problems: &mut Vec<Problem>) {
+    let mut grouped: BTreeSet<&EvidenceKindId> = BTreeSet::new();
+    for (at, group) in action.records_together.iter().enumerate() {
+        let refuse = |fault| Problem::InvalidRecordGroup {
+            action: id.clone(),
+            group: at + 1,
+            fault,
+        };
+        let mut named: Vec<&EvidenceKindId> = Vec::new();
+        for kind in &group.kinds {
+            if !named.contains(&kind) {
+                named.push(kind);
+            }
+        }
+        if named.len() < 2 {
+            problems.push(refuse(RecordGroupFault::FewerThanTwo));
+        }
+        for kind in &named {
+            if action.case_open.is_some() && kind.as_str() == CASE_OUTCOME {
+                problems.push(refuse(RecordGroupFault::ChildOutcome));
+            } else if !action
+                .may_produce
+                .iter()
+                .any(|production| production.evidence == **kind)
+            {
+                problems.push(refuse(RecordGroupFault::NotProduced((*kind).clone())));
+            }
+            if grouped.contains(kind) {
+                problems.push(refuse(RecordGroupFault::InEarlierGroup((*kind).clone())));
+            }
+        }
+        grouped.extend(named);
+    }
 }
 
 fn strs<'a, T: AsRef<str> + 'a>(ids: impl Iterator<Item = &'a T>) -> Vec<&'a str> {
@@ -2222,5 +2320,74 @@ mod tests {
         });
         eprintln!("validated a chain of {claims} claims in {took:?}");
         assert!(valid, "the chain is valid");
+    }
+
+    /// Every refusal of a `records_together` group (story:simulate-record-groups), in the order
+    /// written, after the action's case opening and before the next action's precondition: a
+    /// group of one distinct kind, a kind outside `may_produce`, a kind in an earlier group, and
+    /// `case_outcome` on an action that opens a child case, whether `may_produce` lists it or not.
+    /// An undeclared kind `may_produce` lists is refused once, as `undeclared-evidence-kind`. The
+    /// same kinds grouped on an action that opens no case, or repeated within one group of two
+    /// distinct kinds, are valid.
+    #[test]
+    fn a_record_group_names_two_or_more_kinds_the_action_produces_once() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            artifacts: {doc: {}}\n\
+            evidence_kinds: {a: {}, b: {}, c: {}, case_outcome: {}}\n\
+            actions:\n  \
+              opens:\n    \
+                case_open: {protocol: q, subject: missing}\n    \
+                may_produce: [{evidence: a}, {evidence: b}, {evidence: case_outcome}, {evidence: z}]\n    \
+                records_together:\n      \
+                  - {kinds: [a, a]}\n      \
+                  - {kinds: [case_outcome, a, z, c]}\n      \
+                  - {kinds: [b, case_outcome]}\n  \
+              plain:\n    \
+                precondition: {claim: y}\n    \
+                may_produce: [{evidence: a}, {evidence: b}, {evidence: case_outcome}]\n    \
+                records_together: [{kinds: [b, case_outcome, b]}]\n";
+        assert_eq!(
+            problems(source),
+            [
+                "undeclared-evidence-kind: action `opens` references evidence kind `z`, which is not declared",
+                "undeclared-artifact: action `opens` references artifact `missing`, which is not declared",
+                "invalid-record-group: action `opens` records_together group 1 names fewer than two distinct evidence kinds",
+                "invalid-record-group: action `opens` records_together group 2 names evidence kind `case_outcome`, which a child case the action opens records",
+                "invalid-record-group: action `opens` records_together group 2 names evidence kind `a`, which an earlier group names",
+                "invalid-record-group: action `opens` records_together group 2 names evidence kind `c`, which its may_produce does not list",
+                "invalid-record-group: action `opens` records_together group 3 names evidence kind `case_outcome`, which a child case the action opens records",
+                "invalid-record-group: action `opens` records_together group 3 names evidence kind `case_outcome`, which an earlier group names",
+                "undeclared-claim: action `plain` references claim `y`, which is not declared",
+            ]
+        );
+        let opened = source
+            .replace("      - {kinds: [b, case_outcome]}\n", "")
+            .replace("{evidence: case_outcome}, {evidence: z}", "{evidence: c}")
+            .replace("subject: missing", "subject: doc")
+            .replace("[a, a]", "[a, c]")
+            .replace("[case_outcome, a, z, c]", "[b, case_outcome]")
+            .replace("{claim: y}", "{all: []}");
+        assert_eq!(
+            problems(&opened),
+            [
+                "invalid-record-group: action `opens` records_together group 2 names evidence kind `case_outcome`, which a child case the action opens records"
+            ]
+        );
+        assert_eq!(
+            problems(&opened.replace("[b, case_outcome]", "[b, a]")),
+            [
+                "invalid-record-group: action `opens` records_together group 2 names evidence kind `a`, which an earlier group names"
+            ]
+        );
+        assert_eq!(
+            problems(&opened.replace("[b, case_outcome]}", "[b, b]}")),
+            [
+                "invalid-record-group: action `opens` records_together group 2 names fewer than two distinct evidence kinds"
+            ]
+        );
+        assert_eq!(
+            problems(&opened.replace("    records_together:\n      - {kinds: [a, c]}\n      - {kinds: [b, case_outcome]}\n", "")),
+            Vec::<String>::new()
+        );
     }
 }

@@ -239,6 +239,13 @@ pub struct Action {
     pub effect: Option<EffectClass>,
     #[serde(default, deserialize_with = "present::defaulted")]
     pub may_produce: Vec<EvidenceProduction>,
+    /// The kinds one run of the action records together, all of them or none
+    /// (story:simulate-record-groups). Absent: no group. Each group names two or more distinct
+    /// kinds of `may_produce`, and no kind is in two groups of one action. It has no evaluation
+    /// meaning: only `canon simulate` reads it, adding a group's records in one step and never
+    /// one of its kinds alone.
+    #[serde(default, deserialize_with = "present::defaulted")]
+    pub records_together: Vec<RecordGroup>,
     /// The JSON Schema, in Canon's argument-schema dialect, that the action's arguments satisfy.
     /// Absent: the action takes no arguments; a runner accepts only `{}`. Canon evaluates no call:
     /// `canon validate` holds the schema to the dialect (`action-arguments`), and a runner checks
@@ -328,6 +335,16 @@ pub struct EvidenceProduction {
     /// evaluation meaning.
     #[serde(default, deserialize_with = "present::optional")]
     pub decided_by: Option<Author>,
+}
+
+/// Evidence kinds one run of an action records together, all of them or none
+/// (story:simulate-record-groups).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RecordGroup {
+    /// The kinds of the group: two or more distinct kinds the action may produce.
+    #[serde(deserialize_with = "present::required")]
+    pub kinds: Vec<EvidenceKindId>,
 }
 
 /// A legitimate terminal interpretation of a case and what it requires: a predicate, or an explicit

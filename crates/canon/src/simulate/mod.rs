@@ -52,6 +52,19 @@
 //!   past two or more) returns the same state. `case_outcome` is not among the kinds
 //!   an opening action's step adds (`canon check` still counts it as produced, `check::produces`):
 //!   it arrives by the child-outcome step.
+//! - **Group step** (story:simulate-record-groups). An action that declares `records_together`
+//!   records each group's kinds in one run, all of them or none: for each group, one step adds
+//!   one current record of each member kind at once, each member in one dimension of its kind, of
+//!   one class and from a producer of one profile, and each combination is its own successor, so
+//!   a group step has the product of its members' successor counts. A member no record can be
+//!   about adds nothing. A kind in a group is never added alone: the action's single-kind steps
+//!   are those of its kinds in no group. It is an action step in every other way: it is taken
+//!   only where the action is `admissible`, raises the action's mark, and returns the same state
+//!   when it adds nothing. The declaration states a fact Canon cannot check, as `independent_on`
+//!   does: every finding holds for a runner that records each group together or not at all, and
+//!   a state holding one kind of a group alone is not a state of such a case. `canon validate`
+//!   refuses a group naming `case_outcome` on an action that opens a child case, so a child's
+//!   outcome is never grouped.
 //! - **Supplied step.** A kind that declares `supplied_by` is produced by another protocol's
 //!   cases (story:supplied-evidence), and no action step produces it: a record of it may arrive at
 //!   any step, from any state, by the combinations an action step takes.
@@ -107,8 +120,11 @@
 //!
 //! There is one initial state per assignment of case-input values, in input order, the last input
 //! varying fastest, with every mark at none. Breadth-first search reaches each state first along
-//! a shortest path. From a state, steps are tried in this order: actions in identifier order,
-//! then their kinds, dimensions, classes and profiles in the space's own orders; supplied kinds
+//! a shortest path, a group step counting as one step. From a state, steps are tried in this
+//! order: actions in identifier order, then their kinds in no group, dimensions, classes and
+//! profiles in the space's own orders, then their groups in order of each group's least kind id,
+//! each group's combinations with its members in kind-id order and the last member varying
+//! fastest, each member's dimensions, classes and profiles in the space's orders; supplied kinds
 //! the same way; the child-outcome step, by opening action, dimension, class and profile, each
 //! plain successor before its replacing ones, and each with the lower mark before the kept one;
 //! expiring kinds in dimension order, then classes; capabilities in
@@ -160,7 +176,9 @@
 //! one and `` action `a` opened 2 or more children `` for two or more. Printed
 //! stuck states and cycles are ordered by the length of their path, then by their rendering. A
 //! path is written as its steps, `` action `a` produces evidence `k` result `r` `` (`` action `a`
-//! produces nothing `` for the step of an opening action that adds no record), `` protocol `s`
+//! produces nothing `` for the step of an opening action that adds no record; a group step on one
+//! line, its records in kind-id order joined by ` and `, `` action `a` produces evidence `k`
+//! and evidence `l` result `r` ``), `` protocol `s`
 //! supplies evidence `k` ``, `` a child of action `a` records evidence `case_outcome` result `r`
 //! ``, `` evidence `k` expires ``, `` capability `c` denied ``, `` decision `d` taken ``, joined
 //! by `, then `, or `empty`. The findings are followed by the summary: `` simulated: protocol `p`
@@ -458,7 +476,8 @@ struct Replacing {
 }
 
 /// One step of the walk, one variant per kind of step, by position: an action step (the action,
-/// and the record it adds, `None` for the step of an action that adds none), a supplied record, a
+/// and the record it adds, `None` for the step of an action that adds none), an action's group
+/// step (the action, and which of its group combinations it adds), a supplied record, a
 /// child's outcome (the action whose mark it lowers or keeps, the record, and the `open` records
 /// it replaces, if any), a record class that expires, an authority decision or a decision taken.
 #[derive(Clone, Copy, Debug)]
@@ -466,6 +485,12 @@ enum Step {
     Action {
         action: usize,
         record: Option<Added>,
+    },
+    /// A group step of `action`: its combination `at`, one record of each member kind of one of
+    /// its groups (story:simulate-record-groups).
+    Group {
+        action: usize,
+        at: usize,
     },
     Supplied(Added),
     Child {
@@ -824,11 +849,59 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
             .collect()
     };
     // An action step adds a record of its `may_produce` only: a child's `case_outcome` arrives
-    // by the child-outcome step, which `check::produces` does not know.
+    // by the child-outcome step, which `check::produces` does not know. A kind in one of the
+    // action's groups (`records_together`) is never added alone.
     let action_records: Vec<Vec<Added>> = ir
         .actions
         .values()
-        .map(|action| records(&of_kinds(&action.may_produce.iter().collect())))
+        .map(|action| {
+            let grouped: BTreeSet<&EvidenceKindId> =
+                action.records_together.iter().flatten().collect();
+            records(&of_kinds(
+                &action
+                    .may_produce
+                    .iter()
+                    .filter(|kind| !grouped.contains(kind))
+                    .collect(),
+            ))
+        })
+        .collect();
+    // Each action's group steps, in group order (by least kind): for each group, every
+    // combination of one record of each member kind, the members in kind-id order and the last
+    // varying fastest. A member no record can be about adds nothing and takes no part.
+    let action_groups: Vec<Vec<Vec<Added>>> = ir
+        .actions
+        .values()
+        .map(|action| {
+            action
+                .records_together
+                .iter()
+                .flat_map(|group| {
+                    let members: Vec<Vec<Added>> = group
+                        .iter()
+                        .map(|kind| records(&of_kinds(&BTreeSet::from([kind]))))
+                        .filter(|member| !member.is_empty())
+                        .collect();
+                    if members.is_empty() {
+                        return Vec::new();
+                    }
+                    let mut combinations: Vec<Vec<Added>> = vec![Vec::new()];
+                    for member in &members {
+                        combinations = combinations
+                            .into_iter()
+                            .flat_map(|prefix| {
+                                member.iter().map(move |record| {
+                                    let mut combination = prefix.clone();
+                                    combination.push(*record);
+                                    combination
+                                })
+                            })
+                            .collect();
+                    }
+                    combinations
+                })
+                .collect()
+        })
         .collect();
     let supplied_kinds: BTreeSet<&EvidenceKindId> = check::supplied(ir).collect();
     let supplied_records = records(&of_kinds(&supplied_kinds));
@@ -933,27 +1006,46 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         let mut returns = true;
         for action in &admissible {
             admissible_somewhere[*action] = true;
-            // Each step raises the action's mark when it opens a child case.
-            let mut steps: Vec<(State, Option<Added>)> = action_records[*action]
+            // Each step raises the action's mark when it opens a child case: its single-kind steps,
+            // then its group steps, each adding its records at once.
+            let mut steps: Vec<(State, Step)> = action_records[*action]
                 .iter()
                 .map(|record| {
                     let added = layout.add(&state, record.dimension, record.class, record.profile);
-                    (layout.raise(&added, *action), Some(*record))
-                })
-                .collect();
-            if steps.is_empty() {
-                steps.push((layout.raise(&state, *action), None));
-            }
-            for (walked, record) in steps {
-                if walked != state {
-                    returns = false;
-                    successors.push((
-                        walked,
+                    (
+                        layout.raise(&added, *action),
                         Step::Action {
                             action: *action,
-                            record,
+                            record: Some(*record),
                         },
-                    ));
+                    )
+                })
+                .collect();
+            for (at, combination) in action_groups[*action].iter().enumerate() {
+                let added = combination.iter().fold(state.clone(), |added, record| {
+                    layout.add(&added, record.dimension, record.class, record.profile)
+                });
+                steps.push((
+                    layout.raise(&added, *action),
+                    Step::Group {
+                        action: *action,
+                        at,
+                    },
+                ));
+            }
+            if steps.is_empty() {
+                steps.push((
+                    layout.raise(&state, *action),
+                    Step::Action {
+                        action: *action,
+                        record: None,
+                    },
+                ));
+            }
+            for (walked, step) in steps {
+                if walked != state {
+                    returns = false;
+                    successors.push((walked, step));
                 }
             }
         }
@@ -1157,6 +1249,14 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
                 action,
                 record: None,
             } => format!("action `{}` produces nothing", action_id(*action)),
+            Step::Group { action, at } => {
+                let records: Vec<String> = action_groups[*action][*at].iter().map(added).collect();
+                format!(
+                    "action `{}` produces {}",
+                    action_id(*action),
+                    records.join(" and ")
+                )
+            }
             Step::Supplied(record) => {
                 let supplier = ir
                     .evidence_kinds

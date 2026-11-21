@@ -249,6 +249,13 @@
             "$ref": "#/$defs/EvidenceProduction"
           }
         },
+        "records_together": {
+          "description": "The kinds one run of the action records together, all of them or none (story:simulate-record-groups). Absent: no group. Each group names two or more distinct kinds of `may_produce`, and no kind is in two groups of one action. It has no evaluation meaning: only `canon simulate` reads it, adding a group's records in one step and never one of its kinds alone.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RecordGroup"
+          }
+        },
         "arguments": {
           "description": "The JSON Schema, in Canon's argument-schema dialect, that the action's arguments satisfy. Absent: the action takes no arguments; a runner accepts only `{}`. Canon evaluates no call: `canon validate` holds the schema to the dialect (`action-arguments`), and a runner checks a call's arguments with `validate::check_arguments` or any 2020-12 validator."
         },
@@ -563,6 +570,23 @@
       },
       "required": [
         "evidence"
+      ]
+    },
+    "RecordGroup": {
+      "description": "Evidence kinds one run of an action records together, all of them or none (story:simulate-record-groups).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kinds": {
+          "description": "The kinds of the group: two or more distinct kinds the action may produce.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
+        }
+      },
+      "required": [
+        "kinds"
       ]
     },
     "CaseOpening": {

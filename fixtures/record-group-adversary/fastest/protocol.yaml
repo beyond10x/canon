@@ -1,0 +1,54 @@
+format: protocol/1
+protocol:
+  id: adversary.fastest
+  revision: 1
+  description: one group of two kinds with two classes each; the run that gives both named results closes the guard
+artifacts:
+  doc:
+    description: the document checked
+evidence_kinds:
+  a:
+    description: first member; result x or another
+  b:
+    description: second member; result y or another
+  w:
+    description: a kind no action produces
+claims:
+  a_x:
+    true_when:
+      evidence:
+        kind: a
+        result: x
+        subject: doc
+  b_y:
+    true_when:
+      evidence:
+        kind: b
+        result: y
+        subject: doc
+  has_w:
+    true_when:
+      evidence:
+        kind: w
+        subject: doc
+outcomes:
+  done:
+    requires:
+      claim: has_w
+actions:
+  act:
+    precondition:
+      any:
+        - claim: a_x
+          is: "false"
+        - claim: a_x
+          is: unknown
+        - claim: b_y
+          is: "false"
+        - claim: b_y
+          is: unknown
+    may_produce:
+      - evidence: b
+      - evidence: a
+    records_together:
+      - kinds: [b, a]
