@@ -27,14 +27,15 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
 - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
   evidence match without a result has `"result": null`; a claim test without `is` has
   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-  true; absent lists and sections are empty. The ten exceptions are an evidence kind's
-  `max_age`, the `subject` of an evidence match or an order form, an evidence match's
-  `independent_on`, an obligation's `applicable_when`, an action's `arguments`, an action's
-  `case_open`, the `scope` of a capability requirement, the `invalidation` section, the `case`
-  section and the `independence_dimensions` section: each written only when it is declared (a
-  scope only when it names a key, a section only when it holds a rule, an input or a
-  dimension), so the IR of a protocol that declares none of them is the IR it was before they
-  existed. A capability requirement is `{"capability": …}`, or `{"capability": …, "scope": {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
+  true; absent lists and sections are empty. The eleven exceptions are an evidence kind's
+  `max_age` and its `supplied_by`, the `subject` of an evidence match or an order form, an
+  evidence match's `independent_on`, an obligation's `applicable_when`, an action's
+  `arguments`, an action's `case_open`, the `scope` of a capability requirement, the
+  `invalidation` section, the `case` section and the `independence_dimensions` section: each
+  written only when it is declared (a scope only when it names a key, a section only when it
+  holds a rule, an input or a dimension), so the IR of a protocol that declares none of them is
+  the IR it was before they existed. An evidence kind's `supplied_by` is the protocol id as
+  declared, a name nothing resolves (story:supplied-evidence). A capability requirement is `{"capability": …}`, or `{"capability": …, "scope": {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
   section is `{<id>: {"description": …}}`. The `case` section is
   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
   authored: `{"first": {"kind": …, "result": …}}`, `{"before": {"first": …, "then": …}}`,

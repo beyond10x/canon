@@ -98,8 +98,11 @@ upstream artifact and revision in `upstream_revisions`, then its `producer` and 
 `observed_at` when given (an instant, a fraction of one to nine digits allowed, else
 `invalid-instant`), its id
 (used once in the set), its kind (declared by the protocol) and each upstream artifact
-(declared by the protocol, else `undeclared-artifact`, naming the record and the artifact; named
-once, else `duplicate-identifier`), then, for a `case_outcome` record, its child case (named,
+(declared by the protocol, else `undeclared-artifact`, naming the record and the artifact, unless
+the record's kind declares `supplied_by`: such a record, copied unchanged from a case under its
+supplier, may name artifacts only the supplier declares, carried and neither checked nor read,
+story:supplied-evidence; named once, else `duplicate-identifier`), then, for a `case_outcome`
+record, its child case (named,
 else `missing-child-case`) and its outcome (a `result`, else `missing-child-outcome`), and for a
 record of any other kind no child case (else `misplaced-child-case`); then, over the whole set,
 one `case_outcome` record per child case, whatever its revision (else `duplicate-child-case`,

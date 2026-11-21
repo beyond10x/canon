@@ -25,15 +25,19 @@ does not depend on the order the sections are written in:
    claims, obligations, actions, outcomes, invalidation rules, case inputs and independence
    dimensions, in that section order, then the capabilities actions name, each followed by the
    keys and values of its scope in the order written, the effect classes actions name and the
-   protocol each action's `case_open` names, in action order, then the decisions outcomes
-   require, in outcome order, then the values case inputs declare, in input order;
+   protocol each action's `case_open` names, in action order, then the protocol each evidence
+   kind's `supplied_by` names, in evidence kind order, then the decisions outcomes require, in
+   outcome order, then the values case inputs declare, in input order;
 4. duplicate identifiers, in the same section order;
 5. capability requirements whose scope names a key more than once (`duplicate-scope-key`,
    naming the action, the capability and the key, once for every naming after its first), in
    the order the actions and their requirements are written;
 6. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
-   or `d`, or that are but are too long to count in seconds (each with its own message), in the
-   order the evidence kinds are written;
+   or `d`, or that are but are too long to count in seconds (each with its own message), and
+   evidence kinds whose `supplied_by` names the protocol's own id (`self-supplied-evidence`,
+   naming the kind; story:supplied-evidence), each kind's in that order, in the order the
+   evidence kinds are written. Any other protocol may supply a kind, and nothing resolves the
+   name;
 7. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
    more than once (`duplicate-input-value`, naming the input and the value, once for every
    listing after its first), in the order the inputs are written;
@@ -147,6 +151,7 @@ object in code-point order, and the walk keeps a stack of its own, never recursi
 | `duplicate-child-outcome` | A `children` form lists an outcome more than once. |
 | `open-child-outcome` | A `children` form lists `open`, which is a running child case's outcome, never a terminal one: the form is unknown while a child is open. |
 | `self-opened-case` | An action opens a child case under the protocol's own id: a case could then open cases under its own protocol without end (D206). |
+| `self-supplied-evidence` | An evidence kind names the protocol's own id as the protocol that supplies its records (story:supplied-evidence): records of it come from outside the protocol, or from its own actions, never from a case of the same protocol through `supplied_by`. |
 | `claim-cycle` | Claims whose predicates test each other in a cycle; the first claim is repeated at the end. |
 | `action-arguments` | An action's argument schema is outside the argument-schema dialect: `pointer` is the JSON Pointer of the offending keyword inside the schema (`""` for the schema itself) and `reason` why it is refused. |
 | `invalid-import-digest` | An import pins a digest not written `sha256:` followed by 64 lowercase hexadecimal digits. |

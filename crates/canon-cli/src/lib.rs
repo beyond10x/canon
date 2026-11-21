@@ -109,9 +109,12 @@ pub enum Command {
     },
     /// Check a `protocol/1` document over its whole finite state space: report outcomes no state
     /// reaches, actions whose precondition holds in no state, claims, obligations, preconditions and
-    /// outcome requirements that read evidence no action produces, outcomes that rest on evidence an
-    /// authority-requiring action may produce yet hold without any authority decision, and each
-    /// declared property that fails, with a counterexample. A state is a set of evidence records,
+    /// outcome requirements that read evidence no action produces and no other protocol supplies,
+    /// outcomes that rest on evidence an authority-requiring action may produce yet hold without
+    /// any authority decision, and each declared property that fails, with a counterexample. An
+    /// evidence kind that declares `supplied_by` counts as produced without authority and stays
+    /// governed when an action that requires a capability may also produce it, so an outcome a
+    /// supplied record alone makes legitimate is reported as a bypass. A state is a set of evidence records,
     /// authority decisions and explicit decisions; a record an invalidation rule can keep from a
     /// claim is there in any combination of observed before and after each upstream artifact
     /// moved, one record each. Evidence an order form reads (`first`, `before`, `after`, `since`)

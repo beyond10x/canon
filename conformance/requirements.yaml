@@ -153,3 +153,12 @@ requirements:
       change admissibility. Two decisions equal in capability, scope, case revision and principal
       MUST be refused.
     source: story:authority-revision-binding
+  CANON-SUPPLY-001:
+    status: implemented
+    statement: >-
+      An evidence kind MAY name, as supplied_by, another protocol whose cases produce its records,
+      and its compiled canon-ir/1 entry MUST carry that name. A record of such a kind MAY name
+      upstream artifacts the protocol does not declare, and MUST then be evaluated to the decision
+      the same record without those entries gives. The same record under a kind without
+      supplied_by MUST be refused as undeclared-artifact.
+    source: story:supplied-evidence

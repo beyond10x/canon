@@ -21,6 +21,9 @@
 //! | maximum age introduced or shortened | `TIGHTENING` |
 //! | maximum age removed or lengthened | `RELAXATION` |
 //! | maximum age rewritten with the same length (`60m`, `1h`) | `NO SEMANTIC CHANGE` |
+//! | supplier (`supplied_by`) introduced (a record of the kind may then name upstream artifacts the protocol does not declare) | `EXPANSION` |
+//! | supplier removed (such a record is refused again) | `BREAKING` |
+//! | supplier changed to another protocol (a name the runner acts on and nothing resolves, as a changed `case_open` protocol) | `BREAKING` |
 //! | claim added | `EXPANSION` |
 //! | claim removed | `BREAKING` |
 //! | claim's predicate changed | by implication, in the direction the protocol reads the claim (below) |
@@ -117,7 +120,8 @@
 //! Changes come in a fixed order, so the same two inputs always give the same report: the protocol
 //! header, then artifacts, evidence kinds, claims, obligations, actions, outcomes, invalidation
 //! rules, case inputs and independence dimensions; within a section, by identifier; within a declaration, its description,
-//! then its fields in the order the IR declares them (an obligation's discharge predicate and
+//! then its fields in the order the IR declares them (an evidence kind's maximum age and
+//! supplier; an obligation's discharge predicate and
 //! applicability predicate; an action's precondition, capability requirements, effect, evidence
 //! it may produce, argument schema and the case it opens; a case input's values), each list in identifier order, removals before
 //! additions. Every IR declaration is destructured whole, so a field added to one does not compile
@@ -854,14 +858,23 @@ fn evidence_kind(changes: &mut Changes, id: &str, from: &EvidenceKind, to: &Evid
     let EvidenceKind {
         description: from_description,
         max_age: from_max_age,
+        supplied_by: from_supplier,
     } = from;
     let EvidenceKind {
         description: to_description,
         max_age: to_max_age,
+        supplied_by: to_supplier,
     } = to;
     changes.description(SECTION, id, from_description, to_description);
+    max_age(changes, id, from_max_age, to_max_age);
+    supplier(changes, id, from_supplier, to_supplier);
+}
+
+/// An evidence kind's maximum age, introduced, removed or changed.
+fn max_age(changes: &mut Changes, id: &str, from: &Option<Age>, to: &Option<Age>) {
+    const SECTION: &str = "evidence kind";
     let shown = |age: &Age| one_line(age.as_str());
-    let (category, what) = match (from_max_age, to_max_age) {
+    let (category, what) = match (from, to) {
         (None, None) => return,
         (None, Some(to)) => (
             Category::Tightening,
@@ -886,6 +899,39 @@ fn evidence_kind(changes: &mut Changes, id: &str, from: &EvidenceKind, to: &Evid
                 format!("maximum age {how} from {} to {}", shown(from), shown(to)),
             )
         }
+    };
+    changes.push(category, SECTION, id, what);
+}
+
+/// An evidence kind's supplier (story:supplied-evidence). An evaluation reads only whether there
+/// is one: a record of a supplied kind may name upstream artifacts the protocol does not declare.
+/// Introduced, a record set once refused is read, and every set read before decides as it did, as
+/// when a case input gains a value (`EXPANSION`); removed, such a record is refused again, as when
+/// one loses a value (`BREAKING`). Another supplier changes no evaluation, but it is a name the
+/// runner acts on and nothing resolves, like the protocol of a `case_open`, whose change is
+/// `BREAKING`; so is this one.
+fn supplier(changes: &mut Changes, id: &str, from: &Option<ProtocolId>, to: &Option<ProtocolId>) {
+    const SECTION: &str = "evidence kind";
+    let shown = |supplier: &ProtocolId| one_line(supplier.as_str());
+    let (category, what) = match (from, to) {
+        (None, None) => return,
+        (None, Some(to)) => (
+            Category::Expansion,
+            format!("supplier introduced: protocol `{}`", shown(to)),
+        ),
+        (Some(from), None) => (
+            Category::Breaking,
+            format!("supplier removed: was protocol `{}`", shown(from)),
+        ),
+        (Some(from), Some(to)) if from == to => return,
+        (Some(from), Some(to)) => (
+            Category::Breaking,
+            format!(
+                "supplier changed from protocol `{}` to protocol `{}`",
+                shown(from),
+                shown(to)
+            ),
+        ),
     };
     changes.push(category, SECTION, id, what);
 }
@@ -1260,6 +1306,37 @@ mod tests {
         assert_eq!(category(&hour, &minutes), Category::NoSemanticChange);
         assert_eq!(category(&hour, &day), Category::Relaxation);
         assert_eq!(category(&day, &hour), Category::Tightening);
+    }
+
+    /// A supplier introduced admits records once refused and changes no other decision
+    /// (`EXPANSION`), one removed refuses them again (`BREAKING`), and another supplier
+    /// is `BREAKING`, as a changed `case_open` protocol is; each after the kind's maximum age.
+    #[test]
+    fn a_supplier_introduced_expands_and_removed_or_changed_breaks() {
+        let none = ir("evidence_kinds: {a: {max_age: 1h}}\n");
+        let parent = ir("evidence_kinds: {a: {max_age: 2h, supplied_by: parent}}\n");
+        let sibling = ir("evidence_kinds: {a: {max_age: 2h, supplied_by: sibling}}\n");
+        assert_eq!(
+            lines(&none, &parent),
+            [
+                "RELAXATION: evidence kind `a` maximum age lengthened from 1h to 2h",
+                "EXPANSION: evidence kind `a` supplier introduced: protocol `parent`",
+            ]
+        );
+        assert_eq!(
+            lines(&parent, &none),
+            [
+                "TIGHTENING: evidence kind `a` maximum age shortened from 2h to 1h",
+                "BREAKING: evidence kind `a` supplier removed: was protocol `parent`",
+            ]
+        );
+        assert_eq!(
+            lines(&parent, &sibling),
+            [
+                "BREAKING: evidence kind `a` supplier changed from protocol `parent` to protocol `sibling`"
+            ]
+        );
+        assert!(lines(&parent, &parent).is_empty());
     }
 
     #[test]

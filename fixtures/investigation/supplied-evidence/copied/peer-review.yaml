@@ -1,0 +1,11 @@
+format: canon-evidence/1
+id: peer-review-1
+kind: peer_review
+result: approved
+subject: explanation
+subject_revision: r1
+observed_at: 2026-11-20T12:06:00Z
+producer: reviewer
+upstream_revisions:
+  dataset: d2
+  guideline: g7

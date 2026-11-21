@@ -87,11 +87,11 @@ types:
       - name: description
         type: Optional<String>
 
-  # read from: crates/canon/src/model/mod.rs:68-73
+  # read from: crates/canon/src/model/mod.rs:179-198
   - name: canon.protocol.EvidenceKind
     kind: struct
     fields:
-      # read from: crates/canon/src/model/mod.rs:72
+      # read from: crates/canon/src/model/mod.rs:183-184
       - name: description
         type: Optional<String>
       # How old evidence of this kind may be and still apply. At an evaluation instant later than
@@ -104,6 +104,23 @@ types:
       # read from: docs/design/canon-protocol-calculus-design.md:477
       - name: max_age
         type: Optional<canon.protocol.Age>
+      # The protocol whose cases produce records of this kind (story:supplied-evidence): any
+      # protocol but this one, its parent's, an ancestor's, a sibling's or a child's. It is a name,
+      # like CaseOpening.protocol: compile, evaluate and check each read one document, and nothing
+      # resolves it. The runner copies such a record unchanged from a case under that protocol.
+      # canon validate refuses the protocol's own id (self-supplied-evidence), naming the kind.
+      # canon check counts the kind as produced. A kind that declares supplied_by counts as
+      # produced without authority and stays governed when an action that requires a capability
+      # may also produce it, so canon check reports authority-bypass on an outcome a supplied
+      # record alone makes legitimate. Absent, no key is compiled, so the canon-ir/1 of a
+      # protocol without it is unchanged. A record of such a kind may name upstream artifacts this protocol does not
+      # declare (EvidenceRecord.upstream_revisions).
+      # read from: .engineering/planning/story/supplied-evidence.md:51-58
+      # read from: .engineering/planning/story/supplied-evidence.md:185-191
+      # read from: .engineering/planning/story/supplied-evidence.md:235-252
+      # read from: crates/canon/src/model/mod.rs:189-197
+      - name: supplied_by
+        type: Optional<canon.protocol.ProtocolId>
 
   # read from: crates/canon/src/model/mod.rs:76-82
   - name: canon.protocol.Claim
@@ -851,10 +868,16 @@ types:
       # upstream revision and is never invalidated, so no earlier expectation changes. Each key is
       # an artifact the protocol declares and each revision an identifier; the evaluator refuses
       # an undeclared one as undeclared-artifact, naming the record and the artifact, as it
-      # refuses an undeclared subject.
+      # refuses an undeclared subject. One exception (story:supplied-evidence, option B): a record
+      # of a kind that declares supplied_by may name artifacts the protocol does not declare, so a
+      # record copied unchanged from the supplier's case is read; those entries are carried and
+      # neither checked nor read, so no invalidation rule moves the record on them. Each key is
+      # still named once, each revision is still an identifier, and an entry for a declared
+      # artifact is read as from any other record.
       # read from: .engineering/planning/story/invalidation-rules.md:43-45
       # read from: .engineering/planning/story/invalidation-rules.md:50-51
       # read from: .engineering/planning/story/invalidation-rules.md:69-70
+      # read from: .engineering/planning/story/supplied-evidence.md:235-252
       - name: upstream_revisions
         type: Map<canon.protocol.ArtifactId, canon.protocol.Revision>
       # Who produced the record (story:evidence-independence): an opaque principal id, recorded as
