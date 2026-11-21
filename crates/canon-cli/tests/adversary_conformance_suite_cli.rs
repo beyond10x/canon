@@ -91,7 +91,7 @@ fn the_real_registry_with_the_flag_is_the_plain_report_and_one_line() {
     assert_eq!(
         out(&checked),
         format!(
-            "{}requirements: 26 implemented, 26 covered, 0 planned\n",
+            "{}requirements: 27 implemented, 27 covered, 0 planned\n",
             out(&plain)
         )
     );
@@ -156,6 +156,7 @@ fn the_real_catalogue_is_the_requirements_the_stories_name() {
         "CANON-DETERMINISM-001",
         "CANON-FRONTIER-001",
         "CANON-PENDING-001",
+        "CANON-GROUND-001",
         "CANON-EXPLAIN-001",
         "CANON-OBLIGATION-001",
         "CANON-INPUT-001",
