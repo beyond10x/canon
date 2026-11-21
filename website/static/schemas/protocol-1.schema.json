@@ -180,6 +180,10 @@
         "max_age": {
           "description": "How old a record of this kind may be and still apply: at an evaluation instant later than its `observed_at` by more than this, it is excluded as expired (design § 8).",
           "$ref": "#/$defs/Age"
+        },
+        "supplied_by": {
+          "description": "The protocol whose cases produce records of this kind (story:supplied-evidence): any protocol but this one, named and never resolved. A runner copies such a record unchanged from a case under that protocol; `canon check` counts the kind as produced. Absent: the protocol's own actions produce the kind, or nothing does.",
+          "$ref": "#/$defs/Identifier"
         }
       }
     },
