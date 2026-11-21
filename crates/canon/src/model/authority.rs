@@ -8,6 +8,8 @@
 //! - capability: metrics.read
 //!   scope: {cluster: prod-eu}  # optional: absent, the decision covers every scope
 //!   decision: granted          # or require_approval, or denied
+//!   principal: ops-lead        # optional: who took it, recorded as given
+//!   case_revision: c2          # optional: absent, the decision applies at every case revision
 //! ```
 
 use std::fmt;
@@ -15,7 +17,7 @@ use std::fmt;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use super::Declarations;
-use super::ids::CapabilityId;
+use super::ids::{CapabilityId, Principal, Revision};
 
 /// The authority decisions format the evaluator reads.
 pub const AUTHORITY_FORMAT: &str = "canon-authority/1";
@@ -30,8 +32,8 @@ identifier!(
     ScopeValue
 );
 
-/// One entry of a `canon-authority/1` document: a capability, the scope the decision covers and
-/// the decision.
+/// One entry of a `canon-authority/1` document: a capability, the scope the decision covers, the
+/// decision and, optionally, who took it and the case revision it was taken at.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AuthorityDecision {
@@ -45,6 +47,15 @@ pub struct AuthorityDecision {
     pub scope: Declarations<ScopeKey, ScopeValue>,
     /// Whether it is granted.
     pub decision: Grant,
+    /// Who took it, an identifier, recorded as given: Canon resolves no identity, so it is matched
+    /// against nothing and does not change admissibility.
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub principal: Option<Principal>,
+    /// The case revision it was taken at, an identifier: the decision applies only while the case
+    /// snapshot's `revision` equals it, and to nothing when the snapshot has none. Absent, it
+    /// applies at every case revision.
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub case_revision: Option<Revision>,
 }
 
 /// An authority decision on one capability at one scope. Among the decisions covering a

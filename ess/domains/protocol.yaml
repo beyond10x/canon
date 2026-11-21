@@ -296,11 +296,13 @@ types:
     kind: newtype
     of: String
 
-  # Who took an explicit decision (lead-investigator), or who produced an evidence record
-  # (EvidenceRecord.producer, story:evidence-independence). Canon resolves no identity and proves
-  # no production: the principal is recorded as given, an identifier like every other.
+  # Who took an explicit decision (lead-investigator) or an authority decision
+  # (AuthorityDecision.principal, story:authority-revision-binding), or who produced an evidence
+  # record (EvidenceRecord.producer, story:evidence-independence). Canon resolves no identity and
+  # proves no production: the principal is recorded as given, an identifier like every other.
   # read from: .engineering/planning/story/decision-outcomes.md:47
   # read from: .engineering/planning/story/evidence-independence.md:68-69
+  # read from: .engineering/planning/story/authority-revision-binding.md:57
   # read from: docs/design/canon-protocol-calculus-design.md:501
   - name: canon.protocol.Principal
     kind: newtype
@@ -763,9 +765,10 @@ types:
     kind: newtype
     of: String
 
-  # A revision of an artifact, or of the case itself (Case.revision, ExplicitDecision.case_revision):
-  # opaque text, compared for equality only (design § 9).
+  # A revision of an artifact, or of the case itself (Case.revision, ExplicitDecision.case_revision,
+  # AuthorityDecision.case_revision): opaque text, compared for equality only (design § 9).
   # read from: .engineering/planning/story/three-valued-claims.md:57-60
+  # read from: .engineering/planning/story/authority-revision-binding.md:50-53
   - name: canon.protocol.Revision
     kind: newtype
     of: String
@@ -911,38 +914,61 @@ types:
   # document: a YAML (or JSON) list of these entries; an empty list decides nothing, and an empty
   # document is not a list. Canon grants nothing and resolves no identity: whoever runs the
   # evaluation decides which capabilities are granted, at which scope, and passes those decisions
-  # in (design § 33). A capability no action requires may be decided; it changes no action. One
-  # capability may be decided at several scopes; two decisions on one capability with equal scopes
-  # (the same keys with the same values, in any order) are a duplicate. Refused, in this order:
-  # text that is not such a list (a scope that names a key twice included), or an entry with
-  # another key, another decision or a missing key, as malformed-input, naming the key an entry
-  # leaves out; then, entry by entry in the order given, a capability that is not an identifier as
-  # invalid-identifier, then a scope key or value that is not one as invalid-identifier, then a
-  # capability decided a second time at an equal scope as duplicate-identifier.
-  # read from: crates/canon/src/eval/authority.rs:1-29
-  # read from: crates/canon/src/model/authority.rs:33-48
+  # in (design § 33). A capability no action requires may be decided; it changes no action. An
+  # entry may be bound to a case revision and may name the principal who took it
+  # (story:authority-revision-binding). A bound entry, whatever its decision, applies only while
+  # its case_revision is the case snapshot's revision, compared for equality, and to nothing when
+  # the snapshot has no revision; an unbound entry applies at every case revision. Only the entries
+  # that apply take part in coverage and precedence, so a requirement covered only by entries that
+  # do not apply is not decided. One capability may be decided at several scopes and at several
+  # case revisions; two entries equal in capability, scope (the same keys with the same values, in
+  # any order), case revision and principal are a duplicate. Refused, in this order: text that is
+  # not such a list (a scope that names a key twice included), or an entry with another key,
+  # another decision or a missing key, as malformed-input, naming the key an entry leaves out;
+  # then, entry by entry in the order given, a capability that is not an identifier as
+  # invalid-identifier, then a scope key or value that is not one, then a principal, then a case
+  # revision, each as invalid-identifier, then an entry equal to an earlier one as
+  # duplicate-identifier.
+  # read from: crates/canon/src/eval/authority.rs:1-41
+  # read from: crates/canon/src/model/authority.rs:35-59
   # read from: .engineering/planning/story/review-hardening-w7.md:28
   # read from: .engineering/planning/story/review-hardening-w7.md:31
   # read from: .engineering/planning/story/capability-scope.md:74-76
   # read from: .engineering/planning/story/capability-scope.md:156-158
+  # read from: .engineering/planning/story/authority-revision-binding.md:46-62
   - name: canon.protocol.AuthorityDecision
     kind: struct
     fields:
       # The capability decided, an identifier an action's `requires` may name.
-      # read from: crates/canon/src/model/authority.rs:39-40
+      # read from: crates/canon/src/model/authority.rs:41-42
       - name: capability
         type: canon.protocol.CapabilityId
       # The scope the decision covers: one value for each key it names, each key once. It covers
       # a requirement of its capability when the requirement gives each of those keys the same
       # value; a key it leaves out covers every value of it. Absent or empty, it covers every
       # scope of the capability (canon.protocol.CapabilityRequirement).
-      # read from: crates/canon/src/model/authority.rs:41-45
+      # read from: crates/canon/src/model/authority.rs:43-47
       - name: scope
         type: Map<canon.protocol.ScopeKey, canon.protocol.ScopeValue>
       # Whether it is granted.
-      # read from: crates/canon/src/model/authority.rs:46-47
+      # read from: crates/canon/src/model/authority.rs:48-49
       - name: decision
         type: canon.protocol.Grant
+      # Who took the decision, an identifier. Canon records it as given and matches it against
+      # nothing, since it resolves no identity (design § 23): it does not change admissibility.
+      # read from: crates/canon/src/model/authority.rs:50-53
+      # read from: .engineering/planning/story/authority-revision-binding.md:49
+      # read from: .engineering/planning/story/authority-revision-binding.md:57
+      - name: principal
+        type: Optional<canon.protocol.Principal>
+      # The case revision the decision was taken at, an identifier, compared for equality with the
+      # case snapshot's revision (Case.revision): the decision applies only at that revision, as an
+      # explicit decision does (ExplicitDecision.case_revision). Absent, it applies at every case
+      # revision. A grant does not hold at a later revision descended from it.
+      # read from: crates/canon/src/model/authority.rs:54-58
+      # read from: .engineering/planning/story/authority-revision-binding.md:50-56
+      - name: case_revision
+        type: Optional<canon.protocol.Revision>
 
   # A key of a capability scope (cluster, namespace): what the scope narrows the capability to. An
   # identifier: not empty, no whitespace, control or Unicode format characters.
@@ -1182,12 +1208,14 @@ entities:
       # read from: .engineering/planning/story/outcomes.md:38-39
       - name: termination
         type: Optional<canon.protocol.OutcomeId>
-      # The case's own current revision, which an explicit decision is bound to: a decision applies
-      # only while its case_revision is this one (story:decision-outcomes). A snapshot without one
-      # has no current revision, so no explicit decision applies to it and every earlier
-      # expectation holds.
+      # The case's own current revision, which an explicit decision, and an authority decision that
+      # gives a case_revision, is bound to: such a decision applies only while its case_revision is
+      # this one (story:decision-outcomes, story:authority-revision-binding). A snapshot without one
+      # has no current revision, so no explicit decision and no bound authority decision applies to
+      # it, and every earlier expectation holds.
       # read from: .engineering/planning/story/decision-outcomes.md:47-48
       # read from: .engineering/planning/story/decision-outcomes.md:53-54
+      # read from: .engineering/planning/story/authority-revision-binding.md:52-53
       # read from: docs/design/canon-protocol-calculus-design.md:1604
       - name: revision
         type: Optional<canon.protocol.Revision>

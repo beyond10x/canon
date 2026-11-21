@@ -143,3 +143,13 @@ requirements:
       action, naming the denied capability, and one requiring approval MUST make it
       approval-required.
     source: story:capability-scope
+  CANON-AUTHORITY-002:
+    status: implemented
+    statement: >-
+      An authority decision bound to a case revision MUST apply, whatever its decision, only while
+      the case snapshot's revision equals it, and MUST NOT apply when the snapshot has no revision;
+      one bound to no case revision MUST apply at every case revision. A decision that does not
+      apply MUST take no part in coverage or precedence. The principal a decision names MUST NOT
+      change admissibility. Two decisions equal in capability, scope, case revision and principal
+      MUST be refused.
+    source: story:authority-revision-binding

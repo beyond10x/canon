@@ -109,18 +109,20 @@ evidence matches that demand an independence its producer lacks.
 
 ## `canon-authority/1`
 
-Read by `canon evaluate --authority`: a list of `AuthorityDecision` entries; an empty list is allowed. A capability decided twice at an equal scope (the same keys with the same values, in any order) is refused, whatever the decision; the JSON Schema cannot express that, and refuses only an entry repeated exactly. The [JSON Schema](https://beyond10x.github.io/canon/schemas/authority-1.schema.json) is generated from the same types.
+Read by `canon evaluate --authority`: a list of `AuthorityDecision` entries; an empty list is allowed. Two entries equal in capability, scope (the same keys with the same values, in any order), case revision and principal are refused, whatever the decision; the JSON Schema cannot express that, and refuses only an entry repeated exactly. The [JSON Schema](https://beyond10x.github.io/canon/schemas/authority-1.schema.json) is generated from the same types.
 
 ### `AuthorityDecision`
 
-One entry of a `canon-authority/1` document: a capability, the scope the decision covers and
-the decision.
+One entry of a `canon-authority/1` document: a capability, the scope the decision covers, the
+decision and, optionally, who took it and the case revision it was taken at.
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `capability` | [identifier](#identifiers) (`CapabilityId`) | required | The capability decided, an identifier an action's `requires` may name. |
 | `scope` | map from [identifier](#identifiers) (`ScopeKey`) to [identifier](#identifiers) (`ScopeValue`) | optional | The scope the decision covers: one value for each key it names, each key once. It covers a requirement of its capability when the requirement gives each of those keys the same value; a key it leaves out covers every value of it. Absent or empty, it covers every scope. |
 | `decision` | [`Grant`](#grant) | required | Whether it is granted. |
+| `principal` | [identifier](#identifiers) (`Principal`) | optional | Who took it, an identifier, recorded as given: Canon resolves no identity, so it is matched against nothing and does not change admissibility. |
+| `case_revision` | [identifier](#identifiers) (`Revision`) | optional | The case revision it was taken at, an identifier: the decision applies only while the case snapshot's `revision` equals it, and to nothing when the snapshot has none. Absent, it applies at every case revision. |
 
 ### `Grant`
 

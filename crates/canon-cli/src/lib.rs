@@ -92,7 +92,8 @@ pub enum Command {
         /// A `canon-authority/1` document: which capabilities are granted, granted only with
         /// approval or denied, each at a scope or at every scope. An action is admissible only when
         /// every capability it requires is granted at the scope it requires it; without it, none
-        /// is granted.
+        /// is granted. A decision that gives a case revision applies only while the case snapshot
+        /// is at that revision; its principal is recorded as given.
         #[arg(long)]
         authority: Option<PathBuf>,
         /// A `canon-decisions/1` document: the explicit decisions taken, each naming the decision,

@@ -3,7 +3,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://beyond10x.github.io/canon/schemas/authority-1.schema.json",
   "title": "canon-authority/1",
-  "description": "A list of `AuthorityDecision` entries. One entry of a `canon-authority/1` document: a capability, the scope the decision covers and the decision. A capability decided twice at an equal scope (the same keys with the same values, in any order) is refused, whatever the decision; the JSON Schema cannot express that, and refuses only an entry repeated exactly.",
+  "description": "A list of `AuthorityDecision` entries. One entry of a `canon-authority/1` document: a capability, the scope the decision covers, the decision and, optionally, who took it and the case revision it was taken at. Two entries equal in capability, scope (the same keys with the same values, in any order), case revision and principal are refused, whatever the decision; the JSON Schema cannot express that, and refuses only an entry repeated exactly.",
   "type": "array",
   "items": {
     "$ref": "#/$defs/AuthorityDecision"
@@ -17,7 +17,7 @@
       "pattern": "^\\S+$"
     },
     "AuthorityDecision": {
-      "description": "One entry of a `canon-authority/1` document: a capability, the scope the decision covers and the decision.",
+      "description": "One entry of a `canon-authority/1` document: a capability, the scope the decision covers, the decision and, optionally, who took it and the case revision it was taken at.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -38,6 +38,14 @@
         "decision": {
           "description": "Whether it is granted.",
           "$ref": "#/$defs/Grant"
+        },
+        "principal": {
+          "description": "Who took it, an identifier, recorded as given: Canon resolves no identity, so it is matched against nothing and does not change admissibility.",
+          "$ref": "#/$defs/Identifier"
+        },
+        "case_revision": {
+          "description": "The case revision it was taken at, an identifier: the decision applies only while the case snapshot's `revision` equals it, and to nothing when the snapshot has none. Absent, it applies at every case revision.",
+          "$ref": "#/$defs/Identifier"
         }
       },
       "required": [
