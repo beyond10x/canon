@@ -337,7 +337,8 @@ steps:
         }
 
   # Expectation 5. A denial resting on a moved artifact lapses like any other entry, so it takes no
-  # part in precedence: the unbound grant decides, admissible.
+  # part in precedence: the unbound grant decides, admissible. The denial names its principal, since
+  # grounds do not tell two entries apart.
   - id: denial-with-a-moved-ground-lapses
     evaluate:
       case:
@@ -352,6 +353,7 @@ steps:
       authority:
         - capability: x
           decision: denied
+          principal: p
           ground_revisions: {spec: r1}
         - capability: x
           decision: granted
