@@ -216,6 +216,40 @@ types:
       # read from: crates/canon/src/model/mod.rs:212-218
       - name: case_open
         type: Optional<canon.protocol.CaseOpening>
+      # Who writes the action's arguments and the content of the artifacts it revises
+      # (story:judgement-marking): `program`, a reproducible function of the action's inputs, or
+      # `judgement`, a person or a model. Absent means program. Canon gives it no evaluation
+      # meaning: canon evaluate, canon check and canon generate give the same bytes with or without
+      # it. It names no executor, harness, model or tool, and Canon cannot prove that a runner
+      # honours it. canon-ir/1 writes `"author": "judgement"` only on a judgement action, so
+      # `author: program` written out compiles to the bytes of no key. canon diff: program to
+      # judgement is TIGHTENING, judgement to program RELAXATION, each naming the action.
+      # read from: .engineering/planning/story/judgement-marking.md:50
+      # read from: .engineering/planning/story/judgement-marking.md:53-57
+      - name: author
+        type: Optional<canon.protocol.Author>
+      # The artifacts the action may move to a new revision (story:judgement-marking). Absent
+      # means none. canon validate refuses an id that is not a declared artifact
+      # (undeclared-artifact), naming the action, after the evidence kinds it may produce and
+      # before the subject of its case_open. canon-ir/1 writes `"revises"` only when the list is
+      # not empty, sorted, each id once. No evaluation reads it, and Canon never refuses a runner
+      # that moves an artifact outside it: that needs a record Canon does not receive. canon diff:
+      # an artifact added is RELAXATION, one removed TIGHTENING, each naming the action and the
+      # artifact.
+      # read from: .engineering/planning/story/judgement-marking.md:51
+      # read from: .engineering/planning/story/judgement-marking.md:53-57
+      - name: revises
+        type: List<canon.protocol.ArtifactId>
+
+  # Who decides a judgement-marked result (story:judgement-marking): `program`, a reproducible
+  # procedure, or `judgement`, a person or a model. On an action (`author`) it says who writes its
+  # arguments and the artifacts it revises; on a production (`decided_by`) who decides the record's
+  # result. Neither has any evaluation meaning.
+  # read from: .engineering/planning/story/judgement-marking.md:50-52
+  # read from: .engineering/planning/story/judgement-marking.md:99
+  - name: canon.protocol.Author
+    kind: enum
+    variants: ["program", "judgement"]
 
   # What an action's `case_open` names: the protocol a child case is governed by and the artifact
   # it is about, never an existing case, so no run-time check guards against a case opening its
@@ -273,6 +307,16 @@ types:
       # read from: crates/canon/src/model/mod.rs:120
       - name: evidence
         type: canon.protocol.EvidenceKindId
+      # Who decides the result of a record of this kind the action produces
+      # (story:judgement-marking). Absent means the action's `author`. `decided_by: program` on a
+      # judgement action covers a record the runner writes from the effect it applied, such as
+      # provenance. No evaluation reads it. canon-ir/1 writes `"decided_by": "judgement"` only on
+      # a production whose resolved value is judgement; when one action lists a kind twice,
+      # judgement wins. canon diff: a production becoming judgement-decided is TIGHTENING, one
+      # becoming program-decided RELAXATION, each naming the action and the kind.
+      # read from: .engineering/planning/story/judgement-marking.md:52-56
+      - name: decided_by
+        type: Optional<canon.protocol.Author>
 
   # read from: crates/canon/src/model/mod.rs:124-130
   - name: canon.protocol.Outcome
