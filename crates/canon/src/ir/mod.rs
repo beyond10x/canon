@@ -18,14 +18,15 @@
 //! - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
 //!   evidence match without a result has `"result": null`; a claim test without `is` has
 //!   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-//!   true; absent lists and sections are empty. The ten exceptions are an evidence kind's
-//!   `max_age`, the `subject` of an evidence match or an order form, an evidence match's
-//!   `independent_on`, an obligation's `applicable_when`, an action's `arguments`, an action's
-//!   `case_open`, the `scope` of a capability requirement, the `invalidation` section, the `case`
-//!   section and the `independence_dimensions` section: each written only when it is declared (a
-//!   scope only when it names a key, a section only when it holds a rule, an input or a
-//!   dimension), so the IR of a protocol that declares none of them is the IR it was before they
-//!   existed. A capability requirement is `{"capability": …}`, or `{"capability": …, "scope":
+//!   true; absent lists and sections are empty. The eleven exceptions are an evidence kind's
+//!   `max_age` and its `supplied_by`, the `subject` of an evidence match or an order form, an
+//!   evidence match's `independent_on`, an obligation's `applicable_when`, an action's
+//!   `arguments`, an action's `case_open`, the `scope` of a capability requirement, the
+//!   `invalidation` section, the `case` section and the `independence_dimensions` section: each
+//!   written only when it is declared (a scope only when it names a key, a section only when it
+//!   holds a rule, an input or a dimension), so the IR of a protocol that declares none of them is
+//!   the IR it was before they existed. An evidence kind's `supplied_by` is the protocol id as
+//!   declared, a name nothing resolves (story:supplied-evidence). A capability requirement is `{"capability": …}`, or `{"capability": …, "scope":
 //!   {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
 //!   section is `{<id>: {"description": …}}`. The `case` section is
 //!   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
@@ -159,13 +160,17 @@ pub struct Described {
     pub description: Option<String>,
 }
 
-/// An evidence kind: its description, and how old a record of it may be and still apply.
+/// An evidence kind: its description, how old a record of it may be and still apply, and the
+/// protocol whose cases supply its records.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EvidenceKind {
     pub description: Option<String>,
     /// Readable when compiled: the validator refuses a maximum age [`Age::seconds`] does not read.
     /// A caller can build an IR with one; the evaluator then refuses it as `invalid-max-age`.
     pub max_age: Option<Age>,
+    /// The protocol whose cases produce records of this kind, as declared; `None` when the
+    /// protocol names none, and `canon-ir/1` then writes no `supplied_by` key.
+    pub supplied_by: Option<ProtocolId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -269,6 +274,7 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
         evidence_kinds: keyed(&protocol.evidence_kinds, |kind| EvidenceKind {
             description: kind.description.clone(),
             max_age: kind.max_age.clone(),
+            supplied_by: kind.supplied_by.clone(),
         }),
         claims: keyed(&protocol.claims, |claim| Claim {
             description: claim.description.clone(),
@@ -609,6 +615,9 @@ impl Ir {
                     let mut fields = vec![("description", description(&kind.description))];
                     if let Some(max_age) = &kind.max_age {
                         fields.push(("max_age", Value::string(max_age.as_str())));
+                    }
+                    if let Some(supplier) = &kind.supplied_by {
+                        fields.push(("supplied_by", Value::string(supplier.as_str())));
                     }
                     Value::object(fields)
                 }),
@@ -1216,5 +1225,22 @@ mod tests {
             ),
             "{compiled}"
         );
+    }
+
+    /// A supplier is written as declared, after the kind's other members, and only on the kind
+    /// that names one: a protocol naming none compiles to the bytes it did before the field.
+    #[test]
+    fn a_supplier_is_written_only_where_declared() {
+        let compiled = ir(&format!(
+            "{HEADER}evidence_kinds: {{supplied: {{supplied_by: parent.stage, max_age: 1h}}, \
+             plain: {{description: d}}}}\n"
+        ));
+        assert!(
+            compiled.contains(
+                "  \"evidence_kinds\": {\n    \"plain\": {\n      \"description\": \"d\"\n    },\n    \"supplied\": {\n      \"description\": null,\n      \"max_age\": \"1h\",\n      \"supplied_by\": \"parent.stage\"\n    }\n  },\n"
+            ),
+            "{compiled}"
+        );
+        assert!(!ir(&format!("{HEADER}evidence_kinds: {{plain: {{}}}}\n")).contains("supplied_by"));
     }
 }

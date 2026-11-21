@@ -226,6 +226,7 @@ fn protocol(value: &Json) -> Shape<Protocol> {
             Ok(EvidenceKind {
                 description: optional_text(entry, "description")?,
                 max_age: absent_or_text(entry, "max_age")?.map(Age::new),
+                supplied_by: absent_or_text(entry, "supplied_by")?.map(ProtocolId::new),
             })
         })?,
         claims: declarations(value, "claims", ClaimId::new, |entry| {
@@ -582,6 +583,38 @@ mod tests {
         }
         let refusal = read_ir(&text.replace("\"5m\"", "\"5 min\"")).expect_err("invalid age");
         assert!(refusal.to_string().contains("invalid-max-age"), "{refusal}");
+    }
+
+    /// A supplier reads back as written; one that is not a string, or an explicit null the
+    /// compiler never writes, is refused, and so is the protocol's own id, as the validator
+    /// refuses it.
+    #[test]
+    fn a_supplier_reads_back_and_any_other_value_is_refused() {
+        let ir = ir::compile(
+            &model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 evidence_kinds: {k: {supplied_by: q}, l: {}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let text = ir.canonical_json();
+        assert!(text.contains("\"supplied_by\": \"q\""), "{text}");
+        assert_eq!(read_ir(&text), Ok(ir));
+        for replacement in ["\"supplied_by\": 7", "\"supplied_by\": null"] {
+            let refusal = read_ir(&text.replace("\"supplied_by\": \"q\"", replacement))
+                .expect_err(replacement);
+            assert_eq!(refusal.code(), "malformed-input", "{refusal}");
+            assert_eq!(
+                refusal.to_string(),
+                "not canon-ir/1: `supplied_by` is not a string"
+            );
+        }
+        let refusal = read_ir(&text.replace("\"q\"", "\"p\"")).expect_err("self-supplied");
+        assert!(
+            refusal.to_string().contains("self-supplied-evidence"),
+            "{refusal}"
+        );
     }
 
     /// The IR of a claim whose predicate is `not` nested `depth` times around an evidence match.

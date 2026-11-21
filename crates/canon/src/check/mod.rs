@@ -301,7 +301,11 @@
 //!   Every predicate is read: each claim's
 //!   `true_when`, each obligation's `discharged_when`, each action's precondition and each outcome's
 //!   requirement, in that order, each section in identifier order; one finding per declaration and
-//!   kind, kinds in identifier order.
+//!   kind, kinds in identifier order. A kind that declares `supplied_by` is produced, by another
+//!   protocol's cases (story:supplied-evidence): no finding names it, and for `authority-bypass`
+//!   it is produced without authority, its supplier's authority being that protocol's to check.
+//!   Production reads no state, so the slices, their sizes and the states are those of the
+//!   protocol without `supplied_by`; it decides only which states witness a bypass.
 //! - `authority-bypass`: an outcome that reads governed evidence where its presence helps it hold,
 //!   and that is legitimate without authority because of evidence present. Governed evidence is
 //!   each kind some action that requires a capability may produce. A requirement reads an evidence
@@ -312,7 +316,8 @@
 //!   record helps the requirement hold in either position. The outcome is a bypass when some
 //!   evidence dimension it reads positively is of a governed kind, and it is legitimate in a state
 //!   that takes no authority decision, whose
-//!   every present evidence kind some action requiring no capability may produce, and from which
+//!   every present evidence kind some action requiring no capability may produce or is supplied
+//!   (`supplied_by`), and from which
 //!   taking away one positively read dimension that is present blocks it. Each such dimension is
 //!   judged alone, so the outcome may rest on governed evidence produced without authority or on
 //!   other evidence beside it. An outcome that holds only because governed evidence is absent,
@@ -748,11 +753,14 @@ pub(crate) fn check_by(
         .filter(|action| !action.requires.is_empty())
         .flat_map(|action| produces(ir, action))
         .collect();
+    // A supplied kind is produced without authority in this protocol: its supplier's authority is
+    // checked in the supplier's protocol, so a state where it is present can be a witness.
     let free: BTreeSet<&EvidenceKindId> = ir
         .actions
         .values()
         .filter(|action| action.requires.is_empty())
         .flat_map(|action| produces(ir, action))
+        .chain(supplied(ir))
         .collect();
     let mut decided: Vec<Decided> = subjects.iter().map(|_| Decided::default()).collect();
     for (slice, members) in &plan {
@@ -814,6 +822,7 @@ pub(crate) fn check_by(
         .actions
         .values()
         .flat_map(|action| produces(ir, action))
+        .chain(supplied(ir))
         .collect();
     for (reader, predicate) in space::readers(ir) {
         for kind in space::kinds_read(ir, predicate) {
@@ -999,6 +1008,15 @@ fn produces<'a>(
 ) -> impl Iterator<Item = &'a EvidenceKindId> {
     let opened = action.case_open.as_ref().and(space::case_outcome(ir));
     action.may_produce.iter().chain(opened)
+}
+
+/// The evidence kinds another protocol's cases produce (story:supplied-evidence): each that
+/// declares `supplied_by`. Produced, as an action's are, and without authority in this protocol.
+fn supplied(ir: &Ir) -> impl Iterator<Item = &EvidenceKindId> {
+    ir.evidence_kinds
+        .iter()
+        .filter(|(_, kind)| kind.supplied_by.is_some())
+        .map(|(id, _)| id)
 }
 
 /// The `authority-bypass` finding of the outcome at `at`, decided over `enumerated`.

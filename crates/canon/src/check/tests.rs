@@ -217,6 +217,47 @@ fn an_outcome_that_holds_on_absent_governed_evidence_is_no_bypass() {
     );
 }
 
+/// story:supplied-evidence: a kind that declares `supplied_by` is produced, so no
+/// `unproduced-evidence` names it, and produced without authority, so a state where it is present
+/// witnesses the bypass of `granted` through the governed `k` that `self_approve` also produces.
+/// The kind `w`, which only `other` reads, makes the whole product four times `granted`'s slice,
+/// so `canon check` decides each subject over its slice, and the three strategies agree. Without
+/// `supplied_by`, `s` is unproduced, a state holding it is no witness and the bypass is hidden.
+/// The state count does not change: production reads no state.
+#[test]
+fn a_supplied_kind_is_produced_without_authority_in_every_slice() {
+    let supplied = "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}}\n\
+        evidence_kinds: {k: {}, s: {supplied_by: q}, w: {}}\n\
+        claims: {approved: {true_when: {evidence: {kind: k}}}, \
+        reviewed: {true_when: {evidence: {kind: s}}}}\n\
+        actions:\n\
+        \x20\x20approve: {requires: [{capability: c}], may_produce: [{evidence: k}]}\n\
+        \x20\x20self_approve: {may_produce: [{evidence: k}]}\n\
+        \x20\x20watch: {may_produce: [{evidence: w}]}\n\
+        outcomes:\n\
+        \x20\x20granted: {requires: {all: [{claim: approved}, {claim: reviewed}]}}\n\
+        \x20\x20other: {requires: {evidence: {kind: w}}}\n";
+    let ir = compiled(supplied);
+    assert_eq!(
+        check(&ir, None).expect("checked").to_string(),
+        "authority-bypass: outcome `granted` is legitimate without authority in state \
+         {evidence `k`, evidence `s`}\n\
+         checked: protocol `p` revision 1: 24 states, 0 properties, 1 finding\n"
+    );
+    let (widest, whole) = assert_slices_agree(&ir, None, supplied);
+    assert!(widest * 2 < whole, "{widest} of {whole}");
+
+    let unsupplied = supplied.replace("s: {supplied_by: q}", "s: {}");
+    let ir = compiled(&unsupplied);
+    assert_eq!(
+        check(&ir, None).expect("checked").to_string(),
+        "unproduced-evidence: claim `reviewed` reads evidence kind `s`, which no action may produce\n\
+         unproduced-evidence: outcome `granted` reads evidence kind `s`, which no action may produce\n\
+         checked: protocol `p` revision 1: 24 states, 0 properties, 2 findings\n"
+    );
+    assert_slices_agree(&ir, None, &unsupplied);
+}
+
 /// Adversary pass 1, finding 7: the bound refusal the module docs show is one `check` gives, so
 /// its count is the product of its dimensions. Reads the module source at run time. The slice of
 /// `act` holds `k`, `m` and `c`, not the decision `d` only `o` reads (story:check-subject-slices).

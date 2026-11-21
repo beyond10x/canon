@@ -186,6 +186,12 @@ pub struct EvidenceKind {
     /// its `observed_at` by more than this, it is excluded as expired (design § 8).
     #[serde(default, deserialize_with = "present::optional")]
     pub max_age: Option<Age>,
+    /// The protocol whose cases produce records of this kind (story:supplied-evidence): any
+    /// protocol but this one, named and never resolved. A runner copies such a record unchanged
+    /// from a case under that protocol; `canon check` counts the kind as produced. Absent: the
+    /// protocol's own actions produce the kind, or nothing does.
+    #[serde(default, deserialize_with = "present::optional")]
+    pub supplied_by: Option<ProtocolId>,
 }
 
 /// A proposition whose value is established from evidence by its predicate.

@@ -2,6 +2,12 @@
 //! [`crate::model::EvidenceRecord`]; this file reads a record from text or a YAML value and checks
 //! the set against the compiled protocol. Which records apply is decided afterwards, by the
 //! exclusion stages (`binding.rs`, `freshness.rs`, `invalidation.rs`).
+//!
+//! Each upstream artifact a record names is one the protocol declares, except on a record of a
+//! kind that declares `supplied_by` (story:supplied-evidence): copied unchanged from a case under
+//! another protocol, it may name artifacts only that protocol declares. Those entries are carried
+//! and neither checked nor read; every upstream artifact is still named once and its revision is
+//! still an identifier.
 
 use std::collections::BTreeSet;
 
@@ -96,7 +102,7 @@ fn check_record<'a>(
             ),
         ));
     }
-    if !ir.evidence_kinds.contains_key(&record.kind) {
+    let Some(kind) = ir.evidence_kinds.get(&record.kind) else {
         return Err(Refusal::new(
             "undeclared-evidence-kind",
             format!(
@@ -105,10 +111,14 @@ fn check_record<'a>(
                 one_line(record.kind.as_str())
             ),
         ));
-    }
+    };
+    // A record of a supplied kind is copied unchanged from a case under its supplier, which may
+    // declare artifacts this protocol does not (story:supplied-evidence, option B): such an entry
+    // is carried. Nothing reads it: an invalidation rule watches a declared artifact only.
+    let supplied = kind.supplied_by.is_some();
     let mut upstream = BTreeSet::new();
     for artifact in record.upstream_revisions.ids() {
-        if !ir.artifacts.contains_key(artifact) {
+        if !supplied && !ir.artifacts.contains_key(artifact) {
             return Err(Refusal::new(
                 "undeclared-artifact",
                 format!(
@@ -229,6 +239,52 @@ mod tests {
         assert_eq!(
             checked("~").expect_err("null refused").code(),
             "malformed-input"
+        );
+    }
+
+    /// A record of a supplied kind may name upstream artifacts the protocol does not declare, each
+    /// still once and each revision still an identifier; a record of a kind without a supplier
+    /// may not, as before.
+    #[test]
+    fn a_supplied_record_may_name_undeclared_upstream_artifacts() {
+        let ir = crate::ir::compile(
+            &crate::model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 artifacts: {a: {}, up: {}}\nevidence_kinds: {s: {supplied_by: q}, k: {}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let checked = |kind: &str, upstream: &str| -> Result<(), Refusal> {
+            let record = read_evidence(&format!(
+                "format: canon-evidence/1\nid: e1\nkind: {kind}\nsubject: a\nsubject_revision: r1\n\
+                 upstream_revisions: {upstream}\n"
+            ))?;
+            check(&ir, &[record])
+        };
+        assert_eq!(checked("s", "{up: u1, gone: g1}"), Ok(()));
+        assert_eq!(checked("s", "{gone: g1}"), Ok(()));
+        assert_eq!(
+            checked("k", "{up: u1, gone: g1}")
+                .expect_err("refused")
+                .to_string(),
+            "evidence `e1` records a revision of upstream artifact `gone`, which the protocol does not declare"
+        );
+        assert_eq!(
+            checked("s", "{gone: ' '}").expect_err("refused").code(),
+            "invalid-identifier"
+        );
+        let mut built = read_evidence(
+            "format: canon-evidence/1\nid: e1\nkind: s\nsubject: a\nsubject_revision: r1\n",
+        )
+        .expect("reads");
+        built.upstream_revisions = crate::model::Declarations::new(vec![
+            ("gone".into(), "g1".into()),
+            ("gone".into(), "g2".into()),
+        ]);
+        assert_eq!(
+            check(&ir, &[built]).expect_err("refused").to_string(),
+            "evidence `e1` records a revision of upstream artifact `gone` more than once"
         );
     }
 

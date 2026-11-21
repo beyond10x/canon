@@ -16,15 +16,19 @@
 //!    claims, obligations, actions, outcomes, invalidation rules, case inputs and independence
 //!    dimensions, in that section order, then the capabilities actions name, each followed by the
 //!    keys and values of its scope in the order written, the effect classes actions name and the
-//!    protocol each action's `case_open` names, in action order, then the decisions outcomes
-//!    require, in outcome order, then the values case inputs declare, in input order;
+//!    protocol each action's `case_open` names, in action order, then the protocol each evidence
+//!    kind's `supplied_by` names, in evidence kind order, then the decisions outcomes require, in
+//!    outcome order, then the values case inputs declare, in input order;
 //! 4. duplicate identifiers, in the same section order;
 //! 5. capability requirements whose scope names a key more than once (`duplicate-scope-key`,
 //!    naming the action, the capability and the key, once for every naming after its first), in
 //!    the order the actions and their requirements are written;
 //! 6. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
-//!    or `d`, or that are but are too long to count in seconds (each with its own message), in the
-//!    order the evidence kinds are written;
+//!    or `d`, or that are but are too long to count in seconds (each with its own message), and
+//!    evidence kinds whose `supplied_by` names the protocol's own id (`self-supplied-evidence`,
+//!    naming the kind; story:supplied-evidence), each kind's in that order, in the order the
+//!    evidence kinds are written. Any other protocol may supply a kind, and nothing resolves the
+//!    name;
 //! 7. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
 //!    more than once (`duplicate-input-value`, naming the input and the value, once for every
 //!    listing after its first), in the order the inputs are written;
@@ -274,6 +278,13 @@ pub enum Problem {
         action: ActionId,
         protocol: ProtocolId,
     },
+    /// An evidence kind names the protocol's own id as the protocol that supplies its records
+    /// (story:supplied-evidence): records of it come from outside the protocol, or from its own
+    /// actions, never from a case of the same protocol through `supplied_by`.
+    SelfSuppliedEvidence {
+        kind: EvidenceKindId,
+        protocol: ProtocolId,
+    },
     /// Claims whose predicates test each other in a cycle; the first claim is repeated at the end.
     ClaimCycle { claims: Vec<ClaimId> },
     /// An action's argument schema is outside the argument-schema dialect: `pointer` is the JSON
@@ -375,6 +386,7 @@ impl Problem {
             Problem::DuplicateChildOutcome { .. } => "duplicate-child-outcome",
             Problem::OpenChildOutcome { .. } => "open-child-outcome",
             Problem::SelfOpenedCase { .. } => "self-opened-case",
+            Problem::SelfSuppliedEvidence { .. } => "self-supplied-evidence",
             Problem::ClaimCycle { .. } => "claim-cycle",
             Problem::ActionArguments { .. } => "action-arguments",
             Problem::InvalidImportDigest { .. } => "invalid-import-digest",
@@ -556,6 +568,12 @@ impl fmt::Display for Problem {
                 f,
                 "action `{}` opens a case under protocol `{}`, the protocol's own id",
                 one_line(action.as_str()),
+                one_line(protocol.as_str())
+            ),
+            Problem::SelfSuppliedEvidence { kind, protocol } => write!(
+                f,
+                "evidence kind `{}` is supplied by protocol `{}`, the protocol's own id",
+                one_line(kind.as_str()),
                 one_line(protocol.as_str())
             ),
             Problem::ClaimCycle { claims } => {
@@ -776,6 +794,11 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
             named.push((Section::Protocol, opening.protocol.as_str()));
         }
     }
+    for (_, kind) in protocol.evidence_kinds.iter() {
+        if let Some(supplier) = &kind.supplied_by {
+            named.push((Section::Protocol, supplier.as_str()));
+        }
+    }
     for (_, outcome) in protocol.outcomes.iter() {
         if let Some(decision) = outcome.requires.decision() {
             named.push((Section::Decision, decision.as_str()));
@@ -826,6 +849,12 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
                 kind: id.clone(),
                 max_age: max_age.as_str().to_owned(),
                 too_long: max_age.is_well_formed(),
+            });
+        }
+        if kind.supplied_by.as_ref() == Some(&protocol.protocol.id) {
+            problems.push(Problem::SelfSuppliedEvidence {
+                kind: id.clone(),
+                protocol: protocol.protocol.id.clone(),
             });
         }
     }
@@ -1591,6 +1620,40 @@ mod tests {
             [
                 "invalid-max-age: evidence kind `k` has max_age `106751991167301d`, which is too long to count in seconds"
             ]
+        );
+    }
+
+    /// A supplier is a protocol identifier, checked after every name actions give and before the
+    /// decisions outcomes require; the protocol's own id is refused as `self-supplied-evidence`,
+    /// naming the kind, after its maximum age and before the unresolved references. Any other id
+    /// is valid, resolved by nothing: the parent's, a child's, one no document declares.
+    #[test]
+    fn a_supplier_is_another_protocol_named_by_an_identifier() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            evidence_kinds: {z: {supplied_by: p, max_age: 5x}, a: {supplied_by: 'q q'}, \
+            k: {supplied_by: p}}\n\
+            actions: {act: {effect: 'bad effect'}}\n\
+            outcomes: {o: {requires: {decision: 'bad decision'}}}\n\
+            claims: {c: {true_when: {evidence: {kind: x}}}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "invalid-identifier: effect class identifier `bad effect` is empty or contains whitespace or a control character",
+                "invalid-identifier: protocol identifier `q q` is empty or contains whitespace or a control character",
+                "invalid-identifier: decision identifier `bad decision` is empty or contains whitespace or a control character",
+                "invalid-max-age: evidence kind `z` has max_age `5x`, which is not a whole number without leading zeros, followed by s, m, h or d",
+                "self-supplied-evidence: evidence kind `z` is supplied by protocol `p`, the protocol's own id",
+                "self-supplied-evidence: evidence kind `k` is supplied by protocol `p`, the protocol's own id",
+                "undeclared-evidence-kind: claim `c` references evidence kind `x`, which is not declared",
+            ]
+        );
+        assert_eq!(
+            problems(
+                "format: protocol/1\nprotocol: {id: p.child, revision: 1}\n\
+                 evidence_kinds: {up: {supplied_by: p}, down: {supplied_by: p.child.grandchild}, \
+                 side: {supplied_by: p.sibling}, nowhere: {supplied_by: never.declared}}\n"
+            ),
+            Vec::<String>::new()
         );
     }
 
