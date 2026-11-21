@@ -1,0 +1,75 @@
+format: protocol/1
+
+protocol:
+  id: child.twice
+  revision: 1
+  description: Open child cases until the opening is closed; end once every child ended.
+
+artifacts:
+  thing:
+    description: The thing the child cases settle.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child case.
+  opened:
+    description: A child case was opened.
+  closure:
+    description: No more child cases are opened.
+
+claims:
+  started:
+    description: A child case was opened.
+    true_when:
+      evidence:
+        kind: opened
+
+  closed:
+    description: No more child cases are opened.
+    true_when:
+      evidence:
+        kind: closure
+
+  resolved:
+    description: Every child case ended accepted.
+    true_when:
+      children:
+        in: [accepted]
+
+actions:
+  open:
+    description: Open a child case while the opening is not closed.
+    precondition:
+      claim: closed
+      is: unknown
+    case_open:
+      protocol: child.task
+      subject: thing
+    may_produce:
+      - evidence: opened
+
+  close:
+    description: Close the opening once a child case was opened.
+    precondition:
+      all:
+        - claim: started
+        - claim: closed
+          is: unknown
+    may_produce:
+      - evidence: closure
+
+outcomes:
+  done:
+    description: The opening is closed and every child ended accepted.
+    requires:
+      all:
+        - claim: closed
+        - claim: resolved
+
+  declined:
+    description: The opening is closed and a child ended otherwise.
+    requires:
+      all:
+        - claim: closed
+        - claim: resolved
+          is: false
