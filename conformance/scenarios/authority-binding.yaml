@@ -257,6 +257,72 @@ steps:
     expect:
       refusal: duplicate-identifier
 
+  # Beyond the seven expectations: a `require_approval` is bound like any other decision. Bound to
+  # c2, it applies at c2 and wins over the unbound grant: approval is required, naming it.
+  - id: current-approval-wins
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-1
+        protocol: metrics
+        revision: c2
+        artifacts: {}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-eu}
+          decision: granted
+        - capability: metrics.read
+          decision: require_approval
+          case_revision: c2
+    expect:
+      decision: |
+        {
+          "actions": {
+            "inspect": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "require_approval",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }
+
+  # The same entries with the case at c3: the `require_approval` bound to c2 does not apply, so the
+  # unbound grant decides, admissible.
+  - id: stale-approval-takes-no-part
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-1
+        protocol: metrics
+        revision: c3
+        artifacts: {}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-eu}
+          decision: granted
+        - capability: metrics.read
+          decision: require_approval
+          case_revision: c2
+    expect:
+      decision: |
+        {
+          "actions": {
+            "inspect": {
+              "status": "admissible"
+            }
+          }
+        }
+
   # The story's duplicate key, beyond the seven expectations. Two principals deciding one capability
   # at one scope and one case revision are two entries, not a duplicate: read, admissible.
   - id: two-principals-at-one-revision
