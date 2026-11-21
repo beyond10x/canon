@@ -1,17 +1,21 @@
-//! Adversary pass 1 on story:argument-validator: `validate::check_arguments` against its claims.
+//! Adversary passes 1 and 2 on story:argument-validator: `validate::check_arguments` against its
+//! claims.
 //!
-//! - Claim 5: `canon validate`, `canon compile` and `canon diff` print what they printed on the
-//!   base for every protocol. The base binary `canon-6f44325` (same argument-schema and diff code
-//!   as the base 619fd03) prints the texts pinned here; the change of `same` to exact comparison
-//!   changes them.
-//! - Claim 3: numbers are compared exactly. With serde_json's `arbitrary_precision` feature a
-//!   `Number` holds the text exactly, and `cargo test --workspace` turns that feature on, because
-//!   `b10x-canon-expr` enables it. The function then compares through `as_f64`, which rounds, and
-//!   is `None` for a number beyond the double range, which `double` turns into NaN. Each of those
-//!   cases checks first that the `Number` holds the exact text; without the feature serde_json
-//!   cannot hand the value over at all and the case asserts that instead.
-//! - Mutants the unit's suite does not catch: pointer escaping, `type` hiding the other keywords,
-//!   refusals at three depths.
+//! - D1 (decided in review): one exact comparison of numbers. `canon validate` accepts an `enum`
+//!   holding `9007199254740993` and `9007199254740992.0`, and `canon diff` prints `BREAKING` for
+//!   `[9007199254740992.0]` to `[9007199254740993]`. Pass 1 pinned the base's outputs; pass 2
+//!   re-pins them to these.
+//! - D2: the comparison is exact however `serde_json` is built. With `arbitrary_precision` a
+//!   `Number` read from JSON holds its text, and `cargo test --workspace` turns that feature on,
+//!   because `b10x-canon-expr` enables it; `cargo install canon-cli` and `cargo test -p b10x-canon`
+//!   do not. The pass 1 cases of claim 3 check the text path and return early without the feature.
+//! - Pass 2: a number a protocol's YAML writes with a fraction or an exponent is a double that
+//!   holds the literal exactly, yet with `arbitrary_precision` it is compared by the shortest text
+//!   of that double, which is another decimal above 2^53. Those cases are red in
+//!   `cargo test --workspace` and green in `cargo test -p b10x-canon`. A fuzz compares the exact
+//!   decimal comparison with an oracle written here, digit strings aligned at the point.
+//! - Mutants the unit's suite did not catch in pass 1: pointer escaping, `type` hiding the other
+//!   keywords, refusals at three depths.
 
 use b10x_canon::diff;
 use b10x_canon::ir;
@@ -56,49 +60,53 @@ fn schema(text: &str) -> Value {
     serde_json::from_str(text).expect("JSON")
 }
 
-// ---- claim 5: no change to what `canon validate`, `compile` and `diff` print ----
-
-/// Base: `error[action-arguments]: action `act` arguments at `/properties/n/enum/1`:
-/// `9007199254740992.0` is listed more than once` (exit 1). HEAD: `valid` (exit 0), and `canon
-/// compile` now compiles it.
-#[test]
-fn validate_still_refuses_the_enum_the_base_refused() {
-    let text = protocol(
-        "{type: object, properties: {n: {type: number, enum: [9007199254740993, 9007199254740992.0]}}}",
-        1,
-    );
-    let problems = match validate::validate(&model::parse(&text).expect("parses")) {
+/// What `canon validate` prints for a protocol whose action `act` has `schema` as its arguments.
+fn validate_lines(schema: &str) -> Vec<String> {
+    match validate::validate(&model::parse(&protocol(schema, 1)).expect("parses")) {
         Ok(()) => Vec::new(),
         Err(problems) => problems.iter().map(ToString::to_string).collect(),
-    };
-    assert_eq!(
-        problems,
-        [
-            "action `act` arguments at `/properties/n/enum/1`: `9007199254740992.0` is listed more than once"
-        ],
-        "claim 5: `canon validate` prints what it printed on the base"
-    );
+    }
 }
 
-/// Base: `NO SEMANTIC CHANGE: action `act` arguments rewritten`. HEAD: `BREAKING: action `act`
-/// arguments changed`.
-#[test]
-fn diff_still_prints_what_the_base_printed_for_an_enum_above_two_to_the_53() {
-    let from = "{type: object, properties: {n: {type: number, enum: [9007199254740992.0]}}}";
-    let to = "{type: object, properties: {n: {type: number, enum: [9007199254740993]}}}";
+/// The `arguments` lines `canon diff` prints from revision `from` to `to` of the schema.
+fn diff_lines(from: &str, to: &str) -> Vec<String> {
     let from = ir::compile(&model::parse(&protocol(from, 1)).expect("parses")).expect("compiles");
     let to = ir::compile(&model::parse(&protocol(to, 2)).expect("parses")).expect("compiles");
-    let lines: Vec<String> = diff::diff(&from, &to)
+    diff::diff(&from, &to)
         .expect("compares")
         .changes
         .into_iter()
         .filter(|change| change.what.starts_with("arguments"))
         .map(|change| format!("{}: {}", change.category, change.what))
-        .collect();
+        .collect()
+}
+
+// ---- D1: the exact comparison's outputs of `canon validate` and `canon diff` ----
+
+/// Base: refused as `9007199254740992.0` listed more than once. D1: the two are distinct values,
+/// so `canon validate` prints `valid` and `canon compile` compiles it.
+#[test]
+fn validate_accepts_the_enum_d1_keeps_distinct() {
     assert_eq!(
-        lines,
-        ["NO SEMANTIC CHANGE: arguments rewritten"],
-        "claim 5: `canon diff` prints what it printed on the base"
+        validate_lines(
+            "{type: object, properties: {n: {type: number, enum: [9007199254740993, 9007199254740992.0]}}}"
+        ),
+        Vec::<String>::new(),
+        "D1: `canon validate` accepts two values a double cannot tell apart"
+    );
+}
+
+/// Base: `NO SEMANTIC CHANGE: action `act` arguments rewritten`. D1: `BREAKING: action `act`
+/// arguments changed`, since the old and the new value are different numbers.
+#[test]
+fn diff_prints_breaking_for_an_enum_value_changed_above_two_to_the_53() {
+    assert_eq!(
+        diff_lines(
+            "{type: object, properties: {n: {type: number, enum: [9007199254740992.0]}}}",
+            "{type: object, properties: {n: {type: number, enum: [9007199254740993]}}}"
+        ),
+        ["BREAKING: arguments changed"],
+        "D1: `canon diff` reports the changed value"
     );
 }
 
@@ -422,5 +430,403 @@ fn random_schemas_and_documents_never_panic() {
     assert!(
         inside > 100 && outside > 100,
         "{inside} inside, {outside} outside"
+    );
+}
+
+// ---- pass 2: a protocol's YAML number against the arguments, with the text held ----
+
+/// Whether serde_json holds a number's text (`arbitrary_precision`).
+fn holds_text() -> bool {
+    "0.10"
+        .parse::<serde_json::Number>()
+        .is_ok_and(|number| number.to_string() == "0.10")
+}
+
+/// The arguments schema of action `act` as `ir::compile` holds it, numbers as the YAML reader
+/// made them.
+fn compiled_arguments(schema: &str) -> Value {
+    let compiled =
+        ir::compile(&model::parse(&protocol(schema, 1)).expect("parses")).expect("compiles");
+    compiled
+        .actions
+        .values()
+        .next()
+        .and_then(|action| action.arguments.clone())
+        .expect("the action declares arguments")
+}
+
+/// `1152921504606846976.0` in the protocol is 2^60, a double holds it exactly, and the arguments
+/// `1152921504606846976` are 2^60: one value by JSON Schema 2020-12. With the text held the
+/// schema's number is compared as `1152921504606847000`, the shortest text of that double.
+#[test]
+fn a_yaml_enum_value_a_double_holds_exactly_is_that_integer() {
+    let schema = compiled_arguments(
+        "{type: object, properties: {n: {type: number, enum: [1152921504606846976.0]}}}",
+    );
+    let arguments: Value = serde_json::from_str(r#"{"n": 1152921504606846976}"#).expect("JSON");
+    assert_eq!(check_arguments(Some(&schema), &arguments), Ok(()));
+}
+
+/// `1152921504606846976` and `1152921504606846976.0` are one value, so `canon validate` refuses
+/// the second as listed twice, as the shipped binary (no `arbitrary_precision`) does.
+#[test]
+fn validate_refuses_an_integer_and_its_exact_double_as_one_value() {
+    let lines = validate_lines(
+        "{type: object, properties: {n: {type: number, enum: [1152921504606846976, 1152921504606846976.0]}}}",
+    );
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(
+        lines[0].starts_with("action `act` arguments at `/properties/n/enum/1`: ")
+            && lines[0].ends_with("is listed more than once"),
+        "{lines:?}"
+    );
+}
+
+/// `[1152921504606846976.0]` to `[1152921504606846976]` rewrites one value: no semantic change.
+#[test]
+fn diff_finds_no_change_when_an_enum_value_is_rewritten_as_its_exact_double() {
+    assert_eq!(
+        diff_lines(
+            "{type: object, properties: {n: {type: number, enum: [1152921504606846976.0]}}}",
+            "{type: object, properties: {n: {type: number, enum: [1152921504606846976]}}}"
+        ),
+        ["NO SEMANTIC CHANGE: arguments rewritten"]
+    );
+}
+
+/// The same literal, `9007199254740993.0`, in the protocol's `enum` and in the arguments. The
+/// YAML reader rounds the schema's to 2^53; with the text held the arguments keep 2^53 + 1, so the
+/// call is refused although both files write one value.
+#[test]
+fn the_same_literal_in_the_protocol_and_the_arguments_is_one_enum_value() {
+    let schema = compiled_arguments(
+        "{type: object, properties: {n: {type: number, enum: [9007199254740993.0]}}}",
+    );
+    let arguments: Value = serde_json::from_str(r#"{"n": 9007199254740993.0}"#).expect("JSON");
+    assert_eq!(check_arguments(Some(&schema), &arguments), Ok(()));
+}
+
+// ---- pass 2: the exact decimal comparison against an oracle written here ----
+
+/// A number `±digits × 10^exponent`, with the text it is written as.
+struct Written {
+    negative: bool,
+    digits: String,
+    exponent: i64,
+}
+
+/// The oracle: the value as its integer and fraction digit strings, aligned at the point, with no
+/// leading zero in the integer part and no trailing zero in the fraction; `None` for zero.
+fn fixed_point(written: &Written) -> Option<(bool, String, String)> {
+    let digits = written.digits.trim_start_matches('0');
+    let (whole, fraction) = if written.exponent >= 0 {
+        (
+            format!("{digits}{}", "0".repeat(written.exponent as usize)),
+            String::new(),
+        )
+    } else {
+        let places = (-written.exponent) as usize;
+        let padded = format!(
+            "{}{digits}",
+            "0".repeat(places.saturating_sub(digits.len()))
+        );
+        let (whole, fraction) = padded.split_at(padded.len() - places);
+        (whole.to_owned(), fraction.to_owned())
+    };
+    let whole = whole.trim_start_matches('0').to_owned();
+    let fraction = fraction.trim_end_matches('0').to_owned();
+    if whole.is_empty() && fraction.is_empty() {
+        None
+    } else {
+        Some((written.negative, whole, fraction))
+    }
+}
+
+/// The oracle's order of two values.
+fn oracle(left: &Written, right: &Written) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    let sign = |value: &Option<(bool, String, String)>| match value {
+        None => 0,
+        Some((true, ..)) => -1,
+        Some((false, ..)) => 1,
+    };
+    let (left, right) = (fixed_point(left), fixed_point(right));
+    let order = sign(&left).cmp(&sign(&right));
+    if order != Ordering::Equal {
+        return order;
+    }
+    let (Some((negative, lw, lf)), Some((_, rw, rf))) = (left, right) else {
+        return Ordering::Equal;
+    };
+    let width = lf.len().max(rf.len());
+    let magnitude = lw
+        .len()
+        .cmp(&rw.len())
+        .then_with(|| lw.cmp(&rw))
+        .then_with(|| format!("{lf:0<width$}").cmp(&format!("{rf:0<width$}")));
+    if negative {
+        magnitude.reverse()
+    } else {
+        magnitude
+    }
+}
+
+/// A fixed-seed generator.
+struct Rng(u64);
+
+impl Rng {
+    fn below(&mut self, n: u64) -> u64 {
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        (self.0 >> 33) % n
+    }
+
+    fn digits(&mut self, count: u64) -> String {
+        (0..count)
+            .map(|_| char::from(b'0' + self.below(10) as u8))
+            .collect()
+    }
+
+    /// A value over a small domain, so that equal values and near misses are frequent.
+    fn written(&mut self) -> Written {
+        let wide = self.below(10) == 0;
+        let length = 1 + self.below(if wide { 40 } else { 4 });
+        let mut digits = self.digits(length);
+        if self.below(3) == 0 {
+            digits = digits.trim_end_matches('0').to_owned() + &"0".repeat(self.below(4) as usize);
+        }
+        Written {
+            negative: self.below(2) == 0,
+            digits,
+            exponent: self.below(13) as i64 - 6,
+        }
+    }
+
+    /// The same value written as JSON in one of several forms, `exponent` written with a sign or
+    /// leading zeros now and then.
+    fn text(&mut self, value: &Written) -> String {
+        let sign = if value.negative { "-" } else { "" };
+        let mut digits = value.digits.trim_start_matches('0').to_owned();
+        let mut exponent = value.exponent;
+        // Trailing zeros moved into the exponent and back.
+        let moved = if digits.is_empty() { 0 } else { self.below(3) };
+        for _ in 0..moved {
+            digits.push('0');
+            exponent -= 1;
+        }
+        if digits.is_empty() {
+            digits.push('0');
+        }
+        let written_exponent = |exponent: i64, rng: &mut Rng| -> String {
+            if exponent == 0 && rng.below(2) == 0 {
+                return String::new();
+            }
+            let e = if rng.below(2) == 0 { "e" } else { "E" };
+            let sign = match (exponent < 0, rng.below(3)) {
+                (true, _) => "-",
+                (false, 0) => "+",
+                _ => "",
+            };
+            let zeros = "0".repeat(rng.below(3) as usize);
+            format!("{e}{sign}{zeros}{}", exponent.unsigned_abs())
+        };
+        let fraction_zeros = "0".repeat(self.below(3) as usize);
+        match self.below(3) {
+            // `digits e exponent`
+            0 => {
+                let exponent = written_exponent(exponent, self);
+                format!("{sign}{digits}{exponent}")
+            }
+            // `0.digits e (exponent + length)`
+            1 => {
+                let shifted = exponent + digits.len() as i64;
+                let exponent = written_exponent(shifted, self);
+                format!("{sign}0.{digits}{fraction_zeros}{exponent}")
+            }
+            // `d.igits e (exponent + length - 1)`, the point inside the digits
+            _ => {
+                let (first, rest) = digits.split_at(1);
+                let shifted = exponent + rest.len() as i64;
+                let exponent = written_exponent(shifted, self);
+                if rest.is_empty() && fraction_zeros.is_empty() {
+                    format!("{sign}{first}{exponent}")
+                } else {
+                    format!("{sign}{first}.{rest}{fraction_zeros}{exponent}")
+                }
+            }
+        }
+    }
+}
+
+/// With the text held: over 300,000 random pairs, two numbers are one `enum` value exactly when
+/// the oracle finds them equal, and `type: integer` holds exactly when the oracle finds no
+/// fraction; over 100,000 more, `minimum` and `maximum` at a 64-bit integer agree with the oracle.
+/// Without `arbitrary_precision` the text is not held and the case asserts only that.
+#[test]
+fn the_decimal_comparison_agrees_with_an_aligned_digit_oracle() {
+    if !holds_text() {
+        return;
+    }
+    let mut rng = Rng(0x00ad_0002);
+    let (mut equal, mut integers, mut disagreements) = (0usize, 0usize, Vec::new());
+    for round in 0..300_000 {
+        let left = rng.written();
+        let right = if round % 3 == 0 {
+            Written {
+                negative: left.negative,
+                digits: left.digits.clone(),
+                exponent: left.exponent,
+            }
+        } else {
+            rng.written()
+        };
+        let (left_text, right_text) = (rng.text(&left), rng.text(&right));
+        let schema = schema(&format!(
+            r#"{{"type": "object", "properties": {{"e": {{"type": "number", "enum": [{left_text}]}}, "i": {{"type": "integer"}}}}}}"#
+        ));
+        let doc: Value =
+            serde_json::from_str(&format!(r#"{{"e": {right_text}, "i": {right_text}}}"#))
+                .expect("JSON");
+        let found = refusals(Some(&schema), &doc);
+        let same = oracle(&left, &right) == std::cmp::Ordering::Equal;
+        let integer = fixed_point(&right).is_none_or(|(_, _, fraction)| fraction.is_empty());
+        let mut expected = Vec::new();
+        if !same {
+            expected.push(("/e", "enum"));
+        }
+        if !integer {
+            expected.push(("/i", "type"));
+        }
+        equal += usize::from(same);
+        integers += usize::from(integer);
+        if found != pairs(&expected) && disagreements.len() < 5 {
+            disagreements.push(format!("{left_text} against {right_text}: {found:?}"));
+        }
+    }
+    let bounds = [
+        "0",
+        "1",
+        "-1",
+        "10",
+        "-100",
+        "123",
+        "9007199254740993",
+        "-9223372036854775808",
+        "18446744073709551615",
+    ];
+    for _ in 0..100_000 {
+        let bound = bounds[rng.below(bounds.len() as u64) as usize];
+        let value = if rng.below(4) == 0 {
+            let negative = bound.starts_with('-');
+            Written {
+                negative,
+                digits: bound.trim_start_matches('-').to_owned(),
+                exponent: 0,
+            }
+        } else {
+            rng.written()
+        };
+        let text = rng.text(&value);
+        let bound_value = Written {
+            negative: bound.starts_with('-'),
+            digits: bound.trim_start_matches('-').to_owned(),
+            exponent: 0,
+        };
+        let schema = schema(&format!(
+            r#"{{"type": "object", "properties": {{"n": {{"type": "number", "minimum": {bound}, "maximum": {bound}}}}}}}"#
+        ));
+        let doc: Value = serde_json::from_str(&format!(r#"{{"n": {text}}}"#)).expect("JSON");
+        let expected = match oracle(&value, &bound_value) {
+            std::cmp::Ordering::Less => pairs(&[("/n", "minimum")]),
+            std::cmp::Ordering::Equal => Vec::new(),
+            std::cmp::Ordering::Greater => pairs(&[("/n", "maximum")]),
+        };
+        let found = refusals(Some(&schema), &doc);
+        if found != expected && disagreements.len() < 10 {
+            disagreements.push(format!("{text} against {bound}: {found:?}"));
+        }
+    }
+    assert!(
+        equal > 50_000 && integers > 50_000,
+        "{equal} equal, {integers} integers"
+    );
+    assert!(disagreements.is_empty(), "{disagreements:#?}");
+}
+
+/// With the text held: exponents beyond 64 and beyond 128 bits on both operands, and digits that
+/// differ only at the 400th place.
+#[test]
+fn huge_exponents_and_long_digits_compare_exactly() {
+    if !holds_text() {
+        return;
+    }
+    let huge = "9".repeat(45);
+    let one = |text: &str, other: &str| -> bool {
+        let schema = schema(&format!(
+            r#"{{"type": "object", "properties": {{"n": {{"type": "number", "enum": [{text}]}}}}}}"#
+        ));
+        let doc: Value = serde_json::from_str(&format!(r#"{{"n": {other}}}"#)).expect("JSON");
+        check_arguments(Some(&schema), &doc).is_ok()
+    };
+    let same = [
+        (format!("1e{huge}"), format!("10e{}8", "9".repeat(44))),
+        (format!("1e{huge}"), format!("0.1e1{}", "0".repeat(45))),
+        (format!("1e-{huge}"), format!("10e-1{}", "0".repeat(45))),
+        (
+            format!("-25e-{huge}"),
+            format!("-2.50e-{}8", "9".repeat(44)),
+        ),
+        ("1e+0005".to_owned(), "100000".to_owned()),
+        ("100e-2".to_owned(), "1".to_owned()),
+        ("1.0e1".to_owned(), "10".to_owned()),
+        ("0e5".to_owned(), "-0".to_owned()),
+        ("0.000".to_owned(), "0e-99999999999999999999".to_owned()),
+    ];
+    for (left, right) in &same {
+        assert!(one(left, right), "{left} is {right}");
+    }
+    let tail = "0".repeat(398);
+    let different = [
+        (format!("1.{tail}1"), format!("1.{tail}2")),
+        (format!("-1.{tail}1"), format!("-1.{tail}2")),
+        (format!("1e{huge}"), format!("1e{}", "9".repeat(44))),
+        (format!("1e-{huge}"), "0".to_owned()),
+        (format!("-1e-{huge}"), "0".to_owned()),
+        (format!("1e{huge}"), format!("-1e{huge}")),
+        ("1e-99999999999999999999".to_owned(), "0".to_owned()),
+    ];
+    for (left, right) in &different {
+        assert!(!one(left, right), "{left} is not {right}");
+        assert!(!one(right, left), "{right} is not {left}");
+    }
+    let bound = |bound: &str, text: &str| -> Vec<(String, String)> {
+        let schema = schema(&format!(
+            r#"{{"type": "object", "properties": {{"n": {{"type": "number", "minimum": {bound}, "maximum": {bound}}}}}}}"#
+        ));
+        let doc: Value = serde_json::from_str(&format!(r#"{{"n": {text}}}"#)).expect("JSON");
+        refusals(Some(&schema), &doc)
+    };
+    assert_eq!(
+        bound("0", &format!("1e-{huge}")),
+        pairs(&[("/n", "maximum")])
+    );
+    assert_eq!(
+        bound("0", &format!("-1e-{huge}")),
+        pairs(&[("/n", "minimum")])
+    );
+    assert_eq!(
+        bound("-9223372036854775808", &format!("-1e{huge}")),
+        pairs(&[("/n", "minimum")])
+    );
+    assert_eq!(
+        bound("18446744073709551615", &format!("1e{huge}")),
+        pairs(&[("/n", "maximum")])
+    );
+    assert_eq!(bound("1", "1e-0"), Vec::new());
+    assert_eq!(
+        bound("1", &format!("1.{tail}1")),
+        pairs(&[("/n", "maximum")])
     );
 }
