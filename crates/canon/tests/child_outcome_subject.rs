@@ -63,7 +63,9 @@ fn validate_refuses_an_undeclared_subject_naming_the_declaration() {
     assert_ne!(nope, fixture(), "the claim's subject was replaced");
     assert_eq!(
         problems(&nope),
-        ["undeclared-artifact: claim `wave.passed` references artifact `nope`, which is not declared"]
+        [
+            "undeclared-artifact: claim `wave.passed` references artifact `nope`, which is not declared"
+        ]
     );
     let in_action = fixture().replacen(
         "{in: [passed], subject: wave, revision: current}",
@@ -73,17 +75,25 @@ fn validate_refuses_an_undeclared_subject_naming_the_declaration() {
     assert_ne!(in_action, fixture(), "the action's subject was replaced");
     assert_eq!(
         problems(&in_action),
-        ["undeclared-artifact: action `wave.close` references artifact `nope`, which is not declared"]
+        [
+            "undeclared-artifact: action `wave.close` references artifact `nope`, which is not declared"
+        ]
     );
     let in_outcome = fixture().replacen(
         "    requires:\n      claim: wave.passed\n",
         "    requires:\n      children: {in: [passed], subject: nope}\n",
         1,
     );
-    assert_ne!(in_outcome, fixture(), "the outcome's requirement was replaced");
+    assert_ne!(
+        in_outcome,
+        fixture(),
+        "the outcome's requirement was replaced"
+    );
     assert_eq!(
         problems(&in_outcome),
-        ["undeclared-artifact: outcome `wave.done` references artifact `nope`, which is not declared"]
+        [
+            "undeclared-artifact: outcome `wave.done` references artifact `nope`, which is not declared"
+        ]
     );
     let undeclared_kind = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
         artifacts: {wave: {}}\n\
@@ -177,7 +187,11 @@ fn forms_that_differ_only_in_subject_are_two_members_no_subject_first() {
 fn a_subject_selects_the_records_about_its_artifact() {
     let source = format!(
         "{}  wave.ever:\n    true_when:\n      children: {{in: [passed], subject: wave}}\n",
-        fixture().replacen("\nactions:\n", "\n", 1).split("\n  ideas.open:").next().expect("head")
+        fixture()
+            .replacen("\nactions:\n", "\n", 1)
+            .split("\n  ideas.open:")
+            .next()
+            .expect("head")
     );
     let ir = compiled(&source);
     for (records, ever, now, why) in [
@@ -279,7 +293,8 @@ fn reasons_and_the_explanation_name_the_form_with_its_subject() {
 fn the_diff_takes_a_changed_subject_as_breaking() {
     let from = compiled(&fixture());
     let later = |text: String| compiled(&text.replacen("revision: 1", "revision: 2", 1));
-    let moved = later(fixture().replacen("        subject: wave\n", "        subject: intake\n", 1));
+    let moved =
+        later(fixture().replacen("        subject: wave\n", "        subject: intake\n", 1));
     let changes = diff(&from, &moved).expect("diffs").changes;
     assert_eq!(changes.len(), 1, "{changes:?}");
     assert_eq!(changes[0].category, Category::Breaking);

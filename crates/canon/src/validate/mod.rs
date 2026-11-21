@@ -54,7 +54,9 @@
 //!    an empty `in` list, `empty-child-outcomes`, or an outcome it lists more than once,
 //!    `duplicate-child-outcome`, once for every listing after its first, then `open` listed,
 //!    `open-child-outcome`, once, then the evidence kind `case_outcome` when it is not declared,
-//!    `undeclared-evidence-kind`, every one naming the declaration the form is written in): those
+//!    `undeclared-evidence-kind`, then the artifact it names as its `subject` when that is not
+//!    declared, `undeclared-artifact` (story:child-outcome-subject), every one naming the
+//!    declaration the form is written in): those
 //!    in claims first, then those in obligations (each obligation's discharge predicate, followed
 //!    by every evidence match, order form and `children` form it holds, which a discharge
 //!    predicate may not: it tests only claim values, each kind an order form names once, the kind
@@ -1121,8 +1123,9 @@ fn duplicates(section: Section, ids: &[&str], problems: &mut Vec<Problem>) {
 /// Reports every claim, evidence kind and evidence subject the predicate references that is not
 /// declared, every input test that lists no value, a value twice, an undeclared input or a
 /// value its input does not declare, every `before` that orders a kind before itself, and every
-/// `children` form that lists no outcome, an outcome twice or `open`, or is written in a protocol
-/// that does not declare `case_outcome`, in the order the predicate is written.
+/// `children` form that lists no outcome, an outcome twice or `open`, is written in a protocol
+/// that does not declare `case_outcome`, or names a subject that is not declared, in the order the
+/// predicate is written.
 fn references(
     protocol: &Protocol,
     referrer: &Referrer,
@@ -1286,6 +1289,14 @@ fn references(
                 unresolved.push(Problem::UndeclaredEvidenceKind {
                     referrer: referrer.clone(),
                     kind,
+                });
+            }
+            if let Some(subject) = &form.subject
+                && !protocol.artifacts.contains(subject)
+            {
+                unresolved.push(Problem::UndeclaredArtifact {
+                    referrer: referrer.clone(),
+                    artifact: subject.clone(),
                 });
             }
         }

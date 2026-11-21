@@ -35,9 +35,11 @@
 //!   (no subject first), each form once. Each form over the child cases that decides it, by the same
 //!   rule, is a reason after those (story:case-composition), `{"children": [<outcome>, ...],
 //!   "value": <value>}`, its outcomes as the IR lists them, with `"revision": "current"` added for
-//!   a form that reads only the records about the current revision (story:child-outcome-revision),
-//!   each form once, two that differ only in `revision` being two, in the order of those lists,
-//!   then no `revision` first. Authority is not consulted.
+//!   a form that reads only the records about the current revision (story:child-outcome-revision)
+//!   and `"subject": <artifact>` for a form that names one (story:child-outcome-subject), each form
+//!   once, two that differ only in `revision` or only in `subject` being two, in the order of those
+//!   lists, then no `revision` first, then no `subject` first and then in subject order. Authority
+//!   is not consulted.
 //! - `blocked`, when the precondition is `true` and the authority denies a requirement of the
 //!   action: each denied requirement is a reason, `{"capability": <id>, "decision": "denied"}`,
 //!   with `"scope": {<key>: <value>, ...}` added when the requirement has a scope. Asking again

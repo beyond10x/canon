@@ -2143,7 +2143,8 @@ pub(super) fn ordered_child_outcomes(ir: &Ir) -> Option<&EvidenceKindId> {
 
 /// What reads evidence in `predicate` itself, in source order: each evidence match, each kind an
 /// order form reads, and, for a `children` form, the kind `case_outcome` with each outcome it lists
-/// and `open`, about any artifact (story:case-composition).
+/// and `open`, about the artifact it names as its `subject` (story:child-outcome-subject), as an
+/// evidence match with a subject reads, and otherwise about any artifact (story:case-composition).
 fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
     let mut found = Vec::new();
     predicate.visit(&mut |node| match node {
@@ -2153,7 +2154,7 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
                 for result in outcomes.chain([OPEN_OUTCOME]) {
                     found.push(Read {
                         kind,
-                        subject: None,
+                        subject: form.subject.as_ref(),
                         result: Some(result),
                         independent_on: None,
                         ordered: false,

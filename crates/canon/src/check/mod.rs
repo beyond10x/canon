@@ -234,7 +234,10 @@
 //! current records at it and its earlier records at a superseded one, so a form with `revision:
 //! current` reads exactly the current records and never the history dimension's earlier ones,
 //! which only a form without the key reads: the same space reaches every value of both together,
-//! and the key adds no dimension. Each `case_outcome` record of a state is the outcome of a child case of
+//! and the key adds no dimension. A form with `subject` (story:child-outcome-subject) reads the
+//! `case_outcome` dimension about that artifact, which it binds as an evidence match's subject
+//! does, and not the one about an artifact nothing names, which stands for the records only a form
+//! without `subject` reads. Each `case_outcome` record of a state is the outcome of a child case of
 //! its own, named by the record's id, and a record of the class without a result carries an outcome
 //! no predicate names (`other`, primed until it is none), since a `case_outcome` record must give
 //! one; the state still writes it `` evidence `case_outcome` ``. A protocol with no `children` form
