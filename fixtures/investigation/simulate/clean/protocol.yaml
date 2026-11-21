@@ -3,32 +3,47 @@ format: protocol/1
 protocol:
   id: simulate.clean
   revision: 1
-  description: Accept a report once a review accepts it; the review can be repeated until one does.
+  description: Review a report once it has a draft; every case can reach the outcome.
 
 artifacts:
   report:
-    description: The report under review.
+    description: The report being written and reviewed.
 
 evidence_kinds:
+  draft:
+    description: A draft of the report.
   review:
-    description: A review of the report; its result is accepted or another.
+    description: A review of the report.
 
 claims:
-  report.accepted:
-    description: A review accepted the report.
+  report.drafted:
+    description: The report has a draft.
+    true_when:
+      evidence:
+        kind: draft
+
+  report.reviewed:
+    description: The report has a review.
     true_when:
       evidence:
         kind: review
-        result: accepted
 
 actions:
+  write_draft:
+    description: Write a draft of the report.
+    may_produce:
+      - evidence: draft
+
   review_report:
-    description: Review the report.
+    description: Review the report, once it has a draft.
+    precondition:
+      claim: report.drafted
+      is: true
     may_produce:
       - evidence: review
 
 outcomes:
-  accepted:
-    description: The report is accepted.
+  reviewed:
+    description: The report is reviewed.
     requires:
-      claim: report.accepted
+      claim: report.reviewed

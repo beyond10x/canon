@@ -115,7 +115,10 @@ fn failures(cases: &[&str]) -> Vec<String> {
             .expect("a named case");
         let first = simulate(case);
         let (stdout, stderr) = match expected {
-            Expected::Report => (read(&format!("{FIXTURES}/{case}/report.txt")), String::new()),
+            Expected::Report => (
+                read(&format!("{FIXTURES}/{case}/report.txt")),
+                String::new(),
+            ),
             Expected::Refusal => (
                 String::new(),
                 read(&format!("{FIXTURES}/{case}/refusal.txt")),
@@ -163,7 +166,8 @@ fn simulate_reports_reachability_findings() {
     let checked = canon(&["check", "--path", &protocol("state-space-bound")]);
     let stderr = text(&checked.stderr);
     if checked.status.code() != Some(1)
-        || !stderr.starts_with("error[state-space-bound]: protocol `simulate.upstream` revision 1: ")
+        || !stderr
+            .starts_with("error[state-space-bound]: protocol `simulate.upstream` revision 1: ")
     {
         failures.push(format!(
             "state-space-bound: canon check exits {:?}, stderr {stderr:?}",

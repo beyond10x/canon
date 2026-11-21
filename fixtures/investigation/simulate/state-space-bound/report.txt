@@ -1,1 +1,1 @@
-simulated: protocol `simulate.upstream` revision 1: 8 reachable states, 6 terminable (outcome `accepted` 4, outcome `rejected` 4), 0 findings
+simulated: protocol `simulate.upstream` revision 1: 2 reachable states, 1 terminable (outcome `reviewed` 1), 0 findings

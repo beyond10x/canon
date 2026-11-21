@@ -32,8 +32,8 @@ actions:
   prepare:
     description: Prepare a draft of the release, once.
     precondition:
-      not:
-        claim: release.prepared
+      claim: release.prepared
+      is: unknown
     may_produce:
       - evidence: draft
 

@@ -1,1 +1,1 @@
-simulated: protocol `simulate.clean` revision 1: 4 reachable states, 2 terminable (outcome `accepted` 2), 0 findings
+simulated: protocol `simulate.clean` revision 1: 3 reachable states, 1 terminable (outcome `reviewed` 1), 0 findings

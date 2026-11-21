@@ -11,17 +11,16 @@ artifacts:
 
 evidence_kinds:
   peer_review:
-    description: A peer's review of the report, recorded in a simulate.review case; its result is approved or another.
+    description: A peer's review of the report, recorded in a simulate.review case.
   publication:
     description: The published report.
 
 claims:
-  peer.approved:
-    description: A peer approved the report.
+  peer.reviewed:
+    description: A peer reviewed the report.
     true_when:
       evidence:
         kind: peer_review
-        result: approved
 
   report.published:
     description: The report has been published.
@@ -31,9 +30,9 @@ claims:
 
 actions:
   publish:
-    description: Publish the report, once a peer approved it.
+    description: Publish the report, once a peer reviewed it.
     precondition:
-      claim: peer.approved
+      claim: peer.reviewed
       is: true
     may_produce:
       - evidence: publication

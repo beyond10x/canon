@@ -3,7 +3,7 @@ format: protocol/1
 protocol:
   id: simulate.upstream
   revision: 1
-  description: Accept or reject an analysis by review; three upstream artifacts can invalidate a review, which puts each record in eight variants and the state space above the bound.
+  description: Review an analysis; five upstream artifacts can invalidate a review, which puts a record in thirty-two variants and the state space above the bound.
 
 artifacts:
   analysis:
@@ -14,44 +14,52 @@ artifacts:
     description: The second input the analysis rests on.
   upstream_3:
     description: The third input the analysis rests on.
+  upstream_4:
+    description: The fourth input the analysis rests on.
+  upstream_5:
+    description: The fifth input the analysis rests on.
 
 evidence_kinds:
   review:
-    description: A review of the analysis; its result is accepted, rejected or another.
+    description: A review of the analysis.
 
 claims:
-  analysis.accepted:
-    description: A review accepted the analysis.
+  analysis.reviewed:
+    description: The analysis has a review.
     true_when:
       evidence:
         kind: review
-        result: accepted
-
-  analysis.rejected:
-    description: A review rejected the analysis.
-    true_when:
-      evidence:
-        kind: review
-        result: rejected
 
 invalidation:
   upstream_1.revised:
-    description: A review made before the first input moved no longer decides the analysis.
+    description: A review made before the first input moved no longer counts.
     upstream: upstream_1
     invalidates:
-      - analysis.accepted
+      - analysis.reviewed
 
   upstream_2.revised:
-    description: A review made before the second input moved no longer decides the analysis.
+    description: A review made before the second input moved no longer counts.
     upstream: upstream_2
     invalidates:
-      - analysis.accepted
+      - analysis.reviewed
 
   upstream_3.revised:
-    description: A review made before the third input moved no longer decides the analysis.
+    description: A review made before the third input moved no longer counts.
     upstream: upstream_3
     invalidates:
-      - analysis.accepted
+      - analysis.reviewed
+
+  upstream_4.revised:
+    description: A review made before the fourth input moved no longer counts.
+    upstream: upstream_4
+    invalidates:
+      - analysis.reviewed
+
+  upstream_5.revised:
+    description: A review made before the fifth input moved no longer counts.
+    upstream: upstream_5
+    invalidates:
+      - analysis.reviewed
 
 actions:
   review_analysis:
@@ -60,12 +68,7 @@ actions:
       - evidence: review
 
 outcomes:
-  accepted:
-    description: The analysis is accepted.
+  reviewed:
+    description: The analysis is reviewed.
     requires:
-      claim: analysis.accepted
-
-  rejected:
-    description: The analysis is rejected.
-    requires:
-      claim: analysis.rejected
+      claim: analysis.reviewed
