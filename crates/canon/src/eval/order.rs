@@ -68,13 +68,15 @@
 //! or when the snapshot gives no `descends_from` for the subject of one; otherwise `false`. A
 //! record without an `item` takes no part, and items compare as text.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use serde_json::{Map, Value};
 
 use super::claims::reads;
 use super::composition::Artifacts;
 use crate::model::{
     ArtifactId, EvidenceAfter, EvidenceDescended, EvidenceKindId, EvidenceOrder, EvidenceRecord,
-    EvidenceSince, FirstResult, LaterRecord, Predicate, Truth,
+    EvidenceSince, FirstResult, LaterRecord, Predicate, Revision, Truth,
 };
 
 /// The value of an order form over the `history`, with `artifacts` the case snapshot's artifacts,
@@ -288,6 +290,8 @@ fn since(form: &EvidenceSince, history: &[EvidenceRecord], ticks: &[Option<i128>
 /// `descended` (story:revision-ordering): whether a later record, of `form.then` about the current
 /// revision of its subject and naming an item, has an earlier record, of `form.first` with the same
 /// item and subject, about a revision that subject's `descends_from` lists, as the module docs say.
+/// The earlier records are indexed once by subject and item, each subject's ancestors are a set
+/// once, and each subject and item is paired once, so the time is linear in the history.
 fn descended(
     form: &EvidenceDescended,
     history: &[EvidenceRecord],
@@ -300,6 +304,13 @@ fn descended(
             && record.item.is_some()
     };
     let artifact = |record: &EvidenceRecord| artifacts?.get(&record.subject);
+    let mut earlier: BTreeMap<(&ArtifactId, &Option<String>), Vec<&Revision>> = BTreeMap::new();
+    for first in history.iter().filter(|record| of(&form.first, record)) {
+        let revisions = earlier.entry((&first.subject, &first.item)).or_default();
+        revisions.push(&first.subject_revision);
+    }
+    let mut descent: BTreeMap<&ArtifactId, BTreeSet<&Revision>> = BTreeMap::new();
+    let mut paired = BTreeSet::new();
     let (mut later, mut undescended) = (false, false);
     for then in history.iter().filter(|record| of(&form.then, record)) {
         let Some(current) = artifact(then).filter(|a| a.revision == then.subject_revision) else {
@@ -310,12 +321,18 @@ fn descended(
             undescended = true;
             continue;
         };
-        if history.iter().any(|first| {
-            of(&form.first, first)
-                && first.item == then.item
-                && first.subject == then.subject
-                && ancestors.contains(&first.subject_revision)
-        }) {
+        let key = (&then.subject, &then.item);
+        if !paired.insert(key) {
+            continue;
+        }
+        let ancestors = descent
+            .entry(&then.subject)
+            .or_insert_with(|| ancestors.iter().collect());
+        let revisions = earlier.get(&key).map_or(&[][..], Vec::as_slice);
+        if revisions
+            .iter()
+            .any(|revision| ancestors.contains(revision))
+        {
             return Truth::True;
         }
     }
