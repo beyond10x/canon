@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T09:42:17Z",
+  "actor": "human:timo",
+  "artifact": "story:simulate-child-outcome-step",
+  "kind": "story",
+  "revision": 14,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "pre-existing: clippy 1.100 refuses the loop in Layout::expired: fixed on the wave branch by merge 6fe994e of release/prep 3c9ce06; CI green at d0633f6",
+    "reference": "wave/2026-11-20-w6 6fe994e",
+    "review": "review-result:adversary-simulate-child-outcome-step-pass-1",
+    "outcome": "fixed"
+  }
+}

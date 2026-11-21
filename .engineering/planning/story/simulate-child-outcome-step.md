@@ -27,7 +27,7 @@ scope:
   path: ess/domains/cli.yaml
 - confidence: inferred
   path: fixtures/investigation/child-outcome/
-revision: 13
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T05:02:20Z", actor: "human:timo", revision: 9, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
 - {from: "proposed", to: "active", at: "2026-11-21T05:02:20Z", actor: "human:timo", revision: 10, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
@@ -260,3 +260,29 @@ may overrule it.
   renamed fixture 78/43/6/4 (14); the smaller 122/69/13/5 (25); twice 39/13/6/0. They are
   emulated; the binary must repeat them, and where it does not the unit finds out which is right.
 - `twice` becomes a fixture of the unit with its report pinned.
+
+## Decided in review, after adversary pass 2: D3 is withdrawn
+
+The second and last adversary pass (`review-result:adversary-simulate-child-outcome-step-pass-2`)
+was green: the count rule (D1 with D5) held against the adversary's own enumerator of real cases
+on 15 protocols (24 printed findings, all true; no protocol with a real dead end exits 0), a hand
+check of the seven expiry findings, and seven mutants the unit's tests all hold. Two notes, both
+on wording. Decided on 2026-11-21 by the wave coordinator.
+
+- **D6, D3 is withdrawn: the limit it states does not arise.** D3 said that one taking of an
+  opening action that may produce two records is walked as two takings and so as two children
+  where a real case has one. The walk takes the second record only by a second step of the
+  action, and that step is offered only where the action is admissible again, which is where a
+  runner can take it again: the walked path is a real path of two takings. The adversary found
+  no protocol in which this prints a false finding, and its argument says there is none. The
+  coordinator's reasoning for D3 was wrong. The sentence leaves the `Simulate` clap doc,
+  `ess/domains/cli.yaml` and the generated reference, because it tells an author to discount
+  findings that are true. The fixture `two-records` stays as a pinned case; its comment says the
+  finding is true.
+- What one record per step costs is the limit story:canon-simulate already has and
+  story:simulate-record-groups (wave 7) removes: where an action's guard closes on its first
+  record, the walk never holds the records of one taking together, so an outcome that needs both
+  is reported as not reached. If the reference does not say this in a place an author reads, the
+  unit says it there in one sentence; it is not new with this story.
+- The sentence "an outcome other than `open` lowers it" in the help and `cli.yaml` gains its
+  second half: from two-or-more the count may also stay at two-or-more.
