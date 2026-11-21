@@ -13,7 +13,8 @@
 domain: canon.cli
 
 summary: >-
-  The canon command line: validate, compile, evaluate, check, simulate, generate, diff and conform
+  The canon command line: validate, compile, evaluate, check, simulate, generate, diff, floor and
+  conform
   run, each reading files named by its flags and printing its result, or refusing with exit status
   1 when a document is rejected and 2 when an input cannot be read.
 
@@ -409,6 +410,46 @@ commands:
         error: canon.cli.Rejected
       # read from: crates/canon-cli/src/diff.rs:37-40
       - name: compared
+        returns: true
+
+  # read from: crates/canon-cli/src/lib.rs:247-262
+  # read from: crates/canon-cli/src/floor.rs:12-51
+  - name: canon.cli.Floor
+    naming:
+      wire: floor
+      display: Floor
+      summary: >-
+        Check that a compiled protocol stays above a compiled floor: every change from the floor to
+        the protocol is a tightening, an expansion or no semantic change.
+    input:
+      # The organization's floor, a protocol/1 document compiled as `canon compile` prints it.
+      # read from: crates/canon-cli/src/lib.rs:255-257
+      - name: floor
+        type: String
+      # The protocol checked, as `canon compile` prints it; a composed protocol is compiled with
+      # its imports first.
+      # read from: crates/canon-cli/src/lib.rs:258-261
+      - name: ir
+        type: String
+    response:
+      # `floor: holds` and the counts of tightening, expansion and no semantic change.
+      # read from: crates/canon-cli/src/floor.rs:39
+      - name: output
+        type: String
+    outcomes:
+      # read from: crates/canon-cli/src/floor.rs:19
+      - name: unreadable
+        external: the floor or the protocol cannot be read
+        error: canon.cli.Unreadable
+      # read from: crates/canon-cli/src/floor.rs:20-27
+      # read from: crates/canon-cli/src/floor.rs:42-49
+      - name: rejected
+        external: >-
+          the floor or the protocol is not canon-ir/1, or the protocol is below the floor: a change
+          from the floor to it is a relaxation or breaking
+        error: canon.cli.Rejected
+      # read from: crates/canon-cli/src/floor.rs:38-41
+      - name: holds
         returns: true
 
   # The clap path `conform run`.

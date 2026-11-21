@@ -1,0 +1,17 @@
+format: protocol/1
+
+protocol:
+  id: investigation.composed
+  revision: 2
+  description: An investigation composed from the floor, which adds an action to request a review.
+
+imports:
+  floor.investigation:
+    revision: 1
+    digest: sha256:de2c95f1f23052294d159242f5e7292d47dfdfbe51b3097659936b07f6150003
+
+actions:
+  request_review:
+    description: Ask a reviewer to look at the finding before it is published.
+    may_produce:
+      - evidence: supporting_observation
