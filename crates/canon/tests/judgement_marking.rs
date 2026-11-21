@@ -271,3 +271,171 @@ fn judgement_marking_compiles_and_means_nothing_yet() {
          TIGHTENING: action `review_spec` now decides evidence `spec_review` by judgement\n"
     );
 }
+
+/// The reverse of expectation 8: every judgement mark removed relaxes and `revises` emptied
+/// tightens; the fixture against itself with `author: program` removed is no change.
+#[test]
+fn removing_the_marks_relaxes_and_emptying_revises_tightens() {
+    let source = read(FIXTURE);
+    let marked = compiled(&source);
+    let plain = compiled(&unmarked(&source));
+    assert_eq!(
+        diff(&marked, &plain).expect("one protocol").render(),
+        "diff: protocol `investigation.drafting` revision 1 to 1\n\
+         RELAXATION: action `draft_spec` author changed from judgement to program\n\
+         RELAXATION: action `draft_spec` now decides evidence `spec_rationale` by program\n\
+         TIGHTENING: action `draft_spec` no longer revises artifact `spec`\n\
+         RELAXATION: action `review_spec` author changed from judgement to program\n\
+         RELAXATION: action `review_spec` now decides evidence `spec_review` by program\n"
+    );
+    let program_unwritten = compiled(&source.replace("    author: program\n", ""));
+    assert_eq!(
+        diff(&marked, &program_unwritten)
+            .expect("one protocol")
+            .render(),
+        "diff: protocol `investigation.drafting` revision 1 to 1\n\
+         NO SEMANTIC CHANGE: no declaration differs\n"
+    );
+}
+
+/// `revises` is checked in validation step 9, after the evidence kinds the action may produce and
+/// before the subject of the case it opens, once for every listing, in the order listed.
+#[test]
+fn an_undeclared_revised_artifact_comes_after_the_kinds_and_before_the_opened_subject() {
+    let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}}\n\
+                  actions:\n  act:\n    may_produce: [{evidence: missing_kind}]\n    \
+                  revises: [z, a, y, z]\n    case_open: {protocol: q, subject: missing_subject}\n";
+    assert_eq!(
+        problems(source),
+        [
+            "undeclared-evidence-kind: action `act` references evidence kind `missing_kind`, which is not declared",
+            "undeclared-artifact: action `act` references artifact `z`, which is not declared",
+            "undeclared-artifact: action `act` references artifact `y`, which is not declared",
+            "undeclared-artifact: action `act` references artifact `z`, which is not declared",
+            "undeclared-artifact: action `act` references artifact `missing_subject`, which is not declared",
+        ]
+    );
+}
+
+/// A part `id` holding `body` after its header.
+fn part(id: &str, body: &str) -> String {
+    format!("format: protocol/1\nprotocol:\n  id: {id}\n  revision: 1\n{body}")
+}
+
+/// The composition of a root holding `root_body` that imports `a`, pinned to `a`'s digest (or
+/// to a digest of zeros when `a` does not compile alone), compiled, or the problems as
+/// `code: message` lines.
+fn composed(a: &str, root_body: &str) -> Result<String, Vec<String>> {
+    let a = model::parse(&part("a", a)).expect("a parses");
+    let digest = ir::compile(&a)
+        .map(|compiled| ir::digest(&compiled))
+        .unwrap_or_else(|_| format!("sha256:{}", "0".repeat(64)));
+    let root = model::parse(&format!(
+        "{}imports:\n  a:\n    revision: 1\n    digest: \"{digest}\"\n{root_body}",
+        part("root", "")
+    ))
+    .expect("root parses");
+    ir::compose(&root, &[a])
+        .and_then(|composed| ir::compile(&composed))
+        .map(|compiled| compiled.canonical_json())
+        .map_err(|problems| {
+            problems
+                .iter()
+                .map(|problem| format!("{}: {problem}", problem.code()))
+                .collect()
+        })
+}
+
+/// story:protocol-imports: an imported action keeps its three fields through the merge, so the
+/// composition is the IR of one document declaring it inline. A root action may revise an artifact
+/// only an import declares, as it may open a case about one; an imported action that revises an
+/// artifact only the root declares makes the import invalid alone, as a case it opens about one
+/// does.
+#[test]
+fn an_imported_action_keeps_its_marks_and_revises_is_judged_like_other_artifact_references() {
+    let marked = "artifacts: {spec: {}}\nevidence_kinds: {k: {}}\nactions:\n  draft:\n    \
+                  author: judgement\n    revises: [spec]\n    \
+                  may_produce: [{evidence: k, decided_by: program}]\n";
+    let composition = composed(marked, "").expect("composes");
+    assert_eq!(
+        composition,
+        compiled(&part("root", marked)).canonical_json()
+    );
+    assert!(
+        composition.contains("\"author\": \"judgement\""),
+        "{composition}"
+    );
+    assert!(composition.contains("\"revises\": [\n        \"spec\"\n      ]"));
+    assert!(!composition.contains("decided_by"), "{composition}");
+
+    let declares = "artifacts: {spec: {}}\n";
+    assert!(composed(declares, "actions: {draft: {revises: [spec]}}\n").is_ok());
+    assert!(
+        composed(
+            declares,
+            "actions: {open: {case_open: {protocol: q, subject: spec}}}\n"
+        )
+        .is_ok()
+    );
+
+    let revising = composed(
+        "actions: {draft: {revises: [spec]}}\n",
+        "artifacts: {spec: {}}\n",
+    )
+    .expect_err("the import does not compile alone");
+    let opening = composed(
+        "actions: {draft: {case_open: {protocol: q, subject: spec}}}\n",
+        "artifacts: {spec: {}}\n",
+    )
+    .expect_err("the import does not compile alone");
+    assert_eq!(
+        revising,
+        [
+            "invalid-import: imported protocol `a`: undeclared-artifact: action `draft` references artifact `spec`, which is not declared"
+        ]
+    );
+    assert_eq!(opening, revising);
+}
+
+/// Two imports that declare one action differently in its marks conflict, as for any other
+/// field; `author: program` written out and no `author` are one declaration.
+#[test]
+fn imports_that_differ_in_a_mark_conflict_and_program_written_out_does_not() {
+    let two = |first: &str, second: &str| {
+        let a = model::parse(&part("a", first)).expect("a parses");
+        let b = model::parse(&part("b", second)).expect("b parses");
+        let pin = |document: &model::Protocol| {
+            ir::digest(&ir::compile(document).expect("a part compiles"))
+        };
+        let root = model::parse(&format!(
+            "{}imports:\n  a:\n    revision: 1\n    digest: \"{}\"\n  b:\n    revision: 1\n    digest: \"{}\"\n",
+            part("root", ""),
+            pin(&a),
+            pin(&b)
+        ))
+        .expect("root parses");
+        ir::compose(&root, &[a, b]).map(|_| ()).map_err(|problems| {
+            problems
+                .iter()
+                .map(|problem| problem.code())
+                .collect::<Vec<_>>()
+        })
+    };
+    let plain = "actions: {act: {}}\n";
+    assert_eq!(two(plain, "actions: {act: {author: program}}\n"), Ok(()));
+    for marked in [
+        "actions: {act: {author: judgement}}\n",
+        "artifacts: {s: {}}\nactions: {act: {revises: [s]}}\n",
+    ] {
+        let first = if marked.starts_with("artifacts") {
+            "artifacts: {s: {}}\nactions: {act: {}}\n"
+        } else {
+            plain
+        };
+        assert_eq!(
+            two(first, marked),
+            Err(vec!["conflicting-imports"]),
+            "{marked}"
+        );
+    }
+}
