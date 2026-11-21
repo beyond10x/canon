@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T15:26:44Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-writer",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "6 of 19 mutants survived the unit's suite: the four green cases of the pass kill them and merge with the unit; 19 of 19 killed at pass 2",
+    "reference": "impl/protocol-writer 280c42df",
+    "review": "review-result:adversary-protocol-writer-pass-1",
+    "outcome": "fixed"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T15:26:44Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-writer",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "the module docs put the key limit at 1024 characters and said parse gives no such key: the Keys section states the limit in bytes of written text and the false sentence is gone, in the docs and in protocol_write.rs",
+    "reference": "impl/protocol-writer 94150485",
+    "review": "review-result:adversary-protocol-writer-pass-1",
+    "outcome": "fixed"
+  }
+}

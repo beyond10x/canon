@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T15:26:45Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-writer",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "a backspace written in six bytes and more stack in the list of predicates passed the unit's and pass 1's cases: the pass's escape-form and all-depth cases kill both and merge with the unit",
+    "reference": "impl/protocol-writer 26b7de25",
+    "review": "review-result:adversary-protocol-writer-pass-2",
+    "outcome": "fixed"
+  }
+}
