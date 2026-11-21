@@ -984,11 +984,29 @@ types:
   # One explicit decision of a canon-decisions/1 document. `canon evaluate --decisions` names that
   # document: a YAML (or JSON) list of these entries, the way canon-authority/1 is a list of
   # authority decisions; an empty list decides nothing. A decision applies to the outcome it names
-  # when the outcome requires a decision of its name and its case_revision is the case snapshot's
-  # revision; a decision taken at a superseded case revision does not apply, and the outcome stays
-  # blocked (CANON-OUTCOME-002).
+  # when the outcome requires a decision of its name, its case_revision is the case snapshot's
+  # revision and every ground it rested on holds (ground_revisions, ground_evidence,
+  # story:decision-grounds); a decision taken at a superseded case revision, or set aside by a
+  # ground, does not apply, and the outcome stays blocked (CANON-OUTCOME-002). Its reason
+  # {"decision", "present": false} then lists under stale_grounds each failed ground of the
+  # decisions for it taken at the snapshot's revision, each once, artifact grounds by artifact and
+  # revision, then evidence grounds by id; a decision taken at another case revision adds none of
+  # its grounds, because it would not apply whatever its grounds do, so naming them would ask for a
+  # ground to hold again that restores nothing (CANON-GROUND-001). Two entries equal in decision,
+  # outcome, principal and case revision are a duplicate, whatever their grounds. Refused, in this
+  # order: text that is not such a list, or an entry with another key or a missing one, as
+  # malformed-input; then, entry by entry in the order given, a decision, outcome, principal, case
+  # revision, ground artifact, ground revision or ground evidence id that is not an identifier as
+  # invalid-identifier, then an entry equal to an earlier one as duplicate-identifier; then a
+  # ground artifact the protocol does not declare as undeclared-artifact; then a decision for an
+  # outcome the protocol does not declare as undeclared-outcome, and one for an outcome that does
+  # not require a decision of its name as undeclared-decision. canon evaluate's computed_from
+  # records each entry's grounds, ground_evidence sorted and without repeats, and leaves an empty
+  # ground field out.
   # read from: .engineering/planning/story/decision-outcomes.md:46-48
   # read from: .engineering/planning/story/decision-outcomes.md:53-54
+  # read from: .engineering/planning/story/decision-grounds.md:65-79
+  # read from: crates/canon/src/eval/decisions.rs:1-42
   - name: canon.protocol.ExplicitDecision
     kind: struct
     fields:
@@ -1045,18 +1063,29 @@ types:
   # entry may be bound to a case revision and may name the principal who took it
   # (story:authority-revision-binding). A bound entry, whatever its decision, applies only while
   # its case_revision is the case snapshot's revision, compared for equality, and to nothing when
-  # the snapshot has no revision; an unbound entry applies at every case revision. Only the entries
-  # that apply take part in coverage and precedence, so a requirement covered only by entries that
-  # do not apply is not decided. One capability may be decided at several scopes and at several
-  # case revisions; two entries equal in capability, scope (the same keys with the same values, in
-  # any order), case revision and principal are a duplicate. Refused, in this order: text that is
-  # not such a list (a scope that names a key twice included), or an entry with another key,
-  # another decision or a missing key, as malformed-input, naming the key an entry leaves out;
-  # then, entry by entry in the order given, a capability that is not an identifier as
-  # invalid-identifier, then a scope key or value that is not one, then a principal, then a case
-  # revision, each as invalid-identifier, then an entry equal to an earlier one as
-  # duplicate-identifier.
-  # read from: crates/canon/src/eval/authority.rs:1-41
+  # the snapshot has no revision; an unbound entry applies at every case revision. An entry that
+  # names grounds (ground_revisions, ground_evidence, story:decision-grounds) applies only while
+  # every ground holds, whatever its decision, so a denial whose ground moved lapses too. Only the
+  # entries that apply take part in coverage and precedence, so a requirement covered only by
+  # entries that do not apply is not decided; its reason {"capability", "decision": "none"} then
+  # lists under stale_grounds each failed ground of the entries on its capability that cover it
+  # and apply at the case revision, each once, artifact grounds by artifact and revision, then
+  # evidence grounds by id. An entry bound to another case revision adds none of its grounds,
+  # because it would not apply whatever its grounds do, so naming them would ask for a ground to
+  # hold again that restores nothing (CANON-GROUND-001). One capability may be decided at several
+  # scopes and at several case revisions; two entries equal in capability, scope (the same keys
+  # with the same values, in any order), case revision and principal are a duplicate, whatever
+  # their decisions and grounds. Refused, in this order: text that is not such a list (a scope or
+  # ground_revisions that names a key twice included), or an entry with another key, another
+  # decision or a missing key, as malformed-input, naming the key an entry leaves out; then, entry
+  # by entry in the order given, a capability that is not an identifier as invalid-identifier,
+  # then a scope key or value that is not one, then a principal, then a case revision, then a
+  # ground artifact or its revision, then a ground evidence id, each as invalid-identifier, then
+  # an entry equal to an earlier one as duplicate-identifier; then, once the explicit decisions are
+  # read too, a ground artifact the protocol does not declare as undeclared-artifact. canon
+  # evaluate's computed_from records each entry's grounds, ground_evidence sorted and without
+  # repeats, and leaves an empty ground field out.
+  # read from: crates/canon/src/eval/authority.rs:1-50
   # read from: crates/canon/src/model/authority.rs:37-75
   # read from: .engineering/planning/story/review-hardening-w7.md:28
   # read from: .engineering/planning/story/review-hardening-w7.md:31
@@ -1146,7 +1175,7 @@ types:
   # denied requirement; and approval-required when none is denied and one requires approval or is
   # not decided, naming each such requirement (CANON-AUTHORITY-001, CANON-SCOPE-001).
   # read from: crates/canon/src/model/authority.rs:77-91
-  # read from: crates/canon/src/eval/actions.rs:41-59
+  # read from: crates/canon/src/eval/actions.rs:41-70
   # read from: .engineering/planning/story/capability-scope.md:65-72
   - name: canon.protocol.Grant
     kind: enum

@@ -331,8 +331,9 @@ grounds alone, each once, artifact grounds first by artifact and then revision, 
 by id, `{"evidence": <id>, "reason": <reason>}` with the reason the record was excluded with
 (the revision-binding or freshness stage's, else that of the first claim listing it in claim-id
 order), or `{"evidence": <id>, "present": false}` when no record has the id. An entry set aside
-by its case revision adds none of its grounds. So the order of the entries does not change the
-result (`grounds.rs`). `pending_decisions` lists such a requirement as it lists any other that
+by its case revision adds none of its grounds: it would not apply whatever its grounds do, so
+naming them would ask for a ground to hold again that restores nothing. So the order of the
+entries does not change the result (`grounds.rs`). `pending_decisions` lists such a requirement as it lists any other that
 is not decided, without the grounds.
 
 Refused, in this order: text that is not such a list, or an entry with another key, another

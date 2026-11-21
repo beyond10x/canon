@@ -214,14 +214,15 @@ requirements:
       when it has one, is current, whatever it decided. A requirement covered only by entries that
       do not apply MUST be approval-required with the reason decision none, and an outcome whose
       only explicit decision does not apply MUST be blocked with the reason present false; either
-      reason MUST then list under stale_grounds each failed ground of the entries set aside by
-      their grounds alone, once, artifact grounds by artifact and then revision, as
-      revision_mismatch with the ground's revision, then evidence grounds by id, with the reason the
-      record was excluded with, or present false when no record has the id. An entry set aside by
-      its case revision MUST NOT add a ground. pending_decisions MUST list such a requirement and
-      such an outcome as it lists one with no decision. The order of the entries in a document MUST
-      NOT change the result. A ground artifact the protocol does not declare MUST be refused as
-      undeclared-artifact, and a ground artifact, revision or evidence id that is not an identifier
-      as invalid-identifier. Two entries that differ only in their grounds MUST be refused as
-      duplicate-identifier.
+      reason MUST then list under stale_grounds each failed ground of the entries that every other
+      rule would let apply, set aside by their grounds alone, once, artifact grounds by artifact
+      and then revision, as revision_mismatch with the ground's revision, then evidence grounds by
+      id, with the reason the record was excluded with, or present false when no record has the
+      id. An entry set aside by its case revision MUST NOT add a ground, whether its grounds hold
+      or not, since it would not apply whatever they do. pending_decisions MUST list such a
+      requirement and such an outcome as it lists one with no decision. The order of the entries in
+      a document MUST NOT change the result. A ground artifact the protocol does not declare MUST
+      be refused as undeclared-artifact, and a ground artifact, revision or evidence id that is not
+      an identifier as invalid-identifier. Two entries that differ only in their grounds MUST be
+      refused as duplicate-identifier.
     source: story:decision-grounds

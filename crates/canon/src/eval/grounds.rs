@@ -19,8 +19,10 @@
 //! that once, before coverage, precedence and `decided_by` read the entries ([`Standing`] says
 //! which grounds hold), so the `actions` and `outcomes` sections see only the entries that apply.
 //! An entry set aside by its case revision adds none of its grounds to a reason: it would not apply
-//! whatever its grounds. An entry at its case revision (or with none) whose grounds fail is set
-//! aside by its grounds, and each ground that failed is a [`Failed`].
+//! whatever its grounds do, so naming them would ask for a ground to hold again that restores
+//! nothing. `stale_grounds` lists the failed grounds of the entries every other rule would let
+//! apply. An entry at its case revision (or with none) whose grounds fail is set aside by its
+//! grounds, and each ground that failed is a [`Failed`].
 //!
 //! A reason that a set-aside entry leaves undecided lists the failed grounds of every such entry
 //! under `stale_grounds` ([`stale_grounds`]), each once, artifact grounds first, by artifact and
