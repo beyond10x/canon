@@ -70,9 +70,11 @@ does not depend on the order the sections are written in:
    `case_outcome` for a `children` form; then its applicability predicate, followed likewise by
    every evidence match, order form and `children` form it holds, `evidence-in-applicability`:
    it tests only claim values and case inputs), then those in actions (each action's
-   precondition, then each evidence kind it may produce, then the subject of the case it opens,
-   `undeclared-artifact`, then an opening under the protocol's own id, `self-opened-case`, both
-   naming the action), then those in outcomes, then those in invalidation rules (the upstream
+   precondition, then each evidence kind it may produce, then each artifact it `revises`
+   (story:judgement-marking), `undeclared-artifact`, once for every listing, in the order
+   listed, then the subject of the case it opens, `undeclared-artifact`, then an opening under
+   the protocol's own id, `self-opened-case`, every one naming the action), then those in
+   outcomes, then those in invalidation rules (the upstream
    artifact, then each claim the rule invalidates); within a section, in the order its
    declarations are written, and within a declaration, in the order its references are
    written;

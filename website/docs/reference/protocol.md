@@ -93,6 +93,8 @@ has and what evidence it may produce (design § 10).
 | `may_produce` | list of [`EvidenceProduction`](#evidenceproduction) | optional | — |
 | `arguments` | any JSON value | optional | The JSON Schema, in Canon's argument-schema dialect, that the action's arguments satisfy. Absent: the action takes no arguments; a runner accepts only `{}`. Canon never validates arguments at run time: the runner that calls the action validates them against the schema, and `canon validate` holds the schema to the dialect (`action-arguments`). |
 | `case_open` | [`CaseOpening`](#caseopening) | optional | The child case the action opens (story:case-composition): a case governed by another protocol, about a declared artifact. Absent: the action opens no case. Canon opens nothing itself; whoever takes the action opens the child case. A case has one commission, and a second party works through a child case: this is the one primitive by which a case hands work to another party (D207). |
+| `author` | [`Author`](#author) | optional | Who writes the action's arguments and the content of the artifacts it revises (story:judgement-marking): `program`, a reproducible function of the action's inputs, or `judgement`, a person or a model. Absent: `program`. It has no evaluation meaning, names no executor, model or tool, and Canon cannot prove that a runner honours it. |
+| `revises` | list of [identifier](#identifiers) (`ArtifactId`) | optional | The declared artifacts the action may move to a new revision (story:judgement-marking). Absent: none. It has no evaluation meaning; Canon never refuses a runner that moves an artifact outside it. |
 
 ## `Outcome`
 
@@ -257,6 +259,7 @@ One evidence kind an action may produce.
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `evidence` | [identifier](#identifiers) (`EvidenceKindId`) | required | — |
+| `decided_by` | [`Author`](#author) | optional | Who decides the result of a record of this kind the action produces (story:judgement-marking). Absent: the action's `author`. `program` on a judgement action covers a record the runner writes from the effect it applied, such as provenance. It has no evaluation meaning. |
 
 ## `CaseOpening`
 
@@ -270,6 +273,17 @@ openings form a cycle, naming it in the order its openings go, from its least pr
 |---|---|---|---|
 | `protocol` | [identifier](#identifiers) (`ProtocolId`) | required | The protocol the child case is governed by. |
 | `subject` | [identifier](#identifiers) (`ArtifactId`) | required | The declared artifact the child case is about. |
+
+## `Author`
+
+Who decides (story:judgement-marking): a reproducible procedure, or a judgement by a person or
+a model. On an action (`author`) it says who writes the action's arguments and the artifacts it
+revises; on a production (`decided_by`) who decides the record's result.
+
+| Value | Meaning |
+|---|---|
+| `program` | A reproducible function of the action's inputs: the value when nothing is written. |
+| `judgement` | A person or a model, whose result is not a function of the action's inputs. |
 
 ## `OutcomeRequirement`
 

@@ -16,26 +16,32 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   are written in. The members of an `all` or `any` predicate are sorted by `canonical_order`,
   and an action's capability requirements (by capability, then by scope, one without a scope
   first, a scope comparing its keys and values in key order), the evidence kinds it may
-  produce, the claims an
+  produce and the artifacts it revises, the claims an
   invalidation rule invalidates, the values a case input declares, the values an input test
   lists and the dimensions an evidence match demands independence on by identifier, and the
   outcomes a `children` form lists by code point.
-- **No repetition.** Each of those nine lists holds every member once: in three-valued logic
-  `all` and `any` are idempotent, and the two action lists, the invalidated claims, the two
+- **No repetition.** Each of those ten lists holds every member once: in three-valued logic
+  `all` and `any` are idempotent, and the three action lists, the invalidated claims, the two
   lists of input values, the dimensions of `independent_on` and the outcomes of `children` are
-  sets.
+  sets. A kind an action lists twice may produce once, and is judgement-decided when either
+  listing is.
 - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
   evidence match without a result has `"result": null`; a claim test without `is` has
   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-  true; absent lists and sections are empty. The twelve exceptions are an evidence kind's
+  true; absent lists and sections are empty. The fifteen exceptions are an evidence kind's
   `max_age` and its `supplied_by`, the `subject` of an evidence match or an order form, an
   evidence match's `independent_on`, an obligation's `applicable_when`, an action's
-  `arguments`, an action's `case_open`, the `scope` of a capability requirement, the
-  `revision` of a `children` form, the `invalidation` section, the `case` section and the
-  `independence_dimensions` section: each written only when it is declared (a scope only when
-  it names a key, a `children` form's `revision` only when it is `current`, a section only when
-  it holds a rule, an input or a dimension), so the IR of a protocol that declares none of them
-  is the IR it was before they existed. An evidence kind's `supplied_by` is the protocol id as
+  `arguments`, an action's `case_open`, an action's `author` and its `revises`, the
+  `decided_by` of an evidence kind an action may produce, the `scope` of a capability
+  requirement, the `revision` of a `children` form, the `invalidation` section, the `case`
+  section and the `independence_dimensions` section: each written only when it is declared (a
+  scope only when it names a key, a `children` form's `revision` only when it is `current`, an
+  action's `author` only as `"author": "judgement"`, its `revises` only when it lists an
+  artifact, a production's `decided_by` only as `"decided_by": "judgement"`, a section only
+  when it holds a rule, an input or a dimension), so the IR of a protocol that declares none of
+  them is the IR it was before they existed. A production's `decided_by` is resolved: the
+  action's `author` when the production declares none (story:judgement-marking), so
+  `author: program` and a `decided_by` equal to the action's `author` compile to no key. An evidence kind's `supplied_by` is the protocol id as
   declared, a name nothing resolves (story:supplied-evidence). A capability requirement is `{"capability": …}`, or `{"capability": …, "scope": {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
   section is `{<id>: {"description": …}}`. The `case` section is
   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
@@ -55,7 +61,8 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
 - **Resolved references.** Only a document the validator accepts compiles, so every claim and
   evidence kind the IR references is declared in it (`case_outcome` wherever a `children` form
   reads it), and so is every artifact an evidence match or an order form names as its subject,
-  an action opens a case about (`case_open`) or an invalidation rule names as its upstream
+  an action revises (`revises`) or opens a case about (`case_open`) or an invalidation rule
+  names as its upstream
   artifact, every input an input test names, with every value it lists, and every dimension an
   evidence match demands independence on.
 
