@@ -88,6 +88,73 @@ fn floor(floor: &str, ir: &str, status: i32, stdout: Option<&str>) -> String {
     text(&output.stdout).to_owned()
 }
 
+/// What the floor does with inputs it cannot compare: a floor against itself changes nothing, an
+/// unreadable file exits 2 and a file that is not `canon-ir/1` exits 1, each naming the file.
+#[test]
+fn floor_refuses_what_it_cannot_read_and_holds_against_itself() {
+    let dir = scratch("refuses");
+    let (floor_path, _) = compiled("floor", false, &dir);
+    floor(
+        &floor_path,
+        &floor_path,
+        0,
+        Some(
+            "floor: holds\n\
+             TIGHTENING: 0\n\
+             EXPANSION: 0\n\
+             NO SEMANTIC CHANGE: 0\n",
+        ),
+    );
+
+    let missing = dir.join("missing.json").display().to_string();
+    for (arguments, named) in [
+        (
+            ["--floor", missing.as_str(), "--ir", floor_path.as_str()],
+            0,
+        ),
+        (
+            ["--floor", floor_path.as_str(), "--ir", missing.as_str()],
+            1,
+        ),
+    ] {
+        let output = canon(&[
+            "floor",
+            arguments[0],
+            arguments[1],
+            arguments[2],
+            arguments[3],
+        ]);
+        assert_eq!(output.status.code(), Some(2), "{arguments:?}");
+        assert_eq!(text(&output.stdout), "");
+        let stderr = text(&output.stderr);
+        assert!(
+            stderr.starts_with(&format!("error[unreadable]: {missing}: ")),
+            "{named}: {stderr}"
+        );
+    }
+
+    let source = format!("{DIR}/floor.yaml");
+    for (arguments, named) in [
+        (["--floor", source.as_str(), "--ir", floor_path.as_str()], 0),
+        (["--floor", floor_path.as_str(), "--ir", source.as_str()], 1),
+    ] {
+        let output = canon(&[
+            "floor",
+            arguments[0],
+            arguments[1],
+            arguments[2],
+            arguments[3],
+        ]);
+        assert_eq!(output.status.code(), Some(1), "{arguments:?}");
+        assert_eq!(text(&output.stdout), "");
+        let stderr = text(&output.stderr);
+        assert!(
+            stderr.starts_with(&format!("error[malformed-input]: {source}: ")),
+            "{named}: {stderr}"
+        );
+    }
+}
+
 #[test]
 fn floor_admits_only_tightening_and_expansion() {
     let dir = scratch("admits");
