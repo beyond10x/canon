@@ -179,6 +179,22 @@ types:
       # read from: crates/canon/src/model/mod.rs:106
       - name: may_produce
         type: List<canon.protocol.EvidenceProduction>
+      # The kinds one run of the action records together, all of them or none
+      # (story:simulate-record-groups). Absent means no group. canon validate refuses a group with
+      # fewer than two distinct kinds, a kind its may_produce does not list, a kind an earlier
+      # group of the action names, and case_outcome on an action that opens a child case (its
+      # child's outcome arrives on its own), each as invalid-record-group naming the action. No
+      # evaluation reads it: canon evaluate, canon check and canon generate give the same bytes
+      # with or without it, and canon diff reports a group added, removed or changed as NO
+      # SEMANTIC CHANGE. canon simulate adds a group's records in one step, one record of each
+      # member kind, and never offers a grouped kind alone. canon-ir/1 writes
+      # `"records_together"` only when the list is not empty, the groups sorted and the kinds
+      # sorted within each group, each kind once.
+      # read from: .engineering/planning/story/simulate-record-groups.md:48-67
+      # read from: .engineering/planning/story/simulate-record-groups.md:233-235
+      # read from: crates/canon/src/model/mod.rs:239-245
+      - name: records_together
+        type: List<canon.protocol.RecordGroup>
       # The one argument schema the action declares (story:action-arguments). Absent: the action
       # takes no arguments; a runner accepts only `{}`. Canon evaluates no call and never calls an
       # action. The library function b10x_canon::validate::check_arguments (story:argument-validator)
@@ -324,6 +340,18 @@ types:
       # read from: crates/canon/src/model/mod.rs:322-327
       - name: decided_by
         type: Optional<canon.protocol.Author>
+
+  # One group of an action's records_together (story:simulate-record-groups): kinds one run of
+  # the action records together, all of them or none. A named type, not a list of lists.
+  # read from: .engineering/planning/story/simulate-record-groups.md:48-52
+  # read from: crates/canon/src/model/mod.rs:337-345
+  - name: canon.protocol.RecordGroup
+    kind: struct
+    fields:
+      # The kinds of the group: two or more distinct kinds the action may produce.
+      # read from: crates/canon/src/model/mod.rs:342-344
+      - name: kinds
+        type: List<canon.protocol.EvidenceKindId>
 
   # read from: crates/canon/src/model/mod.rs:124-130
   - name: canon.protocol.Outcome

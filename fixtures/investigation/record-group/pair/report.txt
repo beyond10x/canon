@@ -1,0 +1,5 @@
+stuck-state: state {evidence `fit` about `doc`}: no outcome is legitimate and no action is admissible or approval-required; path: action `check` produces evidence `fit` about `doc`
+stuck-state: state {evidence `shape` about `doc`}: no outcome is legitimate and no action is admissible or approval-required; path: action `check` produces evidence `shape` about `doc`
+unreached-outcome: outcome `done` is legitimate in no reachable state
+no-outcome-reachable: protocol `probe.pair` revision 1 reaches no state in which an outcome is legitimate
+simulated: protocol `probe.pair` revision 1: 3 reachable states, 0 terminable (outcome `done` 0), 4 findings (2 stuck or cycle states)
