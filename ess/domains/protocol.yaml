@@ -1,6 +1,8 @@
 # Retrofitted from the protocol/1 source model in crates/canon/src/model/ (story:protocol-source-model).
-# This is the typed model, not the protocol/1 surface syntax: parsing that syntax, and every
-# validation rule (duplicate identifiers, references that resolve), is tested by Canon itself.
+# This is the typed model, not the protocol/1 surface syntax: parsing that syntax, writing a model
+# back out as canonical JSON text (b10x_canon::model::write, story:protocol-writer) with the round
+# trip between the two (for keys of at most 1022 bytes as written), and every validation rule
+# (duplicate identifiers, references that resolve), is tested by Canon itself.
 # The evaluation documents (canon-case/1, canon-evidence/1, canon-decision/1) are specified first
 # here (story:three-valued-claims), and the explicit decisions an evaluation reads
 # (canon-decisions/1) too (story:decision-outcomes), and the authority decisions it reads
