@@ -79,6 +79,7 @@
 //! text on one line. The same document always yields the same problems in the same order.
 
 pub(crate) mod arguments;
+pub use arguments::{ArgumentRefusal, ArgumentsRefused, check_arguments};
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
