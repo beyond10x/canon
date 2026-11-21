@@ -13,5 +13,6 @@ pub mod explain;
 pub mod generate;
 pub mod ir;
 pub mod model;
+pub mod mutate;
 pub mod simulate;
 pub mod validate;
