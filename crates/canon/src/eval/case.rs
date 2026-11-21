@@ -10,7 +10,7 @@ use serde_yaml_ng::Value;
 use super::read::{malformed, yaml};
 use super::{Refusal, identifier, unsupported_format};
 use crate::ir::Ir;
-use crate::model::{ArtifactId, CASE_FORMAT, Case, CaseArtifact, InputId, one_line};
+use crate::model::{ArtifactId, CASE_FORMAT, Case, CaseArtifact, InputId, is_identifier, one_line};
 
 /// Reads one `canon-case/1` document: parsed as YAML, then read as [`case_from_value`] reads it.
 pub fn read_case(text: &str) -> Result<Case, Refusal> {
@@ -93,7 +93,6 @@ pub(super) fn check(ir: &Ir, case: &Case) -> Result<(), Refusal> {
 fn descent(case: &Case, artifact: &ArtifactId, entry: &CaseArtifact) -> Result<(), Refusal> {
     let mut seen = BTreeSet::new();
     for revision in entry.descends_from.iter().flatten() {
-        identifier("artifact ancestor revision", revision.as_str())?;
         let named = || {
             format!(
                 "case `{}` lists revision `{}` among those artifact `{}` descends from",
@@ -102,6 +101,15 @@ fn descent(case: &Case, artifact: &ArtifactId, entry: &CaseArtifact) -> Result<(
                 one_line(artifact.as_str())
             )
         };
+        if !is_identifier(revision.as_str()) {
+            return Err(Refusal::new(
+                "invalid-identifier",
+                format!(
+                    "{}, which is empty or contains whitespace or a control character",
+                    named()
+                ),
+            ));
+        }
         if !seen.insert(revision) {
             return Err(Refusal::new(
                 "duplicate-identifier",
@@ -200,7 +208,7 @@ mod tests {
             (
                 "{revision: r2, descends_from: ['r 1']}",
                 "invalid-identifier",
-                "artifact ancestor revision `r 1` is empty or contains whitespace or a control character",
+                "case `C-1` lists revision `r 1` among those artifact `a` descends from, which is empty or contains whitespace or a control character",
             ),
             (
                 "{revision: r2, descends_from: [r1, r0, r1]}",
