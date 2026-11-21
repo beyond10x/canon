@@ -921,7 +921,14 @@ types:
       # read from: .engineering/planning/story/three-valued-claims.md:59
       - name: format
         type: String
-      # read from: .engineering/planning/story/three-valued-claims.md:59
+      # Used once in an evaluation's evidence set, except that a record given more than once
+      # counts once when every copy equals the first (story:evidence-redelivery): equal in kind,
+      # result, subject, subject_revision, observed_at as written text, producer, child_case and
+      # upstream_revisions (the same pairs in any order). The evaluator keeps the first copy, in
+      # the order given, and every later stage reads each id once. A copy that differs in any of
+      # these is refused as duplicate-identifier, "evidence `e1` is given more than once with
+      # different content". Where the evaluator does this: crates/canon/src/eval/evidence.rs.
+      # read from: crates/canon/src/model/evidence.rs:21-22
       - name: id
         type: canon.protocol.EvidenceId
       # read from: .engineering/planning/story/three-valued-claims.md:59
