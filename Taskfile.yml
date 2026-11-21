@@ -3,9 +3,10 @@ version: '3'
 vars:
   ESS_VERSION:
     sh: "sed -n 's/^requires: ess //p' ess/ess-inputs.yaml"
+  ESS_DIR: '{{env "HOME"}}/.cache/ess/toolchains/{{.ESS_VERSION}}'
 
 env:
-  PATH: '{{env "HOME"}}/.cache/ess/toolchains/{{.ESS_VERSION}}:{{env "PATH"}}'
+  PATH: '{{.ESS_DIR}}:{{env "PATH"}}'
 
 tasks:
   default:
@@ -25,7 +26,7 @@ tasks:
   ess-gate:
     desc: Atlas ADR 0076 gate on ess/, and ess/ equal to the Rust model and the canon command line.
     preconditions:
-      - sh: test "$(ess --version 2>/dev/null)" = "ess {{.ESS_VERSION}}"
+      - sh: PATH="{{.ESS_DIR}}:$PATH"; test "$(ess --version 2>/dev/null)" = "ess {{.ESS_VERSION}}"
         msg: 'ess {{.ESS_VERSION}} (ess/ess-inputs.yaml) is not first on PATH: unpack https://github.com/beyond10x/ess/releases/download/{{.ESS_VERSION}}/ess-{{.ESS_VERSION}}-x86_64-unknown-linux-gnu.tar.gz into ~/.cache/ess/toolchains/{{.ESS_VERSION}}/ so that ess is there'
     cmds:
       - cargo test -p b10x-canon --test ess_gate --test ess_model_matches --locked
