@@ -9,6 +9,8 @@ relations:
 - serves: vision:governed-autonomy
 scope:
 - confidence: inferred
+  path: .cargo/config.toml
+- confidence: inferred
   path: .config/nextest.toml
 - confidence: cited
   path: .github/workflows/check.yml
@@ -52,7 +54,7 @@ scope:
   path: crates/canon/tests/invalidation_evaluation_cost.rs
 - confidence: inferred
   path: crates/canon/tests/missing_keys.rs
-revision: 18
+revision: 20
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 8}
 - {from: "proposed", to: "active", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 9}
@@ -278,3 +280,21 @@ sent the correction. Step 4 above is kept as written; this section replaces its 
   again in several tests or work inside one test. A cache is built only for the first kind.
 - A cache on disk gets two tests: two processes that build it at once leave a whole file (write
   to a temporary name, then rename), and a changed source misses the cache.
+
+## Corrected 2026-11-21: a profile setting in the manifest loses on the workstation
+
+The workspace rule was corrected again (`~/beyond10x/AGENTS.md` lines 44-52, found in another
+repository; sent by the `host-operator` session): `~/.cargo/config.toml` on the workstation sets
+`[profile.dev] debug = "line-tables-only"`, and a cargo config file wins over the manifest, so
+`[profile.dev] debug = false` in `Cargo.toml` has no effect there.
+
+- Every profile setting of this story (the debug level, and the optimization of step 3) is
+  proved on a built test binary: `readelf -S` and the binary's size before and after, and a
+  timing for the optimization.
+- A setting that loses in the manifest goes into the repository's `.cargo/config.toml` or the
+  environment of the gate's test task (`CARGO_PROFILE_DEV_DEBUG=false`). The unit says what CI
+  gets and what the workstation gets for each setting, and they are equal.
+- `.cargo/config.toml` is this unit's for `[profile.*]` only; story:local-gate-equals-ci keeps
+  `[env]` and the rest and merges after it. The typed scope gains the file.
+- One `cargo clean` after the switch, with the size of `target/` before it and after the next
+  full build.
