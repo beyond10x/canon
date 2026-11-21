@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T07:08:44Z",
+  "actor": "human:timo",
+  "artifact": "story:decision-grounds",
+  "kind": "story",
+  "revision": 19,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "on 70ddcd0 (specification only): specification_and_model_are_equal names ground_revisions and ground_evidence on AuthorityDecision and ExplicitDecision (20 passed, 10 failed) and conform run fails CANON-GROUND-001 step artifact-ground-holds (25 passed, 1 failed; 27 implemented, 26 covered); on e6f60f5: workspace 148 summaries, 1064 passed, 0 failed per the unit's sum, conform 26 passed, 27 covered; VERIFIED by the coordinator from the unit's logs",
+    "reference": "w6/decision-grounds/red.log vs gate.log, gate-test.log (session scratch)"
+  }
+}
