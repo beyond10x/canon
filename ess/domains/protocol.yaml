@@ -226,6 +226,7 @@ types:
       # judgement is TIGHTENING, judgement to program RELAXATION, each naming the action.
       # read from: .engineering/planning/story/judgement-marking.md:50
       # read from: .engineering/planning/story/judgement-marking.md:53-57
+      # read from: crates/canon/src/model/mod.rs:252-257
       - name: author
         type: Optional<canon.protocol.Author>
       # The artifacts the action may move to a new revision (story:judgement-marking). Absent
@@ -238,6 +239,7 @@ types:
       # artifact.
       # read from: .engineering/planning/story/judgement-marking.md:51
       # read from: .engineering/planning/story/judgement-marking.md:53-57
+      # read from: crates/canon/src/model/mod.rs:258-262
       - name: revises
         type: List<canon.protocol.ArtifactId>
 
@@ -247,6 +249,7 @@ types:
   # result. Neither has any evaluation meaning.
   # read from: .engineering/planning/story/judgement-marking.md:50-52
   # read from: .engineering/planning/story/judgement-marking.md:99
+  # read from: crates/canon/src/model/mod.rs:265-275
   - name: canon.protocol.Author
     kind: enum
     variants: ["program", "judgement"]
@@ -315,6 +318,7 @@ types:
       # judgement wins. canon diff: a production becoming judgement-decided is TIGHTENING, one
       # becoming program-decided RELAXATION, each naming the action and the kind.
       # read from: .engineering/planning/story/judgement-marking.md:52-56
+      # read from: crates/canon/src/model/mod.rs:322-327
       - name: decided_by
         type: Optional<canon.protocol.Author>
 

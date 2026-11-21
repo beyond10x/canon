@@ -37,8 +37,14 @@
 //! | capability requirement added to an action (a requirement is a capability and its scope, so a changed scope is one removed and one added) | `TIGHTENING` |
 //! | capability requirement removed from an action | `RELAXATION` |
 //! | action effect changed | `BREAKING` |
+//! | action `author` changed from program to judgement (story:judgement-marking: a judgement mark only adds obligations) | `TIGHTENING` |
+//! | action `author` changed from judgement to program | `RELAXATION` |
 //! | evidence kind an action may produce added | `EXPANSION` |
 //! | evidence kind an action may produce removed | `BREAKING` |
+//! | evidence kind an action may produce in both revisions becoming judgement-decided (its resolved `decided_by`) | `TIGHTENING` |
+//! | evidence kind an action may produce in both revisions becoming program-decided | `RELAXATION` |
+//! | artifact added to what an action `revises` (more may move) | `RELAXATION` |
+//! | artifact removed from what an action `revises` | `TIGHTENING` |
 //! | action argument schema introduced or removed (absent, the action takes only `{}`) | `BREAKING` |
 //! | action argument schema narrowed, widened, rewritten or changed | by the rules in `diff/arguments.rs` |
 //! | case an action opens (`case_open`) introduced, removed or changed | `BREAKING` |
@@ -122,9 +128,12 @@
 //! rules, case inputs and independence dimensions; within a section, by identifier; within a declaration, its description,
 //! then its fields in the order the IR declares them (an evidence kind's maximum age and
 //! supplier; an obligation's discharge predicate and
-//! applicability predicate; an action's precondition, capability requirements, effect, evidence
-//! it may produce, argument schema and the case it opens; a case input's values), each list in identifier order, removals before
-//! additions. Every IR declaration is destructured whole, so a field added to one does not compile
+//! applicability predicate; an action's precondition, capability requirements, effect, author,
+//! evidence it may produce, who decides each kind it may produce in both revisions, the artifacts
+//! it revises, argument schema and the case it opens; a case input's values), each list in
+//! identifier order, removals before additions. The IR holds a production's resolved
+//! `decided_by`, so an `author` changed on an action also changes who decides each kind that
+//! declares none, and each such kind is its own line after the author's. Every IR declaration is destructured whole, so a field added to one does not compile
 //! here until the classifier says what a change to it is.
 //!
 //! Out of scope (story:semantic-diff): live-case impact, which needs case data Canon does not hold
@@ -140,8 +149,8 @@ use crate::ir::{
     Outcome,
 };
 use crate::model::{
-    Age, ArtifactId, CaseOpening, ClaimId, EvidenceKindId, EvidenceMatch, IndependenceDimensionId,
-    Predicate, ProtocolId, Truth, one_line,
+    Age, ArtifactId, Author, CaseOpening, ClaimId, EvidenceKindId, EvidenceMatch,
+    IndependenceDimensionId, Predicate, ProtocolId, Truth, one_line,
 };
 
 /// What a change does to legitimate work (design § 31).
@@ -1002,7 +1011,10 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         requires: _,
         scopes: _,
         effect: from_effect,
+        author: from_author,
         may_produce: from_may_produce,
+        judgement_decided: from_judged,
+        revises: from_revises,
         arguments: from_arguments,
         case_open: from_case_open,
     } = from;
@@ -1012,7 +1024,10 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         requires: _,
         scopes: _,
         effect: to_effect,
+        author: to_author,
         may_produce: to_may_produce,
+        judgement_decided: to_judged,
+        revises: to_revises,
         arguments: to_arguments,
         case_open: to_case_open,
     } = to;
@@ -1049,6 +1064,23 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
             ),
         );
     }
+    // A judgement mark only adds obligations under the follow-up checks (story:judgement-marking).
+    if from_author != to_author {
+        let category = match to_author {
+            Author::Judgement => Category::Tightening,
+            Author::Program => Category::Relaxation,
+        };
+        changes.push(
+            category,
+            SECTION,
+            id,
+            format!(
+                "author changed from {} to {}",
+                from_author.as_str(),
+                to_author.as_str()
+            ),
+        );
+    }
     changes.members(
         SECTION,
         id,
@@ -1056,6 +1088,40 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         to_may_produce,
         (Category::Breaking, "may no longer produce evidence"),
         (Category::Expansion, "may now produce evidence"),
+    );
+    // Who decides a kind the action may produce in both revisions; a kind added or removed is
+    // the change above.
+    for kind in to_may_produce
+        .iter()
+        .filter(|kind| from_may_produce.contains(kind))
+    {
+        let (was, is) = (from_judged.contains(kind), to_judged.contains(kind));
+        if was != is {
+            let (category, by) = if is {
+                (Category::Tightening, Author::Judgement)
+            } else {
+                (Category::Relaxation, Author::Program)
+            };
+            changes.push(
+                category,
+                SECTION,
+                id,
+                format!(
+                    "now decides evidence `{}` by {}",
+                    one_line(kind.as_str()),
+                    by.as_str()
+                ),
+            );
+        }
+    }
+    // `revises` widens what may move.
+    changes.members(
+        SECTION,
+        id,
+        from_revises,
+        to_revises,
+        (Category::Tightening, "no longer revises artifact"),
+        (Category::Relaxation, "now revises artifact"),
     );
     if let Some((category, what)) =
         arguments::classify(from_arguments.as_ref(), to_arguments.as_ref())
@@ -1394,6 +1460,64 @@ mod tests {
             .iter()
             .map(ToString::to_string)
             .collect()
+    }
+
+    /// story:judgement-marking: an author or a production turned to judgement tightens and turned
+    /// to program relaxes; an artifact added to `revises` relaxes and one removed tightens. A kind
+    /// added or removed is only its own line, whoever decides it; `author: program` written out is
+    /// no change. Each line names the action, after its effect and before its argument schema.
+    #[test]
+    fn judgement_marks_tighten_and_revises_relaxes() {
+        let kinds = "artifacts: {a: {}, b: {}}\nevidence_kinds: {k: {}, l: {}, m: {}}\n";
+        let program = ir(&format!(
+            "{kinds}actions: {{act: {{effect: write, revises: [a], may_produce: [{{evidence: k}}, {{evidence: l}}, \
+             {{evidence: m, decided_by: judgement}}], arguments: {{type: object}}}}}}\n"
+        ));
+        let judgement = ir(&format!(
+            "{kinds}actions: {{act: {{author: judgement, effect: write, revises: [b], may_produce: [{{evidence: k}}, \
+             {{evidence: l, decided_by: program}}, {{evidence: m}}], arguments: {{type: object, title: t}}}}}}\n"
+        ));
+        assert_eq!(
+            lines(&program, &judgement),
+            [
+                "TIGHTENING: action `act` author changed from program to judgement",
+                "TIGHTENING: action `act` now decides evidence `k` by judgement",
+                "TIGHTENING: action `act` no longer revises artifact `a`",
+                "RELAXATION: action `act` now revises artifact `b`",
+                "NO SEMANTIC CHANGE: action `act` arguments rewritten",
+            ]
+        );
+        assert_eq!(
+            lines(&judgement, &program),
+            [
+                "RELAXATION: action `act` author changed from judgement to program",
+                "RELAXATION: action `act` now decides evidence `k` by program",
+                "TIGHTENING: action `act` no longer revises artifact `b`",
+                "RELAXATION: action `act` now revises artifact `a`",
+                "NO SEMANTIC CHANGE: action `act` arguments rewritten",
+            ]
+        );
+
+        let without = ir(&format!(
+            "{kinds}actions: {{act: {{author: judgement, may_produce: [{{evidence: k}}]}}}}\n"
+        ));
+        let with = ir(&format!(
+            "{kinds}actions: {{act: {{author: judgement, may_produce: [{{evidence: k}}, {{evidence: l}}]}}}}\n"
+        ));
+        assert_eq!(
+            lines(&without, &with),
+            ["EXPANSION: action `act` may now produce evidence `l`"]
+        );
+        assert_eq!(
+            lines(&with, &without),
+            ["BREAKING: action `act` may no longer produce evidence `l`"]
+        );
+
+        let unwritten = ir(&format!("{kinds}actions: {{act: {{}}}}\n"));
+        let written = ir(&format!(
+            "{kinds}actions: {{act: {{author: program, revises: []}}}}\n"
+        ));
+        assert_eq!(lines(&unwritten, &written), Vec::<String>::new());
     }
 
     /// An input `s` and a claim `c` for the protocols of the tests below.

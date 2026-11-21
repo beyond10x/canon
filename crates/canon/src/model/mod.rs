@@ -249,6 +249,39 @@ pub struct Action {
     /// work to another party (D207).
     #[serde(default, deserialize_with = "present::optional")]
     pub case_open: Option<CaseOpening>,
+    /// Who writes the action's arguments and the content of the artifacts it revises
+    /// (story:judgement-marking): `program`, a reproducible function of the action's inputs, or
+    /// `judgement`, a person or a model. Absent: `program`. It has no evaluation meaning, names no
+    /// executor, model or tool, and Canon cannot prove that a runner honours it.
+    #[serde(default, deserialize_with = "present::optional")]
+    pub author: Option<Author>,
+    /// The declared artifacts the action may move to a new revision (story:judgement-marking).
+    /// Absent: none. It has no evaluation meaning; Canon never refuses a runner that moves an
+    /// artifact outside it.
+    #[serde(default, deserialize_with = "present::defaulted")]
+    pub revises: Vec<ArtifactId>,
+}
+
+/// Who decides (story:judgement-marking): a reproducible procedure, or a judgement by a person or
+/// a model. On an action (`author`) it says who writes the action's arguments and the artifacts it
+/// revises; on a production (`decided_by`) who decides the record's result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Author {
+    /// A reproducible function of the action's inputs: the value when nothing is written.
+    Program,
+    /// A person or a model, whose result is not a function of the action's inputs.
+    Judgement,
+}
+
+impl Author {
+    /// The value as `protocol/1` and `canon-ir/1` write it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Author::Program => "program",
+            Author::Judgement => "judgement",
+        }
+    }
 }
 
 /// What an action's `case_open` names: the protocol the child case is governed by and the
@@ -286,6 +319,12 @@ pub struct CapabilityRequirement {
 pub struct EvidenceProduction {
     #[serde(deserialize_with = "present::required")]
     pub evidence: EvidenceKindId,
+    /// Who decides the result of a record of this kind the action produces
+    /// (story:judgement-marking). Absent: the action's `author`. `program` on a judgement action
+    /// covers a record the runner writes from the effect it applied, such as provenance. It has no
+    /// evaluation meaning.
+    #[serde(default, deserialize_with = "present::optional")]
+    pub decided_by: Option<Author>,
 }
 
 /// A legitimate terminal interpretation of a case and what it requires: a predicate, or an explicit
