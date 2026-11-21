@@ -227,3 +227,8 @@ items:
     story: story:child-outcome-subject
     detail: "The children predicate takes subject: <artifact>, and then reads only the case_outcome records about that artifact, with revision: current only those at its current revision. A record about another artifact neither establishes nor contradicts it, so children opened about different artifacts no longer mix in one form. canon validate refuses an undeclared subject as undeclared-artifact; without the key every record counts as before and canon-ir/1 is unchanged; scenario CANON-COMPOSE-003."
     href: /docs/reference/protocol#childoutcomes
+  - label: Write a protocol/1 model
+    area: Language
+    story: story:protocol-writer
+    detail: The library function b10x_canon::model::write writes any protocol/1 model as canonical JSON text that model::parse reads back to an equal model, declaration order and repeated identifiers kept, a key left out only when the model holds none; it writes a model the validator refuses, and canon validate stays the only judge of validity. No builder, no canon fmt, no change to canon-ir/1.
+    href: /docs/reference/protocol
