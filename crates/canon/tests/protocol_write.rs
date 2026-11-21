@@ -751,7 +751,7 @@ fn a_specified_field_no_protocol_writes_is_named() {
 // ---------------------------------------------------------------------------------------------
 // The four points the story did not verify.
 
-/// 1. `parse` accepts JSON text.
+/// Point 1: `parse` accepts JSON text.
 #[test]
 fn parse_accepts_json_text() {
     let text = "{\n  \"format\": \"protocol/1\",\n  \"protocol\": {\n    \"id\": \"p\",\n    \"revision\": 1,\n    \"description\": \"a\\u0000\\t\\\"b\\\"\\\\\\u2028\"\n  },\n  \"claims\": {\n    \"a\": {\n      \"true_when\": {\n        \"claim\": \"a\",\n        \"is\": \"true\"\n      }\n    }\n  }\n}\n";
@@ -790,7 +790,7 @@ fn deepest_predicate_parse_reads() -> usize {
     depth
 }
 
-/// 2. The nesting limit of `serde_yaml_ng`: a predicate `parse` reads is written at the same
+/// Point 2: the nesting limit of `serde_yaml_ng`: a predicate `parse` reads is written at the same
 /// depth, so the written text is read; one nested a level deeper is refused by `parse` itself.
 #[test]
 fn a_predicate_nested_as_deep_as_parse_reads_is_written_and_read_back() {
@@ -825,7 +825,7 @@ fn a_predicate_nested_as_deep_as_parse_reads_is_written_and_read_back() {
     println!("predicate depth limit {limit}, arguments depth limit {arguments_limit}");
 }
 
-/// 3. Whether `serde_json`'s spellings of a number read back as numbers.
+/// Point 3: whether `serde_json`'s spellings of a number read back as numbers.
 #[test]
 fn the_numbers_in_arguments_a_parse_gives_read_back_equal() {
     let mut numbers: Vec<serde_json::Number> = vec![
@@ -841,7 +841,7 @@ fn the_numbers_in_arguments_a_parse_gives_read_back_equal() {
         -0.5,
         1.5,
         100.0,
-        3.141592653589793,
+        std::f64::consts::PI,
         1e16,
         1e21,
         1e300,
@@ -914,7 +914,7 @@ fn a_second_write_of_arguments_with_number_text_is_a_fixpoint() {
     assert_eq!(write(&read), first);
 }
 
-/// 4. Repeated keys in a flow mapping reach `Declarations`, as they do from block YAML.
+/// Point 4: repeated keys in a flow mapping reach `Declarations`, as they do from block YAML.
 #[test]
 fn repeated_keys_in_a_flow_mapping_reach_the_declarations() {
     let text = "{\"format\": \"protocol/1\", \"protocol\": {\"id\": \"p\", \"revision\": 1}, \"claims\": {\"a\": {\"true_when\": {\"claim\": \"x\"}}, \"a\": {\"true_when\": {\"claim\": \"y\"}}}}";
@@ -939,7 +939,7 @@ fn a_claim_test_is_always_written_with_is_and_a_decision_as_a_map() {
     let protocol = model::parse(source).expect("parses");
     let text = write(&protocol);
     assert!(
-        text.contains("\"claim\": \"c\",\n          \"is\": \"true\""),
+        text.contains("\"claim\": \"c\",\n        \"is\": \"true\""),
         "{text}"
     );
     assert!(text.contains("\"is\": \"unknown\""), "{text}");
@@ -1055,16 +1055,21 @@ fn a_key_beyond_the_simple_key_limit_is_refused_by_parse_in_either_layout() {
     let block = format!(
         "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nclaims:\n  {id}: {{true_when: {{all: []}}}}\n"
     );
+    assert!(
+        model::parse(&block).is_err(),
+        "block YAML refuses the long key"
+    );
     let mut protocol = minimal();
     protocol.claims = claims(&[id.as_str()]);
     let json_text = write(&protocol);
     assert!(json_text.contains(&id), "the long key is written");
-    let read = model::parse(&json_text);
-    assert_eq!(
-        read.is_ok(),
-        model::parse(&block).is_ok(),
-        "{:?}",
-        read.err()
+    assert!(model::parse(&json_text).is_err(), "so does the JSON text");
+
+    let id = "k".repeat(1000);
+    protocol.claims = claims(&[id.as_str()]);
+    assert!(
+        round_trip(&protocol) == protocol,
+        "a key under the limit reads back"
     );
 }
 

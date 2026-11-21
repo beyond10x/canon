@@ -11,7 +11,8 @@
 //! evidence matches may demand, and the protocols it imports, each pinned to a revision and a
 //! digest. Every declaration section is a map keyed by identifier; [`Declarations`] keeps the
 //! entries in source order and keeps repeated keys, so the validator can report a duplicate
-//! identifier instead of the parser silently dropping one.
+//! identifier instead of the parser silently dropping one. [`write`] writes a protocol back out as
+//! canonical JSON text that [`parse`] reads to an equal model.
 
 // `ids` declares the `identifier!` macro, which a module can use only when declared after it.
 #[macro_use]
@@ -29,6 +30,7 @@ mod present;
 mod properties;
 mod requirement;
 mod time;
+mod write;
 
 use std::fmt;
 use std::marker::PhantomData;
@@ -64,6 +66,7 @@ pub use properties::{
     PROPERTIES_FORMAT, Properties, Property, PropertyDependency, PropertyId, PropertySubject,
 };
 pub use requirement::OutcomeRequirement;
+pub use write::write;
 
 /// A `protocol/1` source document as written.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
