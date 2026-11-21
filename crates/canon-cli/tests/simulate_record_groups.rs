@@ -26,6 +26,13 @@
 //! 6. Two runs on each fixture give identical bytes. (`simulate_reports_reachability_findings`,
 //!    in `canon_simulate.rs`, still holds the walk without groups.)
 //!
+//! `simulate_walks_the_chain_in_group_steps` holds expectation 7 (condition 2 of the story's
+//! `## Decided`): `chain`, a structure-preserving rename of a four-stage protocol whose
+//! third-stage check records two kinds in one run under the guard that neither is recorded, with
+//! the declaration, gives 405 reachable states and 35 findings standing for 89 states, as the
+//! story figured them before any binary had the step. Without the declaration it gives the line
+//! the story recorded from the binary, 405 states and 42 findings standing for 88.
+//!
 //! `canon evaluate`, `canon check` and `canon generate` give the same bytes for `pair` and
 //! `grouped`, one test each.
 
@@ -366,6 +373,71 @@ fn read_source(case: &str) -> String {
     read(&protocol(case))
 }
 
+/// Expectation 7: the summary line of `chain` with its group, and without it, each walked twice
+/// to identical bytes. Every printed stuck state and cycle of the grouped walk is reached by a
+/// path in which `query.check` is one step.
+#[test]
+fn simulate_walks_the_chain_in_group_steps() {
+    let declaration = "    records_together:\n      - kinds: [query_done, query_form]\n";
+    let source = read_source("chain");
+    assert_eq!(source.matches(declaration).count(), 1);
+    let dir = scratch("chain");
+    let ungrouped = dir.join("protocol.yaml");
+    std::fs::write(&ungrouped, source.replace(declaration, "")).expect("written");
+    let walk = |path: &str| {
+        let first = canon(&["simulate", "--path", path]);
+        let second = canon(&["simulate", "--path", path]);
+        assert_eq!(
+            (first.status.code(), &first.stdout, &first.stderr),
+            (second.status.code(), &second.stdout, &second.stderr),
+            "{path}: a second run gave different bytes"
+        );
+        assert_eq!(text(&first.stderr), "", "{path}");
+        assert_eq!(first.status.code(), Some(1), "{path}");
+        text(&first.stdout)
+    };
+
+    let grouped = walk(&protocol("chain"));
+    assert_eq!(
+        grouped.lines().last(),
+        Some(
+            "simulated: protocol `grouped.chain` revision 8: 405 reachable states, 3 terminable \
+             (outcome `complete` 3), 35 findings (89 stuck or cycle states)"
+        )
+    );
+    let dead: Vec<&str> = grouped
+        .lines()
+        .filter(|line| line.starts_with("stuck-state: ") || line.starts_with("cycle: "))
+        .collect();
+    assert_eq!(dead.len(), 35);
+    for line in dead {
+        assert_eq!(
+            line.matches("action `query.check` produces").count(),
+            1,
+            "{line}"
+        );
+        assert!(
+            line.contains(
+                "action `query.check` produces evidence `query_done` about `query` result \
+                 `closed` and evidence `query_form` about `query`"
+            ) || line.contains(
+                "action `query.check` produces evidence `query_done` about `query` and evidence \
+                 `query_form` about `query`"
+            ),
+            "{line}"
+        );
+    }
+
+    let ungrouped = walk(path(&ungrouped));
+    assert_eq!(
+        ungrouped.lines().last(),
+        Some(
+            "simulated: protocol `grouped.chain` revision 8: 405 reachable states, 0 terminable \
+             (outcome `complete` 0), 42 findings (88 stuck or cycle states)"
+        )
+    );
+}
+
 /// Groups are written sorted, and the kinds within each group sorted, each once; the IR reads
 /// back to the same IR and the same bytes.
 #[test]
@@ -517,6 +589,7 @@ fn every_record_group_fixture_is_read() {
             "{case}"
         );
     }
+    assert_eq!(entries(root.join("chain")), ["protocol.yaml"]);
     let mut refused: Vec<String> = REFUSED.iter().map(|(file, _)| (*file).to_owned()).collect();
     refused.sort();
     assert_eq!(entries(root.join("invalid")), refused);
