@@ -57,6 +57,9 @@ fn pairs(list: &[(&str, &str)]) -> Vec<(String, String)> {
         .collect()
 }
 
+/// A property schema, an argument's JSON text and the `(pointer, keyword)` refusals it gives.
+type Case<'a> = (&'a str, &'a str, &'a [(&'a str, &'a str)]);
+
 /// Expectation 1: an absent schema is `{"type": "object", "additionalProperties": false}`.
 #[test]
 fn an_absent_schema_takes_only_the_empty_object() {
@@ -352,7 +355,7 @@ fn a_number_beyond_the_double_range_is_its_exact_value_where_the_text_is_held() 
         );
         return;
     }
-    let cases: [(&str, &str, &[(&str, &str)]); 10] = [
+    let cases: [Case; 10] = [
         (
             r#"{"type": "number", "maximum": 5}"#,
             "1e400",
@@ -415,12 +418,13 @@ fn an_enum_lists_each_exact_value_once() {
         Ok(())
     );
     if holds_text() {
+        // serde_json writes the exponent it holds with its sign: `10e399` is shown `10e+399`.
         let same = with_n(r#"{"type": "number", "enum": [1e400, 10e399]}"#);
         assert_eq!(
             check_arguments(Some(&same), &json!({})),
             Err(ArgumentsRefused::Schema(vec![(
                 "/properties/n/enum/1".to_owned(),
-                "`10e399` is listed more than once".to_owned(),
+                "`10e+399` is listed more than once".to_owned(),
             )]))
         );
     }
@@ -429,7 +433,7 @@ fn an_enum_lists_each_exact_value_once() {
 /// Values both builds hold alike, above 2^53 and beyond the 64-bit range, compared exactly.
 #[test]
 fn doubles_beyond_two_to_the_53_are_compared_exactly_in_both_builds() {
-    let cases: [(&str, &str, &[(&str, &str)]); 7] = [
+    let cases: [Case; 7] = [
         (
             r#"{"type": "integer", "maximum": 9007199254740993}"#,
             "9007199254740994.0",
@@ -486,6 +490,35 @@ fn a_number_made_from_a_double_is_the_double_or_its_shortest_text() {
         Vec::new()
     };
     assert_eq!(found, expected);
+}
+
+/// A bound or an `integer` `enum` value written `-0` is the integer 0 where the text is held, and
+/// the double -0.0, not an integer, where it is not: the third difference the module docs name.
+#[test]
+fn a_bound_written_minus_zero_is_an_integer_only_where_the_text_is_held() {
+    for (property, pointer, keyword) in [
+        (
+            r#"{"type": "integer", "minimum": -0}"#,
+            "/properties/n/minimum",
+            "`minimum` is not an integer",
+        ),
+        (
+            r#"{"type": "integer", "enum": [-0]}"#,
+            "/properties/n/enum/0",
+            "`-0.0` is not of `type: integer`",
+        ),
+    ] {
+        let found = check_arguments(Some(&with_n(property)), &json!({"n": 0}));
+        let expected = if holds_text() {
+            Ok(())
+        } else {
+            Err(ArgumentsRefused::Schema(vec![(
+                pointer.to_owned(),
+                keyword.to_owned(),
+            )]))
+        };
+        assert_eq!(found, expected, "{property}");
+    }
 }
 
 /// Expectation 6: every refusal is reported, in document order with members in code-point order;
