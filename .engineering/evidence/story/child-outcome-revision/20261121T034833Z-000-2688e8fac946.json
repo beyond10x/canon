@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T03:48:33Z",
+  "actor": "human:timo",
+  "artifact": "story:child-outcome-revision",
+  "kind": "story",
+  "revision": 23,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "the unit's patch to eval/mod.rs needs the evaluation reference regenerated: applied by the coordinator; task docs-generate runs after the last merge and docs-check is a step of the wave gate",
+    "reference": "wave/2026-11-20-w4 after the merge of impl/child-outcome-revision",
+    "review": "review-result:adversary-child-outcome-revision-pass-1",
+    "outcome": "fixed"
+  }
+}

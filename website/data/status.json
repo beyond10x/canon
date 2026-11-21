@@ -254,14 +254,14 @@
     },
     {
       "label": "Child outcomes bound to the current revision",
-      "status": "planned",
+      "status": "shipped",
       "detail": "The children predicate takes revision: current, and then reads only the case_outcome records about the case's current revision of their subject. A record about an earlier revision neither establishes nor contradicts it, so a parent whose subject is revised after its children ended falls back to UNKNOWN until a child about the new revision ends. Without the key, or with revision: any, every record counts as before, and canon-ir/1 is unchanged; scenario CANON-COMPOSE-002.",
       "href": "/docs/reference/protocol#childrevision",
       "area": "Language"
     },
     {
       "label": "Missing evidence",
-      "status": "planned",
+      "status": "shipped",
       "detail": "canon-decision/1 may carry a missing_evidence section that maps each admissible action whose may_produce is not empty to the kinds of that list with no applicable record, in kind order; a record is applicable when the revision-binding and freshness stages leave it and no claim lists it in excluded_evidence, whatever its result and whether or not its kind declares supplied_by, and the section is absent when no action qualifies; scenario CANON-FRONTIER-001.",
       "href": "/docs/reference/documents#decision",
       "area": "Evaluation"

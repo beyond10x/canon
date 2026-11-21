@@ -34,7 +34,7 @@ scope:
   path: ess/domains/cli.yaml
 - confidence: inferred
   path: fixtures/investigation/simulate/
-revision: 14
+revision: 15
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 13, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 14, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
@@ -195,3 +195,25 @@ becomes a finding. Request 10 is a request and no story on 2026-11-20.
 ## Decided
 
 Option A of § Decision needed: authority steps and decision steps are steps of the walk. Decided on 2026-11-20 by the wave coordinator on the drafter's recommendation, after the operator accepted the story without choosing (`approval-record:accept-sdc-requests-2026-11-20`). The unit builds this option and does not reopen the choice.
+
+## Refined after adversary pass 1, 2026-11-21
+
+Adversary pass 1 (`review-result:adversary-canon-simulate-pass-1`) found that § Outcome, built as written, reports findings that are false in a real case, reports one cause hundreds of times, and refuses a protocol whose reachable part fits. The wave coordinator decides the following on 2026-11-21; the session working on the SDC prototype, which orchestrates this plan, may overrule any of it. Where this section and § Outcome differ, this section holds.
+
+**R1. The bound counts reachable states only.** The walk is refused with `reachable-state-bound` only when it would visit more than `check::STATE_BOUND` states. The number of values of a dimension is never a reason to refuse: a dimension whose values the check cannot enumerate is walked by the values the walk reaches.
+
+**R2. A record of a kind that declares `max_age` may expire.** This is a fourth kind of step, the expiry step: one current record class of such a kind leaves the state, as the evaluator's freshness stage sets an expired record aside. It is written `` evidence `k` expires ``. It is tried after the action steps and the steps of supplied kinds, kinds in identifier order, and before the capabilities. With it the step graph is no longer free of loops; § Outcome's sentence "Every step only adds" holds for action, authority and decision steps only.
+
+**R3. A finding is about a state no step sequence gets out of.** A state is *open* when some sequence of action, authority, supplied and expiry steps leads from it to a state in which an outcome is legitimate. Decision steps are not part of that sequence.
+- `stuck-state`: the state is not open, and no action is `admissible` or `approval-required` in it.
+- `cycle`: the state is not open, no action is `approval-required`, at least one action is `admissible`, and every step of every admissible action returns the same state.
+- A state that meets the second half of either rule and is open is counted as waiting in the summary line and is not a finding. This replaces the rule that any supplied step that changes a state makes it waiting.
+- Every reachable state that is not open leads, by action and authority steps, to a state reported under one of the two rules, so nothing is left out by reporting only these.
+
+**R4. A decision step is not a way out, and the finding says when one exists.** A protocol with an outcome that requires only a decision can leave every state by that decision; counting it would report nothing for such a protocol. A `stuck-state` or `cycle` whose state has a decision step leading to a state with a legitimate outcome names each such decision and its outcome at the end of the finding, decisions in name order.
+
+**R5. One finding per smallest state.** Among the findings of one kind (`stuck-state`, or `cycle`), a finding is printed only when no other finding of that kind has a state contained in its state. State A is contained in state B when both have the same case-input values and every record class, every capability decision and every taken decision of A is in B. A printed finding ends with the number of other reachable states of that kind that contain its state, when that number is not 0. The summary line counts printed findings as findings and gives the number of states they stand for.
+
+**R6. The word `cycle` stays.** With R2 a set of states the steps never leave can be a loop of steps; the rule of R3 reports the state of it in which every action step returns the same state.
+
+**Known limit, unchanged:** no artifact is revised. A kind read with `result:` that an action may produce twice with different results gives one `cycle` finding per such kind (after R5), because the walk cannot set the mixed records aside by a revision. A revise step waits for the `revises` field of story:judgement-marking and is a later story.

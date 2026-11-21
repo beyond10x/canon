@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T04:27:59Z",
+  "actor": "human:timo",
+  "artifact": "story:missing-evidence",
+  "kind": "story",
+  "revision": 27,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "the reference page named a crate-private function instead of the rule: the doc comment states the rule in words, page regenerated (1284bb2)",
+    "reference": "impl/missing-evidence 1284bb2",
+    "review": "review-result:adversary-missing-evidence-pass-1",
+    "outcome": "fixed"
+  }
+}

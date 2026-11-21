@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T02:58:53Z",
+  "actor": "human:timo",
+  "artifact": "story:child-outcome-revision",
+  "kind": "story",
+  "revision": 23,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "on 0050a7d (specification only): ess_model_matches FAILED naming ChildOutcomes.revision and the enum ChildRevision (21 passed, 7 failed), conform 22 passed, 1 failed on CANON-COMPOSE-002; on 2f8bfe5: workspace 999 passed, 0 failed, conform 23 passed, 24 implemented, 24 covered; VERIFIED by the coordinator from the unit's logs",
+    "reference": "w4/child-outcome-revision/red.log vs gate.log (session scratch)"
+  }
+}

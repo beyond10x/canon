@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:child-outcome-revision
 kind: story
-status: active
+status: implemented
 title: Bind a child case's outcome to the parent's current revision on the children form
 tags:
 - from-request
@@ -19,8 +19,14 @@ scope:
   path: conformance/requirements.yaml
 - confidence: cited
   path: conformance/scenarios/child-outcome-revision.yaml
-- confidence: inferred
-  path: crates/canon/src/check/space.rs
+- confidence: cited
+  path: crates/canon-cli/tests/adversary_conformance_suite_cli.rs
+- confidence: cited
+  path: crates/canon-cli/tests/conform_requirements.rs
+- confidence: cited
+  path: crates/canon/src/check/mod.rs
+- confidence: cited
+  path: crates/canon/src/check/tests.rs
 - confidence: cited
   path: crates/canon/src/eval/actions.rs
 - confidence: cited
@@ -29,24 +35,31 @@ scope:
   path: crates/canon/src/eval/composition.rs
 - confidence: inferred
   path: crates/canon/src/eval/mod.rs
+- confidence: cited
+  path: crates/canon/src/eval/outcomes.rs
+- confidence: cited
+  path: crates/canon/src/eval/read.rs
 - confidence: inferred
   path: crates/canon/src/explain/mod.rs
 - confidence: cited
   path: crates/canon/src/ir/mod.rs
 - confidence: cited
+  path: crates/canon/src/model/mod.rs
+- confidence: cited
   path: crates/canon/src/model/predicate.rs
-- confidence: inferred
-  path: crates/canon/src/validate/mod.rs
+- confidence: cited
+  path: crates/canon/tests/adversary_child_outcome_revision.rs
 - confidence: inferred
   path: crates/canon/tests/case_composition.rs
 - confidence: cited
   path: ess/domains/protocol.yaml
 - confidence: cited
   path: fixtures/investigation/child-outcome-revision.yaml
-revision: 23
+revision: 35
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 20, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 21, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "active", to: "implemented", at: "2026-11-21T04:27:59Z", actor: "human:timo", revision: 35, decided_on: {"recorded":{"test_result":1,"review_outcome":4,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w4"}
 ---
 ## Outcome
 
@@ -274,3 +287,18 @@ runtime is built this way. The coordinator did not read Loom. A terminal `case_o
 This is the sentence the unit writes in the reference page for the `children` form, unless the
 operator decides otherwise before wave 5. It is the same reading as the section above: Canon's
 rule for every evidence record, applied to `case_outcome`. The form's rule in Canon is unchanged.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w4 from the implementor's reports, the adversary's report (`review-result:adversary-child-outcome-revision-pass-1`) and the merge of `impl/child-outcome-revision` (`49c86a9`, with the unit's hand-over patch in `ce7dc77`). It corrects the body where the two differ.
+
+- The records a `children` form reads are selected by one function, `composition::read(form, history, artifacts)` in `crates/canon/src/eval/composition.rs`. story:child-outcome-subject adds its key there as one more condition.
+- A record is compared with the snapshot's current revision of its own `subject`. The adversary's case with two artifacts at different revisions pins that; no earlier test did.
+- A case snapshot that gives no revision for a record's subject is refused as `missing-artifact` before the form is read, so the form never meets a subject without a revision. One child with records at two revisions is refused as `duplicate-child-case`, as before.
+- `revision: any` is normalised to no key wherever a `children` form may stand (claims, obligations, action preconditions, outcome requirements), before members are sorted and de-duplicated. The IR read-back in `crates/canon/src/eval/read.rs` refuses `"revision": "any"` and every value but `"current"`.
+- `canon check` needed no change to its space: a state puts a dimension's current records at the artifacts' one revision and its earlier records at a superseded one, so the bound form reads the current records only and the key adds no dimension. `crates/canon/src/check/space.rs` was not edited. The generated sliced-against-whole protocols of `crates/canon/src/check/tests.rs` write the key on half their `children` forms.
+- The reason of a blocked action or outcome carries `"revision": "current"` for a bound form.
+- In § Scope and not edited: `crates/canon/src/check/space.rs`, `crates/canon/src/validate/mod.rs`.
+- Not in § Scope and edited: `crates/canon/src/eval/read.rs`, `crates/canon/src/check/mod.rs` (module documentation), `crates/canon/src/check/tests.rs`, the requirement counts in `crates/canon-cli/tests/adversary_conformance_suite_cli.rs` and `crates/canon-cli/tests/conform_requirements.rs`, and, by the coordinator from the unit's patch, the re-export of `ChildRevision` in `crates/canon/src/model/mod.rs` and two sentences of module documentation in `crates/canon/src/eval/mod.rs` and `crates/canon/src/eval/outcomes.rs`.
+- `ess/domains/protocol.yaml` changed in 47 hunks; 45 renumber `# read from:` references into `crates/canon/src/model/predicate.rs`, which gained 17 documentation lines. The adversary checked 17 of them against the file.
+- Added by the adversary: `crates/canon/tests/adversary_child_outcome_revision.rs` (2 cases).

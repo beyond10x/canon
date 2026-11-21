@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T04:27:59Z",
+  "actor": "human:timo",
+  "artifact": "story:missing-evidence",
+  "kind": "story",
+  "revision": 27,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "CANON-FRONTIER-001 had sentences no step pinned: a step with an approval-required action that may produce evidence and an action of two kinds (f24618e, e447aca); two mutants of eval/missing.rs each turn it red; the sentence on the section's absence left the requirement text and stays with the unit tests",
+    "reference": "impl/missing-evidence e447aca",
+    "review": "review-result:adversary-missing-evidence-pass-1",
+    "outcome": "fixed"
+  }
+}
