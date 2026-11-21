@@ -250,6 +250,12 @@ judgement decides, so `author: program` written out compiles to the same bytes a
 | an artifact added to `revises` | `RELAXATION` | ``now revises artifact `a` `` |
 | an artifact removed from `revises` | `TIGHTENING` | ``no longer revises artifact `a` `` |
 
+`canon-ir/1` holds who decides each production after resolving it against the action's `author`,
+so a change of `author` also prints a `now decides evidence` line for each kind of that action that
+declares no `decided_by` and is produced in both revisions, in kind order, after the `author` line
+and any kind added or removed. To get only the `author` line, write the old value as `decided_by`
+on each production of the action.
+
 :::shipped[Judgement marks]
 
 On `main` (story:judgement-marking), not yet in a release: the three fields in `protocol/1`,
