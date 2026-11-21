@@ -75,7 +75,13 @@ does not depend on the order the sections are written in:
    precondition, then each evidence kind it may produce, then each artifact it `revises`
    (story:judgement-marking), `undeclared-artifact`, once for every listing, in the order
    listed, then the subject of the case it opens, `undeclared-artifact`, then an opening under
-   the protocol's own id, `self-opened-case`, every one naming the action), then those in
+   the protocol's own id, `self-opened-case`, then each group of its `records_together`
+   (story:simulate-record-groups), in the order written, `invalid-record-group`: a group with
+   fewer than two distinct kinds, then for each kind it names, once, in the order named:
+   `case_outcome` on an action that opens a child case (a child's outcome arrives when the
+   child ends, never with a record of the run that opened it), or else a kind its
+   `may_produce` does not list, and then a kind an earlier group of the action names, every
+   one naming the action and the group, counted from 1), then those in
    outcomes, then those in invalidation rules (the upstream
    artifact, then each claim the rule invalidates); within a section, in the order its
    declarations are written, and within a declaration, in the order its references are
@@ -243,6 +249,7 @@ differently in these cases only:
 | `duplicate-child-outcome` | A `children` form lists an outcome more than once. |
 | `open-child-outcome` | A `children` form lists `open`, which is a running child case's outcome, never a terminal one: the form is unknown while a child is open. |
 | `self-opened-case` | An action opens a child case under the protocol's own id: a case could then open cases under its own protocol without end (D206). |
+| `invalid-record-group` | A group of an action's `records_together` (story:simulate-record-groups) is not one run's records: `group` counts the action's groups from 1, in the order written. |
 | `self-supplied-evidence` | An evidence kind names the protocol's own id as the protocol that supplies its records (story:supplied-evidence): records of it come from outside the protocol, or from its own actions, never from a case of the same protocol through `supplied_by`. |
 | `claim-cycle` | Claims whose predicates test each other in a cycle; the first claim is repeated at the end. |
 | `action-arguments` | An action's argument schema is outside the argument-schema dialect: `pointer` is the JSON Pointer of the offending keyword inside the schema (`""` for the schema itself) and `reason` why it is refused. |

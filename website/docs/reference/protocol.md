@@ -91,6 +91,7 @@ has and what evidence it may produce (design § 10).
 | `requires` | list of [`CapabilityRequirement`](#capabilityrequirement) | optional | — |
 | `effect` | [identifier](#identifiers) (`EffectClass`) | optional | — |
 | `may_produce` | list of [`EvidenceProduction`](#evidenceproduction) | optional | — |
+| `records_together` | list of [`RecordGroup`](#recordgroup) | optional | The kinds one run of the action records together, all of them or none (story:simulate-record-groups). Absent: no group. Each group names two or more distinct kinds of `may_produce`, and no kind is in two groups of one action. It has no evaluation meaning: only `canon simulate` reads it, adding a group's records in one step and never one of its kinds alone. |
 | `arguments` | any JSON value | optional | The JSON Schema, in Canon's argument-schema dialect, that the action's arguments satisfy. Absent: the action takes no arguments; a runner accepts only `{}`. Canon evaluates no call: `canon validate` holds the schema to the dialect (`action-arguments`), and a runner checks a call's arguments with `validate::check_arguments` or any 2020-12 validator. |
 | `case_open` | [`CaseOpening`](#caseopening) | optional | The child case the action opens (story:case-composition): a case governed by another protocol, about a declared artifact. Absent: the action opens no case. Canon opens nothing itself; whoever takes the action opens the child case. A case has one commission, and a second party works through a child case: this is the one primitive by which a case hands work to another party (D207). |
 | `author` | [`Author`](#author) | optional | Who writes the action's arguments and the content of the artifacts it revises (story:judgement-marking): `program`, a reproducible function of the action's inputs, or `judgement`, a person or a model. Absent: `program`. It has no evaluation meaning, names no executor, model or tool, and Canon cannot prove that a runner honours it. |
@@ -260,6 +261,15 @@ One evidence kind an action may produce.
 |---|---|---|---|
 | `evidence` | [identifier](#identifiers) (`EvidenceKindId`) | required | — |
 | `decided_by` | [`Author`](#author) | optional | Who decides the result of a record of this kind the action produces (story:judgement-marking). Absent: the action's `author`. `program` on a judgement action covers a record the runner writes from the effect it applied, such as provenance. It has no evaluation meaning. |
+
+## `RecordGroup`
+
+Evidence kinds one run of an action records together, all of them or none
+(story:simulate-record-groups).
+
+| Key | Value | Required | Meaning |
+|---|---|---|---|
+| `kinds` | list of [identifier](#identifiers) (`EvidenceKindId`) | required | The kinds of the group: two or more distinct kinds the action may produce. |
 
 ## `CaseOpening`
 
