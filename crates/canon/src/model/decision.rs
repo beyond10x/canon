@@ -48,8 +48,8 @@ pub struct Decision {
     /// list that have no applicable record, in kind-identifier order; an empty list means every
     /// kind it may produce has one. Written only when some action qualifies. An action that is
     /// blocked or approval-required, and one whose `may_produce` is empty, is not listed. A record
-    /// is applicable by the rule of `eval::missing::applicable`. Its shape is fixed by
-    /// CANON-FRONTIER-001.
+    /// is applicable when the revision-binding and freshness stages leave it and no claim lists it
+    /// in its `excluded_evidence`. Its shape is fixed by CANON-FRONTIER-001.
     pub missing_evidence: Option<Declarations<ActionId, Vec<EvidenceKindId>>>,
 }
 
