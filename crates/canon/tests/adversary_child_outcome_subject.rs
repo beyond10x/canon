@@ -149,3 +149,103 @@ fn simulate_over_the_fixture_opens_ideas_only_about_the_intake() {
         "{text}"
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// Pass 2, after `Space::produced_by` (step 1) and the walk bound to it (step 2). Each case below
+// agrees with an enumeration of real cases judged by `canon evaluate` (one child per opening, its
+// `open` record written at once, every artifact at one revision, two children per opener).
+
+/// The last line of `canon simulate` over `source`.
+fn summary(source: &str) -> String {
+    let text = simulate(&compiled(source))
+        .unwrap_or_else(|refusal| panic!("{}: {refusal}", refusal.code()))
+        .to_string();
+    text.lines().last().expect("a summary").to_owned()
+}
+
+const WITH_AND_WITHOUT: &str = "claims:\n  a.ok: {true_when: {children: {in: [passed], subject: alpha}}}\n  \
+    all.ok: {true_when: {children: {in: [passed]}}}\n";
+
+/// `gamma` is no form's subject, and the dimension without a subject stands for `beta`, the
+/// first artifact nothing names. A child of `gamma.open` is still read by `all.ok`: `no.alpha` is
+/// legitimate once one passed and no child about `alpha` exists (real cases: 2 states). Behind
+/// `produced_by` binding the dimension without a subject to its stand-in artifact only.
+#[test]
+fn simulate_records_a_child_about_an_unnamed_artifact_without_subject() {
+    let source = format!(
+        "format: protocol/1\nprotocol: {{id: gamma, revision: 1}}\n\
+         artifacts: {{alpha: {{}}, beta: {{}}, gamma: {{}}}}\nevidence_kinds: {{case_outcome: {{}}}}\n\
+         {WITH_AND_WITHOUT}actions:\n  alpha.open: {{case_open: {{protocol: q, subject: alpha}}}}\n  \
+         gamma.open: {{case_open: {{protocol: q, subject: gamma}}}}\n\
+         outcomes:\n  no.alpha: {{requires: {{all: [{{claim: all.ok}}, {{claim: a.ok, is: unknown}}]}}}}\n"
+    );
+    assert_eq!(
+        summary(&source),
+        "simulated: protocol `gamma` revision 1: 400 reachable states, 9 terminable (outcome \
+         `no.alpha` 9), 3 waiting on supplied evidence, a child outcome or expiry, 4 findings (60 \
+         stuck or cycle states)"
+    );
+}
+
+/// Only `alpha.open` opens children, and a form names `alpha`: its children record about
+/// `alpha` alone, so `all.ok` true beside `a.ok` unknown is no case (real cases: 0 states).
+/// Behind `produced_by` giving an opener the dimension without a subject as well.
+#[test]
+fn simulate_keeps_a_named_child_out_of_the_dimension_without_subject() {
+    let source = format!(
+        "format: protocol/1\nprotocol: {{id: alpha-only, revision: 1}}\n\
+         artifacts: {{alpha: {{}}, beta: {{}}}}\nevidence_kinds: {{case_outcome: {{}}}}\n\
+         {WITH_AND_WITHOUT}actions:\n  alpha.open: {{case_open: {{protocol: q, subject: alpha}}}}\n\
+         outcomes:\n  none.alpha: {{requires: {{all: [{{claim: all.ok}}, {{claim: a.ok, is: unknown}}]}}}}\n  \
+         with.alpha: {{requires: {{claim: a.ok}}}}\n"
+    );
+    assert_eq!(
+        summary(&source),
+        "simulated: protocol `alpha-only` revision 1: 20 reachable states, 3 terminable (outcome \
+         `none.alpha` 0, outcome `with.alpha` 3), 3 waiting on supplied evidence, a child outcome \
+         or expiry, 2 findings (4 stuck or cycle states)"
+    );
+}
+
+/// `authority-bypass` decided per dimension. A free opener about `alpha` and a gated one about
+/// `beta` with an outcome requiring both forms: no case reaches `done` without `dispatch`. A
+/// gated opener about `beta` with a free one about `alpha` read only by a form without subject:
+/// `done` rests on `beta` alone, no bypass. Two openers about `alpha`, one free: a bypass.
+#[test]
+fn check_decides_a_bypass_per_dimension() {
+    let head = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+        artifacts: {alpha: {}, beta: {}}\nevidence_kinds: {case_outcome: {}}\n";
+    let gated = "  beta.open: {requires: [{capability: dispatch}], case_open: {protocol: q, subject: beta}}\n";
+    let both = format!(
+        "{head}actions:\n  alpha.open: {{case_open: {{protocol: q, subject: alpha}}}}\n{gated}\
+         outcomes:\n  done: {{requires: {{all: [{{children: {{in: [passed], subject: alpha}}}}, \
+         {{children: {{in: [passed], subject: beta}}}}]}}}}\n"
+    );
+    assert_eq!(
+        check(&compiled(&both), None).expect("checks").to_string(),
+        "checked: protocol `p` revision 1: 15552 states, 0 properties, 0 findings\n"
+    );
+    let unbound_free = format!(
+        "{head}claims:\n  all.ok: {{true_when: {{children: {{in: [passed]}}}}}}\n\
+         actions:\n  alpha.open: {{case_open: {{protocol: q, subject: alpha}}}}\n{gated}\
+         \x20 close: {{precondition: {{claim: all.ok}}}}\n\
+         outcomes:\n  done: {{requires: {{children: {{in: [passed], subject: beta}}}}}}\n"
+    );
+    assert_eq!(
+        check(&compiled(&unbound_free), None)
+            .expect("checks")
+            .to_string(),
+        "checked: protocol `p` revision 1: 15552 states, 0 properties, 0 findings\n"
+    );
+    let same = format!(
+        "{head}actions:\n  free.open: {{case_open: {{protocol: q, subject: alpha}}}}\n  \
+         gated.open: {{requires: [{{capability: dispatch}}], case_open: {{protocol: q, subject: alpha}}}}\n\
+         outcomes:\n  done: {{requires: {{children: {{in: [passed], subject: alpha}}}}}}\n"
+    );
+    assert_eq!(
+        check(&compiled(&same), None).expect("checks").to_string(),
+        "authority-bypass: outcome `done` is legitimate without authority in state {evidence \
+         `case_outcome` about `alpha` result `passed` earlier}\n\
+         checked: protocol `p` revision 1: 216 states, 0 properties, 1 finding\n"
+    );
+}
