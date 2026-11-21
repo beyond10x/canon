@@ -20,7 +20,7 @@ scope:
   path: Taskfile.yml
 - confidence: cited
   path: crates/canon-cli/tests/adversary_scenario_generation.rs
-revision: 9
+revision: 10
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 8}
 - {from: "proposed", to: "active", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 9}
@@ -134,3 +134,28 @@ Written by the wave coordinator on 2026-11-21 from the tree at `98169001`; every
 `~/beyond10x/AGENTS.md` § Tests stay fast, a rule for every repository under that
 folder, quoting the operator on 2026-11-21. The `runbook` session sent its path to this session
 on 2026-11-21 and asked for the measured time of the gate's test step.
+
+## Added 2026-11-21: the step's own bound
+
+The workspace rule gained two lines the same evening (`~/beyond10x/AGENTS.md` § Tests stay fast):
+"The step itself fails when it runs over 120 s, locally and in CI. A repository whose runner does
+not kill a test at 60 s yet gets that change as its first budget story", and "Every sub-agent
+brief that runs tests names the 60 s bound and the 120 s step budget." The `host-operator`
+session sent them to this session.
+
+They bind this story, in addition to § Acceptance:
+
+- **First commit after the measurement: the runner's 60 s kill.** `.config/nextest.toml` with
+  `slow-timeout = { period = "60s", terminate-after = 1 }`, and the gate's test step run by it,
+  land before any test is made faster. A test that runs over 60 s today then fails; the unit
+  brings it under the bound or moves it to the `slow` lane in the commits that follow, and the
+  branch is not merged while one fails.
+- **The step fails over 120 s**, locally and in CI: the gate's test task measures its own wall
+  time (build excluded: the tests are built by a step before it) and exits non-zero over 120 s,
+  printing the time and the ten slowest tests. In CI the same task runs, so the same bound holds;
+  the unit states the time of the CI run and, if the runner is slower than the workstation, says
+  so with both numbers and does not raise the bound.
+- **A test that proves the bound**: the task run on a tree with a test made to sleep 61 s exits
+  non-zero by the kill, and with the step's limit set to 1 s exits non-zero by the step bound;
+  both shown in the report, neither committed as a sleeping test.
+- `AGENTS.md` states both bounds, so every brief written from it names them.
