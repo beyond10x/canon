@@ -77,11 +77,14 @@
 //!   shortest text that reads back the same double (`0.5`, `100.0`, `1e300`, `1.5e-7`, `5e-324`).
 //! - Without the feature, a number is a double or a 64-bit integer and nothing else exists, so
 //!   every model value that holds a number round-trips.
-//! - With the feature, a number a program builds from other text is written as that text. One of
-//!   an integer in range, or the spelling `parse` gives, reads back equal. One spelled otherwise
-//!   (`1.50`, `1E5`, an integer beyond 64 bits) reads back as the number `parse` spells for the
-//!   same double (`1.5`, `100000.0`, `1e20`), and writing that again gives the same bytes. One
-//!   beyond the range of a double (`1e400`) is refused by `parse`, as written in a document.
+//! - With the feature, a number a program builds from other text is written as that text, except
+//!   an integer beyond 64 bits, which is written as the double it names (`1e20`): `serde_yaml_ng`
+//!   refuses an integer of 65 to 128 bits in `arguments`, and reads a longer one as a double. A
+//!   number in the spelling `parse` gives reads back equal. One spelled otherwise (`1.50`, `1E5`,
+//!   an integer beyond 64 bits) reads back as the number `parse` spells for the same double
+//!   (`1.5`, `100000.0`, `1e20`), and writing that again gives the same bytes. One beyond the
+//!   range of a double (`1e400`) is written as its text, and `parse` reads it as the string
+//!   `"1e400"`, as it does in any document: no spelling reads back as that number.
 //!
 //! # Model values `parse` never gives
 //!
@@ -94,13 +97,14 @@
 //! - A predicate or an `arguments` value nested deeper than `serde_yaml_ng`'s recursion limit.
 //!   The written text nests as deep as the model, so a model `parse` gave is read back.
 //! - A key longer than YAML's simple key limit of 1024 characters, which a flow mapping has too.
-//! - A number beyond the range of a double, in the build that holds number text.
+//! - A number beyond the range of a double, in the build that holds number text: it reads back as
+//!   a string.
 //!
 //! Nothing here evaluates, validates or compiles the model, and no clock, file or network is read.
 
 use std::fmt::Write as _;
 
-use serde_json::Value;
+use serde_json::{Number, Value};
 
 use super::{
     Action, Artifact, Author, CapabilityRequirement, CaseInput, CaseOpening, CaseSection,
@@ -723,12 +727,30 @@ fn later_record(depth: usize, record: &LaterRecord) -> String {
     object(depth, members)
 }
 
+/// A number as the build spells it, except an integer beyond 64 bits, which `parse` refuses as
+/// digits (`serde_yaml_ng` offers it to the reader as 128 bits) and reads as a double as `1e20`.
+/// Only a build that holds number text can hold one.
+fn number_text(number: &Number) -> String {
+    let text = number.to_string();
+    if number.is_u64() || number.is_i64() {
+        return text;
+    }
+    let digits = text.strip_prefix('-').unwrap_or(&text);
+    if digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        let double = number.as_f64().and_then(Number::from_f64);
+        if let Some(double) = double {
+            return double.to_string();
+        }
+    }
+    text
+}
+
 /// A JSON value, as `serde_json` holds it: a number as that build spells it.
 fn json_value(depth: usize, value: &Value) -> String {
     match value {
         Value::Null => "null".to_owned(),
         Value::Bool(value) => value.to_string(),
-        Value::Number(number) => number.to_string(),
+        Value::Number(number) => number_text(number),
         Value::String(text) => quote(text),
         Value::Array(items) => list(
             depth,

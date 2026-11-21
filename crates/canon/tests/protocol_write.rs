@@ -804,8 +804,7 @@ fn a_predicate_nested_as_deep_as_parse_reads_is_written_and_read_back() {
     );
     let protocol = model::parse(&source).expect("the deepest predicate parses");
     assert!(round_trip(&protocol) == protocol);
-    // The claim test spelled `{claim: a}` is written `{claim: a, is: true}`: one object, not one
-    // level more.
+    // The same for `arguments`, which the model holds as JSON and the writer nests as deep.
     let arguments_limit = (1..200)
         .take_while(|depth| {
             let source = format!(
@@ -820,9 +819,12 @@ fn a_predicate_nested_as_deep_as_parse_reads_is_written_and_read_back() {
         serde_json::from_str::<Json>(&format!("{}0{}", "[".repeat(depth), "]".repeat(depth)))
             .expect("nested arrays")
     };
-    let protocol = with_arguments(nested_arguments(arguments_limit.saturating_sub(2)));
+    let protocol = with_arguments(nested_arguments(arguments_limit));
     assert!(round_trip(&protocol) == protocol);
-    println!("predicate depth limit {limit}, arguments depth limit {arguments_limit}");
+    assert!(
+        limit > 50 && arguments_limit > 50,
+        "{limit} {arguments_limit}"
+    );
 }
 
 /// Point 3: whether `serde_json`'s spellings of a number read back as numbers.
@@ -899,19 +901,85 @@ fn a_number_spelled_otherwise_reads_back_as_the_double_it_names() {
     {
         let given = given.as_f64().expect("a double");
         assert_eq!(back.as_f64(), Some(given), "{back} reads {given}");
+        let spelled = serde_json::Number::from_f64(given).expect("finite");
+        assert_eq!(
+            back,
+            &Json::Number(spelled),
+            "{back} is not the spelling parse gives"
+        );
     }
     if !holds_number_text() {
         assert!(read == arguments);
     }
 }
 
+/// With number text, `1e400` is a number the build holds and no double holds. No spelling reads
+/// back as it: `serde_yaml_ng` reads `1e400` as the string, in block YAML as in JSON, so `parse`
+/// gives a string for it. The text is written as it is, and this pins what happens to it. Without
+/// number text there is no such number.
 #[test]
-fn a_second_write_of_arguments_with_number_text_is_a_fixpoint() {
+fn a_number_beyond_a_double_is_written_and_read_back_as_a_string() {
+    match serde_json::from_str::<Json>("[1e400, -1e400]") {
+        Ok(arguments) => {
+            assert!(
+                holds_number_text(),
+                "only a build with number text holds it"
+            );
+            let spelled: Vec<String> = arguments
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(Json::to_string)
+                .collect();
+            let text = write(&with_arguments(arguments));
+            assert!(
+                spelled
+                    .iter()
+                    .all(|spelling| text.contains(spelling.as_str())),
+                "{text}"
+            );
+            let read = model::parse(&text).expect("the text is read");
+            let arguments = read
+                .actions
+                .iter()
+                .next()
+                .expect("an action")
+                .1
+                .arguments
+                .clone();
+            assert_eq!(arguments, Some(serde_json::json!(spelled)));
+        }
+        Err(_) => assert!(!holds_number_text()),
+    }
+}
+
+/// An integer beyond 64 bits is refused by `parse` as digits, up to 128 bits: the writer spells it
+/// as the double it names, so the text is read back.
+#[test]
+fn an_integer_beyond_64_bits_is_written_as_a_double() {
+    let arguments: Json = serde_json::from_str(
+        "[100000000000000000000, -100000000000000000000, 18446744073709551616]",
+    )
+    .expect("JSON");
+    let text = write(&with_arguments(arguments));
+    assert!(
+        !text.contains("00000000000"),
+        "an integer beyond 64 bits is written as digits:\n{text}"
+    );
+    assert!(model::parse(&text).is_ok(), "{text}");
+}
+
+#[test]
+fn arguments_with_number_text_are_a_fixpoint_from_the_first_read() {
+    // A model built with number text is written as that text, which `parse` reads as the double;
+    // from the model `parse` gives, every write is the same bytes.
     let arguments: Json =
         serde_json::from_str(r#"{"a": [1.50, 1E5, 100000000000000000000]}"#).unwrap();
-    let first = write(&with_arguments(arguments));
-    let read = model::parse(&first).expect("reads");
-    assert_eq!(write(&read), first);
+    let read = round_trip(&with_arguments(arguments));
+    let first = write(&read);
+    let again = model::parse(&first).expect("reads");
+    assert!(again == read);
+    assert_eq!(write(&again), first);
 }
 
 /// Point 4: repeated keys in a flow mapping reach `Declarations`, as they do from block YAML.
@@ -1091,8 +1159,8 @@ fn a_null_inside_arguments_reads_back() {
     assert!(round_trip(&protocol) == protocol);
 }
 
-/// A key inside arguments longer than a document can name reads back when it is short, and an
-/// argument key that is a YAML-special word stays text.
+/// A key inside `arguments` that YAML would read as a boolean, null, number or merge key stays
+/// text, and so does an empty one.
 #[test]
 fn arguments_keys_that_yaml_would_read_otherwise_stay_text() {
     let protocol = with_arguments(serde_json::json!({
