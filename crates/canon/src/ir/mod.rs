@@ -18,14 +18,15 @@
 //! - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
 //!   evidence match without a result has `"result": null`; a claim test without `is` has
 //!   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-//!   true; absent lists and sections are empty. The eleven exceptions are an evidence kind's
+//!   true; absent lists and sections are empty. The twelve exceptions are an evidence kind's
 //!   `max_age` and its `supplied_by`, the `subject` of an evidence match or an order form, an
 //!   evidence match's `independent_on`, an obligation's `applicable_when`, an action's
 //!   `arguments`, an action's `case_open`, the `scope` of a capability requirement, the
-//!   `invalidation` section, the `case` section and the `independence_dimensions` section: each
-//!   written only when it is declared (a scope only when it names a key, a section only when it
-//!   holds a rule, an input or a dimension), so the IR of a protocol that declares none of them is
-//!   the IR it was before they existed. An evidence kind's `supplied_by` is the protocol id as
+//!   `revision` of a `children` form, the `invalidation` section, the `case` section and the
+//!   `independence_dimensions` section: each written only when it is declared (a scope only when
+//!   it names a key, a `children` form's `revision` only when it is `current`, a section only when
+//!   it holds a rule, an input or a dimension), so the IR of a protocol that declares none of them
+//!   is the IR it was before they existed. An evidence kind's `supplied_by` is the protocol id as
 //!   declared, a name nothing resolves (story:supplied-evidence). A capability requirement is `{"capability": …}`, or `{"capability": …, "scope":
 //!   {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
 //!   section is `{<id>: {"description": …}}`. The `case` section is
@@ -33,8 +34,11 @@
 //!   authored: `{"first": {"kind": …, "result": …}}`, `{"before": {"first": …, "then": …}}`,
 //!   `{"after": {"first": …, "then": {"kind": …, "result": …}}}` and
 //!   `{"since": {"last": …, "then": {"kind": …, "result": …}}}`.
-//!   The form over the child cases is `{"children": {"in": [...]}}`, and an action's `case_open`
-//!   is `{"protocol": …, "subject": …}`, as declared (story:case-composition).
+//!   The form over the child cases is `{"children": {"in": [...]}}`, or `{"children": {"in":
+//!   [...], "revision": "current"}}` when it reads only the records about the current revision of
+//!   their subject (story:child-outcome-revision): `revision: any` reads what no key reads and is
+//!   written as no key. An action's `case_open` is `{"protocol": …, "subject": …}`, as declared
+//!   (story:case-composition).
 //!   An action's `arguments` is its JSON Schema as declared, the same JSON value, its object keys
 //!   sorted like every object's (story:action-arguments).
 //! - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
@@ -366,8 +370,10 @@ pub(crate) fn normalize(predicate: &Predicate) -> Predicate {
             independent_on: matching.independent_on.clone().map(unique),
             ..matching.clone()
         }),
+        // `revision: any` reads what no key reads, and is one form with it.
         Predicate::Children(form) => Predicate::Children(ChildOutcomes {
             r#in: unique(form.r#in.clone()),
+            revision: form.revision.filter(|_| form.current_only()),
         }),
         Predicate::Claim(_)
         | Predicate::First(_)
@@ -437,7 +443,8 @@ fn scopes(requires: &[model::CapabilityRequirement]) -> BTreeMap<CapabilityId, V
 ///    result, then subject; two `since` forms by `last`, then the later kind, then the later
 ///    result, then subject; no subject comes before any subject.
 /// 8. Two `children` forms compare the outcomes they list, in their own (code-point) order,
-///    pairwise as text; when one list runs out first, the shorter list comes first.
+///    pairwise as text; when one list runs out first, the shorter list comes first; then by
+///    `revision`, none before `current`. Two forms that differ only in `revision` are two members.
 fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
     fn form(predicate: &Predicate) -> u8 {
         match predicate {
@@ -569,13 +576,18 @@ fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
                 })
         }
         (Predicate::Children(left), Predicate::Children(right)) => {
-            for (left, right) in left.r#in.iter().zip(&right.r#in) {
-                let order = text(left, right);
+            for (outcome, other) in left.r#in.iter().zip(&right.r#in) {
+                let order = text(outcome, other);
                 if order != Ordering::Equal {
                     return order;
                 }
             }
-            left.r#in.len().cmp(&right.r#in.len())
+            left.r#in.len().cmp(&right.r#in.len()).then_with(|| {
+                optional(
+                    left.revision.map(|revision| revision.as_str()),
+                    right.revision.map(|revision| revision.as_str()),
+                )
+            })
         }
         _ => form(left).cmp(&form(right)),
     }
@@ -915,10 +927,15 @@ fn predicate_value(predicate: &Predicate) -> Value {
                 ),
             ]),
         )]),
-        Predicate::Children(ChildOutcomes { r#in }) => Value::object([(
-            "children",
-            Value::object([("in", Value::Array(r#in.iter().map(Value::string).collect()))]),
-        )]),
+        // `"revision"` only when the form reads the current revision alone, so a form without the
+        // key, or with `any`, is written as it was before the key existed.
+        Predicate::Children(form @ ChildOutcomes { r#in, revision: _ }) => {
+            let mut written = vec![("in", Value::Array(r#in.iter().map(Value::string).collect()))];
+            if form.current_only() {
+                written.push(("revision", Value::string("current")));
+            }
+            Value::object([("children", Value::object(written))])
+        }
     }
 }
 

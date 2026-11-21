@@ -34,8 +34,10 @@
 //!   `before`, then every `first`, then every `since`, each by its fields in the order written here
 //!   (no subject first), each form once. Each form over the child cases that decides it, by the same
 //!   rule, is a reason after those (story:case-composition), `{"children": [<outcome>, ...],
-//!   "value": <value>}`, its outcomes as the IR lists them, each form once, in the order of those
-//!   lists. Authority is not consulted.
+//!   "value": <value>}`, its outcomes as the IR lists them, with `"revision": "current"` added for
+//!   a form that reads only the records about the current revision (story:child-outcome-revision),
+//!   each form once, two that differ only in `revision` being two, in the order of those lists,
+//!   then no `revision` first. Authority is not consulted.
 //! - `blocked`, when the precondition is `true` and the authority denies a requirement of the
 //!   action: each denied requirement is a reason, `{"capability": <id>, "decision": "denied"}`,
 //!   with `"scope": {<key>: <value>, ...}` added when the requirement has a scope. Asking again
@@ -74,7 +76,7 @@ use super::authority::Authority;
 use super::claims::{EvidenceSets, Inputs, predicate};
 use crate::ir::{Action, Ir, Scope};
 use crate::model::{
-    ArtifactId, CapabilityId, ClaimId, EvidenceKindId, EvidenceMatch, Grant,
+    ArtifactId, CapabilityId, ChildOutcomes, ClaimId, EvidenceKindId, EvidenceMatch, Grant,
     IndependenceDimensionId, InputId, Json, Predicate, Truth,
 };
 
@@ -190,8 +192,10 @@ struct Named<'a> {
     /// Each order form that decides it, in the order found; `order.rs` orders them and names each
     /// once.
     orders: Vec<&'a Predicate>,
-    /// Each form over the child cases that decides it, by the outcomes it lists.
-    children: BTreeSet<&'a [String]>,
+    /// Each form over the child cases that decides it; `composition.rs` names each once, by the
+    /// outcomes it lists and its `revision`, so two forms that differ only in `revision` are two
+    /// reasons.
+    children: Vec<&'a ChildOutcomes>,
 }
 
 /// The reasons a precondition (not `true`) is unmet: each claim whose test decides it, with the
@@ -264,7 +268,8 @@ pub(super) fn unmet(
         ]))
     });
     let order_reasons = super::order::reasons(named.orders, evidence.history);
-    let children_reasons = super::composition::reasons(named.children, evidence.history);
+    let children_reasons =
+        super::composition::reasons(named.children, evidence.history, evidence.artifacts);
     claim_reasons
         .chain(evidence_reasons)
         .chain(input_reasons)
@@ -327,7 +332,7 @@ fn deciding<'a>(
         }
         Predicate::Children(form) => {
             if value(node) != goal {
-                named.children.insert(form.r#in.as_slice());
+                named.children.push(form);
             }
         }
         Predicate::Not(inner) => deciding(inner, !wanted, claims, inputs, evidence, named),

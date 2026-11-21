@@ -64,7 +64,13 @@
 //!   `open` while the child runs. It is `unknown` with no record, `false` when a record's outcome
 //!   is neither listed nor `open` (a child that ended outside the set), otherwise `unknown` while a
 //!   child is `open` and `true` when every child ended with a listed outcome (CANON-COMPOSE-001).
-//!   No record is listed in `excluded_evidence` because of it.
+//!   With `revision: current`, `{children: {in: [O, ...], revision: current}}`
+//!   (story:child-outcome-revision), it reads only the records whose `subject_revision` is the
+//!   case snapshot's current revision of their `subject`, by the same rules: a record about
+//!   another revision neither establishes nor contradicts it, and with no record read it is
+//!   `unknown` (CANON-COMPOSE-002). `revision: any` reads what no key reads. No record is listed
+//!   in `excluded_evidence` because of it, and a reason names it with its `revision` when the IR
+//!   writes one.
 //!
 //! `unknown` and `false` are never collapsed, and only `true` satisfies a positive requirement.
 //!
@@ -448,6 +454,7 @@ pub fn evaluate_with(
             left: &applicable,
             history: evidence,
             independence: Some(&independence),
+            artifacts: Some(&case.artifacts),
         };
         let values = claims::values(ir, sets, &invalidated, &case_inputs)?;
         let obligations = obligations::section(ir, &values, &case_inputs);
@@ -532,12 +539,14 @@ pub(crate) fn order_reasons<'a>(
 }
 
 /// The reason each `children` form among `forms` gives, as a blocked action names it, with its
-/// value over the `history` (`composition.rs`): each form once, in the order of its outcome list.
+/// value over the records it reads of the `history`, against the current revisions of the case's
+/// `artifacts` (`composition.rs`): each form once, by its outcome list and then its `revision`.
 pub(crate) fn children_reasons<'a>(
     forms: impl IntoIterator<Item = &'a ChildOutcomes>,
     history: &[EvidenceRecord],
+    artifacts: &Declarations<ArtifactId, crate::model::CaseArtifact>,
 ) -> Vec<crate::model::Json> {
-    composition::reasons(forms.into_iter().map(|form| form.r#in.as_slice()), history)
+    composition::reasons(forms, history, Some(artifacts))
 }
 
 /// Moves the records one exclusion stage excluded out of `applicable` and into `excluded`. A stage

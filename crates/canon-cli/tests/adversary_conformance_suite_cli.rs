@@ -91,7 +91,7 @@ fn the_real_registry_with_the_flag_is_the_plain_report_and_one_line() {
     assert_eq!(
         out(&checked),
         format!(
-            "{}requirements: 23 implemented, 23 covered, 0 planned\n",
+            "{}requirements: 24 implemented, 24 covered, 0 planned\n",
             out(&plain)
         )
     );
@@ -122,8 +122,8 @@ fn without_the_flag_no_check_runs() {
 /// story:evidence-order-subsecond; CANON-ORDER-004, story:evidence-order-since; CANON-COMPOSE-001,
 /// story:case-composition; CANON-SCOPE-001, story:capability-scope; CANON-IMPORT-001,
 /// story:protocol-imports; CANON-AUTHORITY-002, story:authority-revision-binding;
-/// CANON-SUPPLY-001, story:supplied-evidence), all implemented, and every one is covered by a
-/// scenario of the registry.
+/// CANON-SUPPLY-001, story:supplied-evidence; CANON-COMPOSE-002, story:child-outcome-revision),
+/// all implemented, and every one is covered by a scenario of the registry.
 #[test]
 fn the_real_catalogue_is_the_requirements_the_stories_name() {
     let root = repository_root();
@@ -165,6 +165,7 @@ fn the_real_catalogue_is_the_requirements_the_stories_name() {
         "CANON-SCOPE-001",
         "CANON-AUTHORITY-002",
         "CANON-SUPPLY-001",
+        "CANON-COMPOSE-002",
     ];
     story.sort();
     assert_eq!(ids, story);
