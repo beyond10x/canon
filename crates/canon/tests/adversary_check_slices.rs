@@ -325,3 +325,141 @@ fn an_unreadable_max_age_is_refused_when_no_subject_reads_a_state() {
     assert_eq!(unreadable_age(&with_outcome), refused);
     assert_eq!(unreadable_age(claims_only), refused);
 }
+
+// Pass 2: the probes `check` evaluates over the whole product before it enumerates slices.
+
+/// `k`, `n` (through a `first`, with a history dimension) and `case_outcome` (through a `children`
+/// form, with a history dimension) are read only by obligation `settle`, input `t` only by its
+/// `applicable_when`; `done` reads `j` and `work` requires `c`. The whole product is 34560 states;
+/// without `zz` the slices hold 5, so `check` evaluates the probes and then the slices; with it,
+/// `check` enumerates the whole product, as before slices existed.
+const PROBED: &str = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+case: {inputs: {t: {values: [x, y]}}}\n\
+artifacts: {a: {}, b: {}}\n\
+independence_dimensions: {d: {}}\n\
+evidence_kinds: {k: {}, n: {}, j: {}, case_outcome: {}}\n\
+claims:\n\
+\x20\x20seen: {true_when: {evidence: {kind: k}}}\n\
+\x20\x20early: {true_when: {first: {kind: n, result: r}}}\n\
+\x20\x20kids: {true_when: {children: {in: [accepted]}}}\n\
+\x20\x20noted: {true_when: {evidence: {kind: j}}}\n\
+obligations: {settle: {discharged_when: {all: [{claim: seen}, {claim: early}, {claim: kids}]}, \
+applicable_when: {input: t, in: [x]}}}\n\
+actions:\n\
+\x20\x20work: {requires: [{capability: c}], may_produce: [{evidence: k}, {evidence: n}, \
+{evidence: j}], case_open: {protocol: q, subject: a}}\n\
+\x20\x20ZZ\n\
+outcomes: {done: {requires: {claim: noted}}}\n";
+
+const PROBED_EVERY: &str = "zz: {precondition: {any: [{claim: seen}, {claim: early}, {claim: kids}, \
+{claim: noted}, {input: t, in: [x]}]}, requires: [{capability: c}]}";
+
+/// `PROBED` with and without `zz`, each compiled and then changed by `change`, as a caller that
+/// builds an IR can; returns both results.
+fn probed(change: &dyn Fn(&mut ir::Ir)) -> (String, String) {
+    let run = |source: String| {
+        let mut compiled = ir::compile(&model::parse(&source).expect("parses")).expect("compiles");
+        change(&mut compiled);
+        match check(&compiled, None) {
+            Ok(report) => report.to_string(),
+            Err(refusal) => format!("refused {}: {refusal}", refusal.code()),
+        }
+    };
+    let sliced = run(PROBED.replace("  ZZ\n", ""));
+    let whole = run(PROBED.replace("  ZZ\n", &format!("  {PROBED_EVERY}\n")));
+    eprintln!("sliced: {sliced}\nwhole:  {whole}");
+    (sliced, whole)
+}
+
+fn seen_reads(compiled: &mut ir::Ir, matching: model::EvidenceMatch) {
+    compiled
+        .claims
+        .get_mut(&model::ClaimId::new("seen"))
+        .expect("declared")
+        .true_when = model::Predicate::Evidence(matching);
+}
+
+fn k_match() -> model::EvidenceMatch {
+    model::EvidenceMatch {
+        kind: model::EvidenceKindId::new("k"),
+        result: None,
+        subject: None,
+        independent_on: None,
+    }
+}
+
+fn bad_input(compiled: &mut ir::Ir) {
+    compiled
+        .inputs
+        .get_mut(&model::InputId::new("t"))
+        .expect("declared")
+        .values = vec![model::InputValue::new("x"), model::InputValue::new("y z")];
+}
+
+fn bad_capability(compiled: &mut ir::Ir) {
+    for action in compiled.actions.values_mut() {
+        action.requires = vec![model::CapabilityId::new("c c")];
+    }
+}
+
+/// Three offenders at once, a producer dimension no protocol declares, a capability and an input
+/// value named with a space: the whole product refuses first at the record, the first of them in
+/// its order.
+#[test]
+fn probe_three_offenders_refuse_as_the_whole_product() {
+    let (sliced, whole) = probed(&|compiled| {
+        let mut demand = k_match();
+        demand.independent_on = Some(vec![model::IndependenceDimensionId::new("ghost")]);
+        seen_reads(compiled, demand);
+        bad_input(compiled);
+        bad_capability(compiled);
+    });
+    assert_eq!(sliced, whole);
+}
+
+/// A capability and an input value: the capability comes first in the whole product's order,
+/// though the evaluator checks the case's inputs before the authority.
+#[test]
+fn probe_capability_before_input_refuses_as_the_whole_product() {
+    let (sliced, whole) = probed(&|compiled| {
+        bad_input(compiled);
+        bad_capability(compiled);
+    });
+    assert_eq!(sliced, whole);
+}
+
+/// A record about an undeclared artifact, refused at binding, after the evaluator's case check,
+/// beside an input value refused by the case check: the record's state comes first.
+#[test]
+fn probe_binding_before_case_check_refuses_as_the_whole_product() {
+    let (sliced, whole) = probed(&|compiled| {
+        let mut about = k_match();
+        about.subject = Some(model::ArtifactId::new("ghost"));
+        seen_reads(compiled, about);
+        bad_input(compiled);
+    });
+    assert_eq!(sliced, whole);
+}
+
+/// An unreadable `max_age` on `n`, which only an order form reads, beside a capability: refused at
+/// the least state.
+#[test]
+fn probe_max_age_on_an_ordered_kind_refuses_as_the_whole_product() {
+    let (sliced, whole) = probed(&|compiled| {
+        compiled
+            .evidence_kinds
+            .get_mut(&model::EvidenceKindId::new("n"))
+            .expect("declared")
+            .max_age = Some(model::Age::new("1 hour"));
+        bad_capability(compiled);
+    });
+    assert_eq!(sliced, whole);
+}
+
+/// Unchanged, the probes refuse nothing and the report is the whole product's.
+#[test]
+fn probe_unchanged_reports_as_the_whole_product() {
+    let (sliced, whole) = probed(&|_| {});
+    assert!(!sliced.starts_with("refused"), "{sliced}");
+    assert_eq!(sliced, whole);
+}
