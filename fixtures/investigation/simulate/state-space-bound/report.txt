@@ -1,0 +1,1 @@
+simulated: protocol `simulate.upstream` revision 1: 8 reachable states, 6 terminable (outcome `accepted` 4, outcome `rejected` 4), 0 findings

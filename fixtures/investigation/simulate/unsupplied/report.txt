@@ -1,0 +1,5 @@
+stuck-state: state {}: no outcome is legitimate and no action is admissible or approval-required; path: empty
+dead-action: action `publish` is admissible in no reachable state
+unreached-outcome: outcome `published` is legitimate in no reachable state
+no-outcome-reachable: protocol `simulate.unsupplied` revision 1 reaches no state in which an outcome is legitimate
+simulated: protocol `simulate.unsupplied` revision 1: 1 reachable state, 0 terminable (outcome `published` 0), 4 findings

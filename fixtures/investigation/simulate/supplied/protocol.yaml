@@ -1,0 +1,46 @@
+format: protocol/1
+
+protocol:
+  id: simulate.supplied
+  revision: 1
+  description: Publish a report once a peer approved it in the review case; the review arrives from that case, not from an action here.
+
+artifacts:
+  report:
+    description: The report being published.
+
+evidence_kinds:
+  peer_review:
+    description: A peer's review of the report, recorded in a simulate.review case; its result is approved or another.
+    supplied_by: simulate.review
+  publication:
+    description: The published report.
+
+claims:
+  peer.approved:
+    description: A peer approved the report.
+    true_when:
+      evidence:
+        kind: peer_review
+        result: approved
+
+  report.published:
+    description: The report has been published.
+    true_when:
+      evidence:
+        kind: publication
+
+actions:
+  publish:
+    description: Publish the report, once a peer approved it.
+    precondition:
+      claim: peer.approved
+      is: true
+    may_produce:
+      - evidence: publication
+
+outcomes:
+  published:
+    description: The report is published.
+    requires:
+      claim: report.published

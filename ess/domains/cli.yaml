@@ -13,9 +13,9 @@
 domain: canon.cli
 
 summary: >-
-  The canon command line: validate, compile, evaluate, check, generate, diff and conform run, each
-  reading files named by its flags and printing its result, or refusing with exit status 1 when a
-  document is rejected and 2 when an input cannot be read.
+  The canon command line: validate, compile, evaluate, check, simulate, generate, diff and conform
+  run, each reading files named by its flags and printing its result, or refusing with exit status
+  1 when a document is rejected and 2 when an input cannot be read.
 
 naming:
   wire: cli
@@ -228,6 +228,42 @@ commands:
           finds something
         error: canon.cli.Rejected
       # read from: crates/canon-cli/src/check.rs:42-44
+      - name: nothing-found
+        returns: true
+
+  # Walks every state a case can reach from the empty case, one step at a time
+  # (story:canon-simulate), modelled on canon.cli.Check.
+  # read from: .engineering/planning/story/canon-simulate.md:44-80
+  # read from: .engineering/planning/story/canon-simulate.md:125
+  - name: canon.cli.Simulate
+    naming:
+      wire: simulate
+      display: Simulate
+      summary: >-
+        Walk every state a case of a protocol/1 document can reach from the empty case and report
+        stuck states, cycles, dead actions and unreached outcomes.
+    input:
+      # The protocol/1 document to simulate.
+      # read from: .engineering/planning/story/canon-simulate.md:44
+      - name: path
+        type: String
+    response:
+      # The walk's summary line, which found nothing.
+      # read from: .engineering/planning/story/canon-simulate.md:67
+      - name: output
+        type: String
+    outcomes:
+      # read from: .engineering/planning/story/canon-simulate.md:125
+      - name: unreadable
+        external: the protocol cannot be read
+        error: canon.cli.Unreadable
+      # read from: .engineering/planning/story/canon-simulate.md:69-80
+      - name: rejected
+        external: >-
+          the document is rejected, the walk is refused, or the walk finds a stuck state, a cycle,
+          a dead action or an unreached outcome
+        error: canon.cli.Rejected
+      # read from: .engineering/planning/story/canon-simulate.md:69
       - name: nothing-found
         returns: true
 

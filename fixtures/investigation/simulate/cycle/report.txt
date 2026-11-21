@@ -1,0 +1,2 @@
+cycle: state {evidence `draft`, capability `sign` denied}: no outcome is legitimate, no action is approval-required, and every step of action `wait` returns this state; path: action `prepare` produces evidence `draft`, then capability `sign` denied
+simulated: protocol `simulate.cycle` revision 1: 7 reachable states, 1 terminable (outcome `approved` 1), 1 finding

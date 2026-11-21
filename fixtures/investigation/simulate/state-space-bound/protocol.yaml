@@ -1,0 +1,71 @@
+format: protocol/1
+
+protocol:
+  id: simulate.upstream
+  revision: 1
+  description: Accept or reject an analysis by review; three upstream artifacts can invalidate a review, which puts each record in eight variants and the state space above the bound.
+
+artifacts:
+  analysis:
+    description: The analysis under review.
+  upstream_1:
+    description: The first input the analysis rests on.
+  upstream_2:
+    description: The second input the analysis rests on.
+  upstream_3:
+    description: The third input the analysis rests on.
+
+evidence_kinds:
+  review:
+    description: A review of the analysis; its result is accepted, rejected or another.
+
+claims:
+  analysis.accepted:
+    description: A review accepted the analysis.
+    true_when:
+      evidence:
+        kind: review
+        result: accepted
+
+  analysis.rejected:
+    description: A review rejected the analysis.
+    true_when:
+      evidence:
+        kind: review
+        result: rejected
+
+invalidation:
+  upstream_1.revised:
+    description: A review made before the first input moved no longer decides the analysis.
+    upstream: upstream_1
+    invalidates:
+      - analysis.accepted
+
+  upstream_2.revised:
+    description: A review made before the second input moved no longer decides the analysis.
+    upstream: upstream_2
+    invalidates:
+      - analysis.accepted
+
+  upstream_3.revised:
+    description: A review made before the third input moved no longer decides the analysis.
+    upstream: upstream_3
+    invalidates:
+      - analysis.accepted
+
+actions:
+  review_analysis:
+    description: Review the analysis.
+    may_produce:
+      - evidence: review
+
+outcomes:
+  accepted:
+    description: The analysis is accepted.
+    requires:
+      claim: analysis.accepted
+
+  rejected:
+    description: The analysis is rejected.
+    requires:
+      claim: analysis.rejected

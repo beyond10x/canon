@@ -1,0 +1,1 @@
+simulated: protocol `simulate.supplied` revision 1: 6 reachable states, 2 terminable (outcome `published` 2), 2 waiting on supplied evidence, 0 findings
