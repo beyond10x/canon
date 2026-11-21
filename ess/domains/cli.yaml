@@ -252,8 +252,13 @@ commands:
       # The walk's summary line, which found nothing: the reachable states, the terminable ones
       # per outcome, the open states with no action to take (waiting on supplied evidence or
       # expiry) when the protocol declares a supplied or an expiring kind, and 0 findings.
+      # When an action opens a child case (case_open), one line starting `limit:` comes after the
+      # findings and before the summary: a child case's outcome is walked only as a step of its
+      # opening action, so a stuck-state or cycle in a state that waits for a child's outcome may
+      # not be one in a real case. It changes neither the exit status nor the count of findings.
       # read from: .engineering/planning/story/canon-simulate.md:67
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R3 and R5
+      # read from: .engineering/planning/story/canon-simulate.md, section "Known limit on child outcomes, stated by the tool", R7
       - name: output
         type: String
     outcomes:
@@ -264,9 +269,12 @@ commands:
       # A stuck state or a cycle is a state that is not open: no sequence of action, authority,
       # supplied and expiry steps leads from it to a legitimate outcome. Each is printed once per
       # smallest state, with the decisions that would make an outcome legitimate and the number
-      # of other such states that contain it.
+      # of other such states that contain it. A case_outcome record that expires stays read by
+      # every children form: with no evidence match reading case_outcome it has no expiry step,
+      # otherwise it is held as expired, absent to every evidence match.
       # read from: .engineering/planning/story/canon-simulate.md:69-80
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R1 to R5
+      # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 2", R2a
       - name: rejected
         external: >-
           the document is rejected, the walk is refused (an order form, or more than 65536

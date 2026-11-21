@@ -1,0 +1,64 @@
+format: protocol/1
+
+protocol:
+  id: simulate.held
+  revision: 1
+  description: Open one child case at a time while unlocked and lock once every child ended accepted; a child's outcome expires after an hour, and both a children form and an evidence match read it.
+
+artifacts:
+  findings:
+    description: The findings the child cases settle.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of a child case, valid for an hour.
+    max_age: 1h
+  lock:
+    description: A lock on the findings.
+
+claims:
+  findings.resolved:
+    description: Every child case ended accepted.
+    true_when:
+      children:
+        in: [accepted]
+
+  findings.opened:
+    description: A child case has a fresh outcome.
+    true_when:
+      evidence:
+        kind: case_outcome
+
+  findings.locked:
+    description: The findings are locked.
+    true_when:
+      evidence:
+        kind: lock
+
+actions:
+  open_change:
+    description: Open a child case while no child has a fresh outcome and the findings are unlocked.
+    precondition:
+      all:
+        - claim: findings.opened
+          is: unknown
+        - claim: findings.locked
+          is: unknown
+    case_open:
+      protocol: simulate.change
+      subject: findings
+
+  lock:
+    description: Lock the findings once every child case ended accepted.
+    precondition:
+      claim: findings.resolved
+    may_produce:
+      - evidence: lock
+
+outcomes:
+  done:
+    description: Every child case ended accepted and the findings are locked.
+    requires:
+      all:
+        - claim: findings.resolved
+        - claim: findings.locked

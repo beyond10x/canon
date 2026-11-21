@@ -29,6 +29,8 @@
 //! The story's rules refined after adversary pass 1 (R1 to R6) are held by
 //! `simulate_follows_the_refined_rules`: an expiry step, the open-state rule for `stuck-state`
 //! and `cycle`, a decision named on a finding, and one finding per smallest state with a count.
+//! Those refined after adversary pass 2 (R2a, an expired child outcome, and R7, the line naming
+//! the limit on child outcomes) by `simulate_follows_the_rules_refined_after_pass_2`.
 //!
 //! Each fixture directory carries `protocol.yaml` and the exact output: `report.txt` on standard
 //! output with nothing on standard error, or `refusal.txt` on standard error with nothing on
@@ -51,7 +53,7 @@ enum Expected {
 
 /// Every fixture directory, the exit status and where the expected text goes. A walk that finds
 /// nothing exits 0; findings and a refusal exit 1 (`REJECTED`).
-const CASES: [(&str, i32, Expected); 15] = [
+const CASES: [(&str, i32, Expected); 17] = [
     ("clean", 0, Expected::Report),
     ("mutual", 1, Expected::Report),
     ("denied", 1, Expected::Report),
@@ -67,7 +69,12 @@ const CASES: [(&str, i32, Expected); 15] = [
     ("contained", 1, Expected::Report),
     ("unread-supplied", 1, Expected::Report),
     ("clean-result", 0, Expected::Report),
+    ("child-expiry", 1, Expected::Report),
+    ("child-expiry-held", 1, Expected::Report),
 ];
+
+/// The cases of the rules refined after adversary pass 2 (R2a and R7).
+const CHILDREN: [&str; 2] = ["child-expiry", "child-expiry-held"];
 
 /// The cases of the rules refined after adversary pass 1 (the story's last section, R1 to R6).
 const REFINED: [&str; 6] = [
@@ -229,6 +236,21 @@ fn simulate_lets_a_supplied_record_arrive_at_any_step() {
 #[test]
 fn simulate_follows_the_refined_rules() {
     let failures = failures(&REFINED);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The rules refined after adversary pass 2, on a `case_outcome` kind that declares `max_age`:
+///
+/// - `child-expiry`: only a `children` form reads `case_outcome`, which an expiry does not undo,
+///   so there is no expiry step for it (R2a). Without one, a child that ended with an outcome the
+///   form does not list keeps the outcome illegitimate: the `cycle` is real. The protocol opens
+///   child cases, so the line naming the limit on child outcomes comes before the summary (R7).
+/// - `child-expiry-held`: an evidence match reads `case_outcome` too, so an expired record is
+///   held as expired: absent to the match, present to the `children` form. `{lock}` with an
+///   expired accepted outcome is terminable, as the evaluator says past the `max_age` (R2a, R7).
+#[test]
+fn simulate_follows_the_rules_refined_after_pass_2() {
+    let failures = failures(&CHILDREN);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
