@@ -1,0 +1,46 @@
+format: canon-conformance/1
+id: investigation-observation-only
+covers: []
+fixture: fixtures/investigation/mutate/protocol.yaml
+# A supporting observation and no falsification attempt: `supported` is not legitimate, since the
+# explanation has not yet survived an attempt to falsify it. This is the witness the `lacking` set
+# leaves out.
+steps:
+  - id: observation-only
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "refuted": {
+              "reasons": [
+                {
+                  "claim": "explanation.refuted",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "supported": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }

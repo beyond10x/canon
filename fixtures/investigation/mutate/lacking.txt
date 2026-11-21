@@ -1,0 +1,8 @@
+killed: drop-conjunct claim `explanation.supported` true_when all[0]: RELAXATION (weakening); scenario `investigation-falsification-only` fails
+weak point: drop-conjunct claim `explanation.supported` true_when all[1]: RELAXATION (weakening); no scenario fails
+killed: all-to-any claim `explanation.supported` true_when: RELAXATION (weakening); scenario `investigation-falsification-only` fails
+killed: remove-precondition action `publish_finding` precondition: RELAXATION (weakening); scenario `investigation-precondition-unknown` fails
+killed: remove-capability action `publish_finding` requires[0] capability `finding.publish`: RELAXATION (weakening); scenario `investigation-no-authority` fails
+killed: change-result claim `explanation.refuted` true_when result `refuted` to `survived`: BREAKING; scenario `investigation-falsification-only` fails
+killed: change-result claim `explanation.supported` true_when all[1] result `survived` to `refuted`: BREAKING; scenario `investigation-falsification-only` fails
+mutate: 7 mutants, 6 killed, 1 survived (1 weak point), 0 invalid

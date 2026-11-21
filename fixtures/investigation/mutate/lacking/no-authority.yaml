@@ -1,0 +1,48 @@
+format: canon-conformance/1
+id: investigation-no-authority
+covers: []
+fixture: fixtures/investigation/mutate/protocol.yaml
+# The explanation is supported, so the precondition of `publish_finding` is TRUE, and the authority
+# carries no decision for `finding.publish`: approval is required.
+steps:
+  - id: no-authority
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "status": "admissible"
+            },
+            "inspect": {
+              "status": "admissible"
+            },
+            "publish_finding": {
+              "reasons": [
+                {
+                  "capability": "finding.publish",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }

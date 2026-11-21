@@ -11,6 +11,7 @@ mod diff;
 mod evaluate;
 mod floor;
 mod generate;
+mod mutate;
 mod simulate;
 
 use std::path::{Path, PathBuf};
@@ -69,6 +70,7 @@ fn main() -> ExitCode {
         } => check::run(&path, properties.as_deref(), &import),
         Command::Simulate { path } => simulate::run(&path),
         Command::Generate { path, out } => generate::run(&path, &out),
+        Command::Mutate { path, scenarios } => mutate::run(&path, &scenarios),
     }
 }
 

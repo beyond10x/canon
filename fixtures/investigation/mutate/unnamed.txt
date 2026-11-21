@@ -1,0 +1,1 @@
+error[no-scenario]: no scenario of fixtures/investigation/mutate/complete names fixtures/investigation/protocol.yaml as its fixture
