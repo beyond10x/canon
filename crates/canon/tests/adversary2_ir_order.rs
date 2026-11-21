@@ -496,11 +496,11 @@ fn generate_descended(rng: &mut Rng, depth: u32) -> Predicate {
     };
     match rng.below(if depth == 0 { 3 } else { 6 }) {
         0 => generate_since(rng, 0),
-        1 => Predicate::Descended(EvidenceDescended {
+        1 => Predicate::Descended(Box::new(EvidenceDescended {
             first: record(rng),
             then: record(rng),
             subject: None,
-        }),
+        })),
         2 => not(generate_descended(rng, depth.saturating_sub(1))),
         3 => evidence(IDS[rng.below(IDS.len())], RESULTS[rng.below(RESULTS.len())]),
         form => {

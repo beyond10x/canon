@@ -724,7 +724,7 @@ fn predicate(depth: usize, predicate: &Predicate) -> String {
                 first,
                 then,
                 subject,
-            } = form;
+            } = form.as_ref();
             let mut body = Members::new();
             put(&mut body, "first", later_record(depth + 2, first));
             put(&mut body, "then", later_record(depth + 2, then));

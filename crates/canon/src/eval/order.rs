@@ -1461,7 +1461,7 @@ mod tests {
     }
 
     fn descended_of(first: &str, then: &str, subject: Option<&str>) -> Predicate {
-        Predicate::Descended(EvidenceDescended {
+        Predicate::Descended(Box::new(EvidenceDescended {
             first: LaterRecord {
                 kind: EvidenceKindId::new("k"),
                 result: first.to_owned(),
@@ -1471,7 +1471,7 @@ mod tests {
                 result: then.to_owned(),
             },
             subject: subject.map(ArtifactId::new),
-        })
+        }))
     }
 
     /// The case snapshot's artifacts: `a` at `r2`, descending from `ancestors` when given, and `b`

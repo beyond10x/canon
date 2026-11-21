@@ -94,7 +94,7 @@ struct WrittenRequirement {
     #[serde(default, deserialize_with = "super::present::form")]
     since: Option<EvidenceSince>,
     #[serde(default, deserialize_with = "super::present::form")]
-    descended: Option<EvidenceDescended>,
+    descended: Option<Box<EvidenceDescended>>,
     #[serde(default, deserialize_with = "super::present::form")]
     children: Option<ChildOutcomes>,
 }

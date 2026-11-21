@@ -2031,11 +2031,11 @@ mod tests {
         };
         assert_eq!(
             outcome.requires,
-            Predicate::Descended(crate::model::EvidenceDescended {
+            Predicate::Descended(Box::new(crate::model::EvidenceDescended {
                 first: record("f"),
                 then: record("p"),
                 subject: None,
-            })
+            }))
         );
     }
 

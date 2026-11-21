@@ -537,11 +537,11 @@ fn predicate(value: &Json) -> Shape<Predicate> {
                     result: text(read, "result")?,
                 })
             };
-            Ok(Predicate::Descended(EvidenceDescended {
+            Ok(Predicate::Descended(Box::new(EvidenceDescended {
                 first: record("first")?,
                 then: record("then")?,
                 subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
-            }))
+            })))
         }
         // `"revision"` is written only as `current`; an `any` read here compiles to no key, so
         // the bytes differ and the text is refused. `"subject"` is written only when the form

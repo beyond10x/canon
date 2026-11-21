@@ -1027,11 +1027,12 @@ fn predicate_value(predicate: &Predicate) -> Value {
             ));
             Value::object([("since", Value::object(fields))])
         }
-        Predicate::Descended(EvidenceDescended {
-            first,
-            then,
-            subject,
-        }) => {
+        Predicate::Descended(form) => {
+            let EvidenceDescended {
+                first,
+                then,
+                subject,
+            } = form.as_ref();
             let record = |read: &model::LaterRecord| {
                 Value::object([
                     ("kind", Value::string(read.kind.as_str())),

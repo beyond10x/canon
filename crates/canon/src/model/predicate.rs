@@ -161,7 +161,9 @@ pub enum Predicate {
     Since(EvidenceSince),
     /// Whether an item that had a result on a revision the current revision of its subject
     /// descends from has a result on the current revision (story:revision-ordering).
-    Descended(EvidenceDescended),
+    // Boxed: its two records would grow every predicate by a quarter, and the recursive
+    // readers and writers of a predicate nested as deep as parse reads run out of stack.
+    Descended(Box<EvidenceDescended>),
     /// Whether every child case of the case ended with one of the outcomes listed, over its
     /// `case_outcome` records (story:case-composition).
     Children(ChildOutcomes),
@@ -543,7 +545,7 @@ pub(crate) struct WrittenPredicate {
     #[serde(default, deserialize_with = "super::present::form")]
     pub(crate) since: Option<EvidenceSince>,
     #[serde(default, deserialize_with = "super::present::form")]
-    pub(crate) descended: Option<EvidenceDescended>,
+    pub(crate) descended: Option<Box<EvidenceDescended>>,
     #[serde(default, deserialize_with = "super::present::form")]
     pub(crate) children: Option<ChildOutcomes>,
 }
