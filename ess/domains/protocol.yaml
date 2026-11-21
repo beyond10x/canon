@@ -1213,6 +1213,29 @@ types:
       # read from: .engineering/planning/story/missing-evidence.md:58-66
       - name: missing_evidence
         type: Optional<Map<canon.protocol.ActionId, List<canon.protocol.EvidenceKindId>>>
+      # Filled by story:pending-decisions: the decisions the evaluation waits on, each a
+      # canon-authority/1 or canon-decisions/1 entry that would change a status in the same
+      # decision. An object with up to two members, each written only when it has an entry, and
+      # the section only when one of them is. authority: one entry per reason {"capability",
+      # "decision": "none" | "require_approval", "scope"?} of an approval-required action in the
+      # actions section, {"action", "capability", "scope"?, "current", "case_revision"?,
+      # "options": ["granted", "denied"]}; current is that reason's decision, scope is written
+      # when the requirement has one and case_revision is the case snapshot's revision, written
+      # when it has one. A blocked action has no entry. Ordered by action id, then capability, then
+      # scope: no scope first, two scopes by their key-value pairs in key order, pair by pair,
+      # key before value, by code point, a scope that is a prefix of the other first. decisions:
+      # one entry per outcome blocked with the reason {"decision": <name>, "present": false},
+      # {"outcome", "decision", "case_revision"?, "options"}, in outcome-id order; options is
+      # ["taken"] when the snapshot has a revision and [] with no case_revision when it has none,
+      # since a canon-decisions/1 entry applies only at the snapshot's revision. An option is the
+      # value of the entry a caller would add with its own principal; precedence is unchanged, so
+      # a granted entry decides a requirement whose current is require_approval only when no
+      # require_approval entry still covers it. Computed from the inputs canon evaluate takes;
+      # principal, holder, expiry, routing and grounds are not. Its shape is fixed by
+      # CANON-PENDING-001.
+      # read from: .engineering/planning/story/pending-decisions.md:46-63
+      - name: pending_decisions
+        type: Optional<Json>
 
 entities:
   # The source model's root, with its header (id, revision, description) written in place. Every
