@@ -52,7 +52,7 @@ scope:
   path: crates/canon/tests/invalidation_evaluation_cost.rs
 - confidence: inferred
   path: crates/canon/tests/missing_keys.rs
-revision: 17
+revision: 18
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 8}
 - {from: "proposed", to: "active", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 9}
@@ -262,3 +262,19 @@ It binds this story, in addition to § Acceptance:
   unit's; what must change there is handed over as a patch.
 - Tests that relied on one process per file are named, with the runner each remaining test line
   uses.
+
+## Corrected 2026-11-21: `OnceLock` is not a shared fixture under this runner
+
+"What the unit does" step 4 names `OnceLock` in the test binary. The workspace rule was
+corrected the same evening (`~/beyond10x/AGENTS.md` lines 26-32, found in another repository):
+"A `OnceLock` or other in-process global is not this form under cargo-nextest, which runs each
+test in its own process, so the fixture is built once per test". The `host-operator` session
+sent the correction. Step 4 above is kept as written; this section replaces its mechanism.
+
+- The accepted forms of a product made once: a committed generated file with a digest of its
+  sources and a fast check of the digest; a cache on disk under `target/` keyed by the digest of
+  its sources; a setup step that runs once before the tests.
+- The unit says, from its measurement, for each slow test whether its time is one product built
+  again in several tests or work inside one test. A cache is built only for the first kind.
+- A cache on disk gets two tests: two processes that build it at once leave a whole file (write
+  to a temporary name, then rename), and a changed source misses the cache.
