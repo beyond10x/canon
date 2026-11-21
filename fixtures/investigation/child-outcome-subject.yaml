@@ -29,6 +29,11 @@ claims:
       children:
         in: [passed]
         revision: current
+  wave.troubled:
+    description: Not every child case about the wave, at whatever revision, ended passed.
+    true_when:
+      not:
+        children: {in: [passed], subject: wave}
 
 actions:
   ideas.open:

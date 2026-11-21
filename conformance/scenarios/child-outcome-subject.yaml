@@ -7,6 +7,9 @@ fixture: fixtures/investigation/child-outcome-subject.yaml
 # case_outcome records whose subject is the wave and whose subject_revision is the case snapshot's
 # current revision of the wave. Claim all.passed is the same form without `subject`, which reads
 # the records about the current revision of every artifact, as CANON-COMPOSE-002's form does.
+# Claim wave.troubled is `not` over `{children: {in: [passed], subject: wave}}`, without
+# `revision`: the form reads the records about the wave at every revision, so it is TRUE once a
+# wave story ended outside the set at any revision, and it reads no record about the intake.
 # Action wave.close requires either form; outcome wave.done requires wave.passed. Over the records
 # it reads, each form follows CANON-COMPOSE-001: FALSE once a child ended outside the set,
 # otherwise UNKNOWN while a child is open or with no record read, TRUE when every child ended
@@ -110,6 +113,19 @@ steps:
                   "subject": "wave"
                 }
               }
+            },
+            "wave.troubled": {
+              "description": "Not every child case about the wave, at whatever revision, ended passed.",
+              "true_when": {
+                "not": {
+                  "children": {
+                    "in": [
+                      "passed"
+                    ],
+                    "subject": "wave"
+                  }
+                }
+              }
             }
           },
           "evidence_kinds": {
@@ -140,7 +156,8 @@ steps:
   # Expectation 2. The wave is at w2. c1 passed and c2 dropped about w1, c3 and c4 passed about
   # w2, and the idea child i1 is open about the current intake. wave.passed reads c3 and c4 alone:
   # TRUE. all.passed reads c3, c4 and i1: UNKNOWN while i1 is open. wave.close is admissible
-  # through the form with `subject`, and wave.done is legitimate.
+  # through the form with `subject`, and wave.done is legitimate. wave.troubled reads c2, dropped
+  # about w1: TRUE.
   - id: an-open-idea-beside-the-wave-stories
     evaluate:
       case:
@@ -176,6 +193,9 @@ steps:
             },
             "wave.passed": {
               "value": "true"
+            },
+            "wave.troubled": {
+              "value": "true"
             }
           },
           "outcomes": {
@@ -210,6 +230,9 @@ steps:
               "value": "false"
             },
             "wave.passed": {
+              "value": "true"
+            },
+            "wave.troubled": {
               "value": "true"
             }
           },
@@ -275,6 +298,9 @@ steps:
             },
             "wave.passed": {
               "value": "false"
+            },
+            "wave.troubled": {
+              "value": "true"
             }
           }
         }
@@ -304,6 +330,9 @@ steps:
             },
             "wave.passed": {
               "value": "unknown"
+            },
+            "wave.troubled": {
+              "value": "true"
             }
           }
         }
@@ -360,6 +389,9 @@ steps:
             },
             "wave.passed": {
               "value": "unknown"
+            },
+            "wave.troubled": {
+              "value": "true"
             }
           },
           "outcomes": {
@@ -376,7 +408,7 @@ steps:
         }
 
   # Expectation 6. Only c3 is given, c4 absent: wave.passed is TRUE. Canon counts only the records
-  # it is given; a child opened without a record takes no part.
+  # it is given; a child opened without a record takes no part. wave.troubled is FALSE.
   - id: only-one-wave-story-given
     evaluate:
       case:
@@ -397,6 +429,9 @@ steps:
             },
             "wave.passed": {
               "value": "true"
+            },
+            "wave.troubled": {
+              "value": "false"
             }
           },
           "outcomes": {
@@ -408,7 +443,8 @@ steps:
 
   # The story's outcome, beyond its eight expectations: a record about another artifact does not
   # establish the form with `subject` either. One idea child passed about the current intake and
-  # no record about the wave: wave.passed is UNKNOWN, all.passed TRUE.
+  # no record about the wave: wave.passed is UNKNOWN, all.passed TRUE, and wave.troubled, `not`
+  # over a form that reads no record, UNKNOWN.
   - id: only-an-idea-passed
     evaluate:
       case:
@@ -428,6 +464,9 @@ steps:
               "value": "true"
             },
             "wave.passed": {
+              "value": "unknown"
+            },
+            "wave.troubled": {
               "value": "unknown"
             }
           },
