@@ -9,7 +9,7 @@ use b10x_canon::diff;
 use b10x_canon::eval;
 use b10x_canon::ir;
 use b10x_canon::model;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 #[path = "support/schemas.rs"]
 mod schemas;
