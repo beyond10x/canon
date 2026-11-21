@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T01:28:25Z",
+  "actor": "human:timo",
+  "artifact": "story:supplied-evidence",
+  "kind": "story",
+  "revision": 22,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "on 241643f (specification only): ess_model_matches FAILED naming EvidenceKind.supplied_by (23 passed, 5 failed), conform 20 passed, 1 failed on CANON-SUPPLY-001; on 282edbc: workspace 976 passed, 0 failed, conform 21 passed, 22 implemented, 22 covered; the upstream-artifact refusal reproduced on the base for the saved SDC case; VERIFIED by the coordinator from the unit's logs",
+    "reference": "w3/supplied-evidence/red.log, red-upstream.log vs gate-1..5.log (session scratch)"
+  }
+}

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:authority-revision-binding
 kind: story
-status: active
+status: implemented
 title: Bind authority decisions to a case revision and record the principal who took them
 tags:
 - from-request
@@ -20,10 +20,16 @@ scope:
   path: conformance/requirements.yaml
 - confidence: cited
   path: conformance/scenarios/authority-binding.yaml
+- confidence: cited
+  path: crates/canon-cli/src/lib.rs
 - confidence: inferred
   path: crates/canon-cli/tests/adversary_conformance_suite_cli.rs
 - confidence: inferred
   path: crates/canon-cli/tests/conform_requirements.rs
+- confidence: cited
+  path: crates/canon-docs/src/main.rs
+- confidence: cited
+  path: crates/canon-docs/src/pages.rs
 - confidence: cited
   path: crates/canon/src/eval/actions.rs
 - confidence: cited
@@ -35,11 +41,14 @@ scope:
 - confidence: cited
   path: crates/canon/src/model/authority.rs
 - confidence: cited
+  path: crates/canon/tests/adversary_authority_binding.rs
+- confidence: cited
   path: ess/domains/protocol.yaml
-revision: 16
+revision: 22
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 14, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 15, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "active", to: "implemented", at: "2026-11-21T02:24:51Z", actor: "human:timo", revision: 22, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w3"}
 ---
 ## Outcome
 
@@ -179,3 +188,31 @@ Conformance scenario `CANON-AUTHORITY-002` passes under `canon conform run` over
 ## Decided
 
 Option A of § Decision needed: every bound entry, whatever its decision, applies only at its case revision; a deny that must last is written without `case_revision`. Decided on 2026-11-20 by the wave coordinator on the drafter's recommendation, after the operator accepted the story without choosing (`approval-record:accept-sdc-requests-2026-11-20`). The unit builds this option and does not reopen the choice.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w3 from the implementor's reports
+and the merge `b4f93c7`. It corrects § Scope where the two differ.
+
+- **How the case revision reaches admissibility.** `evaluate_with` calls
+  `authority.applying_at(case.revision)` and hands the action stage only the entries that apply:
+  every unbound entry, and each bound entry whose `case_revision` equals the snapshot's revision;
+  with no revision in the snapshot, only the unbound ones. `eval/actions.rs` is not edited, so
+  coverage and precedence see applying entries only. The explanation records every entry as given.
+- An action whose only covering entry has lapsed reads `approval-required` with `decision: none`,
+  as with no entry at all.
+- Two entries that differ only in `principal` are both read; among them a denial wins. The
+  principal is recorded and never matched.
+- A revision is opaque text compared for equality: the NFC and NFD spellings of one revision do
+  not match, as for explicit decisions.
+- `canon check` and `canon generate` write unbound entries and are not edited.
+- Not in § Scope and edited: `crates/canon-docs/src/main.rs` and `pages.rs` (the sentence on a
+  capability decided twice now names all four parts of the key).
+- Tests re-pinned because behaviour changed: the requirement counts in
+  `crates/canon-cli/tests/conform_requirements.rs` and
+  `crates/canon-cli/tests/adversary_conformance_suite_cli.rs`, and the list of requirement ids in
+  the latter.
+- Added by the adversary: `crates/canon/tests/adversary_authority_binding.rs` (2 cases). Added in
+  review: two scenario steps that bind a `require_approval` (`24a2f90`).
+- The `--authority` help text in `crates/canon-cli/src/lib.rs` was applied by the coordinator at
+  the merge from the unit's patch.

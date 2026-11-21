@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T02:24:51Z",
+  "actor": "human:timo",
+  "artifact": "story:supplied-evidence",
+  "kind": "story",
+  "revision": 31,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "CANON-SUPPLY-001 stated rules its scenario did not pin: the requirement text now states only what the scenario pins and the scenario header names the tests for the rest (40841db); the same gap in CANON-IMPORT-001 is in the plan page backlog",
+    "reference": "impl/supplied-evidence 40841db",
+    "review": "review-result:adversary-supplied-evidence-pass-1",
+    "outcome": "fixed"
+  }
+}

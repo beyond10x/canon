@@ -240,14 +240,14 @@
     },
     {
       "label": "Authority bound to a case revision",
-      "status": "planned",
+      "status": "shipped",
       "detail": "A canon-authority/1 entry may give the case revision it was taken at and the principal who took it; a bound entry, whatever its decision, applies only while the case is at that revision and takes no part in coverage or precedence otherwise, an unbound one applies at every revision, and the principal is recorded as given; scenario CANON-AUTHORITY-002.",
       "href": "/docs/reference/documents#authoritydecision",
       "area": "Evaluation"
     },
     {
       "label": "Supplied evidence",
-      "status": "planned",
+      "status": "shipped",
       "detail": "An evidence kind may name, as supplied_by, another protocol whose cases produce its records; canon check counts it as produced, without authority, and a record of it copied unchanged from the supplier's case may name upstream artifacts only the supplier declares, carried and not read; the protocol's own id is refused as self-supplied-evidence; scenario CANON-SUPPLY-001.",
       "href": "/docs/reference/protocol",
       "area": "Language"

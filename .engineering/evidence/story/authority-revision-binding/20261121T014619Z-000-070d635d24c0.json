@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T01:46:19Z",
+  "actor": "human:timo",
+  "artifact": "story:authority-revision-binding",
+  "kind": "story",
+  "revision": 16,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "on 1654d3b (specification only): ess_model_matches FAILED naming AuthorityDecision.principal and .case_revision (20 passed, 8 failed), conform 20 passed, 1 failed on CANON-AUTHORITY-002 (unknown field case_revision); on e3ce944: workspace 972 passed, 0 failed, conform 21 passed, 22 implemented, 22 covered; VERIFIED by the coordinator from the unit's logs",
+    "reference": "w3/authority-revision-binding/red.log vs gate-1..5.log (session scratch)"
+  }
+}

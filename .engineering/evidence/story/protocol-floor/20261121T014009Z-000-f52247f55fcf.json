@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T01:40:09Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-floor",
+  "kind": "story",
+  "revision": 28,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "on 9725c8c (specification only): the named test fails (clap refuses floor, exit 64) and ess_commands_match names canon.cli.Floor as no canon subcommand (9 passed, 4 failed); on f2d7d8f: workspace 970 passed, 0 failed, 3 ignored, conform 20 passed, 21 covered; VERIFIED by the coordinator from the unit's logs",
+    "reference": "w3/protocol-floor/red.log vs the unit's gate logs (session scratch)"
+  }
+}

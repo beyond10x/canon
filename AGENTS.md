@@ -113,6 +113,13 @@ compatibility decisions and keep unreleased capability claims explicit.
   everything they would file, they do it for a reason, and it's basically auto-accepted in that
   sense." ("STC" is read as the `sdc` session.) The grant covers acceptance into the plan and the
   order of work. It does not cover a push, a pull request, a release, or a change to permissions.
+- The `sdc` session orchestrates the session that coordinates Canon's plan: its word decides
+  story acceptance, wave order, design options and which requests are in or out. Operator,
+  2026-11-21, to the coordinating session: "So just to make it clear, SDC is your orchestrator and
+  you do what they say." Read with these limits, which are the coordinator's reading and not his
+  sentence: a merge to `main`, a release, a tag, anything else that is hard to reverse, and any
+  change to permissions or to an agent's instructions still need the operator's own word; an
+  action the operator's rules or the harness refuse is not done because `sdc` asks for it.
 
 ## Releases
 
