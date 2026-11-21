@@ -1114,31 +1114,107 @@ fn the_largest_revision_reads_back() {
     assert!(round_trip(&protocol) == protocol);
 }
 
-/// A key longer than YAML's simple key limit (1024 characters) is refused by `parse` whether it is
-/// written as block YAML or as JSON, so no protocol `parse` gives holds one, and a model that does
-/// is written all the same.
-#[test]
-fn a_key_beyond_the_simple_key_limit_is_refused_by_parse_in_either_layout() {
-    let id = "k".repeat(2000);
-    let block = format!(
-        "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nclaims:\n  {id}: {{true_when: {{all: []}}}}\n"
-    );
-    assert!(
-        model::parse(&block).is_err(),
-        "block YAML refuses the long key"
-    );
-    let mut protocol = minimal();
-    protocol.claims = claims(&[id.as_str()]);
-    let json_text = write(&protocol);
-    assert!(json_text.contains(&id), "the long key is written");
-    assert!(model::parse(&json_text).is_err(), "so does the JSON text");
+/// The longest key, in bytes as written between its quotes with the escapes, that `parse` reads
+/// back: the YAML reader behind it drops a simple key more than 1024 bytes long before its `:`,
+/// quotes included (decided in review, D1). Measured, not assumed: 1022 reads, 1023 does not, for
+/// each kind of key below.
+const KEY_LIMIT: usize = 1022;
 
-    let id = "k".repeat(1000);
-    protocol.claims = claims(&[id.as_str()]);
-    assert!(
-        round_trip(&protocol) == protocol,
-        "a key under the limit reads back"
-    );
+/// A key that is `n` bytes as written: `n` letters.
+fn plain_key(n: usize) -> String {
+    "k".repeat(n)
+}
+
+/// A key that is `n` bytes as written, a part of it `\` and `"`, which are written as two bytes
+/// each.
+fn escaped_key(n: usize) -> String {
+    let pairs = n / 8;
+    format!("{}{}", "\\\"".repeat(pairs), "k".repeat(n - 4 * pairs))
+}
+
+/// How `write` spells `key` between the quotes, for a key made of letters, `\` and `"`.
+fn spelled(key: &str) -> String {
+    key.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn claim_key(key: &str) -> Protocol {
+    let mut protocol = minimal();
+    protocol.claims = claims(&[key]);
+    protocol
+}
+
+fn property_key(key: &str) -> Protocol {
+    let mut properties = serde_json::Map::new();
+    properties.insert(key.to_owned(), serde_json::json!({"type": "string"}));
+    with_arguments(serde_json::json!({"type": "object", "properties": properties}))
+}
+
+#[test]
+fn a_key_reads_back_up_to_1022_bytes_as_written_and_not_beyond() {
+    type Kind = (&'static str, fn(usize) -> String, fn(&str) -> Protocol);
+    let kinds: [Kind; 4] = [
+        ("plain identifier", plain_key, claim_key),
+        ("identifier grown by escapes", escaped_key, claim_key),
+        ("property name in arguments", plain_key, property_key),
+        ("escaped property name", escaped_key, property_key),
+    ];
+    for (kind, key, protocol) in kinds {
+        for (n, reads) in [
+            (1, true),
+            (1021, true),
+            (KEY_LIMIT, true),
+            (KEY_LIMIT + 1, false),
+            (KEY_LIMIT + 2, false),
+            (2000, false),
+        ] {
+            let key = key(n);
+            assert_eq!(
+                spelled(&key).len(),
+                n,
+                "{kind}: the key is {n} bytes as written"
+            );
+            let protocol = protocol(&key);
+            let text = write(&protocol);
+            assert!(
+                text.contains(&format!("\"{}\": ", spelled(&key))),
+                "{kind}: {n}"
+            );
+            assert_eq!(
+                model::parse(&text).is_ok_and(|read| read == protocol),
+                reads,
+                "{kind}: a key of {n} bytes as written"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_multibyte_key_counts_its_utf8_bytes_against_the_limit() {
+    // 340 characters of three bytes and two letters make 1022 bytes; one more character makes 1025.
+    let within = format!("{}kk", "\u{65e5}".repeat(340));
+    let beyond = format!("{within}\u{65e5}");
+    assert_eq!(within.len(), KEY_LIMIT);
+    assert!(round_trip(&claim_key(&within)) == claim_key(&within));
+    assert!(model::parse(&write(&claim_key(&beyond))).is_err());
+}
+
+#[test]
+fn the_text_for_a_key_beyond_the_limit_is_json_holding_the_key() {
+    for key in [plain_key(2000), escaped_key(2000)] {
+        let text = write(&claim_key(&key));
+        let value: Json = serde_json::from_str(&text).expect("serde_json reads the text");
+        let claims = value["claims"].as_object().expect("claims");
+        assert_eq!(
+            claims.keys().collect::<Vec<_>>(),
+            [&key],
+            "the key is intact"
+        );
+        assert!(text.ends_with("}\n"));
+    }
+    let key = plain_key(2000);
+    let text = write(&property_key(&key));
+    let value: Json = serde_json::from_str(&text).expect("serde_json reads the text");
+    assert!(value["actions"]["act"]["arguments"]["properties"][&key].is_object());
 }
 
 /// `Some(null)` arguments are the one model value with no `protocol/1` spelling at all: `arguments:

@@ -3,16 +3,17 @@
 //! The first group holds protocols `parse` gives whose written text `parse` refuses: a mapping key
 //! the source spells within YAML's simple key limit, or spells as an explicit `?` key, and whose
 //! JSON spelling exceeds it. The limit counts bytes of the written text, quotes and escapes
-//! included, and a quoted key leaves 1022 of them.
+//! included, and a quoted key leaves 1022 of them. Decided in review, D1: the round trip holds up
+//! to that limit, and for a longer key `write` returns JSON that `serde_json` reads with the key
+//! intact, which `parse` refuses. Each case pins that.
 //!
-//! The second group holds a model built in Rust that the module documentation says is still
-//! written: a predicate nested deeper than `parse` reads.
+//! The second group holds a model built in Rust nested deeper than `parse` reads. Decided in
+//! review, D2: `write` recurses once per level and returns for every model whose nesting the
+//! calling thread's stack holds; the case writes a predicate 1000 deep on a 2 MiB stack.
 //!
 //! The third group pins what the writer documents and no other case observes, so a mutant of the
 //! writer that changes it turns a case red: `Some` of empty arguments, the order of keys inside
 //! `arguments`, the indent of every nesting level, and an empty description or result.
-
-use std::process::Command;
 
 use b10x_canon::model::{self, Claim, ClaimId, Declarations, Predicate, Protocol, write};
 
@@ -32,66 +33,106 @@ fn reads_back(source: &str) -> Protocol {
     protocol
 }
 
+/// `parse` gives a protocol from `source`; the text `write` gives for it is JSON that `serde_json`
+/// reads, which holds `key` as a key of `section`, and `parse` refuses that text.
+fn written_text_is_json_with_the_key_and_parse_refuses_it(source: &str, section: &str, key: &str) {
+    let protocol =
+        model::parse(source).unwrap_or_else(|error| panic!("parse refuses the source: {error}"));
+    let text = write(&protocol);
+    let value: serde_json::Value =
+        serde_json::from_str(&text).expect("serde_json reads the written text");
+    assert!(
+        value[section]
+            .as_object()
+            .is_some_and(|section| section.contains_key(key)),
+        "the key is intact in the written JSON"
+    );
+    assert!(text.ends_with("}\n"));
+    assert!(
+        model::parse(&text).is_err(),
+        "parse refuses the text for a key this long"
+    );
+}
+
 // ---------------------------------------------------------------------------------------------
 // Keys `parse` gives that the written text cannot hold.
 
+// Decided in review, D1
 #[test]
-fn a_plain_key_of_1023_bytes_parse_reads_reads_back() {
+fn a_plain_key_of_1023_bytes_is_given_by_parse_and_its_written_text_is_refused() {
     let id = "k".repeat(1023);
-    reads_back(&format!(
-        "{HEADER}claims:\n  {id}: {{true_when: {{all: []}}}}\n"
-    ));
+    written_text_is_json_with_the_key_and_parse_refuses_it(
+        &format!("{HEADER}claims:\n  {id}: {{true_when: {{all: []}}}}\n"),
+        "claims",
+        &id,
+    );
 }
 
+// Decided in review, D1
 #[test]
-fn a_plain_key_of_341_characters_parse_reads_reads_back() {
-    // 341 characters of three bytes each: 1023 bytes, far below the 1024 characters the module
-    // documentation names as the limit.
+fn a_plain_key_of_341_characters_is_given_by_parse_and_its_written_text_is_refused() {
+    // 341 characters of three bytes each: 1023 bytes, far below 1024 characters; the limit is in
+    // bytes.
     let id = "\u{65e5}".repeat(341);
-    reads_back(&format!(
-        "{HEADER}claims:\n  {id}: {{true_when: {{all: []}}}}\n"
-    ));
+    written_text_is_json_with_the_key_and_parse_refuses_it(
+        &format!("{HEADER}claims:\n  {id}: {{true_when: {{all: []}}}}\n"),
+        "claims",
+        &id,
+    );
 }
 
+// Decided in review, D1
 #[test]
-fn an_explicit_key_of_2000_bytes_parse_reads_reads_back() {
+fn an_explicit_key_of_2000_bytes_is_given_by_parse_and_its_written_text_is_refused() {
     let id = "k".repeat(2000);
-    reads_back(&format!(
-        "{HEADER}claims:\n  ? {id}\n  : {{true_when: {{all: []}}}}\n"
-    ));
+    written_text_is_json_with_the_key_and_parse_refuses_it(
+        &format!("{HEADER}claims:\n  ? {id}\n  : {{true_when: {{all: []}}}}\n"),
+        "claims",
+        &id,
+    );
 }
 
+// Decided in review, D1
 #[test]
-fn an_explicit_long_property_name_inside_arguments_reads_back() {
+fn an_explicit_long_property_name_inside_arguments_is_given_by_parse_and_its_text_is_refused() {
     let name = "x".repeat(1100);
-    reads_back(&format!(
+    let source = format!(
         "{HEADER}actions:\n  a:\n    arguments:\n      type: object\n      properties:\n        ? {name}\n        : {{type: string}}\n"
-    ));
+    );
+    let protocol = model::parse(&source).expect("parse gives the protocol");
+    let text = write(&protocol);
+    let value: serde_json::Value =
+        serde_json::from_str(&text).expect("serde_json reads the written text");
+    assert!(
+        value["actions"]["a"]["arguments"]["properties"][&name].is_object(),
+        "the property name is intact in the written JSON"
+    );
+    assert!(model::parse(&text).is_err());
 }
 
+// Decided in review, D1
 #[test]
-fn a_plain_key_of_600_backslashes_parse_reads_reads_back() {
-    // 600 bytes in the source; each backslash is written `\\`, so the written key is 1202 bytes.
+fn a_plain_key_of_600_backslashes_is_given_by_parse_and_its_written_text_is_refused() {
+    // 600 bytes in the source; each backslash is written `\\`, so the written key is 1200 bytes.
     let id = "\\".repeat(600);
-    reads_back(&format!(
-        "{HEADER}claims:\n  {id}: {{true_when: {{all: []}}}}\n"
-    ));
+    written_text_is_json_with_the_key_and_parse_refuses_it(
+        &format!("{HEADER}claims:\n  {id}: {{true_when: {{all: []}}}}\n"),
+        "claims",
+        &id,
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
-// A model built in Rust: `write` is documented total, and a value nested deeper than `parse`
-// reads "is still written".
+// A model built in Rust, nested deeper than `parse` reads.
 
-const DEEP_CHILD: &str = "ADVERSARY_PROTOCOL_WRITE_DEEP_CHILD";
-const DEEP_TEST: &str =
-    "a_predicate_nested_5000_deep_is_written_on_a_thread_with_the_default_stack";
-
+// Decided in review, D2
 #[test]
-fn a_predicate_nested_5000_deep_is_written_on_a_thread_with_the_default_stack() {
-    if std::env::var_os(DEEP_CHILD).is_some() {
-        let written = std::thread::spawn(|| {
+fn a_predicate_nested_1000_deep_is_written_on_a_thread_with_a_2_mib_stack() {
+    let written = std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(|| {
             let mut predicate = Predicate::All(Vec::new());
-            for _ in 0..5000 {
+            for _ in 0..1000 {
                 predicate = Predicate::Not(Box::new(predicate));
             }
             let mut protocol = model::parse(HEADER).expect("the header parses");
@@ -105,28 +146,22 @@ fn a_predicate_nested_5000_deep_is_written_on_a_thread_with_the_default_stack() 
             let text = write(&protocol);
             // The model is not dropped here: the case is about `write`, not about `Drop`.
             std::mem::forget(protocol);
-            text.matches("\"not\"").count()
+            text
         })
+        .expect("the thread starts")
         .join()
-        .expect("the writing thread returns");
-        assert_eq!(written, 5000);
-        return;
-    }
-    // A stack overflow aborts the process, so the write runs in a child test process.
-    let output = Command::new(std::env::current_exe().expect("the test binary"))
-        .args(["--exact", DEEP_TEST, "--test-threads=1", "--nocapture"])
-        .env(DEEP_CHILD, "1")
-        .env_remove("RUST_MIN_STACK")
-        .output()
-        .expect("the child test process runs");
+        .expect("write returns on the 2 MiB stack");
+    assert!(written.ends_with("}\n"));
+    assert_eq!(written.matches("\"not\"").count(), 1000);
+    // Each `not` is one object deeper: the innermost is 1000 objects below the claim's.
+    let deepest = written
+        .lines()
+        .map(|line| line.len() - line.trim_start().len())
+        .max();
+    assert!(deepest.is_some_and(|indent| indent >= 2 * 1000));
     assert!(
-        output.status.success(),
-        "write does not return for a predicate nested 5000 deep: {}\n{}",
-        output.status,
-        String::from_utf8_lossy(&output.stderr)
-            .lines()
-            .rfind(|line| !line.trim().is_empty())
-            .unwrap_or("")
+        model::parse(&written).is_err(),
+        "parse reads at most 123 levels"
     );
 }
 

@@ -2,13 +2,15 @@
 //! text.
 //!
 //! [`write`] gives canonical JSON, which [`parse`](super::parse) reads as YAML, so
-//! `parse(&write(&p)) == Ok(p)` for every model `p` that `parse` gives. The writer is hand-written
+//! `parse(&write(&p)) == Ok(p)` for every model `p` that `parse` gives in which every key, as
+//! written with its escapes, is at most 1022 bytes (see "Keys"). The writer is hand-written
 //! beside the model, as the `canon-ir/1` writer is: the model derives no `Serialize`, because a
 //! derived one would write Rust variant tags and `null` for an absent option, which every optional
 //! key refuses on read. Every model struct is destructured with no `..`, so a field added to the
-//! model stops this file compiling until the writer writes it. `write` is total and infallible: it
-//! writes a model the validator refuses (a repeated identifier, a dangling reference) like any
-//! other, and `canon validate` stays the only judge of validity.
+//! model stops this file compiling until the writer writes it. `write` is infallible and returns
+//! for every model whose nesting the calling thread's stack holds (see "Depth"). It writes a model
+//! the validator refuses (a repeated identifier, a dangling reference) like any other, and
+//! `canon validate` stays the only judge of validity.
 //!
 //! # Layout
 //!
@@ -86,17 +88,33 @@
 //!   range of a double (`1e400`) is written as its text, and `parse` reads it as the string
 //!   `"1e400"`, as it does in any document: no spelling reads back as that number.
 //!
-//! # Model values `parse` never gives
+//! # Keys
 //!
-//! `parse` is the other half of the contract, and it has limits the writer cannot lift. A model
-//! value outside them is still written, and `parse` refuses or changes the text exactly as it
-//! would refuse the same value written in block YAML:
+//! The YAML reader behind `parse` drops a simple key whose text runs more than 1024 bytes before
+//! its `:`. A key is written quoted, so the quotes count and the key leaves 1022 bytes of written
+//! text, escapes included: a `\`, a `"` and a line feed, carriage return, tab, backspace or form
+//! feed take two bytes, every other escaped character six, and any other character its length in
+//! UTF-8. The limit holds for an identifier and for a property
+//! name inside `arguments`, and `parse` itself gives longer keys (a plain key of 1023 bytes, an
+//! explicit `?` key of any length, a key whose escapes grow it when written). JSON has one spelling
+//! for a key, so the round trip holds for a model in which every key is at most 1022 bytes as
+//! written, and for a longer key `write` still returns JSON that `serde_json` reads with the key
+//! intact, and `parse` refuses that text.
+//!
+//! # Depth
+//!
+//! `write` recurses once per level of nesting of a predicate or of an `arguments` value, so it
+//! uses stack in proportion to the nesting depth and returns for every model whose nesting the
+//! calling thread's stack holds. `parse` gives at most 123 levels of predicate and 125 of
+//! `arguments` (`serde_yaml_ng`'s recursion limit), and the written text nests exactly as deep as
+//! the model, so every model `parse` gives is written and read back. A model built in Rust nested
+//! deeper than `parse` reads is written (a predicate 1000 deep, on a thread with a 2 MiB stack,
+//! in a debug build) as far as the stack allows, and `parse` refuses its text.
+//!
+//! # Model values `parse` never gives
 //!
 //! - `arguments: Some(null)`: `parse` refuses an explicit `null` on `arguments`, so the model has
 //!   no `protocol/1` spelling for it. A `null` inside the arguments reads back.
-//! - A predicate or an `arguments` value nested deeper than `serde_yaml_ng`'s recursion limit.
-//!   The written text nests as deep as the model, so a model `parse` gave is read back.
-//! - A key longer than YAML's simple key limit of 1024 characters, which a flow mapping has too.
 //! - A number beyond the range of a double, in the build that holds number text: it reads back as
 //!   a string.
 //!
