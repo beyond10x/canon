@@ -2313,21 +2313,27 @@ pub(super) fn positive_reads<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Re
 }
 
 /// One evidence dimension as `canon simulate` walks it (story:canon-simulate): its kind, how a
-/// state writes it, its classes in class order and how a record of each of its producer profiles
-/// is written after its class, in profile order.
+/// state writes it, its classes in class order, how a record of each of its producer profiles is
+/// written after its class, in profile order, and which profile is within which.
 pub(crate) struct Walked<'a> {
     pub(crate) kind: &'a EvidenceKindId,
     /// `` `k` ``, or `` `k` about `b` `` for a bound dimension.
     pub(crate) name: String,
+    /// Empty for a dimension of a protocol that declares no artifact: no record can be about one.
     pub(crate) classes: Vec<Option<&'a str>>,
     /// Empty for the empty profile, otherwise `` by a producer independent on `d`, `e` ``.
     pub(crate) profiles: Vec<String>,
+    /// `within[i][j]`: profile `i` is within profile `j`, so a record from a producer of profile
+    /// `j` meets every demand one of profile `i` meets.
+    pub(crate) within: Vec<Vec<bool>>,
 }
 
-/// The states of the whole space a walk from the empty case reaches (story:canon-simulate): only
-/// adding steps, each a current record of one class and profile, an authority decision on an
-/// undecided capability or a decision taken. A walk takes no step on a history, later-record,
-/// last-record or order dimension, which stay at their least value.
+/// What `canon simulate` needs of the space (story:canon-simulate). A walk holds its own records:
+/// for each evidence dimension and class, the producer profiles of its current records, observed
+/// after every move of an upstream artifact, so it never needs a dimension's whole table of
+/// values, which a dimension of many upstream artifacts or profiles does not fit in a `u32`. The
+/// rest of a walk's state is a state of this space with every evidence dimension at no record and
+/// every history dimension at its least value: capabilities, decisions and case inputs.
 impl<'a> Space<'a> {
     /// Each evidence dimension, in dimension order, as a walk adds records to it.
     pub(crate) fn walked(&self) -> Vec<Walked<'a>> {
@@ -2352,40 +2358,18 @@ impl<'a> Space<'a> {
                         }
                     })
                     .collect(),
+                within: kind
+                    .profiles
+                    .iter()
+                    .map(|inner| {
+                        kind.profiles
+                            .iter()
+                            .map(|outer| inner.is_subset(outer))
+                            .collect()
+                    })
+                    .collect(),
             })
             .collect()
-    }
-
-    /// The first evidence dimension whose values a state cannot hold, as the bound refusal names
-    /// it with its number of values: one with more producer sets than the bound, or more values
-    /// than a `u32` holds. `None` when every dimension fits.
-    pub(crate) fn unwalkable(&self) -> Option<String> {
-        self.kinds.iter().find_map(|kind| {
-            let fits = kind.values.is_some()
-                && kind
-                    .radix()
-                    .is_some_and(|radix| radix <= u128::from(u32::MAX) + 1);
-            if fits {
-                return None;
-            }
-            let count = match (kind.radix(), &kind.values, kind.variants()) {
-                (Some(n), ..) => n.to_string(),
-                (None, Some(values), Some(variants)) => format!("{}^{variants}", values.len()),
-                (None, Some(values), None) => format!(
-                    "{}^({} * 2^{})",
-                    values.len(),
-                    kind.classes.len(),
-                    kind.upstreams.len()
-                ),
-                (None, None, _) => format!(
-                    "more than {}^({} * 2^{})",
-                    super::STATE_BOUND,
-                    kind.classes.len(),
-                    kind.upstreams.len()
-                ),
-            };
-            Some(format!("evidence kind {} {count}", kind.dimension_name()))
-        })
     }
 
     /// How many initial states a walk has: one per assignment of case-input values. `None` when
@@ -2415,50 +2399,6 @@ impl<'a> Space<'a> {
                 state
             })
             .collect()
-    }
-
-    /// `state` with one more current record in the evidence dimension at `at`: of its class at
-    /// `class`, observed after every move of an upstream artifact, from a producer of its profile
-    /// at `profile`. The state itself when such a record, or one from a producer independent on
-    /// more, is already there. Called only when [`Space::unwalkable`] is `None`.
-    pub(crate) fn with_record(
-        &self,
-        state: &State,
-        at: usize,
-        class: usize,
-        profile: usize,
-    ) -> State {
-        let kind = &self.kinds[at];
-        let values = kind.values.as_ref().expect("a walkable dimension");
-        let base = values.len() as u128;
-        let vectors = u128::from(kind.vectors().expect("a walkable dimension"));
-        let variant = u32::try_from(class as u128 * vectors).expect("a walkable dimension");
-        let place = base.pow(variant);
-        let value = u128::from(state[at]);
-        let digit = (value / place) % base;
-        let held = &values[usize::try_from(digit).expect("a digit")];
-        let within =
-            |inner: usize, outer: usize| kind.profiles[inner].is_subset(&kind.profiles[outer]);
-        let members: Vec<usize> = (0..kind.profiles.len())
-            .filter(|q| held.iter().any(|p| within(*q, *p)) || within(*q, profile))
-            .collect();
-        let greatest: Producers = members
-            .iter()
-            .copied()
-            .filter(|member| {
-                !members
-                    .iter()
-                    .any(|other| other != member && within(*member, *other))
-            })
-            .collect();
-        let next = values
-            .iter()
-            .position(|producers| *producers == greatest)
-            .expect("a down-closed set is a value") as u128;
-        let mut walked = state.clone();
-        walked[at] =
-            u32::try_from(value - digit * place + next * place).expect("a walkable dimension");
-        walked
     }
 
     /// Each capability some action requires, in identifier order.
@@ -2491,8 +2431,105 @@ impl<'a> Space<'a> {
         })
     }
 
-    /// The state as a report writes it, as [`Space::render`] does.
-    pub(crate) fn rendered(&self, state: &State) -> String {
-        self.render(state)
+    /// Whether every capability decision and every taken decision of `smaller` is in `larger`,
+    /// and both give every case input the same value: the part of a walk's containment its
+    /// records do not decide.
+    pub(crate) fn decided_within(&self, smaller: &State, larger: &State) -> bool {
+        let capabilities = self.kinds.len()..self.kinds.len() + self.capabilities.len();
+        let decisions = capabilities.end..capabilities.end + self.decisions.len();
+        let inputs = decisions.end..decisions.end + self.inputs.len();
+        capabilities
+            .chain(decisions)
+            .all(|at| smaller[at] == 0 || smaller[at] == larger[at])
+            && smaller[inputs.clone()] == larger[inputs]
+    }
+
+    /// The evidence records of a walk's records, as [`Space::evidence`] writes the current records
+    /// of a state: for each `(dimension, class, producers)` of `held`, in that order, one record
+    /// per producer profile, about the dimension's artifact at [`REVISION`], recording every
+    /// upstream artifact at [`REVISION`], with no observation instant.
+    pub(crate) fn walk_evidence(&self, held: &[(usize, usize, Vec<usize>)]) -> Vec<EvidenceRecord> {
+        let mut records = Vec::new();
+        for (at, class, producers) in held {
+            let kind = &self.kinds[*at];
+            let Some(record) = &kind.record else {
+                continue;
+            };
+            let upstream_revisions = Declarations::new(
+                kind.upstreams
+                    .iter()
+                    .map(|artifact| ((*artifact).clone(), Revision::new(REVISION)))
+                    .collect(),
+            );
+            for profile in producers {
+                let mut walked = EvidenceRecord {
+                    id: EvidenceId::new(format!("e{}", records.len())),
+                    result: kind.classes[*class].map(str::to_owned),
+                    observed_at: None,
+                    upstream_revisions: upstream_revisions.clone(),
+                    producer: self.producer(&kind.profiles[*profile]),
+                    ..record.clone()
+                };
+                if walked.kind.as_str() == CASE_OUTCOME {
+                    walked.child_case = Some(CaseId::new(walked.id.as_str()));
+                    if walked.result.is_none() {
+                        walked.result = Some(self.unlisted.clone());
+                    }
+                }
+                records.push(walked);
+            }
+        }
+        records
+    }
+
+    /// A walk's state as a report writes it, as [`Space::render`] writes a state: its records
+    /// (`held`, in dimension, class and profile order), then the decided capabilities, the taken
+    /// decisions and the case inputs of `state`. It reads no dimension's table of values, which a
+    /// dimension too large for the check does not have.
+    pub(crate) fn render_walk(&self, state: &State, held: &[(usize, usize, Vec<usize>)]) -> String {
+        let mut items = Vec::new();
+        for (at, class, producers) in held {
+            let kind = &self.kinds[*at];
+            for profile in producers {
+                let name = kind.name();
+                let mut item = match kind.classes[*class] {
+                    Some(result) => format!("evidence {name} result `{}`", one_line(result)),
+                    None => format!("evidence {name}"),
+                };
+                let profile = &kind.profiles[*profile];
+                if !profile.is_empty() {
+                    item.push_str(&format!(
+                        " by a producer independent on {}",
+                        listed(profile)
+                    ));
+                }
+                items.push(item);
+            }
+        }
+        let capabilities = &state[self.kinds.len()..];
+        for (id, value) in self.capabilities.iter().zip(capabilities) {
+            if *value != UNDECIDED {
+                let decision = if *value == GRANTED {
+                    "granted"
+                } else {
+                    "denied"
+                };
+                items.push(format!("capability `{}` {decision}", one_line(id.as_str())));
+            }
+        }
+        let decisions = &state[self.kinds.len() + self.capabilities.len()..];
+        for ((name, _), value) in self.decisions.iter().zip(decisions) {
+            if *value != 0 {
+                items.push(format!("decision `{}` taken", one_line(name.as_str())));
+            }
+        }
+        for (id, value) in self.inputs(state).iter() {
+            items.push(format!(
+                "input `{}` `{}`",
+                one_line(id.as_str()),
+                one_line(value.as_str())
+            ));
+        }
+        format!("{{{}}}", items.join(", "))
     }
 }

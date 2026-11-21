@@ -152,18 +152,23 @@ pub enum Command {
         import: Vec<PathBuf>,
     },
     /// Walk every state a case of a `protocol/1` document can reach from the empty case, one step
-    /// at a time, and report: each stuck state (no outcome legitimate and no action admissible or
-    /// approval-required) with the shortest path that reaches it, each cycle (no outcome
-    /// legitimate, no action approval-required, and every step of every admissible action returns
-    /// the same state), each action admissible in no reachable state, and each outcome legitimate
-    /// in no reachable state. A step adds one current record an admissible action may produce,
-    /// grants or denies one capability some action requires, or takes one decision some outcome
-    /// requires; no action runs. A record of a kind that declares `supplied_by` may arrive at any
-    /// step, and a state that waits only on one is counted as waiting, not reported as stuck. The
-    /// summary counts the reachable states and, per outcome, those in which it is legitimate. A
-    /// protocol with an order form (`first`, `before`, `after`, `since`) is refused
-    /// (`ordered-evidence`), and so is a walk that would visit more than 65536 states
-    /// (`reachable-state-bound`), which reports nothing of what it saw.
+    /// at a time, and report the states no sequence of steps gets out of, each action admissible
+    /// in no reachable state, and each outcome legitimate in no reachable state. A step adds one
+    /// current record an admissible action may produce, adds one record of a kind that declares
+    /// `supplied_by` (at any step), lets one record class of a kind that declares `max_age`
+    /// expire, grants or denies one capability some action requires, or takes one decision some
+    /// outcome requires; no action runs. A state is open when action, supplied, expiry and
+    /// authority steps lead from it to a legitimate outcome; decisions do not count. A state that
+    /// is not open is a stuck state when no action is admissible or approval-required, and a cycle
+    /// when no action is approval-required and every step of every admissible action returns the
+    /// same state. Each is printed once, at its smallest state, with the shortest path that
+    /// reaches it, each decision that would make an outcome legitimate there, and how many other
+    /// such states contain it; an open state with nothing to do is counted as waiting. The summary
+    /// counts the reachable states, per outcome those in which it is legitimate, the waiting
+    /// states, the findings and the stuck and cycle states they stand for. A protocol with an
+    /// order form (`first`, `before`, `after`, `since`) is refused (`ordered-evidence`), and so is
+    /// a walk that would visit more than 65536 states (`reachable-state-bound`), which reports
+    /// nothing of what it saw.
     Simulate {
         /// The protocol document to simulate.
         #[arg(long)]

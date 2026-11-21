@@ -941,8 +941,19 @@ fn enumerate<'s, 'a>(ir: &Ir, space: &'s Space<'a>) -> Result<Enumerated<'s, 'a>
 
 /// Evaluates one state with the evaluator and keeps each action's and outcome's status.
 pub(crate) fn evaluate(ir: &Ir, space: &Space<'_>, state: &State) -> Result<Evaluated, Refusal> {
+    evaluate_records(ir, space, state, space.evidence(state))
+}
+
+/// [`evaluate`] over `evidence` in place of the records of `state`'s evidence dimensions, whose
+/// capabilities, decisions and case inputs it still reads: how `canon simulate` evaluates a state
+/// of its walk, which holds its records itself (story:canon-simulate).
+pub(crate) fn evaluate_records(
+    ir: &Ir,
+    space: &Space<'_>,
+    state: &State,
+    evidence: Vec<crate::model::EvidenceRecord>,
+) -> Result<Evaluated, Refusal> {
     let revision = Revision::new(space::REVISION);
-    let evidence = space.evidence(state);
     let case = Case {
         format: CASE_FORMAT.to_owned(),
         independence: space.independence(&evidence),

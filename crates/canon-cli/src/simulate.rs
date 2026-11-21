@@ -1,5 +1,6 @@
 //! `canon simulate`: reads the `protocol/1` document, composes and compiles it and hands it to the
-//! library, which walks every state a case can reach from the empty case (story:canon-simulate).
+//! library, which walks every state a case can reach from the empty case (story:canon-simulate,
+//! with the rules refined after adversary pass 1).
 
 use std::path::Path;
 use std::process::ExitCode;

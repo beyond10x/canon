@@ -1,4 +1,5 @@
 use super::*;
+use crate::eval::Supplied;
 use crate::{ir, model};
 
 fn compiled(source: &str) -> Ir {
@@ -46,12 +47,13 @@ fn a_producer_profile_is_a_step_of_its_own() {
          no-outcome-reachable: protocol `p` revision 1 reaches no state in which an outcome is \
          legitimate\n\
          simulated: protocol `p` revision 1: 3 reachable states, 0 terminable (outcome `shipped` \
-         0), 4 findings\n"
+         0), 4 findings (2 stuck or cycle states)\n"
     );
 }
 
-/// A supplied record arrives by a step of its own, naming its supplier; a state a supplied
-/// record can still leave waits, and the state no supplied record leaves is stuck.
+/// A supplied record arrives by a step of its own, naming its supplier. A state a supplied
+/// record leads out of waits; one only a supplied veto has reached is stuck, and its finding is
+/// printed at its smallest state.
 #[test]
 fn a_supplied_record_is_a_step_naming_its_supplier() {
     let source = format!(
@@ -74,18 +76,19 @@ fn a_supplied_record_is_a_step_naming_its_supplier() {
     );
     assert_eq!(
         report(&source),
-        "stuck-state: state {evidence `peer_review`, evidence `veto`}: no outcome is legitimate \
-         and no action is admissible or approval-required; path: protocol `q` supplies evidence \
-         `peer_review`, then protocol `q` supplies evidence `veto`\n\
+        "stuck-state: state {evidence `veto`}: no outcome is legitimate and no action is \
+         admissible or approval-required; path: protocol `q` supplies evidence `veto`; 1 other \
+         stuck state contains it\n\
          simulated: protocol `p` revision 1: 6 reachable states, 2 terminable (outcome \
-         `published` 2), 2 waiting on supplied evidence, 1 finding\n"
+         `published` 2), 1 waiting on supplied evidence or expiry, 1 finding (2 stuck or cycle \
+         states)\n"
     );
 }
 
-/// A decision is a step: an outcome that requires one is legitimate after it, and a state where
-/// no action is admissible is stuck though a decision could still be taken there.
+/// A decision is a step but no way out: a state from which only a decision leads to a
+/// legitimate outcome is stuck, and its finding names the decision and the outcome.
 #[test]
-fn a_decision_is_a_step() {
+fn a_decision_is_named_on_the_finding_it_would_end() {
     let source = format!(
         "{HEAD}\
          evidence_kinds:\n\
@@ -97,23 +100,28 @@ fn a_decision_is_a_step() {
          [{{evidence: draft}}]}}\n\
          outcomes:\n\
          \x20 abandoned: {{description: Abandoned., requires: {{decision: abandon}}}}\n\
-         \x20 done: {{description: Done., requires: {{claim: drafted}}}}\n"
+         \x20 dropped: {{description: Dropped., requires: {{decision: abandon}}}}\n\
+         \x20 done: {{description: Done., requires: {{claim: drafted}}}}\n\
+         \x20 halted: {{description: Halted., requires: {{decision: halt}}}}\n"
     );
     assert_eq!(
         report(&source),
         "stuck-state: state {}: no outcome is legitimate and no action is admissible or \
-         approval-required; path: empty\n\
+         approval-required; path: empty; decision `abandon` taken makes outcome `abandoned`, \
+         outcome `dropped` legitimate, decision `halt` taken makes outcome `halted` legitimate\n\
          dead-action: action `write` is admissible in no reachable state\n\
          unreached-outcome: outcome `done` is legitimate in no reachable state\n\
-         simulated: protocol `p` revision 1: 2 reachable states, 1 terminable (outcome \
-         `abandoned` 1, outcome `done` 0), 3 findings\n"
+         simulated: protocol `p` revision 1: 4 reachable states, 3 terminable (outcome \
+         `abandoned` 2, outcome `done` 0, outcome `dropped` 2, outcome `halted` 2), 3 findings \
+         (1 stuck or cycle state)\n"
     );
 }
 
-/// A dimension with more values than a state holds is refused, naming it, before any state is
-/// walked: five classes in eight upstream variants each are `2^40` values.
+/// The number of values of a dimension is no reason to refuse (R1): five classes in eight
+/// upstream variants each are `2^40` values in the check's space, and the walk reaches six
+/// states.
 #[test]
-fn a_dimension_a_state_cannot_hold_is_refused() {
+fn a_dimension_wider_than_a_state_value_is_walked() {
     let mut source = String::from(
         "format: protocol/1\n\
          protocol: {id: p, revision: 1, description: A protocol.}\n\
@@ -123,7 +131,8 @@ fn a_dimension_a_state_cannot_hold_is_refused() {
          \x20 u2: {description: An upstream.}\n\
          \x20 u3: {description: An upstream.}\n\
          evidence_kinds: {review: {description: A review.}}\n\
-         claims:\n",
+         claims:\n\
+         \x20 reviewed: {description: Reviewed., true_when: {evidence: {kind: review}}}\n",
     );
     for result in ["a", "b", "c", "d"] {
         source.push_str(&format!(
@@ -138,19 +147,119 @@ fn a_dimension_a_state_cannot_hold_is_refused() {
         ));
     }
     source.push_str(
-        "actions: {review: {description: Review., may_produce: [{evidence: review}]}}\n\
+        "actions: {review: {description: Review once., precondition: {claim: reviewed, is: \
+         unknown}, may_produce: [{evidence: review}]}}\n\
          outcomes: {a: {description: A., requires: {claim: a}}}\n",
     );
-    let refused = simulate(&compiled(&source)).expect_err("refused");
-    assert_eq!(refused.code(), "reachable-state-bound");
-    assert_eq!(
-        refused.to_string(),
-        "protocol `p` revision 1: evidence kind `review` with upstream `u1`, `u2`, `u3` \
-         1099511627776 values, more than a state of the walk holds"
-    );
+    let walked = simulate(&compiled(&source)).expect("walked");
+    assert_eq!((walked.states, walked.terminable), (6, 1), "{walked}");
 }
 
-/// The walk is a pure function: the same IR gives the same report.
+const EXPIRY: &str = "format: protocol/1\n\
+    protocol: {id: p, revision: 1, description: A protocol.}\n\
+    artifacts: {doc: {description: The document.}}\n\
+    evidence_kinds:\n\
+    \x20 observation: {description: An observation valid for an hour., max_age: 1h}\n\
+    \x20 seal: {description: A seal.}\n\
+    \x20 renewal: {description: A renewal.}\n\
+    claims:\n\
+    \x20 observed: {description: Observed., true_when: {evidence: {kind: observation}}}\n\
+    \x20 sealed: {description: Sealed., true_when: {evidence: {kind: seal}}}\n\
+    \x20 renewed: {description: Renewed., true_when: {evidence: {kind: renewal}}}\n\
+    actions:\n\
+    \x20 observe: {description: Observe., may_produce: [{evidence: observation}]}\n\
+    \x20 place_seal: {description: Seal., precondition: {claim: observed}, may_produce: \
+    [{evidence: seal}]}\n\
+    \x20 renew: {description: Renew., precondition: {all: [{claim: sealed}, {claim: observed, \
+    is: unknown}]}, may_produce: [{evidence: renewal}]}\n\
+    outcomes:\n\
+    \x20 renewed: {description: Renewed., requires: {claim: renewed}}\n";
+
+/// The state after an expiry step evaluates as a case in which the record is past its `max_age`
+/// (R2): the walk's `{seal}`, reached from `{observation, seal}` by `evidence `observation`
+/// expires`, gives every action and outcome the status the evaluator gives the case with both
+/// records, evaluated two hours after the observation.
+#[test]
+fn the_state_after_an_expiry_evaluates_as_a_case_past_its_max_age() {
+    let ir = compiled(EXPIRY);
+    let space = Space::new(&ir);
+    let dimensions = space.walked();
+    let base = space.initial_states().remove(0);
+    let layout = Layout::new(&dimensions, base.len());
+    let mut empty = base.clone();
+    empty.resize(layout.length(), 0);
+    let at = |kind: &str| {
+        dimensions
+            .iter()
+            .position(|walked| walked.kind.as_str() == kind)
+            .expect("a dimension of the kind")
+    };
+    let both = layout.add(
+        &layout.add(&empty, at("observation"), 0, 0),
+        at("seal"),
+        0,
+        0,
+    );
+    let expired = layout.expire(&both, at("observation"), 0);
+    assert_eq!(expired, layout.add(&empty, at("seal"), 0, 0));
+    let walked = check::evaluate_records(
+        &ir,
+        &space,
+        &base,
+        space.walk_evidence(&layout.held(&expired)),
+    )
+    .expect("evaluates");
+
+    let case = eval::read_case(
+        "format: canon-case/1\nid: C-1\nprotocol: p\nartifacts: {doc: {revision: r1}}\n",
+    )
+    .expect("a case");
+    let evidence: Vec<_> = [
+        ("e1", "observation", "2026-01-01T00:00:00Z"),
+        ("e2", "seal", "2026-01-01T00:10:00Z"),
+    ]
+    .iter()
+    .map(|(id, kind, at)| {
+        eval::read_evidence(&format!(
+            "format: canon-evidence/1\nid: {id}\nkind: {kind}\nsubject: doc\n\
+             subject_revision: r1\nobserved_at: {at}\n"
+        ))
+        .expect("a record")
+    })
+    .collect();
+    let decision = eval::evaluate_with(
+        &ir,
+        &case,
+        &evidence,
+        Supplied {
+            at: Some("2026-01-01T02:00:00Z"),
+            ..Supplied::default()
+        },
+    )
+    .expect("evaluates");
+    let status = |section: &Option<model::Json>, id: &str| {
+        section.as_ref().expect("a section")[id]["status"]
+            .as_str()
+            .expect("a status")
+            .to_owned()
+    };
+    let real: Vec<String> = ir
+        .actions
+        .keys()
+        .map(|id| status(&decision.actions, id.as_str()))
+        .chain(
+            ir.outcomes
+                .keys()
+                .map(|id| status(&decision.outcomes, id.as_str())),
+        )
+        .collect();
+    let simulated: Vec<String> = walked.actions.into_iter().chain(walked.outcomes).collect();
+    assert_eq!(simulated, real);
+    assert_eq!(real, ["admissible", "blocked", "admissible", "blocked"]);
+}
+
+/// The walk is a pure function: the same IR gives the same report, and a protocol with its
+/// declarations in another order compiles to the same IR and gives the same bytes.
 #[test]
 fn the_same_protocol_gives_the_same_report() {
     let source = format!(
@@ -163,4 +272,10 @@ fn the_same_protocol_gives_the_same_report() {
     );
     let ir = compiled(&source);
     assert_eq!(simulate(&ir), simulate(&ir));
+    let renewal = "\x20 renewal: {description: A renewal.}\n";
+    let reordered: String = EXPIRY
+        .replace(renewal, "")
+        .replace("evidence_kinds:\n", &format!("evidence_kinds:\n{renewal}"));
+    assert_ne!(reordered, EXPIRY);
+    assert_eq!(report(&reordered), report(EXPIRY));
 }
