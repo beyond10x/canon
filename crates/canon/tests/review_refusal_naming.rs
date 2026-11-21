@@ -1,7 +1,8 @@
 //! Independent review of wave 2026-10-04-w7: every refusal names what it refuses.
 //!
 //! The evidence check refuses "each evidence record in the order given" (module docs of
-//! `eval`), and most of its refusals name the record: `` evidence `e2` is given more than once ``,
+//! `eval`), and most of its refusals name the record: `` evidence `e2` is given more than once
+//! with different content ``,
 //! `` evidence `e2` is of kind `z`, which the protocol does not declare ``, `` evidence `e2`
 //! observed_at `…` is not an instant ``. Four do not: a record whose `format` is not
 //! `canon-evidence/1` (`format is `x`, expected `canon-evidence/1``, the same words a case
@@ -122,7 +123,10 @@ fn each_evidence_refusal_names_the_record_it_refuses() {
             e2.replace("subject_revision: r1", "subject_revision: 'r 1'"),
         ),
         // Controls: these already name the record.
-        ("duplicate id", record("e1")),
+        (
+            "duplicate id",
+            record("e1").replace("subject_revision: r1", "subject_revision: r2"),
+        ),
         ("undeclared kind", e2.replace("kind: k", "kind: z")),
     ] {
         let refused = refusal(bad);
