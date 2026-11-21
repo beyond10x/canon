@@ -1,15 +1,16 @@
 //! Three-valued claim evaluation over an evidence set (the rules are in the module docs of
 //! [`super`]).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, HashMap};
+use std::hash::{BuildHasherDefault, Hasher};
 
 use super::Refusal;
 use super::independence::Independence;
 use super::invalidation::Invalidated;
-use crate::ir::Ir;
+use crate::ir::{Claim, Ir};
 use crate::model::{
-    ArtifactId, ClaimId, EvidenceId, EvidenceKindId, EvidenceMatch, EvidenceRecord, InputId,
-    InputTest, InputValue, Predicate, Truth, one_line,
+    ArtifactId, ClaimId, EvidenceKindId, EvidenceMatch, EvidenceRecord, InputId, InputTest,
+    InputValue, Predicate, Truth, one_line,
 };
 
 /// The evidence a predicate reads: the records the exclusion stages `left`, which evidence matches
@@ -84,97 +85,233 @@ fn input_test(test: &InputTest, inputs: &Inputs) -> Truth {
 /// record invalidated for it, including the matches of every claim it tests, through any number of
 /// claim references. A claim it tests is evaluated, for that use, with the records invalidated for
 /// either of them kept out; the value reported for that claim is its own, in its own context.
+///
+/// Each claim's predicate is evaluated once per distinct context it is reached in. A context is
+/// known by a number, and the records it keeps out are marked by their place among the records the
+/// invalidation stage moved, so deciding whether a match reads a record looks nothing up: a chain
+/// of `n` claims each with its own context costs `n (n + 1) / 2` claim evaluations, each in
+/// constant time beside the records its matches read.
 pub(super) fn values(
     ir: &Ir,
     evidence: EvidenceSets<'_>,
     invalidated: &Invalidated,
     inputs: &Inputs,
 ) -> Result<BTreeMap<ClaimId, Truth>, Refusal> {
+    let claims: Vec<(&ClaimId, &Claim)> = ir.claims.iter().collect();
     let mut walk = Walk {
-        ir,
         evidence,
-        invalidated,
         inputs,
-        values: BTreeMap::new(),
+        place_of: evidence
+            .left
+            .iter()
+            .map(|record| invalidated.place(&record.id))
+            .collect(),
+        kept_out: vec![false; invalidated.moved().len()],
+        numbers: claims
+            .iter()
+            .enumerate()
+            .map(|(number, (id, _))| (*id, number))
+            .collect(),
+        open: vec![false; claims.len()],
+        alone: vec![None; claims.len()],
+        decided_alone: Vec::new(),
+        claims,
+        contexts: BTreeMap::new(),
+        shared: Vec::new(),
+        values: HashMap::default(),
         in_progress: Vec::new(),
     };
+    // Each claim's own context, and which contexts more than one claim starts a walk in.
+    let starts: Vec<Context> = (0..walk.claims.len())
+        .map(|number| walk.context(invalidated.kept(walk.claims[number].0)))
+        .collect();
+    let mut starting = vec![0usize; walk.contexts.len()];
+    for context in &starts {
+        starting[*context] += 1;
+    }
+    walk.shared = starting.into_iter().map(|claims| claims > 1).collect();
     let mut reported = BTreeMap::new();
-    for id in ir.claims.keys() {
-        let own = walk.own(id);
-        reported.insert(id.clone(), walk.value_in(id, &own)?);
+    for (number, context) in starts.into_iter().enumerate() {
+        let id = walk.claims[number].0;
+        let own = invalidated.kept(id);
+        walk.keep_out(own, true);
+        let value = walk.decide(number, context);
+        walk.keep_out(own, false);
+        walk.forget_alone();
+        reported.insert(id.clone(), value?);
     }
     Ok(reported)
 }
 
-/// The records kept out of an evaluation: those invalidated for the claim whose context it is.
-type Context = BTreeSet<EvidenceId>;
+/// A context: the number [`Walk`] gave the records it keeps out when it first met them.
+type Context = usize;
+
+/// The hasher of the walk's maps: fixed, so evaluation reads no randomness. Nothing iterates those
+/// maps, so their order never reaches an output.
+type Fixed = BuildHasherDefault<MultiplyRotate>;
+
+/// A multiply-rotate hash over machine words: the walk's keys are claim ids and pairs of numbers,
+/// which it spreads well enough, at a few instructions a word.
+#[derive(Default)]
+struct MultiplyRotate(u64);
+
+impl MultiplyRotate {
+    fn add(&mut self, word: u64) {
+        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+}
+
+impl Hasher for MultiplyRotate {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for chunk in bytes.chunks(8) {
+            let mut word = [0; 8];
+            word[..chunk.len()].copy_from_slice(chunk);
+            self.add(u64::from_le_bytes(word));
+        }
+    }
+
+    fn write_usize(&mut self, number: usize) {
+        self.add(number as u64);
+    }
+}
 
 /// One evaluation: each claim decided so far in each context, and the claims being decided,
 /// outermost first.
+///
+/// Every claim is evaluated in the context of the claim [`values`] starts from, through every
+/// claim it tests (the predicate's claim tests), so the records that context keeps out are marked
+/// in `kept_out` for the whole of that walk. Claims are known by their number in claim-id order.
+/// A value decided in a context that only one walk starts in is kept by claim number for that walk
+/// alone; one decided in a context several walks share is kept for all of them.
 struct Walk<'a> {
-    ir: &'a Ir,
     evidence: EvidenceSets<'a>,
-    /// What the invalidation stage kept from each claim.
-    invalidated: &'a Invalidated,
     /// The case's input values, which input tests read.
     inputs: &'a Inputs,
-    values: BTreeMap<(ClaimId, Context), Truth>,
-    in_progress: Vec<ClaimId>,
+    /// For each record of `evidence.left`, its place among the records the invalidation stage
+    /// moved (`Invalidated::moved`), when it moved it.
+    place_of: Vec<Option<usize>>,
+    /// By place among the moved records: whether the context of the walk keeps the record out.
+    kept_out: Vec<bool>,
+    /// Each declared claim, by number.
+    claims: Vec<(&'a ClaimId, &'a Claim)>,
+    /// The number of each declared claim.
+    numbers: HashMap<&'a ClaimId, usize, Fixed>,
+    /// The number of each context met so far: equal records, equal number.
+    contexts: BTreeMap<&'a [usize], Context>,
+    /// By context: whether more than one claim starts a walk in it, so a value decided in it is
+    /// kept for the walks after this one.
+    shared: Vec<bool>,
+    /// Each claim's value in each shared context, by context and claim number.
+    values: HashMap<(Context, usize), Truth, Fixed>,
+    /// By claim number, each value decided in the context of this walk when no other walk starts
+    /// in it: kept for this walk only, as a diamond within it needs.
+    alone: Vec<Option<Truth>>,
+    /// The claims `alone` holds a value of.
+    decided_alone: Vec<usize>,
+    /// The claims being decided, by number, outermost first.
+    in_progress: Vec<usize>,
+    /// By claim number: whether the claim is in `in_progress`.
+    open: Vec<bool>,
 }
 
-impl Walk<'_> {
-    /// The records invalidated for `id`.
-    fn own(&self, id: &ClaimId) -> Context {
-        self.invalidated.for_claim(id).cloned().unwrap_or_default()
+impl<'a> Walk<'a> {
+    /// The context that keeps out the moved records at the places `kept`.
+    fn context(&mut self, kept: &'a [usize]) -> Context {
+        let next = self.contexts.len();
+        *self.contexts.entry(kept).or_insert(next)
     }
 
-    /// The value of one claim in one context, memoized, so each claim's predicate is evaluated
-    /// once per context. A claim reached again while it is still being decided closes a cycle,
-    /// which is refused.
-    fn value_in(&mut self, id: &ClaimId, context: &Context) -> Result<Truth, Refusal> {
-        let key = (id.clone(), context.clone());
-        if let Some(value) = self.values.get(&key) {
-            return Ok(*value);
+    /// Marks the moved records at the places `kept` as kept out, or no longer kept out.
+    fn keep_out(&mut self, kept: &[usize], out: bool) {
+        for place in kept {
+            self.kept_out[*place] = out;
         }
-        if let Some(start) = self.in_progress.iter().position(|open| open == id) {
+    }
+
+    /// The value of the claim `id` in one context. A compiled protocol resolves every claim
+    /// reference; nothing establishes an undeclared one, which is `unknown`.
+    fn value_in(&mut self, id: &ClaimId, context: Context) -> Result<Truth, Refusal> {
+        match self.numbers.get(id) {
+            Some(number) => self.decide(*number, context),
+            None => Ok(Truth::Unknown),
+        }
+    }
+
+    /// Forgets the values `alone` holds, which no later walk reads.
+    fn forget_alone(&mut self) {
+        for number in self.decided_alone.drain(..) {
+            self.alone[number] = None;
+        }
+    }
+
+    /// The value of the declared claim `number` in one context, memoized, so each claim's
+    /// predicate is evaluated once per context. A claim reached again while it is still being
+    /// decided closes a cycle, which is refused.
+    fn decide(&mut self, number: usize, context: Context) -> Result<Truth, Refusal> {
+        let key = (context, number);
+        let known = if self.shared[context] {
+            self.values.get(&key).copied()
+        } else {
+            self.alone[number]
+        };
+        if let Some(value) = known {
+            return Ok(value);
+        }
+        if self.open[number] {
+            let start = self
+                .in_progress
+                .iter()
+                .position(|open| *open == number)
+                .unwrap_or_default();
             let path: Vec<String> = self.in_progress[start..]
                 .iter()
-                .chain([id])
-                .map(|claim| one_line(claim.as_str()))
+                .chain([&number])
+                .map(|open| one_line(self.claims[*open].0.as_str()))
                 .collect();
             return Err(Refusal::new(
                 "claim-cycle",
                 format!("claims test each other in a cycle: {}", path.join(" -> ")),
             ));
         }
-        let ir = self.ir;
-        let value = match ir.claims.get(id) {
-            Some(claim) => {
-                self.in_progress.push(id.clone());
-                let value = self.predicate(&claim.true_when, context);
-                self.in_progress.pop();
-                value?
-            }
-            // A compiled protocol resolves every claim reference; nothing establishes an
-            // undeclared one.
-            None => Truth::Unknown,
-        };
-        self.values.insert(key, value);
+        let claim = self.claims[number].1;
+        self.in_progress.push(number);
+        self.open[number] = true;
+        let value = self.predicate(&claim.true_when, context);
+        self.open[number] = false;
+        self.in_progress.pop();
+        let value = value?;
+        if self.shared[context] {
+            self.values.insert(key, value);
+        } else {
+            self.alone[number] = Some(value);
+            self.decided_alone.push(number);
+        }
         Ok(value)
     }
 
-    fn predicate(&mut self, predicate: &Predicate, context: &Context) -> Result<Truth, Refusal> {
+    fn predicate(&mut self, predicate: &'a Predicate, context: Context) -> Result<Truth, Refusal> {
         Ok(match predicate {
             Predicate::All(members) => all(&self.members(members, context)?),
             Predicate::Any(members) => any(&self.members(members, context)?),
             Predicate::Not(inner) => not(self.predicate(inner, context)?),
             Predicate::Evidence(matching) => {
                 let evidence = self.evidence;
+                let (place_of, kept_out) = (&self.place_of, &self.kept_out);
                 evidence_match_in(
                     matching,
-                    evidence.left.iter().filter(|record| {
-                        !context.contains(&record.id) && evidence.of_match(matching, record)
-                    }),
+                    evidence
+                        .left
+                        .iter()
+                        .zip(place_of)
+                        .filter(|(record, place)| {
+                            evidence.of_match(matching, record)
+                                && !place.is_some_and(|place| kept_out[place])
+                        })
+                        .map(|(record, _)| record),
                 )
             }
             // The history, whatever is invalidated for the claim: order is not invalidated.
@@ -186,16 +323,20 @@ impl Walk<'_> {
             }
             // Every case_outcome record, likewise: a child's outcome is not invalidated.
             Predicate::Children(form) => super::composition::value(form, self.evidence.history),
-            Predicate::Claim(test) => {
-                let mut tested_in: Context = self.own(&test.claim);
-                tested_in.extend(context.iter().cloned());
-                tested(self.value_in(&test.claim, &tested_in)?, test.is)
-            }
+            // Tested with the records invalidated for either claim kept out. Those invalidated for
+            // the tested claim are invalidated for every claim built on it (`Invalidated`), so this
+            // context already holds them: the union is this context, and the tested claim is
+            // evaluated in it without building a copy.
+            Predicate::Claim(test) => tested(self.value_in(&test.claim, context)?, test.is),
             Predicate::Input(test) => input_test(test, self.inputs),
         })
     }
 
-    fn members(&mut self, members: &[Predicate], context: &Context) -> Result<Vec<Truth>, Refusal> {
+    fn members(
+        &mut self,
+        members: &'a [Predicate],
+        context: Context,
+    ) -> Result<Vec<Truth>, Refusal> {
         members
             .iter()
             .map(|member| self.predicate(member, context))

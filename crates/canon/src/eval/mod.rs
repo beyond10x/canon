@@ -321,9 +321,9 @@ use std::fmt;
 
 use crate::ir::Ir;
 use crate::model::{
-    Case, ChildOutcomes, ClaimDecision, ClaimId, DECISION_FORMAT, Decision, Declarations,
-    EvidenceExclusion, EvidenceId, EvidenceRecord, ExclusionReason, Predicate, is_identifier,
-    one_line,
+    ArtifactId, Case, ChildOutcomes, ClaimDecision, ClaimId, DECISION_FORMAT, Decision,
+    Declarations, EvidenceExclusion, EvidenceId, EvidenceKindId, EvidenceMatch, EvidenceRecord,
+    ExclusionReason, Predicate, is_identifier, one_line,
 };
 
 pub use case::{case_from_value, read_case};
@@ -444,15 +444,19 @@ pub fn evaluate_with(
         let actions = actions::section(ir, &values, &case_inputs, sets, authority.as_ref());
         let outcomes =
             outcomes::section(ir, case, &values, &case_inputs, sets, decisions.as_ref())?;
+        let record_of: BTreeMap<&EvidenceId, &EvidenceRecord> =
+            evidence.iter().map(|record| (&record.id, record)).collect();
+        let reached = invalidation::reached_by_claim(ir);
         let claims = values
             .iter()
             .map(|(id, value)| {
                 let entry = ClaimDecision {
                     value: *value,
                     excluded_evidence: excluded_for(
-                        ir,
+                        reached.get(id).map_or(&[], Vec::as_slice),
                         id,
                         evidence,
+                        &record_of,
                         &excluded,
                         &invalidated,
                         &independence,
@@ -546,45 +550,36 @@ fn set_aside(
 /// into an IR ends. The records the exclusion stages set aside for every claim (`excluded`) are
 /// listed with their reasons. A record the invalidation stage kept from this claim
 /// (`invalidated`) is listed with the reason `invalidated` when an evidence match the claim reaches
-/// reads it ([`invalidation::Invalidated::lists`]). Any other record is listed with the reason
+/// reads it ([`invalidation::Invalidated::listed`]). Any other record is listed with the reason
 /// `not_independent` when a match the claim reaches would read it by kind and subject and none of
 /// those matches accepts its producer ([`independence::rejected`]). Each record is listed once.
+///
+/// `reached` holds the evidence matches the claim reaches ([`invalidation::reached_by_claim`]) and
+/// `record_of` is `evidence` by id, each found once for every claim, so listing a claim costs time
+/// linear in the matches it reaches and in the records it lists or reads, not that times the
+/// records invalidated for it.
 fn excluded_for(
-    ir: &Ir,
+    reached: &[&EvidenceMatch],
     claim: &ClaimId,
     evidence: &[EvidenceRecord],
+    record_of: &BTreeMap<&EvidenceId, &EvidenceRecord>,
     excluded: &[EvidenceExclusion],
     invalidated: &invalidation::Invalidated,
     independence: &Independence,
 ) -> Vec<EvidenceExclusion> {
-    let kept = invalidated.for_claim(claim);
-    let reached = invalidation::reached_matches(ir, claim);
     let demanding = reached
         .iter()
         .any(|matching| matching.independent_on.is_some());
-    if excluded.is_empty() && kept.is_none_or(BTreeSet::is_empty) && !demanding {
+    if excluded.is_empty() && invalidated.kept(claim).is_empty() && !demanding {
         return Vec::new();
     }
-    let mut matches = BTreeSet::new();
-    let mut visited = BTreeSet::new();
-    let mut pending = vec![claim];
-    while let Some(next) = pending.pop() {
-        if !visited.insert(next) {
-            continue;
-        }
-        let Some(declared) = ir.claims.get(next) else {
-            continue;
-        };
-        declared.true_when.visit(&mut |node| match node {
-            Predicate::Evidence(matching) => {
-                matches.insert((&matching.kind, matching.subject.as_ref()));
-            }
-            Predicate::Claim(test) => pending.push(&test.claim),
-            _ => {}
-        });
-    }
-    let record_of: BTreeMap<&EvidenceId, &EvidenceRecord> =
-        evidence.iter().map(|record| (&record.id, record)).collect();
+    // Each kind and subject the reached matches read, once.
+    let matches: Vec<(&EvidenceKindId, Option<&ArtifactId>)> = reached
+        .iter()
+        .map(|matching| (&matching.kind, matching.subject.as_ref()))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
     let read = |record: &EvidenceRecord| {
         matches
             .iter()
@@ -599,36 +594,35 @@ fn excluded_for(
         })
         .cloned()
         .chain(
-            kept.into_iter()
-                .flatten()
-                .filter(|id| {
-                    record_of
-                        .get(id)
-                        .is_some_and(|record| invalidated.lists(ir, claim, record))
-                })
+            invalidated
+                .listed(matches.iter().copied(), claim)
                 .map(|id| EvidenceExclusion {
                     evidence: id.clone(),
                     reason: ExclusionReason::Invalidated,
                 }),
         )
         .collect();
-    let set_aside: BTreeSet<&EvidenceId> = excluded
-        .iter()
-        .map(|exclusion| &exclusion.evidence)
-        .collect();
-    listed.extend(
-        evidence
+    // A record is rejected only by a match that demands independence: when none of the reached
+    // matches demands it, no record is listed as `not_independent`.
+    if demanding {
+        let set_aside: BTreeSet<&EvidenceId> = excluded
             .iter()
-            .filter(|record| {
-                !set_aside.contains(&record.id)
-                    && !invalidated.excludes(claim, &record.id)
-                    && independence::rejected(&reached, record, independence)
-            })
-            .map(|record| EvidenceExclusion {
-                evidence: record.id.clone(),
-                reason: ExclusionReason::NotIndependent,
-            }),
-    );
+            .map(|exclusion| &exclusion.evidence)
+            .collect();
+        listed.extend(
+            evidence
+                .iter()
+                .filter(|record| {
+                    !set_aside.contains(&record.id)
+                        && !invalidated.excludes(claim, &record.id)
+                        && independence::rejected(reached, record, independence)
+                })
+                .map(|record| EvidenceExclusion {
+                    evidence: record.id.clone(),
+                    reason: ExclusionReason::NotIndependent,
+                }),
+        );
+    }
     listed.sort();
     listed
 }
@@ -1032,11 +1026,13 @@ mod tests {
             exclusion("e2", Expired),
             exclusion("e1", Expired),
         ];
+        let reached = invalidation::reached_by_claim(&ir);
         let listed = |claim: &str| -> Vec<String> {
             excluded_for(
-                &ir,
+                &reached[&ClaimId::new(claim)],
                 &ClaimId::new(claim),
                 &evidence,
+                &evidence.iter().map(|record| (&record.id, record)).collect(),
                 &excluded,
                 &invalidation::Invalidated::default(),
                 &Independence::default(),
@@ -1051,9 +1047,10 @@ mod tests {
         assert_eq!(listed("other"), ["e2"]);
         assert_eq!(
             excluded_for(
-                &ir,
+                &reached[&ClaimId::new("direct")],
                 &ClaimId::new("direct"),
                 &evidence,
+                &evidence.iter().map(|record| (&record.id, record)).collect(),
                 &[],
                 &invalidation::Invalidated::default(),
                 &Independence::default(),
