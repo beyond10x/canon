@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T02:57:09Z",
+  "actor": "human:timo",
+  "artifact": "story:missing-evidence",
+  "kind": "story",
+  "revision": 19,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "on f3b9b6b (specification only): ess_model_matches FAILED naming Decision.missing_evidence (23 passed, 5 failed), conform 22 passed, 1 failed on CANON-FRONTIER-001; on 617f904: workspace 998 passed, 0 failed, conform 23 passed, 24 implemented, 24 covered; VERIFIED by the coordinator from the unit's logs",
+    "reference": "w4/missing-evidence/red.log vs the unit's gate logs (session scratch)"
+  }
+}

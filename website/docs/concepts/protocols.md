@@ -133,7 +133,9 @@ precondition is `TRUE` and every required capability is granted. A status other 
 An action may declare one argument schema, `arguments`: a JSON Schema saying what arguments the
 action is called with. A runner reads it from the protocol it loads and validates each call's
 arguments against it. Absent: the action takes no arguments; a runner accepts only `{}`. Canon
-itself never validates arguments: it evaluates no call.
+evaluates no call, but its library function `b10x_canon::validate::check_arguments` checks one
+call's arguments against the schema, reporting every refusal, and a runner may use it or any
+2020-12 validator.
 
 ```yaml
 actions:
@@ -203,6 +205,64 @@ all keywords are combined: none is `rewritten`, only narrowing is `narrowed`, on
 
 Shipped in Canon 0.5.0 (story:action-arguments): `arguments` on an action, its dialect check in
 `canon validate`, its carry into `canon-ir/1` and its classification by `canon diff`.
+
+:::
+
+### Judgement marks
+
+Three optional fields mark where a protocol's results depend on a judgement, by a person or a
+model, rather than on a reproducible procedure:
+
+- `author` on an action, `program` or `judgement`; absent means `program`. `judgement` says that
+  the action's arguments, and the content of the artifacts it revises, are not a function of its
+  inputs.
+- `revises` on an action: the declared artifacts it may move to a new revision; absent means none.
+  `canon validate` refuses an artifact that is not declared as `undeclared-artifact`, naming the
+  action.
+- `decided_by` on each `may_produce` entry, `program` or `judgement`: who decides the record's
+  result; absent means the action's `author`. `decided_by: program` on a judgement action covers a
+  record the runner writes from the effect it applied, such as provenance.
+
+```yaml
+actions:
+  draft_spec:
+    author: judgement
+    effect: write
+    revises: [spec]
+    may_produce:
+      - evidence: spec_source
+        decided_by: program
+      - evidence: spec_rationale
+```
+
+Canon gives the fields no evaluation meaning: `canon evaluate`, `canon check` and `canon generate`
+print the same with or without them. They name no executor, model or tool, and Canon cannot prove
+that a runner honours them; it never refuses a runner that moves an artifact outside `revises`.
+`canon compile` writes `"author": "judgement"` only on a judgement action, `"revises"` only when
+it lists an artifact, sorted, each once, and `"decided_by": "judgement"` only on a production a
+judgement decides, so `author: program` written out compiles to the same bytes as no `author`.
+`canon diff` names the action in each line:
+
+| Change | Category | Line |
+|---|---|---|
+| `author` from `program` to `judgement` | `TIGHTENING` | ``author changed from program to judgement`` |
+| `author` from `judgement` to `program` | `RELAXATION` | ``author changed from judgement to program`` |
+| a kind it may produce becomes judgement-decided | `TIGHTENING` | ``now decides evidence `k` by judgement`` |
+| a kind it may produce becomes program-decided | `RELAXATION` | ``now decides evidence `k` by program`` |
+| an artifact added to `revises` | `RELAXATION` | ``now revises artifact `a` `` |
+| an artifact removed from `revises` | `TIGHTENING` | ``no longer revises artifact `a` `` |
+
+`canon-ir/1` holds who decides each production after resolving it against the action's `author`,
+so a change of `author` also prints a `now decides evidence` line for each kind of that action that
+declares no `decided_by` and is produced in both revisions, in kind order, after the `author` line
+and any kind added or removed. To get only the `author` line, write the old value as `decided_by`
+on each production of the action.
+
+:::shipped[Judgement marks]
+
+On `main` (story:judgement-marking), not yet in a release: the three fields in `protocol/1`,
+`revises` checked by `canon validate`, carried into `canon-ir/1` and classified by `canon diff`.
+No check reads them yet; checks that do are planned.
 
 :::
 

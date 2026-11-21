@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T09:01:01Z",
+  "actor": "human:timo",
+  "artifact": "story:decision-grounds",
+  "kind": "story",
+  "revision": 20,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "a read-from range and two struct comments in ess/domains/protocol.yaml did not state grounds: corrected, reference regenerated",
+    "reference": "impl/decision-grounds 01a7b79",
+    "review": "review-result:adversary-decision-grounds-pass-1",
+    "outcome": "fixed"
+  }
+}

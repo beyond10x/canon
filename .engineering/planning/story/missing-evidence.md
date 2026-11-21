@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:missing-evidence
 kind: story
-status: active
+status: implemented
 title: Report per admissible action which evidence kinds it may produce still lack an applicable record
 tags:
 - from-request
@@ -27,11 +27,15 @@ scope:
 - confidence: inferred
   path: conformance/scenarios/missing-evidence.yaml
 - confidence: cited
+  path: crates/canon-cli/tests/adversary_conformance_suite_cli.rs
+- confidence: cited
+  path: crates/canon-cli/tests/adversary_missing_evidence_cli.rs
+- confidence: cited
   path: crates/canon-cli/tests/adversary_skel_cli.rs
 - confidence: cited
+  path: crates/canon-cli/tests/conform_requirements.rs
+- confidence: cited
   path: crates/canon-cli/tests/explanation.rs
-- confidence: inferred
-  path: crates/canon-docs/src/source.rs
 - confidence: cited
   path: crates/canon/src/eval/decision.rs
 - confidence: inferred
@@ -41,19 +45,18 @@ scope:
 - confidence: cited
   path: crates/canon/src/model/decision.rs
 - confidence: cited
-  path: crates/canon/tests/adversary_explain_trace.rs
-- confidence: cited
-  path: crates/canon/tests/adversary_obligations_docs.rs
+  path: crates/canon/tests/adversary_missing_evidence.rs
 - confidence: cited
   path: crates/canon/tests/ess_model_matches.rs
 - confidence: cited
   path: ess/domains/protocol.yaml
 - confidence: inferred
   path: fixtures/investigation/missing-evidence.yaml
-revision: 19
+revision: 28
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 18, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 19, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "active", to: "implemented", at: "2026-11-21T04:27:59Z", actor: "human:timo", revision: 28, decided_on: {"recorded":{"test_result":1,"review_outcome":3,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w4"}
 ---
 ## Outcome
 
@@ -172,3 +175,18 @@ Date: 2026-11-20.
 ## Decided
 
 D1 option 2 and D2 option B of § Decision needed: a record is applicable when the revision-binding and freshness stages leave it and no claim lists it in `excluded_evidence`; the field is a new top-level section `missing_evidence`. Decided on 2026-11-20 by the wave coordinator on the drafter's recommendation, after the operator accepted the story without choosing (`approval-record:accept-sdc-requests-2026-11-20`). The unit builds this option and does not reopen the choice.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w4 from the implementor's reports, the adversary's report (`review-result:adversary-missing-evidence-pass-1`) and the merge of `impl/missing-evidence` (`b64347c`). It corrects the body where the two differ.
+
+- The rule for an applicable record is one function, `eval::missing::applicable(left, claims)` in `crates/canon/src/eval/missing.rs`: `left` is the set the revision-binding and freshness stages leave, `claims` every claim's decision. `evaluate_with` in `crates/canon/src/eval/mod.rs` passes both. story:pending-decisions and story:evidence-redelivery build beside it.
+- A record excluded for one claim (`invalidated` or `not_independent`) is not applicable for its kind at all, also when another claim is `true` on it. A record of a kind no claim reads is applicable. Both are pinned by the adversary's cases.
+- `CANON-FRONTIER-001` does not state that the section is absent when no action qualifies: the conformance runner fails a listed section the decision does not carry, so no step can assert an absence. The unit tests of `crates/canon/src/eval/missing.rs` hold that rule. The scenario's last step pins that an approval-required action with a non-empty `may_produce` is not a key and that an action's kinds come in identifier order.
+- The order of kinds comes from the compiled IR, which sorts `may_produce`; the section adds no sort of its own.
+- The parity test `crates/canon/tests/ess_model_matches.rs` was changed to read the key of an `Optional<Map<K, V>>` field, with two mutation controls for it.
+- Existing expectations that gained the new key and lost nothing: `crates/canon-cli/tests/adversary_skel_cli.rs`, `crates/canon/tests/explanation.rs`, `conformance/scenarios/explanation.yaml`.
+- The fixture `fixtures/investigation/missing-evidence.yaml` has seven actions and stays under the state bound of the tests that enumerate every investigation fixture.
+- In § Scope and not edited: `crates/canon-docs/src/source.rs`, `crates/canon/tests/adversary_explain_trace.rs`, `crates/canon/tests/adversary_obligations_docs.rs`.
+- Not in § Scope and edited: the requirement counts in `crates/canon-cli/tests/adversary_conformance_suite_cli.rs` and `crates/canon-cli/tests/conform_requirements.rs` (25 after the merge with story:child-outcome-revision).
+- Added by the adversary: `crates/canon/tests/adversary_missing_evidence.rs` (7 cases) and `crates/canon-cli/tests/adversary_missing_evidence_cli.rs` (1 case).

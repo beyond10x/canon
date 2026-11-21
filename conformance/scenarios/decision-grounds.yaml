@@ -1,0 +1,906 @@
+format: canon-conformance/1
+id: CANON-GROUND-001
+covers: [CANON-GROUND-001]
+fixture: fixtures/investigation/decision-grounds.yaml
+# Decision grounds (story:decision-grounds). An entry of canon-authority/1 or canon-decisions/1 may
+# name the grounds it rested on: `ground_revisions`, artifact revisions keyed by artifact, and
+# `ground_evidence`, evidence record ids. Both are optional and absent read as empty.
+#
+# - An artifact ground holds while its revision equals the case snapshot's current revision of the
+#   artifact, compared for equality.
+# - An evidence ground holds while a record with that id is applicable (CANON-FRONTIER-001): given,
+#   left by the revision-binding and freshness stages, and listed in no claim's
+#   `excluded_evidence`. An id no given record has is not refused.
+# - An entry applies only when every ground holds and, when it has a case revision, that revision
+#   is current; whatever it decided. An entry that does not apply takes no part in coverage,
+#   precedence or `decided_by`.
+# - A requirement covered only by entries that do not apply is not decided, its reason
+#   `{"capability", "decision": "none"}`; an outcome whose only explicit decision does not apply is
+#   blocked, `{"decision", "present": false}`. Either reason then gains `stale_grounds`, every
+#   failed ground of the entries set aside by their grounds alone, each once: artifact grounds
+#   first, by artifact and then revision, as `{"artifact", "reason": "revision_mismatch",
+#   "revision"}`, then evidence grounds by id, as `{"evidence", "reason"}` with the reason the
+#   record was excluded with, or `{"evidence", "present": false}` when no record has the id. An
+#   entry set aside by its case revision adds none of its grounds, whether they hold or not.
+# - Refused: a ground artifact the protocol does not declare as `undeclared-artifact`; a ground
+#   artifact, revision or evidence id that is not an identifier as `invalid-identifier`. Grounds do
+#   not tell two entries apart.
+#
+# The fixture: action `act` requires capability `x`; outcome `o` requires the decision `d`;
+# artifacts `spec` and `up`; claim `c` reads records of kind `k`, whose `max_age` is 1h; the
+# invalidation rule `up.revised` watches `up` and names `c`. The case snapshot is at revision c2,
+# `spec` at r2 and `up` at u2. Record e1 is of kind `k`, about `spec` at r2, observed at
+# 2026-11-21T10:00:00Z against `up` at u2, unless a step says otherwise.
+steps:
+  # Expectation 1. An unbound grant whose artifact ground is current applies: admissible.
+  - id: artifact-ground-holds
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      authority:
+        - capability: x
+          decision: granted
+          ground_revisions: {spec: r2}
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "status": "admissible"
+            }
+          }
+        }
+
+  # Expectation 2. The same grant resting on spec r1 does not apply: the requirement is not
+  # decided, and its reason lists the moved artifact. pending_decisions lists the requirement as it
+  # lists one with no decision, without the grounds.
+  - id: artifact-ground-moved
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      authority:
+        - capability: x
+          decision: granted
+          ground_revisions: {spec: r1}
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "reasons": [
+                {
+                  "capability": "x",
+                  "decision": "none",
+                  "stale_grounds": [
+                    {
+                      "artifact": "spec",
+                      "reason": "revision_mismatch",
+                      "revision": "r1"
+                    }
+                  ]
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "act",
+                "capability": "x",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ],
+            "decisions": [
+              {
+                "case_revision": "c2",
+                "decision": "d",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "o"
+              }
+            ]
+          }
+        }
+
+  # Expectation 3, first part. An evidence ground whose record is given and applicable holds:
+  # admissible.
+  - id: evidence-ground-holds
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: k
+          subject: spec
+          subject_revision: r2
+          observed_at: 2026-11-21T10:00:00Z
+          upstream_revisions: {up: u2}
+      at: 2026-11-21T10:30:00Z
+      authority:
+        - capability: x
+          decision: granted
+          ground_evidence: [e1]
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "status": "admissible"
+            }
+          }
+        }
+
+  # Expectation 3, second part. No record has the id: the ground does not hold, and the id is not
+  # refused.
+  - id: evidence-ground-not-given
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      authority:
+        - capability: x
+          decision: granted
+          ground_evidence: [e1]
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "reasons": [
+                {
+                  "capability": "x",
+                  "decision": "none",
+                  "stale_grounds": [
+                    {
+                      "evidence": "e1",
+                      "present": false
+                    }
+                  ]
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }
+
+  # Expectation 3, third part. At an instant past the kind's max_age the freshness stage excludes
+  # e1 as expired, and the ground fails with that reason.
+  - id: evidence-ground-expired
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: k
+          subject: spec
+          subject_revision: r2
+          observed_at: 2026-11-21T10:00:00Z
+          upstream_revisions: {up: u2}
+      at: 2026-11-21T12:00:00Z
+      authority:
+        - capability: x
+          decision: granted
+          ground_evidence: [e1]
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "reasons": [
+                {
+                  "capability": "x",
+                  "decision": "none",
+                  "stale_grounds": [
+                    {
+                      "evidence": "e1",
+                      "reason": "expired"
+                    }
+                  ]
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }
+
+  # Expectation 4. e1 recorded `up` at u1 and the case is at u2: the invalidation rule keeps it from
+  # `c`, which lists it, so it is not applicable and the ground fails as invalidated.
+  - id: evidence-ground-invalidated
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: k
+          subject: spec
+          subject_revision: r2
+          observed_at: 2026-11-21T10:00:00Z
+          upstream_revisions: {up: u1}
+      authority:
+        - capability: x
+          decision: granted
+          ground_evidence: [e1]
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "reasons": [
+                {
+                  "capability": "x",
+                  "decision": "none",
+                  "stale_grounds": [
+                    {
+                      "evidence": "e1",
+                      "reason": "invalidated"
+                    }
+                  ]
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }
+
+  # Beyond the seven expectations: a record about another revision of its subject is excluded by
+  # the revision-binding stage, and the ground fails with that stage's reason.
+  - id: evidence-ground-revision-mismatch
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: k
+          subject: spec
+          subject_revision: r1
+          observed_at: 2026-11-21T10:00:00Z
+          upstream_revisions: {up: u2}
+      authority:
+        - capability: x
+          decision: granted
+          ground_evidence: [e1]
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "reasons": [
+                {
+                  "capability": "x",
+                  "decision": "none",
+                  "stale_grounds": [
+                    {
+                      "evidence": "e1",
+                      "reason": "revision_mismatch"
+                    }
+                  ]
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }
+
+  # Expectation 5. A denial resting on a moved artifact lapses like any other entry, so it takes no
+  # part in precedence: the unbound grant decides, admissible. The denial names its principal, since
+  # grounds do not tell two entries apart.
+  - id: denial-with-a-moved-ground-lapses
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      authority:
+        - capability: x
+          decision: denied
+          principal: p
+          ground_revisions: {spec: r1}
+        - capability: x
+          decision: granted
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "status": "admissible"
+            }
+          }
+        }
+
+  # Expectation 6, first part. An explicit decision at c2 resting on spec r1 does not apply: `o` is
+  # blocked for want of a decision, its reason lists the moved artifact, and pending_decisions
+  # lists `o` as it lists one with no decision.
+  - id: explicit-decision-ground-moved
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      decisions:
+        - decision: d
+          outcome: o
+          principal: p
+          case_revision: c2
+          ground_revisions: {spec: r1}
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "o": {
+              "reasons": [
+                {
+                  "decision": "d",
+                  "present": false,
+                  "stale_grounds": [
+                    {
+                      "artifact": "spec",
+                      "reason": "revision_mismatch",
+                      "revision": "r1"
+                    }
+                  ]
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "act",
+                "capability": "x",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ],
+            "decisions": [
+              {
+                "case_revision": "c2",
+                "decision": "d",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "o"
+              }
+            ]
+          }
+        }
+
+  # Expectation 6, second part. Resting on spec r2 it applies: `o` is legitimate, decided by p.
+  - id: explicit-decision-ground-holds
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      decisions:
+        - decision: d
+          outcome: o
+          principal: p
+          case_revision: c2
+          ground_revisions: {spec: r2}
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "o": {
+              "decided_by": {
+                "decision": "d",
+                "principals": [
+                  "p"
+                ]
+              },
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # The unit's rule for an entry set aside by its case revision: it adds none of its grounds. The
+  # grant bound to c1 rests on up u1, the one bound to c2 on spec r1; only spec r1 is listed. The
+  # explicit decisions likewise: p's at c1 rests on up u1, q's at c2 on spec r1.
+  - id: an-entry-at-another-case-revision-adds-no-ground
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      authority:
+        - capability: x
+          decision: granted
+          case_revision: c1
+          ground_revisions: {up: u1}
+        - capability: x
+          decision: granted
+          case_revision: c2
+          ground_revisions: {spec: r1}
+      decisions:
+        - decision: d
+          outcome: o
+          principal: p
+          case_revision: c1
+          ground_revisions: {up: u1}
+        - decision: d
+          outcome: o
+          principal: q
+          case_revision: c2
+          ground_revisions: {spec: r1}
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "reasons": [
+                {
+                  "capability": "x",
+                  "decision": "none",
+                  "stale_grounds": [
+                    {
+                      "artifact": "spec",
+                      "reason": "revision_mismatch",
+                      "revision": "r1"
+                    }
+                  ]
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "outcomes": {
+            "o": {
+              "reasons": [
+                {
+                  "decision": "d",
+                  "present": false,
+                  "stale_grounds": [
+                    {
+                      "artifact": "spec",
+                      "reason": "revision_mismatch",
+                      "revision": "r1"
+                    }
+                  ]
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Set aside by its case revision alone, an entry adds no `stale_grounds` key: the reasons are the
+  # ones a superseded entry gives without grounds.
+  - id: an-entry-at-another-case-revision-alone
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      authority:
+        - capability: x
+          decision: granted
+          case_revision: c1
+          ground_revisions: {spec: r1}
+      decisions:
+        - decision: d
+          outcome: o
+          principal: p
+          case_revision: c1
+          ground_revisions: {spec: r1}
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "reasons": [
+                {
+                  "capability": "x",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "outcomes": {
+            "o": {
+              "reasons": [
+                {
+                  "decision": "d",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # The unit's order of stale_grounds: each failed ground once, artifact grounds first by artifact
+  # and then revision, then evidence grounds by id. Two set-aside entries (two principals, so not a
+  # duplicate) rest on spec r0, spec r1, up u1, e1 (expired, named by both) and e9 (not given).
+  - id: stale-grounds-order
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: k
+          subject: spec
+          subject_revision: r2
+          observed_at: 2026-11-21T10:00:00Z
+          upstream_revisions: {up: u2}
+      at: 2026-11-21T12:00:00Z
+      authority:
+        - capability: x
+          decision: granted
+          principal: p
+          ground_revisions: {up: u1, spec: r1}
+          ground_evidence: [e9, e1]
+        - capability: x
+          decision: require_approval
+          principal: q
+          ground_revisions: {spec: r0}
+          ground_evidence: [e1]
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "reasons": [
+                {
+                  "capability": "x",
+                  "decision": "none",
+                  "stale_grounds": [
+                    {
+                      "artifact": "spec",
+                      "reason": "revision_mismatch",
+                      "revision": "r0"
+                    },
+                    {
+                      "artifact": "spec",
+                      "reason": "revision_mismatch",
+                      "revision": "r1"
+                    },
+                    {
+                      "artifact": "up",
+                      "reason": "revision_mismatch",
+                      "revision": "u1"
+                    },
+                    {
+                      "evidence": "e1",
+                      "reason": "expired"
+                    },
+                    {
+                      "evidence": "e9",
+                      "present": false
+                    }
+                  ]
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }
+
+  # The same entries given in the other order give the same result.
+  - id: stale-grounds-order-whatever-the-entry-order
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: k
+          subject: spec
+          subject_revision: r2
+          observed_at: 2026-11-21T10:00:00Z
+          upstream_revisions: {up: u2}
+      at: 2026-11-21T12:00:00Z
+      authority:
+        - capability: x
+          decision: require_approval
+          principal: q
+          ground_revisions: {spec: r0}
+          ground_evidence: [e1]
+        - capability: x
+          decision: granted
+          principal: p
+          ground_revisions: {up: u1, spec: r1}
+          ground_evidence: [e9, e1]
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "reasons": [
+                {
+                  "capability": "x",
+                  "decision": "none",
+                  "stale_grounds": [
+                    {
+                      "artifact": "spec",
+                      "reason": "revision_mismatch",
+                      "revision": "r0"
+                    },
+                    {
+                      "artifact": "spec",
+                      "reason": "revision_mismatch",
+                      "revision": "r1"
+                    },
+                    {
+                      "artifact": "up",
+                      "reason": "revision_mismatch",
+                      "revision": "u1"
+                    },
+                    {
+                      "evidence": "e1",
+                      "reason": "expired"
+                    },
+                    {
+                      "evidence": "e9",
+                      "present": false
+                    }
+                  ]
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }
+
+  # Expectation 7, first part. A ground artifact the protocol does not declare is refused, in an
+  # authority entry and in an explicit decision.
+  - id: undeclared-ground-artifact-in-authority
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      authority:
+        - capability: x
+          decision: granted
+          ground_revisions: {nowhere: r1}
+    expect:
+      refusal: undeclared-artifact
+
+  - id: undeclared-ground-artifact-in-decisions
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      decisions:
+        - decision: d
+          outcome: o
+          principal: p
+          case_revision: c2
+          ground_revisions: {nowhere: r1}
+    expect:
+      refusal: undeclared-artifact
+
+  # Expectation 7, second part. An evidence id that is not an identifier is refused; so are a
+  # ground artifact and a ground revision that are not.
+  - id: ground-evidence-id-not-an-identifier
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      authority:
+        - capability: x
+          decision: granted
+          ground_evidence: ['e 1']
+    expect:
+      refusal: invalid-identifier
+
+  - id: ground-evidence-id-not-an-identifier-in-decisions
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      decisions:
+        - decision: d
+          outcome: o
+          principal: p
+          case_revision: c2
+          ground_evidence: ['e 1']
+    expect:
+      refusal: invalid-identifier
+
+  - id: ground-artifact-not-an-identifier
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      authority:
+        - capability: x
+          decision: granted
+          ground_revisions: {'s pec': r1}
+    expect:
+      refusal: invalid-identifier
+
+  - id: ground-revision-not-an-identifier
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      decisions:
+        - decision: d
+          outcome: o
+          principal: p
+          case_revision: c2
+          ground_revisions: {spec: 'r 1'}
+    expect:
+      refusal: invalid-identifier
+
+  # Grounds do not enter the duplicate key: two entries equal in every other key are refused, in
+  # either document.
+  - id: grounds-do-not-tell-authority-entries-apart
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      authority:
+        - capability: x
+          decision: granted
+          ground_revisions: {spec: r2}
+        - capability: x
+          decision: granted
+          ground_revisions: {spec: r1}
+    expect:
+      refusal: duplicate-identifier
+
+  - id: grounds-do-not-tell-explicit-decisions-apart
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      decisions:
+        - decision: d
+          outcome: o
+          principal: p
+          case_revision: c2
+          ground_evidence: [e1]
+        - decision: d
+          outcome: o
+          principal: p
+          case_revision: c2
+    expect:
+      refusal: duplicate-identifier

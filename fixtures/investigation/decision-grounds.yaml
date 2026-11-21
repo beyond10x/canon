@@ -1,0 +1,42 @@
+format: protocol/1
+
+protocol:
+  id: grounds
+  revision: 1
+  description: Act on a specification under authority decisions grounded on its revision and on an observation of it, and close the case by an explicit decision grounded the same way.
+
+artifacts:
+  spec:
+    description: The specification the decisions rest on.
+  up:
+    description: The upstream artifact the observation was made against.
+
+evidence_kinds:
+  k:
+    description: An observation of the specification.
+    max_age: 1h
+
+claims:
+  c:
+    description: The specification has been observed.
+    true_when:
+      evidence:
+        kind: k
+
+invalidation:
+  up.revised:
+    description: An observation made against an earlier upstream revision no longer counts.
+    upstream: up
+    invalidates: [c]
+
+actions:
+  act:
+    description: Act on the specification.
+    requires:
+      - capability: x
+
+outcomes:
+  o:
+    description: The case is closed by an explicit decision.
+    requires:
+      decision: d

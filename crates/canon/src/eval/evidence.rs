@@ -2,8 +2,20 @@
 //! [`crate::model::EvidenceRecord`]; this file reads a record from text or a YAML value and checks
 //! the set against the compiled protocol. Which records apply is decided afterwards, by the
 //! exclusion stages (`binding.rs`, `freshness.rs`, `invalidation.rs`).
+//!
+//! A record may be given more than once, as a runner that delivers at least once gives it
+//! (story:evidence-redelivery). The copies count once when each equals the first, and the set
+//! [`check`] returns holds the first copy in the order given, so every later stage reads each id
+//! once; a copy that differs is refused as `duplicate-identifier`. [`same_record`] is the equality
+//! and lives here alone.
+//!
+//! Each upstream artifact a record names is one the protocol declares, except on a record of a
+//! kind that declares `supplied_by` (story:supplied-evidence): copied unchanged from a case under
+//! another protocol, it may name artifacts only that protocol declares. Those entries are carried
+//! and neither checked nor read; every upstream artifact is still named once and its revision is
+//! still an identifier.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_yaml_ng::Value;
 
@@ -11,7 +23,10 @@ use super::freshness::invalid_instant;
 use super::read::{malformed, yaml};
 use super::{Refusal, identifier, unsupported_format};
 use crate::ir::Ir;
-use crate::model::{EVIDENCE_FORMAT, EvidenceId, EvidenceRecord, one_line};
+use crate::model::{
+    ArtifactId, Declarations, EVIDENCE_FORMAT, EvidenceId, EvidenceRecord, Instant, Revision,
+    one_line,
+};
 
 /// Reads one `canon-evidence/1` document: parsed as YAML, then read as [`evidence_from_value`]
 /// reads it.
@@ -35,22 +50,80 @@ pub fn evidence_from_value(value: &Value) -> Result<EvidenceRecord, Refusal> {
     })
 }
 
-/// Checks each record in the order given, as the module docs of [`super`] describe. Every refusal
-/// names the record by its id.
-pub(super) fn check(ir: &Ir, evidence: &[EvidenceRecord]) -> Result<(), Refusal> {
-    let mut seen = BTreeSet::new();
+/// Checks each record in the order given, as the module docs of [`super`] describe, and returns the
+/// distinct records: a record given more than once counts once, as its first copy, when every
+/// copy equals it ([`same_record`]); a copy that differs is refused as `duplicate-identifier`.
+/// Every later stage reads the returned records, so each id is read once. Every refusal names the
+/// record by its id.
+pub(super) fn check(ir: &Ir, evidence: &[EvidenceRecord]) -> Result<Vec<EvidenceRecord>, Refusal> {
+    let mut seen = BTreeMap::new();
+    let mut distinct = Vec::with_capacity(evidence.len());
     for record in evidence {
-        check_record(ir, record, &mut seen).map_err(|refusal| refusal.citing(&record.id))?;
+        let first =
+            check_record(ir, record, &mut seen).map_err(|refusal| refusal.citing(&record.id))?;
+        if first {
+            distinct.push(record.clone());
+        }
     }
-    super::composition::one_record_per_child(evidence)
+    super::composition::one_record_per_child(&distinct)?;
+    Ok(distinct)
 }
 
-/// One record of [`check`], refused without its citation, which [`check`] adds.
+/// Whether two records are equal for [`check`]: every field as written, `observed_at` as text
+/// (`12:00:00Z` and `12:00:00.000Z` differ, since precision sets the order resolution, as
+/// `order.rs` explains), and `upstream_revisions` as the same pairs in any order. The record is
+/// destructured without `..`, so a field added to it does not compile until this reads it.
+fn same_record(first: &EvidenceRecord, copy: &EvidenceRecord) -> bool {
+    let EvidenceRecord {
+        format,
+        id,
+        kind,
+        result,
+        subject,
+        subject_revision,
+        observed_at,
+        upstream_revisions,
+        producer,
+        child_case,
+    } = first;
+    let EvidenceRecord {
+        format: copy_format,
+        id: copy_id,
+        kind: copy_kind,
+        result: copy_result,
+        subject: copy_subject,
+        subject_revision: copy_subject_revision,
+        observed_at: copy_observed_at,
+        upstream_revisions: copy_upstream_revisions,
+        producer: copy_producer,
+        child_case: copy_child_case,
+    } = copy;
+    fn pairs(upstream: &Declarations<ArtifactId, Revision>) -> Vec<(&ArtifactId, &Revision)> {
+        let mut pairs: Vec<_> = upstream.iter().collect();
+        pairs.sort();
+        pairs
+    }
+    format == copy_format
+        && id == copy_id
+        && kind == copy_kind
+        && result == copy_result
+        && subject == copy_subject
+        && subject_revision == copy_subject_revision
+        && observed_at.as_ref().map(Instant::as_str)
+            == copy_observed_at.as_ref().map(Instant::as_str)
+        && pairs(upstream_revisions) == pairs(copy_upstream_revisions)
+        && producer == copy_producer
+        && child_case == copy_child_case
+}
+
+/// One record of [`check`], refused without its citation, which [`check`] adds. Returns whether
+/// the record is the first of its id, to be counted: a later copy equal to the first is not, and
+/// is not checked again, since the first passed every check this one would.
 fn check_record<'a>(
     ir: &Ir,
     record: &'a EvidenceRecord,
-    seen: &mut BTreeSet<&'a EvidenceId>,
-) -> Result<(), Refusal> {
+    seen: &mut BTreeMap<&'a EvidenceId, &'a EvidenceRecord>,
+) -> Result<bool, Refusal> {
     let named = format!("evidence `{}`", one_line(record.id.as_str()));
     if record.format != EVIDENCE_FORMAT {
         let refusal = unsupported_format(&record.format, EVIDENCE_FORMAT);
@@ -87,16 +160,20 @@ fn check_record<'a>(
             observed_at.as_str(),
         ));
     }
-    if !seen.insert(&record.id) {
+    if let Some(first) = seen.get(&record.id) {
+        if same_record(first, record) {
+            return Ok(false);
+        }
         return Err(Refusal::new(
             "duplicate-identifier",
             format!(
-                "evidence `{}` is given more than once",
+                "evidence `{}` is given more than once with different content",
                 one_line(record.id.as_str())
             ),
         ));
     }
-    if !ir.evidence_kinds.contains_key(&record.kind) {
+    seen.insert(&record.id, record);
+    let Some(kind) = ir.evidence_kinds.get(&record.kind) else {
         return Err(Refusal::new(
             "undeclared-evidence-kind",
             format!(
@@ -105,10 +182,14 @@ fn check_record<'a>(
                 one_line(record.kind.as_str())
             ),
         ));
-    }
+    };
+    // A record of a supplied kind is copied unchanged from a case under its supplier, which may
+    // declare artifacts this protocol does not (story:supplied-evidence, option B): such an entry
+    // is carried. Nothing reads it: an invalidation rule watches a declared artifact only.
+    let supplied = kind.supplied_by.is_some();
     let mut upstream = BTreeSet::new();
     for artifact in record.upstream_revisions.ids() {
-        if !ir.artifacts.contains_key(artifact) {
+        if !supplied && !ir.artifacts.contains_key(artifact) {
             return Err(Refusal::new(
                 "undeclared-artifact",
                 format!(
@@ -151,7 +232,7 @@ fn check_record<'a>(
             ),
         ));
     }
-    Ok(())
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -173,7 +254,7 @@ mod tests {
             "format: canon-evidence/1\nid: e1\nkind: k\nsubject: a\nsubject_revision: r1\n\
              observed_at: {observed_at}\n"
         ))?;
-        check(&ir(), &[record])
+        check(&ir(), &[record]).map(|_| ())
     }
 
     /// Each upstream artifact a record records a revision of is one the protocol declares, named
@@ -193,7 +274,7 @@ mod tests {
                 "format: canon-evidence/1\nid: e1\nkind: k\nsubject: a\nsubject_revision: r1\n\
                  upstream_revisions: {upstream}\n"
             ))?;
-            check(&ir, &[record])
+            check(&ir, &[record]).map(|_| ())
         };
         assert_eq!(checked("{up: u1}"), Ok(()));
         let undeclared = checked("{up: u1, gone: g1}").expect_err("refused");
@@ -232,6 +313,52 @@ mod tests {
         );
     }
 
+    /// A record of a supplied kind may name upstream artifacts the protocol does not declare, each
+    /// still once and each revision still an identifier; a record of a kind without a supplier
+    /// may not, as before.
+    #[test]
+    fn a_supplied_record_may_name_undeclared_upstream_artifacts() {
+        let ir = crate::ir::compile(
+            &crate::model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 artifacts: {a: {}, up: {}}\nevidence_kinds: {s: {supplied_by: q}, k: {}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let checked = |kind: &str, upstream: &str| -> Result<(), Refusal> {
+            let record = read_evidence(&format!(
+                "format: canon-evidence/1\nid: e1\nkind: {kind}\nsubject: a\nsubject_revision: r1\n\
+                 upstream_revisions: {upstream}\n"
+            ))?;
+            check(&ir, &[record]).map(|_| ())
+        };
+        assert_eq!(checked("s", "{up: u1, gone: g1}"), Ok(()));
+        assert_eq!(checked("s", "{gone: g1}"), Ok(()));
+        assert_eq!(
+            checked("k", "{up: u1, gone: g1}")
+                .expect_err("refused")
+                .to_string(),
+            "evidence `e1` records a revision of upstream artifact `gone`, which the protocol does not declare"
+        );
+        assert_eq!(
+            checked("s", "{gone: ' '}").expect_err("refused").code(),
+            "invalid-identifier"
+        );
+        let mut built = read_evidence(
+            "format: canon-evidence/1\nid: e1\nkind: s\nsubject: a\nsubject_revision: r1\n",
+        )
+        .expect("reads");
+        built.upstream_revisions = crate::model::Declarations::new(vec![
+            ("gone".into(), "g1".into()),
+            ("gone".into(), "g2".into()),
+        ]);
+        assert_eq!(
+            check(&ir, &[built]).expect_err("refused").to_string(),
+            "evidence `e1` records a revision of upstream artifact `gone` more than once"
+        );
+    }
+
     /// `observed_at` is optional, and when given it is an instant; an explicit null or any other
     /// text is refused.
     #[test]
@@ -262,7 +389,8 @@ mod tests {
     }
 
     /// Every refusal `check` gives names the record it refuses: among `e1` and a bad `e2`, each
-    /// message names `e2` (an invalid id names the id it found, `e 2`; a repeated id is `e1`).
+    /// message names `e2` (an invalid id names the id it found, `e 2`; a repeated id with different
+    /// content is `e1`).
     #[test]
     fn every_evidence_check_refusal_names_the_record() {
         let ir = crate::ir::compile(
@@ -313,7 +441,11 @@ mod tests {
                 e2.replace("2026-10-04T12:00:00Z", "yesterday"),
                 "`e2`",
             ),
-            ("repeated id", text("e1"), "`e1`"),
+            (
+                "repeated id",
+                text("e1").replace("12:00:00Z", "12:00:00.000Z"),
+                "`e1`",
+            ),
             ("undeclared kind", e2.replace("kind: k", "kind: z"), "`e2`"),
             (
                 "undeclared upstream artifact",
@@ -341,5 +473,182 @@ mod tests {
                 .collect();
             assert_eq!(cited, [names], "{what}: {message}");
         }
+    }
+
+    const REDELIVERED: &str = "format: canon-evidence/1\nid: e1\nkind: k\nresult: pass\nsubject: a\n\
+         subject_revision: r1\nobserved_at: 2026-10-04T12:00:00Z\n\
+         upstream_revisions: {up: u1, down: d1}\nproducer: p1\n";
+
+    const OUTCOME: &str = "format: canon-evidence/1\nid: o1\nkind: case_outcome\nresult: open\n\
+         subject: a\nsubject_revision: r1\nchild_case: CHG-1\n";
+
+    fn redelivery_ir() -> Ir {
+        crate::ir::compile(
+            &crate::model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 artifacts: {a: {}, up: {}, down: {}}\n\
+                 evidence_kinds: {k: {}, k2: {}, case_outcome: {}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles")
+    }
+
+    fn checked_set(texts: &[&str]) -> Result<Vec<EvidenceRecord>, Refusal> {
+        let records = texts
+            .iter()
+            .map(|text| read_evidence(text))
+            .collect::<Result<Vec<_>, _>>()?;
+        check(&redelivery_ir(), &records)
+    }
+
+    /// Copies equal to the first count once, and the first copy in the order given is the one
+    /// kept; the keys of `upstream_revisions` may be written in any order.
+    #[test]
+    fn copies_equal_to_the_first_count_once_as_the_first() {
+        let reordered = REDELIVERED.replace("{up: u1, down: d1}", "{down: d1, up: u1}");
+        let kept = checked_set(&[REDELIVERED, &reordered, REDELIVERED]).expect("equal copies");
+        assert_eq!(kept.len(), 1);
+        let order = |record: &EvidenceRecord| -> Vec<String> {
+            record
+                .upstream_revisions
+                .ids()
+                .map(|id| id.as_str().to_owned())
+                .collect()
+        };
+        assert_eq!(order(&kept[0]), ["up", "down"]);
+        let kept = checked_set(&[&reordered, REDELIVERED]).expect("equal copies");
+        assert_eq!(kept.len(), 1);
+        assert_eq!(order(&kept[0]), ["down", "up"]);
+        let other = REDELIVERED.replace("id: e1", "id: e2");
+        let kept = checked_set(&[REDELIVERED, &other, REDELIVERED, &other]).expect("distinct");
+        let ids: Vec<&str> = kept.iter().map(|record| record.id.as_str()).collect();
+        assert_eq!(ids, ["e1", "e2"]);
+        let outcome = checked_set(&[OUTCOME, OUTCOME]).expect("an equal copy is one record");
+        assert_eq!(outcome.len(), 1);
+    }
+
+    /// A copy that differs from the first in any one field is refused as `duplicate-identifier`
+    /// naming and citing the record; `observed_at` is compared as written, so the same instant at
+    /// another precision differs, and a field left out differs from one given.
+    #[test]
+    fn a_copy_that_differs_in_any_field_is_refused() {
+        let message = "evidence `e1` is given more than once with different content";
+        let outcome = OUTCOME.replace("id: o1", "id: e1");
+        let cases: Vec<(&str, &str, String)> = vec![
+            ("result", REDELIVERED, REDELIVERED.replace("pass", "fail")),
+            (
+                "result left out",
+                REDELIVERED,
+                REDELIVERED.replace("result: pass\n", ""),
+            ),
+            (
+                "kind",
+                REDELIVERED,
+                REDELIVERED.replace("kind: k\n", "kind: k2\n"),
+            ),
+            (
+                "subject",
+                REDELIVERED,
+                REDELIVERED.replace("subject: a", "subject: up"),
+            ),
+            (
+                "subject revision",
+                REDELIVERED,
+                REDELIVERED.replace("subject_revision: r1", "subject_revision: r2"),
+            ),
+            (
+                "observed_at precision",
+                REDELIVERED,
+                REDELIVERED.replace("12:00:00Z", "12:00:00.000Z"),
+            ),
+            (
+                "observed_at instant",
+                REDELIVERED,
+                REDELIVERED.replace("12:00:00Z", "12:00:01Z"),
+            ),
+            (
+                "observed_at left out",
+                REDELIVERED,
+                REDELIVERED.replace("observed_at: 2026-10-04T12:00:00Z\n", ""),
+            ),
+            (
+                "upstream revision",
+                REDELIVERED,
+                REDELIVERED.replace("down: d1", "down: d2"),
+            ),
+            (
+                "upstream artifact left out",
+                REDELIVERED,
+                REDELIVERED.replace("{up: u1, down: d1}", "{up: u1}"),
+            ),
+            (
+                "upstream revisions left out",
+                REDELIVERED,
+                REDELIVERED.replace("upstream_revisions: {up: u1, down: d1}\n", ""),
+            ),
+            ("producer", REDELIVERED, REDELIVERED.replace("p1", "p2")),
+            (
+                "producer left out",
+                REDELIVERED,
+                REDELIVERED.replace("producer: p1\n", ""),
+            ),
+            ("child case", &outcome, outcome.replace("CHG-1", "CHG-2")),
+            (
+                "child outcome",
+                &outcome,
+                outcome.replace("open", "accepted"),
+            ),
+        ];
+        for (what, first, copy) in &cases {
+            for texts in [[*first, copy.as_str()], [copy.as_str(), *first]] {
+                let refusal = checked_set(&texts).expect_err(what);
+                assert_eq!(
+                    (refusal.code(), refusal.to_string().as_str()),
+                    ("duplicate-identifier", message),
+                    "{what}"
+                );
+                let cited: Vec<String> =
+                    refusal.evidence().iter().map(|id| id.to_string()).collect();
+                assert_eq!(cited, ["e1"], "{what}");
+            }
+        }
+    }
+
+    /// A copy that differs is refused at the place the id is checked: a record refused for an
+    /// earlier reason is still refused for it, and so is any record before it in the order given.
+    #[test]
+    fn a_differing_copy_is_refused_where_the_id_is_checked() {
+        let differing = REDELIVERED.replace("pass", "fail");
+        let code = |texts: &[&str]| -> (&'static str, String) {
+            let refusal = checked_set(texts).expect_err("refused");
+            (refusal.code(), refusal.to_string())
+        };
+        let message = "evidence `e1` is given more than once with different content".to_owned();
+        let bad_instant = differing.replace("2026-10-04T12:00:00Z", "yesterday");
+        assert_eq!(code(&[REDELIVERED, &bad_instant]).0, "invalid-instant");
+        let bad_kind = differing.replace("kind: k\n", "kind: z\n");
+        assert_eq!(
+            code(&[REDELIVERED, &bad_kind]),
+            ("duplicate-identifier", message.clone()),
+            "the id is checked before the kind is declared"
+        );
+        assert_eq!(
+            code(&[&bad_kind, REDELIVERED]).0,
+            "undeclared-evidence-kind"
+        );
+        let other = REDELIVERED
+            .replace("id: e1", "id: e2")
+            .replace("kind: k\n", "kind: z\n");
+        assert_eq!(
+            code(&[REDELIVERED, &other, &differing]).0,
+            "undeclared-evidence-kind",
+            "e2 comes before the copy of e1"
+        );
+        assert_eq!(
+            code(&[REDELIVERED, &differing, &other]),
+            ("duplicate-identifier", message),
+            "the copy of e1 comes before e2"
+        );
     }
 }

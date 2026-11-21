@@ -1,0 +1,68 @@
+format: protocol/1
+
+protocol:
+  id: simulate.expiry
+  revision: 1
+  description: Seal a document while it is observed, and renew it once the observation has expired; renewing is admissible only after an expiry.
+
+artifacts:
+  document:
+    description: The document being sealed and renewed.
+
+evidence_kinds:
+  observation:
+    description: An observation of the document, valid for an hour.
+    max_age: 1h
+  renewal:
+    description: A renewal of the seal.
+  seal:
+    description: A seal on the document.
+
+claims:
+  document.observed:
+    description: The document has a fresh observation.
+    true_when:
+      evidence:
+        kind: observation
+
+  document.renewed:
+    description: The seal has been renewed.
+    true_when:
+      evidence:
+        kind: renewal
+
+  document.sealed:
+    description: The document is sealed.
+    true_when:
+      evidence:
+        kind: seal
+
+actions:
+  observe:
+    description: Observe the document.
+    may_produce:
+      - evidence: observation
+
+  place_seal:
+    description: Seal the document while it is observed.
+    precondition:
+      claim: document.observed
+      is: true
+    may_produce:
+      - evidence: seal
+
+  renew:
+    description: Renew the seal once the observation has expired.
+    precondition:
+      all:
+        - claim: document.sealed
+        - claim: document.observed
+          is: unknown
+    may_produce:
+      - evidence: renewal
+
+outcomes:
+  renewed:
+    description: The seal is renewed.
+    requires:
+      claim: document.renewed

@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T09:42:18Z",
+  "actor": "human:timo",
+  "artifact": "story:simulate-child-outcome-step",
+  "kind": "story",
+  "revision": 14,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "the help and cli.yaml said an ending outcome lowers the count and left out that from two or more it may stay: completed",
+    "reference": "impl/simulate-child-outcome-step 146fac6",
+    "review": "review-result:adversary-simulate-child-outcome-step-pass-2",
+    "outcome": "fixed"
+  }
+}

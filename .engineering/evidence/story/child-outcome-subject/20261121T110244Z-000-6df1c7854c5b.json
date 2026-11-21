@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T11:02:44Z",
+  "actor": "human:timo",
+  "artifact": "story:child-outcome-subject",
+  "kind": "story",
+  "revision": 20,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "the reference bound a child's record to its case_open subject only when a children form names the artifact, while Space::produced_by also binds it when an evidence match names it: the help of canon check, the simulate module documentation and ess/domains/cli.yaml say what the code does; the sentence on protocols that walk as before is corrected the same way",
+    "reference": "impl/child-outcome-subject cbb14deb, 2f5e34bb",
+    "review": "review-result:adversary-child-outcome-subject-pass-2",
+    "outcome": "fixed"
+  }
+}

@@ -23,12 +23,13 @@ use serde_yaml_ng::Value;
 use super::Refusal;
 use crate::ir::{self, Ir};
 use crate::model::{
-    self, Action, Age, Artifact, ArtifactId, CapabilityId, CapabilityRequirement, CaseInput,
-    CaseOpening, CaseSection, ChildOutcomes, Claim, ClaimId, ClaimTest, Declarations, EffectClass,
-    EvidenceAfter, EvidenceKind, EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceProduction,
-    EvidenceSince, FirstResult, IndependenceDimension, IndependenceDimensionId, InputId, InputTest,
-    InputValue, LaterRecord, Obligation, Outcome, OutcomeRequirement, Predicate, Protocol,
-    ProtocolHeader, ProtocolId, ScopeKey, ScopeValue, Truth, one_line,
+    self, Action, Age, Artifact, ArtifactId, Author, CapabilityId, CapabilityRequirement,
+    CaseInput, CaseOpening, CaseSection, ChildOutcomes, Claim, ClaimId, ClaimTest, Declarations,
+    EffectClass, EvidenceAfter, EvidenceKind, EvidenceKindId, EvidenceMatch, EvidenceOrder,
+    EvidenceProduction, EvidenceSince, FirstResult, IndependenceDimension, IndependenceDimensionId,
+    InputId, InputTest, InputValue, LaterRecord, Obligation, Outcome, OutcomeRequirement,
+    Predicate, Protocol, ProtocolHeader, ProtocolId, RecordGroup, ScopeKey, ScopeValue, Truth,
+    one_line,
 };
 
 /// A `malformed-input` refusal: `what` is not a document of its format, and why.
@@ -226,6 +227,7 @@ fn protocol(value: &Json) -> Shape<Protocol> {
             Ok(EvidenceKind {
                 description: optional_text(entry, "description")?,
                 max_age: absent_or_text(entry, "max_age")?.map(Age::new),
+                supplied_by: absent_or_text(entry, "supplied_by")?.map(ProtocolId::new),
             })
         })?,
         claims: declarations(value, "claims", ClaimId::new, |entry| {
@@ -345,20 +347,60 @@ fn action(entry: &Json) -> Shape<Action> {
             })
         })
         .collect::<Shape<_>>()?;
+    // The IR writes a production's resolved `decided_by`, and only as `judgement`: a production
+    // without the key is program-decided whatever the action's author, so it is read as
+    // `decided_by: program`. A `program` written out reads, compiles to no key and is refused by
+    // the byte comparison.
     let may_produce = list(entry, "may_produce")?
         .iter()
         .map(|item| {
             Ok(EvidenceProduction {
                 evidence: EvidenceKindId::new(text(item, "evidence")?),
+                decided_by: Some(author(item, "decided_by")?.unwrap_or(Author::Program)),
             })
         })
         .collect::<Shape<_>>()?;
+    // Written only when not empty; an empty, unsorted or repeated list compiles to other bytes
+    // and is refused by the byte comparison.
+    let revises = if field(entry, "revises").is_some() {
+        list(entry, "revises")?
+            .iter()
+            .map(|item| {
+                item.as_str()
+                    .map(ArtifactId::new)
+                    .ok_or_else(|| "an artifact in `revises` is not a string".to_owned())
+            })
+            .collect::<Shape<_>>()?
+    } else {
+        Vec::new()
+    };
+    // Written only when not empty, as `[{"kinds": [...]}, ...]`; an empty, unsorted or repeated
+    // list compiles to other bytes and is refused by the byte comparison.
+    let records_together = if field(entry, "records_together").is_some() {
+        list(entry, "records_together")?
+            .iter()
+            .map(|group| {
+                let kinds = list(group, "kinds")?
+                    .iter()
+                    .map(|kind| {
+                        kind.as_str().map(EvidenceKindId::new).ok_or_else(|| {
+                            "a kind in `records_together` is not a string".to_owned()
+                        })
+                    })
+                    .collect::<Shape<_>>()?;
+                Ok(RecordGroup { kinds })
+            })
+            .collect::<Shape<_>>()?
+    } else {
+        Vec::new()
+    };
     Ok(Action {
         description: optional_text(entry, "description")?,
         precondition: Some(predicate(required(entry, "precondition")?)?),
         requires,
         effect: optional_text(entry, "effect")?.map(EffectClass::new),
         may_produce,
+        records_together,
         // Written only when declared; read as the JSON it is, and held to the dialect by compiling.
         arguments: field(entry, "arguments").cloned(),
         // Written only when declared.
@@ -369,7 +411,21 @@ fn action(entry: &Json) -> Shape<Action> {
                 subject: ArtifactId::new(text(opening, "subject")?),
             }),
         },
+        // Written only as `judgement`; a `program` written out compiles to no key and is refused
+        // by the byte comparison.
+        author: author(entry, "author")?,
+        revises,
     })
+}
+
+/// An action's `author` or a production's `decided_by`: absent, or `program` or `judgement`.
+fn author(value: &Json, key: &str) -> Shape<Option<Author>> {
+    match absent_or_text(value, key)?.as_deref() {
+        None => Ok(None),
+        Some("program") => Ok(Some(Author::Program)),
+        Some("judgement") => Ok(Some(Author::Judgement)),
+        Some(_) => Err(format!("`{key}` is not program or judgement")),
+    }
 }
 
 /// A capability requirement's scope; the IR writes the key only when the scope names a key, each
@@ -473,11 +529,18 @@ fn predicate(value: &Json) -> Shape<Predicate> {
                 subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
             }))
         }
+        // `"revision"` is written only as `current`; an `any` read here compiles to no key, so
+        // the bytes differ and the text is refused. `"subject"` is written only when the form
+        // names one, as a string, as an evidence match's is.
         "children" => Ok(Predicate::Children(ChildOutcomes {
             r#in: values(inner, "in")?
                 .into_iter()
                 .map(|value| value.as_str().to_owned())
                 .collect(),
+            revision: absent_or_text(inner, "revision")?
+                .map(|revision| revision.parse())
+                .transpose()?,
+            subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
         })),
         _ => Err(
             "a predicate is not one of all, any, not, evidence, claim, input, first, before, after, since or children"
@@ -582,6 +645,235 @@ mod tests {
         }
         let refusal = read_ir(&text.replace("\"5m\"", "\"5 min\"")).expect_err("invalid age");
         assert!(refusal.to_string().contains("invalid-max-age"), "{refusal}");
+    }
+
+    /// A supplier reads back as written; one that is not a string, or an explicit null the
+    /// compiler never writes, is refused, and so is the protocol's own id, as the validator
+    /// refuses it.
+    #[test]
+    fn a_supplier_reads_back_and_any_other_value_is_refused() {
+        let ir = ir::compile(
+            &model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 evidence_kinds: {k: {supplied_by: q}, l: {}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let text = ir.canonical_json();
+        assert!(text.contains("\"supplied_by\": \"q\""), "{text}");
+        assert_eq!(read_ir(&text), Ok(ir));
+        for replacement in ["\"supplied_by\": 7", "\"supplied_by\": null"] {
+            let refusal = read_ir(&text.replace("\"supplied_by\": \"q\"", replacement))
+                .expect_err(replacement);
+            assert_eq!(refusal.code(), "malformed-input", "{refusal}");
+            assert_eq!(
+                refusal.to_string(),
+                "not canon-ir/1: `supplied_by` is not a string"
+            );
+        }
+        let refusal = read_ir(&text.replace("\"q\"", "\"p\"")).expect_err("self-supplied");
+        assert!(
+            refusal.to_string().contains("self-supplied-evidence"),
+            "{refusal}"
+        );
+    }
+
+    /// The judgement marks (story:judgement-marking) read back as compiled. Every other form is
+    /// refused as `malformed-input`: `program` written out, which the compiler never writes; a
+    /// value that is neither program nor judgement, or not a string; a `revises` list that is
+    /// empty, unsorted or repeated, holds a non-string or names an undeclared artifact; a
+    /// production listed twice; a `decided_by` on a kind that is not declared.
+    #[test]
+    fn judgement_marks_read_back_and_any_other_form_is_refused() {
+        let ir = ir::compile(
+            &model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}, b: {}}\n\
+                 evidence_kinds: {k: {}, l: {}}\n\
+                 actions: {act: {author: judgement, revises: [b, a, b], \
+                 may_produce: [{evidence: k, decided_by: program}, {evidence: l}]}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let text = ir.canonical_json();
+        let revises = "\"revises\": [\n        \"a\",\n        \"b\"\n      ]";
+        let program_kind = "{\n          \"evidence\": \"k\"\n        }";
+        let judged_kind =
+            "{\n          \"decided_by\": \"judgement\",\n          \"evidence\": \"l\"\n        }";
+        for written in [
+            "\"author\": \"judgement\"",
+            revises,
+            program_kind,
+            judged_kind,
+        ] {
+            assert!(text.contains(written), "{written}: {text}");
+        }
+        assert_eq!(read_ir(&text), Ok(ir));
+
+        let canonical = "not canon-ir/1: not the canonical text `canon compile` prints";
+        for (from, to, why) in [
+            (
+                "\"author\": \"judgement\"",
+                "\"author\": \"program\"",
+                canonical,
+            ),
+            (
+                "\"author\": \"judgement\"",
+                "\"author\": \"llm\"",
+                "not canon-ir/1: `author` is not program or judgement",
+            ),
+            (
+                "\"author\": \"judgement\"",
+                "\"author\": 1",
+                "not canon-ir/1: `author` is not a string",
+            ),
+            (
+                revises,
+                "\"revises\": [\n        \"b\",\n        \"a\"\n      ]",
+                canonical,
+            ),
+            (
+                revises,
+                "\"revises\": [\n        \"a\",\n        \"a\",\n        \"b\"\n      ]",
+                canonical,
+            ),
+            (revises, "\"revises\": []", canonical),
+            (
+                revises,
+                "\"revises\": [\n        \"a\",\n        2\n      ]",
+                "not canon-ir/1: an artifact in `revises` is not a string",
+            ),
+            (
+                revises,
+                "\"revises\": \"a\"",
+                "not canon-ir/1: `revises` is not an array",
+            ),
+            (
+                program_kind,
+                "{\n          \"decided_by\": \"program\",\n          \"evidence\": \"k\"\n        }",
+                canonical,
+            ),
+            (
+                "\"decided_by\": \"judgement\"",
+                "\"decided_by\": \"llm\"",
+                "not canon-ir/1: `decided_by` is not program or judgement",
+            ),
+            (
+                program_kind,
+                "{\n          \"evidence\": \"k\"\n        },\n        {\n          \"decided_by\": \"judgement\",\n          \"evidence\": \"k\"\n        }",
+                canonical,
+            ),
+        ] {
+            let changed = text.replace(from, to);
+            assert_ne!(changed, text, "{to}");
+            let refusal = read_ir(&changed).expect_err(to);
+            assert_eq!(refusal.code(), "malformed-input", "{to}: {refusal}");
+            assert_eq!(refusal.to_string(), why, "{to}");
+        }
+        for (from, to, problem) in [
+            (
+                revises,
+                "\"revises\": [\n        \"a\",\n        \"c\"\n      ]",
+                "undeclared-artifact: action `act` references artifact `c`, which is not declared",
+            ),
+            (
+                "\"evidence\": \"l\"\n        }",
+                "\"evidence\": \"m\"\n        }",
+                "undeclared-evidence-kind: action `act` references evidence kind `m`, which is not declared",
+            ),
+        ] {
+            let refusal = read_ir(&text.replace(from, to)).expect_err(to);
+            assert_eq!(refusal.code(), "malformed-input", "{to}: {refusal}");
+            assert_eq!(
+                refusal.to_string(),
+                format!("not canon-ir/1: describes an invalid protocol: {problem}"),
+                "{to}"
+            );
+        }
+    }
+
+    /// An action's `records_together` (story:simulate-record-groups) reads back as compiled.
+    /// Every other form is refused as `malformed-input`: an empty list, groups or kinds unsorted, a
+    /// kind repeated, a key the compiler never writes, a kind that is not a string, and a group
+    /// the validator refuses.
+    #[test]
+    fn record_groups_read_back_and_any_other_form_is_refused() {
+        let ir = ir::compile(
+            &model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 evidence_kinds: {a: {}, b: {}, c: {}, d: {}}\n\
+                 actions: {act: {may_produce: [{evidence: a}, {evidence: b}, {evidence: c}, \
+                 {evidence: d}], records_together: [{kinds: [d, c]}, {kinds: [b, a]}]}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let text = ir.canonical_json();
+        let group = |first: &str, second: &str| {
+            format!(
+                "{{\n          \"kinds\": [\n            \"{first}\",\n            \"{second}\"\n          ]\n        }}"
+            )
+        };
+        let groups = format!(
+            "\"records_together\": [\n        {},\n        {}\n      ]",
+            group("a", "b"),
+            group("c", "d")
+        );
+        assert!(text.contains(&groups), "{text}");
+        assert_eq!(read_ir(&text), Ok(ir));
+
+        let canonical = "not canon-ir/1: not the canonical text `canon compile` prints";
+        for (to, why) in [
+            (
+                format!(
+                    "\"records_together\": [\n        {},\n        {}\n      ]",
+                    group("c", "d"),
+                    group("a", "b")
+                ),
+                canonical.to_owned(),
+            ),
+            (
+                format!(
+                    "\"records_together\": [\n        {},\n        {}\n      ]",
+                    group("b", "a"),
+                    group("c", "d")
+                ),
+                canonical.to_owned(),
+            ),
+            (
+                format!(
+                    "\"records_together\": [\n        {},\n        {}\n      ]",
+                    group("a", "b").replace("\"b\"", "\"b\",\n            \"b\""),
+                    group("c", "d")
+                ),
+                canonical.to_owned(),
+            ),
+            ("\"records_together\": []".to_owned(), canonical.to_owned()),
+            (
+                groups.replace(
+                    "\"kinds\": [\n            \"a\"",
+                    "\"also\": 1,\n          \"kinds\": [\n            \"a\"",
+                ),
+                canonical.to_owned(),
+            ),
+            (
+                groups.replace("\"a\",", "1,"),
+                "not canon-ir/1: a kind in `records_together` is not a string".to_owned(),
+            ),
+            (
+                groups.replace("\"b\"\n", "\"a\"\n"),
+                "not canon-ir/1: describes an invalid protocol: invalid-record-group: action \
+                 `act` records_together group 1 names fewer than two distinct evidence kinds"
+                    .to_owned(),
+            ),
+        ] {
+            let changed = text.replace(&groups, &to);
+            assert_ne!(changed, text, "{to}");
+            let refusal = read_ir(&changed).expect_err(&to);
+            assert_eq!(refusal.code(), "malformed-input", "{to}: {refusal}");
+            assert_eq!(refusal.to_string(), why, "{to}");
+        }
     }
 
     /// The IR of a claim whose predicate is `not` nested `depth` times around an evidence match.

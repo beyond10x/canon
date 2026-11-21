@@ -13,7 +13,8 @@
 domain: canon.cli
 
 summary: >-
-  The canon command line: validate, compile, evaluate, check, generate, diff, floor and conform
+  The canon command line: validate, compile, evaluate, check, simulate, generate, diff, floor and
+  conform
   run, each reading files named by its flags and printing its result, or refusing with exit status
   1 when a document is rejected and 2 when an input cannot be read.
 
@@ -228,6 +229,110 @@ commands:
           finds something
         error: canon.cli.Rejected
       # read from: crates/canon-cli/src/check.rs:42-44
+      - name: nothing-found
+        returns: true
+
+  # Walks every state a case can reach from the empty case, one step at a time
+  # (story:canon-simulate), modelled on canon.cli.Check; a child case's outcome arrives at any step
+  # after the action that opened the child was taken (story:simulate-child-outcome-step); an
+  # admissible action may move an artifact it declares in revises to a new revision
+  # (story:simulate-revise-step).
+  # read from: .engineering/planning/story/canon-simulate.md:44-80
+  # read from: .engineering/planning/story/canon-simulate.md:125
+  # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Outcome", 1 to 5
+  # read from: .engineering/planning/story/simulate-revise-step.md, section "Outcome", 1
+  - name: canon.cli.Simulate
+    naming:
+      wire: simulate
+      display: Simulate
+      summary: >-
+        Walk every state a case of a protocol/1 document can reach from the empty case, a child
+        case's outcome arriving at any step after the action that opened the child and an
+        admissible action moving the artifacts it declares in revises to a new revision, and
+        report the states no sequence of steps gets out of (stuck states and cycles, one per
+        smallest state), dead actions and unreached outcomes.
+    input:
+      # The protocol/1 document to simulate.
+      # read from: .engineering/planning/story/canon-simulate.md:44
+      - name: path
+        type: String
+    response:
+      # The walk's summary line, which found nothing: the reachable states, the terminable ones
+      # per outcome, the open states with no action to take, and 0 findings. The open states with
+      # no action to take are counted as waiting on supplied evidence or expiry when the protocol
+      # declares a supplied or an expiring kind and no action that opens a child case, and as
+      # waiting on supplied evidence, a child outcome or expiry when an action opens a child case
+      # (case_open). A state names each opening action whose children have not all ended: `action
+      # a opened a child` for one, `action a opened 2 or more children` for more. An open state
+      # waits only when no outcome is legitimate in it, no action is approval-required there, and
+      # every step of every admissible action, record or revise, returns it. A revise step is
+      # written `action x revises a`, or `action x revises a and produces …` with the record or
+      # group it adds; in a state, a record of a dimension a children form reads that a revision
+      # set aside is written `… earlier`, and one observed before an upstream artifact moved `…
+      # observed before upstream a moved`.
+      # read from: .engineering/planning/story/canon-simulate.md:67
+      # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R3 and R5
+      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 1", D1
+      # read from: .engineering/planning/story/simulate-revise-step.md, section "Outcome", 1, 2 and 4
+      - name: output
+        type: String
+    outcomes:
+      # read from: .engineering/planning/story/canon-simulate.md:125
+      - name: unreadable
+        external: the protocol cannot be read
+        error: canon.cli.Unreadable
+      # A stuck state or a cycle is a state that is not open: no sequence of action (record and
+      # revise), supplied, child-outcome, expiry and authority steps leads from it to a
+      # legitimate outcome. The walk
+      # counts, per action that opens a child case, its children that have not ended: none, one,
+      # or two or more. A step of the action raises the count; a child's outcome arrives while the
+      # count is above none, an outcome other than open lowers it, or from two or more may also
+      # leave it at two or more, and replaces an open record, and a child-outcome step is no
+      # action step, so it never makes a state a cycle. A state holding an open record, current or
+      # held as expired, keeps some count above none, because an open record is a child that has
+      # not ended. A stuck state or cycle is printed once per smallest state, with the decisions
+      # that would make an outcome legitimate and the number of other such states that contain
+      # it. A case_outcome record that expires stays read by every children form: with no
+      # evidence match reading case_outcome it has no expiry step, otherwise it is held as
+      # expired, absent to every evidence match. Limit: a step adds one record, so where an
+      # action's guard closes on its first record the walk never holds two records of one taking
+      # together, and an outcome that needs both is reported as unreached. A child's outcome
+      # arrives only in the case_outcome dimension its opening action produces, as canon check
+      # counts it: about the action's case_open subject when the protocol reads case_outcome about
+      # that artifact by name, in a children form or an evidence match, otherwise without a
+      # subject; an open record keeps a count above none on an action that produces its
+      # dimension. A protocol that reads case_outcome about no artifact by name walks as before.
+      # Revise step: from a state in which an action that declares revises is admissible, one
+      # step per non-empty subset of those artifacts, alone or with one record or one group the
+      # action may produce, tried after the action's record steps. A revision of an artifact
+      # removes the current records about it, except that a record of a dimension a children
+      # form reads becomes an earlier record, which every children form without revision:
+      # current still reads; a record of a dimension with that artifact upstream becomes one
+      # observed before it moved, which its invalidation rules keep from their claims. A state
+      # holds no revision number, and the case revision does not move: authority decisions and
+      # taken decisions stay. A cycle is a state that is not open, in which no action is
+      # approval-required, some action is admissible and every record step of every admissible
+      # action returns the same state; when a revise step of an admissible action changes it,
+      # the finding says every record step and ends with `every revision by action x leads to a
+      # state no outcome is reachable from`. An action that declares no revises has no revise
+      # step, so a protocol without revises walks as before.
+      # read from: .engineering/planning/story/simulate-revise-step.md, section "Outcome", 1 to 4
+      # read from: .engineering/planning/story/simulate-revise-step.md, section "Scope" (one record or one group)
+      # read from: .engineering/planning/story/canon-simulate.md:69-80
+      # read from: .engineering/planning/story/canon-simulate.md:235
+      # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R1 to R5
+      # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 2", R2a
+      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 1", D1
+      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, D5: an `open` record is a child that has not ended"
+      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 2: D3 is withdrawn"
+      # read from: .engineering/planning/story/child-outcome-subject.md, section "Decided in review, after adversary pass 1", D1 and D2
+      - name: rejected
+        external: >-
+          the document is rejected, the walk is refused (an order form, or more than 65536
+          reachable states), or the walk finds a state no step sequence gets out of, a dead action
+          or an unreached outcome
+        error: canon.cli.Rejected
+      # read from: .engineering/planning/story/canon-simulate.md:69
       - name: nothing-found
         returns: true
 

@@ -1,0 +1,74 @@
+format: protocol/1
+
+protocol:
+  id: simulate.upstream
+  revision: 1
+  description: Review an analysis; five upstream artifacts can invalidate a review, which puts a record in thirty-two variants and the state space above the bound.
+
+artifacts:
+  analysis:
+    description: The analysis under review.
+  upstream_1:
+    description: The first input the analysis rests on.
+  upstream_2:
+    description: The second input the analysis rests on.
+  upstream_3:
+    description: The third input the analysis rests on.
+  upstream_4:
+    description: The fourth input the analysis rests on.
+  upstream_5:
+    description: The fifth input the analysis rests on.
+
+evidence_kinds:
+  review:
+    description: A review of the analysis.
+
+claims:
+  analysis.reviewed:
+    description: The analysis has a review.
+    true_when:
+      evidence:
+        kind: review
+
+invalidation:
+  upstream_1.revised:
+    description: A review made before the first input moved no longer counts.
+    upstream: upstream_1
+    invalidates:
+      - analysis.reviewed
+
+  upstream_2.revised:
+    description: A review made before the second input moved no longer counts.
+    upstream: upstream_2
+    invalidates:
+      - analysis.reviewed
+
+  upstream_3.revised:
+    description: A review made before the third input moved no longer counts.
+    upstream: upstream_3
+    invalidates:
+      - analysis.reviewed
+
+  upstream_4.revised:
+    description: A review made before the fourth input moved no longer counts.
+    upstream: upstream_4
+    invalidates:
+      - analysis.reviewed
+
+  upstream_5.revised:
+    description: A review made before the fifth input moved no longer counts.
+    upstream: upstream_5
+    invalidates:
+      - analysis.reviewed
+
+actions:
+  review_analysis:
+    description: Review the analysis.
+    may_produce:
+      - evidence: review
+
+outcomes:
+  reviewed:
+    description: The analysis is reviewed.
+    requires:
+      claim: analysis.reviewed

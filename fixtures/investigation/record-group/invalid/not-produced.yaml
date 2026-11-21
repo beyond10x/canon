@@ -1,0 +1,39 @@
+format: protocol/1
+protocol:
+  id: probe.pair
+  revision: 1
+  description: a group that names a kind the action may not produce
+artifacts:
+  doc:
+    description: the document checked
+evidence_kinds:
+  shape:
+    description: shape check
+  fit:
+    description: fit check
+  size:
+    description: size check, produced by another action
+claims:
+  shaped:
+    description: a shape record exists
+    true_when:
+      evidence:
+        kind: shape
+        subject: doc
+outcomes:
+  done:
+    description: shape checked
+    requires:
+      claim: shaped
+actions:
+  check:
+    description: records two kinds
+    may_produce:
+      - evidence: shape
+      - evidence: fit
+    records_together:
+      - kinds: [fit, size]
+  measure:
+    description: records the size
+    may_produce:
+      - evidence: size

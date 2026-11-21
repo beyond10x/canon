@@ -1,0 +1,61 @@
+format: protocol/1
+
+protocol:
+  id: simulate.revise.child
+  revision: 1
+  description: Open one review of a document as a child case and settle on its outcome; the document can be revised at any time, and a child's outcome about an earlier revision still counts for the children form, which reads every revision.
+
+artifacts:
+  b:
+    description: The log the opening of the review is recorded against.
+  doc:
+    description: The document the child case reviews.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of a child case that reviewed the document.
+  start:
+    description: A record that the review was opened.
+
+claims:
+  doc.reviewed:
+    description: Every child case about the document, at whatever revision, ended accepted.
+    true_when:
+      children:
+        in: [accepted]
+        subject: doc
+
+  review.started:
+    description: The review was opened.
+    true_when:
+      evidence:
+        kind: start
+        subject: b
+
+actions:
+  fix:
+    description: Revise the document, at any time; it records nothing.
+    revises: [doc]
+
+  open_review:
+    description: Open the one review of the document as a child case.
+    precondition:
+      claim: review.started
+      is: unknown
+    may_produce:
+      - evidence: start
+    case_open:
+      protocol: simulate.review
+      subject: doc
+
+outcomes:
+  accepted:
+    description: The review accepted the document.
+    requires:
+      claim: doc.reviewed
+
+  rejected:
+    description: The review ended with an outcome other than accepted.
+    requires:
+      claim: doc.reviewed
+      is: false

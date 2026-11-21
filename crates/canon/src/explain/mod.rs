@@ -12,10 +12,15 @@
 //!   `inputs`, each case input's value, when the case gives any, and `independence`, each producer
 //!   with the dimensions it is independent on, in identifier order, when the case lists any),
 //!   the ids of the evidence set (`evidence`), and, each only when supplied, the authority
-//!   decisions (`authority`, `{"capability", "decision"}` entries, with `"scope"` added to one
-//!   that has a scope, by capability and then by scope, none first), the explicit decisions
-//!   (`decisions`, `{"case_revision", "decision", "outcome", "principal"}` entries) and the
-//!   evaluation instant (`at`).
+//!   decisions (`authority`, every entry as given, whether or not it applies at the case
+//!   revision or its grounds hold: `{"capability", "decision"}`, with `"scope"` added to one that
+//!   has a scope and `"principal"` and `"case_revision"` to one that gives them, by capability,
+//!   then by scope, then by case revision, then by principal, none first in each), the explicit
+//!   decisions (`decisions`, `{"case_revision", "decision", "outcome", "principal"}` entries) and
+//!   the evaluation instant (`at`). An entry of either list that names grounds
+//!   (story:decision-grounds) adds them as given: `"ground_revisions": {<artifact>: <revision>,
+//!   ...}` and `"ground_evidence": [<id>, ...]`, in id order, each id once, each only when not
+//!   empty.
 //! - `outcomes`: each blocked outcome, `{"because": [...], "status": "blocked"}`.
 //! - `actions`: each action that is not admissible, `{"because": [...], "status": <status>}`.
 //! - `obligations`: each open obligation, `{"because": [...], "status": "open"}`. Its reasons are
@@ -36,8 +41,12 @@
 //!   "result": <result>, "value": <value>}`, with `"subject"` when it names one; every `after`
 //!   first, then every `before`, then every `first`, then every `since`, each form once), then
 //!   each form over the child cases it holds, `{"children": [<outcome>, ...], "value": <value>}`,
-//!   over the same history, each form once, in the order of its outcome list
-//!   (story:case-composition), then each record an evidence match the claim reaches reads (as its
+//!   with `"revision": "current"` added for a form that reads only the records about the current
+//!   revision of their subject (story:child-outcome-revision) and `"subject": <artifact>` for a
+//!   form that names one (story:child-outcome-subject), over the same history, each form once, in
+//!   the order of its outcome list, then no `revision` first, then no `subject` first and then in
+//!   subject order (story:case-composition),
+//!   then each record an evidence match the claim reaches reads (as its
 //!   `excluded_evidence` list counts them), written as below, then each evidence match it reaches
 //!   that reads no record of the evidence set, `{"kind": <kind>, "status": "absent"}`, with
 //!   `"subject": <artifact>` added when the match names one, in kind and then subject order (no
@@ -69,7 +78,8 @@
 //! is not written.
 //!
 //! Every list is in a fixed order — claim reasons by claim id, evidence records and evidence ids by
-//! evidence id, absent kinds by kind id, authority decisions by capability, explicit decisions by
+//! evidence id, absent kinds by kind id, authority decisions by capability, scope, case revision
+//! and principal, explicit decisions by
 //! decision, outcome, principal and case revision, each by Unicode code point; a `because` copied
 //! from the decision keeps the decision's order — and objects are written with their keys in
 //! code-point order, so the order the inputs are given in does not change the output
@@ -149,7 +159,7 @@ pub(crate) fn explain(
         .map(|(id, _)| id)
         .chain(named.filter_map(|name| values.keys().find(|id| id.as_str() == name)))
         .collect();
-    let claims = claims(ir, seeds, &values, &case_inputs, &records, evidence);
+    let claims = claims(ir, seeds, &values, &case_inputs, &records, evidence, case);
 
     let mut sections = Map::new();
     sections.insert(
@@ -373,55 +383,69 @@ fn case_snapshot(case: &Case) -> Value {
     Value::Object(snapshot)
 }
 
-/// The authority decisions as the evaluator read and applied them, by capability and then by
-/// scope (none first), each with its scope when it has one.
+/// The authority decisions as the evaluator read them, every one as given, whether or not it
+/// applies at the case revision or its grounds hold: by capability, then by scope, then by case
+/// revision, then by principal (none first in each), each with its scope, principal, case revision
+/// and grounds when it has them.
 fn authority(authority: &Authority) -> Value {
     authority
         .decisions()
-        .map(|(capability, scope, decision)| {
+        .map(|given| {
             let mut entry = Map::from_iter([
-                ("capability".to_owned(), json!(capability.as_str())),
-                ("decision".to_owned(), json!(decision)),
+                ("capability".to_owned(), json!(given.capability.as_str())),
+                ("decision".to_owned(), json!(given.decision)),
             ]);
-            if !scope.is_empty() {
-                let members: Map<String, Value> = scope
+            if !given.scope.is_empty() {
+                let members: Map<String, Value> = given
+                    .scope
                     .iter()
                     .map(|(key, value)| (key.as_str().to_owned(), json!(value.as_str())))
                     .collect();
                 entry.insert("scope".to_owned(), Value::Object(members));
             }
+            if let Some(principal) = given.principal {
+                entry.insert("principal".to_owned(), json!(principal.as_str()));
+            }
+            if let Some(case_revision) = given.case_revision {
+                entry.insert("case_revision".to_owned(), json!(case_revision.as_str()));
+            }
+            given.grounds.explain(&mut entry);
             Value::Object(entry)
         })
         .collect()
 }
 
-/// The explicit decisions as the evaluator read them, by decision, outcome, principal and case
-/// revision.
+/// The explicit decisions as the evaluator read them, every one as given, whether or not it
+/// applies: by decision, outcome, principal and case revision, each with its grounds when it has
+/// them.
 fn decisions(decisions: &Decisions) -> Value {
-    sorted(
-        decisions
-            .entries()
-            .iter()
-            .map(|entry| {
+    let mut entries: Vec<_> = decisions.grounded().collect();
+    // The four keys tell two decisions apart (`eval::decisions`), so the grounds never decide the
+    // order.
+    entries.sort_by_key(|(entry, _)| {
+        (
+            entry.decision.as_str(),
+            entry.outcome.as_str(),
+            entry.principal.as_str(),
+            entry.case_revision.as_str(),
+        )
+    });
+    entries
+        .into_iter()
+        .map(|(decision, grounds)| {
+            let mut entry = Map::from_iter([
                 (
-                    entry.decision.as_str(),
-                    entry.outcome.as_str(),
-                    entry.principal.as_str(),
-                    entry.case_revision.as_str(),
-                )
-            })
-            .collect(),
-    )
-    .into_iter()
-    .map(|(decision, outcome, principal, case_revision)| {
-        json!({
-            "case_revision": case_revision,
-            "decision": decision,
-            "outcome": outcome,
-            "principal": principal,
+                    "case_revision".to_owned(),
+                    json!(decision.case_revision.as_str()),
+                ),
+                ("decision".to_owned(), json!(decision.decision.as_str())),
+                ("outcome".to_owned(), json!(decision.outcome.as_str())),
+                ("principal".to_owned(), json!(decision.principal.as_str())),
+            ]);
+            grounds.explain(&mut entry);
+            Value::Object(entry)
         })
-    })
-    .collect()
+        .collect()
 }
 
 /// `{"claim": <id>, "value": <value>}` for each claim `predicate` tests, in claim-id order.
@@ -492,6 +516,7 @@ fn claims(
     inputs: &CaseInputs,
     records: &Records<'_>,
     history: &[EvidenceRecord],
+    case: &Case,
 ) -> Map<String, Value> {
     let mut entries = Map::new();
     let mut pending = seeds;
@@ -508,6 +533,7 @@ fn claims(
                 because.extend(children_reasons(
                     declared.true_when.children_forms(),
                     history,
+                    &case.artifacts,
                 ));
                 because
             }
@@ -718,6 +744,49 @@ mod tests {
                 {"capability": "cap", "decision": "denied"},
                 {"capability": "cap", "decision": "granted", "scope": {"cluster": "b", "region": "eu"}},
                 {"capability": "cap", "decision": "require_approval", "scope": {"region": "eu"}},
+            ])
+        );
+    }
+
+    /// Every authority decision is recorded as given, with its principal and case revision when it
+    /// gives them, whether or not it applies at the case revision (`c1` here): by capability, then
+    /// scope, then case revision, then principal, none first in each, whatever order they were
+    /// given in.
+    #[test]
+    fn bound_authority_decisions_are_recorded_as_given() {
+        let given = |authority: &'static str| Supplied {
+            authority: Some(authority),
+            ..Supplied::default()
+        };
+        let one = explanation(
+            &[],
+            given(
+                "- {capability: cap, decision: granted, case_revision: c2, principal: q}\n\
+                 - {capability: cap, decision: denied, case_revision: c1}\n\
+                 - {capability: cap, scope: {region: eu}, decision: granted, principal: p}\n\
+                 - {capability: cap, decision: granted, principal: p}\n\
+                 - {capability: cap, decision: require_approval}\n",
+            ),
+        );
+        let two = explanation(
+            &[],
+            given(
+                "- {capability: cap, decision: require_approval}\n\
+                 - {capability: cap, decision: granted, principal: p}\n\
+                 - {capability: cap, scope: {region: eu}, decision: granted, principal: p}\n\
+                 - {capability: cap, decision: denied, case_revision: c1}\n\
+                 - {capability: cap, decision: granted, principal: q, case_revision: c2}\n",
+            ),
+        );
+        assert_eq!(one, two);
+        assert_eq!(
+            one["computed_from"]["authority"],
+            json!([
+                {"capability": "cap", "decision": "require_approval"},
+                {"capability": "cap", "decision": "granted", "principal": "p"},
+                {"capability": "cap", "case_revision": "c1", "decision": "denied"},
+                {"capability": "cap", "case_revision": "c2", "decision": "granted", "principal": "q"},
+                {"capability": "cap", "decision": "granted", "principal": "p", "scope": {"region": "eu"}},
             ])
         );
     }

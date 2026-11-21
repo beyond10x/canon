@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:pending-decisions
 kind: story
-status: active
+status: implemented
 title: 'Derive the pending decisions of an evaluation: per approval-required requirement and per decision-blocked outcome, the entry that would change it'
 tags:
 - from-request
@@ -22,10 +22,10 @@ scope:
   path: conformance/requirements.yaml
 - confidence: inferred
   path: conformance/scenarios/pending-decisions.yaml
+- confidence: cited
+  path: crates/canon-cli/tests/adversary_conformance_suite_cli.rs
 - confidence: inferred
   path: crates/canon-cli/tests/conform_requirements.rs
-- confidence: inferred
-  path: crates/canon-docs/src/source.rs
 - confidence: cited
   path: crates/canon/src/eval/decision.rs
 - confidence: cited
@@ -35,13 +35,18 @@ scope:
 - confidence: cited
   path: crates/canon/src/model/decision.rs
 - confidence: cited
+  path: crates/canon/tests/adversary_pending_decisions.rs
+- confidence: cited
+  path: crates/canon/tests/pending_decisions.rs
+- confidence: cited
   path: ess/domains/protocol.yaml
 - confidence: inferred
   path: fixtures/investigation/pending-decisions.yaml
-revision: 14
+revision: 20
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T00:21:19Z", actor: "human:timo", revision: 13, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-21T00:21:19Z", actor: "human:timo", revision: 14, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "active", to: "implemented", at: "2026-11-21T06:20:18Z", actor: "human:timo", revision: 20, decided_on: {"recorded":{"test_result":1,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
 ---
 ## Outcome
 
@@ -209,3 +214,17 @@ Conformance scenario `CANON-PENDING-001` passes under `canon conform run` over `
 ## Decided
 
 D1 option A and D2 option A of § Decision needed: the view is the section `pending_decisions` of `canon-decision/1`; an entry carries the case revision and no subject artifact. The four points under COULD NOT ESTABLISH that the draft settled provisionally stand as drafted: `options` lists `granted` for a requirement whose `current` is `require_approval`, and `termination` is not read. Decided on 2026-11-21 by the wave coordinator on the drafter's recommendation; the story was accepted under the operator's standing grant without a choice among the options (`approval-record:accept-sdc-requests-12-13-2026-11-21`). The unit builds this option and does not reopen the choice.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w5 from the implementor's report, the adversary's report (`review-result:adversary-pending-decisions-pass-1`) and the merge of `impl/pending-decisions` (`e49f1e6`). It corrects the body where the two differ.
+
+- The section is computed by `eval::pending::section` in `crates/canon/src/eval/pending.rs` from the decision's own `actions` and `outcomes` sections and the case revision. It reads nothing of the authority or decisions documents, so coverage, scope matching, lapse and precedence are decided once, in the action and outcome stages. No visibility changed in `eval/actions.rs` or `eval/outcomes.rs`.
+- The key `pending_decisions` sits after `outcomes` and before `protocol`: canonical JSON writes an object's keys in code-point order. The slot is one line in the slot list of `crates/canon/src/eval/decision.rs`; story:decision-grounds adds its section as one more.
+- Two scopes are ordered by their key and value pairs in key order, key before value, by code point; a scope that is a prefix of another comes first; no scope comes before any scope. It is the order `eval/actions.rs` gives an action's reasons.
+- A list with no entry is left out of the section, and the section is left out when both lists are empty. The conformance runner cannot assert an absent section, so `CANON-PENDING-001` does not state it; `crates/canon/tests/pending_decisions.rs` and the unit tests of `eval/pending.rs` hold it.
+- The scenario has 11 steps: the story's expectations 3 and 6 are two steps each. The fixture has a second outcome that requires a decision, so that the order by outcome id is pinned, and an action with five scopes declared out of order.
+- A case that has terminated still lists what is pending, as § Scope says.
+- In § Scope and not edited: `crates/canon-docs/src/source.rs` (`Json` already maps to an untyped value).
+- Not in § Scope and edited: the requirement count and the catalogue list in `crates/canon-cli/tests/adversary_conformance_suite_cli.rs` (26 requirements).
+- Added by the unit: `crates/canon/tests/pending_decisions.rs`. Added by the adversary: `crates/canon/tests/adversary_pending_decisions.rs` (7 cases).

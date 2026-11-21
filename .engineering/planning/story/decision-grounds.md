@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:decision-grounds
 kind: story
-status: active
+status: implemented
 title: Ground authority and explicit decisions on artifact revisions and evidence records, and set a decision aside when a ground moves
 tags:
 - from-request
@@ -30,12 +30,14 @@ scope:
   path: crates/canon/src/eval/authority.rs
 - confidence: cited
   path: crates/canon/src/eval/decisions.rs
-- confidence: inferred
-  path: crates/canon/src/eval/missing.rs
+- confidence: cited
+  path: crates/canon/src/eval/grounds.rs
 - confidence: cited
   path: crates/canon/src/eval/mod.rs
 - confidence: cited
   path: crates/canon/src/eval/outcomes.rs
+- confidence: cited
+  path: crates/canon/src/eval/pending.rs
 - confidence: cited
   path: crates/canon/src/explain/mod.rs
 - confidence: cited
@@ -43,13 +45,18 @@ scope:
 - confidence: cited
   path: crates/canon/src/model/explicit.rs
 - confidence: cited
+  path: crates/canon/tests/adversary_decision_grounds.rs
+- confidence: cited
+  path: crates/canon/tests/decision_grounds.rs
+- confidence: cited
   path: ess/domains/protocol.yaml
 - confidence: inferred
   path: fixtures/investigation/decision-grounds.yaml
-revision: 19
+revision: 27
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T00:21:35Z", actor: "human:timo", revision: 18, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-21T00:21:35Z", actor: "human:timo", revision: 19, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "active", to: "implemented", at: "2026-11-21T11:37:25Z", actor: "human:timo", revision: 27, decided_on: {"recorded":{"test_result":1,"review_outcome":5,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w6"}
 ---
 ## Outcome
 
@@ -207,3 +214,40 @@ Conformance scenario `CANON-GROUND-001` passes under `canon conform run` over `f
 ## Decided
 
 Option A of § Decision needed: `ground_revisions` and `ground_evidence` on the entries of `canon-authority/1` and `canon-decisions/1`. An evidence ground holds when the record is applicable in the sense of story:missing-evidence. Decided on 2026-11-21 by the wave coordinator on the drafter's recommendation; the story was accepted under the operator's standing grant without a choice among the options (`approval-record:accept-sdc-requests-12-13-2026-11-21`). The unit builds this option and does not reopen the choice.
+
+## Decided in review, after adversary pass 1
+
+The adversary pass (`review-result:adversary-decision-grounds-pass-1`) was green: the six claims
+held, four mutants the unit's suite let through are now held by the adversary's cases, and it
+asked for one rule to be confirmed or reversed. Decided on 2026-11-21 by the wave coordinator;
+the session the operator named orchestrator of this plan may overrule it.
+
+- **D2, an entry set aside by its case revision adds none of its grounds to `stale_grounds`.**
+  The unit built this and pinned it in CANON-GROUND-001 (step
+  `an-entry-at-another-case-revision-adds-no-ground`); § Outcome said only "each failed ground of
+  the set-aside entries". Confirmed. `stale_grounds` answers "which ground must hold again for a
+  decision already given to count". An entry bound to another case revision does not count
+  whatever its grounds do (story:authority-revision-binding), so naming its grounds would tell a
+  runner to restore something that restores nothing. § Outcome reads from now on: `stale_grounds`
+  lists each failed ground of the entries that every other rule would let apply.
+- In `computed_from`, an entry's `ground_evidence` is written sorted and without repeats and an
+  empty ground field is left out. § Outcome said "as given"; the bytes as built stand, because
+  the same input in another order must give the same bytes.
+- The note on `ess/domains/protocol.yaml` is corrected in the unit: the `read from` range of the
+  authority module and the comments of `AuthorityDecision` and `ExplicitDecision`, which state
+  applicability and the refusal order without grounds.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w6 from the implementor's report, the adversary's report (`review-result:adversary-decision-grounds-pass-1`, green) and the merge of `impl/decision-grounds` (`3c0d0a0`). It corrects the body where the two differ.
+
+- Applicability is decided once, in `evaluate_with`, through `Authority::applying_at` and `Decisions::applying_at`, before the action and outcome sections are computed. Whether a ground holds is computed in the new `crates/canon/src/eval/grounds.rs` (`Standing`); nothing else calls it.
+- The claim section is computed before the action and outcome sections. It reads no decision; 152 of 152 evaluate steps of the scenarios without grounds are byte-identical to the base.
+- `stale_grounds` lists each failed ground once across the entries set aside by their grounds alone: artifact grounds by artifact then revision, then evidence grounds by id. A failed evidence ground carries the reason the binding or freshness stage gave the record, otherwise the reason of the first claim that lists it, in claim-id order. An entry set aside by its case revision adds none (Decided in review, D2).
+- The key appears only on a `"decision": "none"` capability reason and on the `{"decision", "present": false}` outcome reason. A `require_approval` reason and a denial never carry it.
+- An evidence ground holds on a record of a kind no claim reads, when the record is given and the binding and freshness stages leave it.
+- In `computed_from`, an entry's `ground_evidence` is written sorted and without repeats and an empty ground field is left out.
+- `crates/canon/src/eval/pending.rs`, which § Scope did not name, changed: its filter takes a reason with no key other than `decision`, `present` and `stale_grounds`. A pending entry does not copy the grounds.
+- `canon check` and `canon generate` write entries without grounds; `canon simulate` reads no authority document.
+- In § Scope and not edited: `crates/canon/src/eval/missing.rs` (a reader only). Added by the unit: `crates/canon/src/eval/grounds.rs`, `crates/canon/tests/decision_grounds.rs`. Added by the adversary: `crates/canon/tests/adversary_decision_grounds.rs` (6 cases; four hold rules the unit's suite let a mutant through on).
+- Scenario `CANON-GROUND-001`. With `CANON-EVIDENCE-004` the catalogue has 28 requirements at this merge.

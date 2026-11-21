@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T10:51:07Z",
+  "actor": "human:timo",
+  "artifact": "story:child-outcome-subject",
+  "kind": "story",
+  "revision": 20,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "a form naming an artifact no case_open action is about gets no finding of its own: kept by decision (D3); what canon check and canon simulate print for it is pinned in step 1 and step 2, and the second pass found each printed line true",
+    "reference": "story:child-outcome-subject, Decided in review, D3",
+    "review": "review-result:adversary-child-outcome-subject-pass-1",
+    "outcome": "no-op"
+  }
+}

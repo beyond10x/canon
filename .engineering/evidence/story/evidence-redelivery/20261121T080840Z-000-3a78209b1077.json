@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T08:08:40Z",
+  "actor": "human:timo",
+  "artifact": "story:evidence-redelivery",
+  "kind": "story",
+  "revision": 18,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "on 8b0777b (specification only): conform run fails CANON-EVIDENCE-004 step equal-copy with duplicate-identifier (25 passed, 1 failed; 27 implemented, 26 covered) and the two count tests fail; on 6954bc4: workspace 147 summaries, 1064 passed, 0 failed per the unit's sum, conform 26 passed, 27 covered; VERIFIED by the coordinator from the unit's logs",
+    "reference": "w6/evidence-redelivery/red.log vs gate-test.log, gate-conform.log (session scratch)"
+  }
+}

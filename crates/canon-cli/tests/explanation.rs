@@ -24,12 +24,13 @@ const BASE: &str = "fixtures/investigation/protocol.yaml";
 const STEPS: [&str; 3] = ["superseded-revision", "second-run", "reversed-evidence"];
 /// Every section the decision carries for this fixture: each step expects the whole decision, so
 /// equal expectations mean byte-identical output.
-const SECTIONS: [&str; 8] = [
+const SECTIONS: [&str; 9] = [
     "actions",
     "case",
     "claims",
     "explanation",
     "format",
+    "missing_evidence",
     "outcomes",
     "protocol",
     "protocol_revision",

@@ -7,33 +7,49 @@
 //!   are written in. The members of an `all` or `any` predicate are sorted by [`canonical_order`],
 //!   and an action's capability requirements (by capability, then by scope, one without a scope
 //!   first, a scope comparing its keys and values in key order), the evidence kinds it may
-//!   produce, the claims an
+//!   produce, the kinds of each group it records together (`records_together`), those groups (by
+//!   their kinds, so by their least kind, since no kind is in two groups) and the artifacts it
+//!   revises, the claims an
 //!   invalidation rule invalidates, the values a case input declares, the values an input test
 //!   lists and the dimensions an evidence match demands independence on by identifier, and the
 //!   outcomes a `children` form lists by code point.
-//! - **No repetition.** Each of those nine lists holds every member once: in three-valued logic
-//!   `all` and `any` are idempotent, and the two action lists, the invalidated claims, the two
+//! - **No repetition.** Each of those twelve lists holds every member once: in three-valued logic
+//!   `all` and `any` are idempotent, and the five action lists, the invalidated claims, the two
 //!   lists of input values, the dimensions of `independent_on` and the outcomes of `children` are
-//!   sets.
+//!   sets. A kind an action lists twice may produce once, and is judgement-decided when either
+//!   listing is.
 //! - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
 //!   evidence match without a result has `"result": null`; a claim test without `is` has
 //!   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-//!   true; absent lists and sections are empty. The ten exceptions are an evidence kind's
-//!   `max_age`, the `subject` of an evidence match or an order form, an evidence match's
-//!   `independent_on`, an obligation's `applicable_when`, an action's `arguments`, an action's
-//!   `case_open`, the `scope` of a capability requirement, the `invalidation` section, the `case`
+//!   true; absent lists and sections are empty. The sixteen exceptions are an evidence kind's
+//!   `max_age` and its `supplied_by`, the `subject` of an evidence match, an order form or a
+//!   `children` form, an evidence match's `independent_on`, an obligation's `applicable_when`, an
+//!   action's `arguments`, an action's `case_open`, an action's `author` and its `revises`, an
+//!   action's `records_together`, the
+//!   `decided_by` of an evidence kind an action may produce, the `scope` of a capability
+//!   requirement, the `revision` of a `children` form, the `invalidation` section, the `case`
 //!   section and the `independence_dimensions` section: each written only when it is declared (a
-//!   scope only when it names a key, a section only when it holds a rule, an input or a
-//!   dimension), so the IR of a protocol that declares none of them is the IR it was before they
-//!   existed. A capability requirement is `{"capability": …}`, or `{"capability": …, "scope":
+//!   scope only when it names a key, a `children` form's `revision` only when it is `current`, an
+//!   action's `author` only as `"author": "judgement"`, its `revises` only when it lists an
+//!   artifact, its `records_together` only when it declares a group, as
+//!   `[{"kinds": [...]}, ...]` (story:simulate-record-groups), a production's `decided_by` only as `"decided_by": "judgement"`, a section only
+//!   when it holds a rule, an input or a dimension), so the IR of a protocol that declares none of
+//!   them is the IR it was before they existed. A production's `decided_by` is resolved: the
+//!   action's `author` when the production declares none (story:judgement-marking), so
+//!   `author: program` and a `decided_by` equal to the action's `author` compile to no key. An evidence kind's `supplied_by` is the protocol id as
+//!   declared, a name nothing resolves (story:supplied-evidence). A capability requirement is `{"capability": …}`, or `{"capability": …, "scope":
 //!   {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
 //!   section is `{<id>: {"description": …}}`. The `case` section is
 //!   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
 //!   authored: `{"first": {"kind": …, "result": …}}`, `{"before": {"first": …, "then": …}}`,
 //!   `{"after": {"first": …, "then": {"kind": …, "result": …}}}` and
 //!   `{"since": {"last": …, "then": {"kind": …, "result": …}}}`.
-//!   The form over the child cases is `{"children": {"in": [...]}}`, and an action's `case_open`
-//!   is `{"protocol": …, "subject": …}`, as declared (story:case-composition).
+//!   The form over the child cases is `{"children": {"in": [...]}}`, or `{"children": {"in":
+//!   [...], "revision": "current"}}` when it reads only the records about the current revision of
+//!   their subject (story:child-outcome-revision): `revision: any` reads what no key reads and is
+//!   written as no key. A form that reads only the records about one artifact adds `"subject":
+//!   …`, as declared (story:child-outcome-subject). An action's `case_open` is `{"protocol": …,
+//!   "subject": …}`, as declared (story:case-composition).
 //!   An action's `arguments` is its JSON Schema as declared, the same JSON value, its object keys
 //!   sorted like every object's (story:action-arguments).
 //! - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
@@ -42,8 +58,9 @@
 //!   other requirement is its predicate.
 //! - **Resolved references.** Only a document the validator accepts compiles, so every claim and
 //!   evidence kind the IR references is declared in it (`case_outcome` wherever a `children` form
-//!   reads it), and so is every artifact an evidence match or an order form names as its subject,
-//!   an action opens a case about (`case_open`) or an invalidation rule names as its upstream
+//!   reads it), and so is every artifact an evidence match, an order form or a `children` form
+//!   names as its subject, an action revises (`revises`) or opens a case about (`case_open`) or an
+//!   invalidation rule names as its upstream
 //!   artifact, every input an input test names, with every value it lists, and every dimension an
 //!   evidence match demands independence on.
 //!
@@ -99,14 +116,14 @@ mod imports;
 mod json;
 
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::model::{
-    self, ActionId, Age, ArtifactId, CapabilityId, CaseOpening, ChildOutcomes, ClaimId, ClaimTest,
-    EffectClass, EvidenceAfter, EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceSince,
-    FirstResult, IndependenceDimensionId, InputId, InputTest, InputValue, InvalidationRuleId,
-    ObligationId, OutcomeId, OutcomeRequirement, Predicate, Protocol, ProtocolId, ScopeKey,
-    ScopeValue, Truth,
+    self, ActionId, Age, ArtifactId, Author, CapabilityId, CaseOpening, ChildOutcomes, ClaimId,
+    ClaimTest, EffectClass, EvidenceAfter, EvidenceKindId, EvidenceMatch, EvidenceOrder,
+    EvidenceSince, FirstResult, IndependenceDimensionId, InputId, InputTest, InputValue,
+    InvalidationRuleId, ObligationId, OutcomeId, OutcomeRequirement, Predicate, Protocol,
+    ProtocolId, ScopeKey, ScopeValue, Truth,
 };
 use crate::validate::{self, Problem};
 
@@ -159,13 +176,17 @@ pub struct Described {
     pub description: Option<String>,
 }
 
-/// An evidence kind: its description, and how old a record of it may be and still apply.
+/// An evidence kind: its description, how old a record of it may be and still apply, and the
+/// protocol whose cases supply its records.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EvidenceKind {
     pub description: Option<String>,
     /// Readable when compiled: the validator refuses a maximum age [`Age::seconds`] does not read.
     /// A caller can build an IR with one; the evaluator then refuses it as `invalid-max-age`.
     pub max_age: Option<Age>,
+    /// The protocol whose cases produce records of this kind, as declared; `None` when the
+    /// protocol names none, and `canon-ir/1` then writes no `supplied_by` key.
+    pub supplied_by: Option<ProtocolId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -197,8 +218,25 @@ pub struct Action {
     /// scope only; empty when no requirement has a scope. [`Action::requirements`] walks both.
     pub scopes: BTreeMap<CapabilityId, Vec<Scope>>,
     pub effect: Option<EffectClass>,
+    /// Who writes the action's arguments and the artifacts it revises (story:judgement-marking);
+    /// [`Author::Program`] when the source declares none, and `canon-ir/1` then writes no `author`
+    /// key.
+    pub author: Author,
     /// Sorted by evidence kind, each once.
     pub may_produce: Vec<EvidenceKindId>,
+    /// The kinds of `may_produce` whose result a judgement decides: those whose `decided_by`, or
+    /// the action's `author` when it declares none, is `judgement`; a kind listed twice is here
+    /// when either listing is. `canon-ir/1` writes `"decided_by": "judgement"` on each of their
+    /// productions, and writes nothing for a kind here that `may_produce` does not hold.
+    pub judgement_decided: BTreeSet<EvidenceKindId>,
+    /// The kinds one run of the action records together (story:simulate-record-groups): each
+    /// group's kinds sorted, each once, and the groups sorted, so by their least kind, since no
+    /// kind is in two groups. Empty when the action declares none, and `canon-ir/1` then writes no
+    /// `records_together` key. No evaluation reads it; `canon simulate` does.
+    pub records_together: Vec<Vec<EvidenceKindId>>,
+    /// The artifacts the action may move to a new revision, sorted, each once; empty when it
+    /// declares none, and `canon-ir/1` then writes no `revises` key.
+    pub revises: Vec<ArtifactId>,
     /// The argument schema as declared; `None` when the action declares none (it takes no
     /// arguments; a runner accepts only `{}`), and `canon-ir/1` then writes no `arguments` key.
     pub arguments: Option<serde_json::Value>,
@@ -269,6 +307,7 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
         evidence_kinds: keyed(&protocol.evidence_kinds, |kind| EvidenceKind {
             description: kind.description.clone(),
             max_age: kind.max_age.clone(),
+            supplied_by: kind.supplied_by.clone(),
         }),
         claims: keyed(&protocol.claims, |claim| Claim {
             description: claim.description.clone(),
@@ -294,6 +333,7 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
             ),
             scopes: scopes(&action.requires),
             effect: action.effect.clone(),
+            author: action.author.unwrap_or(Author::Program),
             may_produce: unique(
                 action
                     .may_produce
@@ -301,6 +341,22 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
                     .map(|production| production.evidence.clone())
                     .collect(),
             ),
+            judgement_decided: action
+                .may_produce
+                .iter()
+                .filter(|production| {
+                    production.decided_by.or(action.author) == Some(Author::Judgement)
+                })
+                .map(|production| production.evidence.clone())
+                .collect(),
+            records_together: unique(
+                action
+                    .records_together
+                    .iter()
+                    .map(|group| unique(group.kinds.clone()))
+                    .collect(),
+            ),
+            revises: unique(action.revises.clone()),
             arguments: action.arguments.clone(),
             case_open: action.case_open.clone(),
         }),
@@ -360,8 +416,12 @@ pub(crate) fn normalize(predicate: &Predicate) -> Predicate {
             independent_on: matching.independent_on.clone().map(unique),
             ..matching.clone()
         }),
+        // `revision: any` reads what no key reads, and is one form with it. `subject` is carried
+        // as written.
         Predicate::Children(form) => Predicate::Children(ChildOutcomes {
             r#in: unique(form.r#in.clone()),
+            revision: form.revision.filter(|_| form.current_only()),
+            subject: form.subject.clone(),
         }),
         Predicate::Claim(_)
         | Predicate::First(_)
@@ -431,7 +491,9 @@ fn scopes(requires: &[model::CapabilityRequirement]) -> BTreeMap<CapabilityId, V
 ///    result, then subject; two `since` forms by `last`, then the later kind, then the later
 ///    result, then subject; no subject comes before any subject.
 /// 8. Two `children` forms compare the outcomes they list, in their own (code-point) order,
-///    pairwise as text; when one list runs out first, the shorter list comes first.
+///    pairwise as text; when one list runs out first, the shorter list comes first; then by
+///    `revision`, none before `current`; then by `subject`, none before any, two as text. Two
+///    forms that differ only in `revision`, or only in `subject`, are two members.
 fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
     fn form(predicate: &Predicate) -> u8 {
         match predicate {
@@ -563,13 +625,27 @@ fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
                 })
         }
         (Predicate::Children(left), Predicate::Children(right)) => {
-            for (left, right) in left.r#in.iter().zip(&right.r#in) {
-                let order = text(left, right);
+            for (outcome, other) in left.r#in.iter().zip(&right.r#in) {
+                let order = text(outcome, other);
                 if order != Ordering::Equal {
                     return order;
                 }
             }
-            left.r#in.len().cmp(&right.r#in.len())
+            left.r#in
+                .len()
+                .cmp(&right.r#in.len())
+                .then_with(|| {
+                    optional(
+                        left.revision.map(|revision| revision.as_str()),
+                        right.revision.map(|revision| revision.as_str()),
+                    )
+                })
+                .then_with(|| {
+                    optional(
+                        left.subject.as_ref().map(|subject| subject.as_str()),
+                        right.subject.as_ref().map(|subject| subject.as_str()),
+                    )
+                })
         }
         _ => form(left).cmp(&form(right)),
     }
@@ -609,6 +685,9 @@ impl Ir {
                     let mut fields = vec![("description", description(&kind.description))];
                     if let Some(max_age) = &kind.max_age {
                         fields.push(("max_age", Value::string(max_age.as_str())));
+                    }
+                    if let Some(supplier) = &kind.supplied_by {
+                        fields.push(("supplied_by", Value::string(supplier.as_str())));
                     }
                     Value::object(fields)
                 }),
@@ -686,12 +765,57 @@ impl Ir {
                                     .may_produce
                                     .iter()
                                     .map(|kind| {
-                                        Value::object([("evidence", Value::string(kind.as_str()))])
+                                        let mut fields =
+                                            vec![("evidence", Value::string(kind.as_str()))];
+                                        if action.judgement_decided.contains(kind) {
+                                            fields.push((
+                                                "decided_by",
+                                                Value::string(Author::Judgement.as_str()),
+                                            ));
+                                        }
+                                        Value::object(fields)
                                     })
                                     .collect(),
                             ),
                         ),
                     ];
+                    if action.author == Author::Judgement {
+                        fields.push(("author", Value::string(Author::Judgement.as_str())));
+                    }
+                    if !action.revises.is_empty() {
+                        fields.push((
+                            "revises",
+                            Value::Array(
+                                action
+                                    .revises
+                                    .iter()
+                                    .map(|artifact| Value::string(artifact.as_str()))
+                                    .collect(),
+                            ),
+                        ));
+                    }
+                    if !action.records_together.is_empty() {
+                        fields.push((
+                            "records_together",
+                            Value::Array(
+                                action
+                                    .records_together
+                                    .iter()
+                                    .map(|group| {
+                                        Value::object([(
+                                            "kinds",
+                                            Value::Array(
+                                                group
+                                                    .iter()
+                                                    .map(|kind| Value::string(kind.as_str()))
+                                                    .collect(),
+                                            ),
+                                        )])
+                                    })
+                                    .collect(),
+                            ),
+                        ));
+                    }
                     if let Some(arguments) = &action.arguments {
                         fields.push(("arguments", Value::json(arguments)));
                     }
@@ -906,10 +1030,25 @@ fn predicate_value(predicate: &Predicate) -> Value {
                 ),
             ]),
         )]),
-        Predicate::Children(ChildOutcomes { r#in }) => Value::object([(
-            "children",
-            Value::object([("in", Value::Array(r#in.iter().map(Value::string).collect()))]),
-        )]),
+        // `"revision"` only when the form reads the current revision alone, so a form without the
+        // key, or with `any`, is written as it was before the key existed; `"subject"` only when
+        // the form names one.
+        Predicate::Children(
+            form @ ChildOutcomes {
+                r#in,
+                revision: _,
+                subject,
+            },
+        ) => {
+            let mut written = vec![("in", Value::Array(r#in.iter().map(Value::string).collect()))];
+            if form.current_only() {
+                written.push(("revision", Value::string("current")));
+            }
+            if let Some(subject) = subject {
+                written.push(("subject", Value::string(subject.as_str())));
+            }
+            Value::object([("children", Value::object(written))])
+        }
     }
 }
 
@@ -1101,6 +1240,64 @@ mod tests {
         assert_eq!(action.requirements().count(), 4);
     }
 
+    /// The judgement marks (story:judgement-marking): `"author"` only on a judgement action,
+    /// `"decided_by"` only on a production a judgement decides, resolved against the author, a kind
+    /// listed twice judgement-decided when either listing is, and `"revises"` only when it lists an
+    /// artifact, sorted, each once. `may_produce` keeps every kind once beside them.
+    #[test]
+    fn judgement_marks_are_written_only_where_they_mark_judgement() {
+        let source = format!(
+            "{HEADER}artifacts: {{a: {{}}, b: {{}}}}\nevidence_kinds: {{k: {{}}, l: {{}}}}\nactions:\n  \
+             judged: {{author: judgement, revises: [b, a, b], may_produce: [{{evidence: k, decided_by: program}}, {{evidence: k}}, {{evidence: l, decided_by: program}}]}}\n  \
+             run: {{author: program, revises: [], may_produce: [{{evidence: k, decided_by: judgement}}, {{evidence: l}}]}}\n"
+        );
+        let compiled = ir(&source);
+        assert!(
+            compiled.contains(
+                "    \"judged\": {\n      \"author\": \"judgement\",\n      \"description\": null,\n      \"effect\": null,\n      \"may_produce\": [\n        {\n          \"decided_by\": \"judgement\",\n          \"evidence\": \"k\"\n        },\n        {\n          \"evidence\": \"l\"\n        }\n      ],\n      \"precondition\": {\n        \"all\": []\n      },\n      \"requires\": [],\n      \"revises\": [\n        \"a\",\n        \"b\"\n      ]\n    },\n"
+            ),
+            "{compiled}"
+        );
+        assert!(
+            compiled.contains(
+                "    \"run\": {\n      \"description\": null,\n      \"effect\": null,\n      \"may_produce\": [\n        {\n          \"decided_by\": \"judgement\",\n          \"evidence\": \"k\"\n        },\n        {\n          \"evidence\": \"l\"\n        }\n      ],\n      \"precondition\": {\n        \"all\": []\n      },\n      \"requires\": []\n    }\n"
+            ),
+            "{compiled}"
+        );
+        let protocol = model::parse(&source).expect("parses");
+        let actions = compile(&protocol).expect("compiles").actions;
+        let judged = &actions[&ActionId::new("judged")];
+        assert_eq!(
+            judged.may_produce,
+            [EvidenceKindId::new("k"), EvidenceKindId::new("l")]
+        );
+        assert_eq!(
+            judged.judgement_decided.iter().collect::<Vec<_>>(),
+            [&EvidenceKindId::new("k")]
+        );
+        assert_eq!(judged.revises, [ArtifactId::new("a"), ArtifactId::new("b")]);
+        assert_eq!(
+            actions[&ActionId::new("run")].author,
+            model::Author::Program
+        );
+    }
+
+    /// A kind in a caller-built action's `judgement_decided` that `may_produce` does not hold is
+    /// not written: `canon-ir/1` carries `decided_by` only on a production.
+    #[test]
+    fn a_judged_kind_the_action_may_not_produce_is_not_written() {
+        let source = format!("{HEADER}evidence_kinds: {{k: {{}}}}\nactions: {{act: {{}}}}\n");
+        let mut compiled = compile(&model::parse(&source).expect("parses")).expect("compiles");
+        let before = compiled.canonical_json();
+        compiled
+            .actions
+            .get_mut(&ActionId::new("act"))
+            .expect("act")
+            .judgement_decided
+            .insert(EvidenceKindId::new("k"));
+        assert_eq!(compiled.canonical_json(), before);
+    }
+
     /// A caller-built action whose `requires` and `scopes` disagree requires more, never less.
     #[test]
     fn requirements_of_disagreeing_fields_require_more_never_less() {
@@ -1118,7 +1315,11 @@ mod tests {
             .into_iter()
             .collect(),
             effect: None,
+            author: model::Author::Program,
             may_produce: Vec::new(),
+            judgement_decided: Default::default(),
+            records_together: Vec::new(),
+            revises: Vec::new(),
             arguments: None,
             case_open: None,
         };
@@ -1216,5 +1417,22 @@ mod tests {
             ),
             "{compiled}"
         );
+    }
+
+    /// A supplier is written as declared, after the kind's other members, and only on the kind
+    /// that names one: a protocol naming none compiles to the bytes it did before the field.
+    #[test]
+    fn a_supplier_is_written_only_where_declared() {
+        let compiled = ir(&format!(
+            "{HEADER}evidence_kinds: {{supplied: {{supplied_by: parent.stage, max_age: 1h}}, \
+             plain: {{description: d}}}}\n"
+        ));
+        assert!(
+            compiled.contains(
+                "  \"evidence_kinds\": {\n    \"plain\": {\n      \"description\": \"d\"\n    },\n    \"supplied\": {\n      \"description\": null,\n      \"max_age\": \"1h\",\n      \"supplied_by\": \"parent.stage\"\n    }\n  },\n"
+            ),
+            "{compiled}"
+        );
+        assert!(!ir(&format!("{HEADER}evidence_kinds: {{plain: {{}}}}\n")).contains("supplied_by"));
     }
 }

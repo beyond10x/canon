@@ -1,0 +1,74 @@
+format: protocol/1
+
+protocol:
+  id: investigation.drafting
+  revision: 1
+  description: Draft a specification by judgement, review it by judgement and test it by program.
+
+artifacts:
+  spec:
+    description: The specification being drafted.
+
+evidence_kinds:
+  spec_source:
+    description: Which inputs a revision of the specification was drafted from, written by the runner from the effect it applied.
+  spec_rationale:
+    description: Why the draft says what it says, as the drafter judged it.
+  spec_review:
+    description: A review of the specification; its result is accept or reject.
+  spec_test:
+    description: A test run against the specification; its result is pass or fail.
+
+claims:
+  spec.drafted:
+    description: The specification has a recorded source and rationale.
+    true_when:
+      all:
+        - evidence:
+            kind: spec_source
+        - evidence:
+            kind: spec_rationale
+  spec.accepted:
+    description: The specification was accepted on review and passes its tests.
+    true_when:
+      all:
+        - evidence:
+            kind: spec_review
+            result: accept
+        - evidence:
+            kind: spec_test
+            result: pass
+
+actions:
+  draft_spec:
+    description: Write a new revision of the specification.
+    author: judgement
+    effect: write
+    revises: [spec]
+    may_produce:
+      - evidence: spec_source
+        decided_by: program
+      - evidence: spec_rationale
+
+  review_spec:
+    description: Judge whether the specification is fit.
+    author: judgement
+    precondition:
+      claim: spec.drafted
+    may_produce:
+      - evidence: spec_review
+
+  test_spec:
+    description: Run the tests against the specification.
+    author: program
+    precondition:
+      claim: spec.drafted
+    may_produce:
+      - evidence: spec_test
+        decided_by: program
+
+outcomes:
+  accepted:
+    description: The specification is accepted.
+    requires:
+      claim: spec.accepted

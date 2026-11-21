@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:judgement-marking
 kind: story
-status: active
+status: implemented
 title: Mark judgement-authored actions, revised artifacts and judgement-decided evidence in protocol/1
 tags:
 - from-request
@@ -16,8 +16,6 @@ relations:
 - depends_on: story:canon-ir
 - depends_on: story:semantic-diff
 scope:
-- confidence: inferred
-  path: crates/canon-docs/src/source.rs
 - confidence: cited
   path: crates/canon/src/diff/mod.rs
 - confidence: cited
@@ -29,8 +27,6 @@ scope:
 - confidence: cited
   path: crates/canon/src/validate/mod.rs
 - confidence: inferred
-  path: crates/canon/tests/ess_model_matches.rs
-- confidence: inferred
   path: crates/canon/tests/judgement_marking.rs
 - confidence: cited
   path: ess/domains/protocol.yaml
@@ -38,10 +34,11 @@ scope:
   path: fixtures/investigation/judgement-marking.yaml
 - confidence: inferred
   path: website/docs/concepts/protocols.md
-revision: 15
+revision: 19
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T23:28:16Z", actor: "human:timo", revision: 14, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T23:28:16Z", actor: "human:timo", revision: 15, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "active", to: "implemented", at: "2026-11-21T06:20:18Z", actor: "human:timo", revision: 19, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
 ---
 ## Outcome
 
@@ -173,3 +170,17 @@ Request 10 (`docs/plan/wave-plan-2026-11-20.md:140-143`); `$HOME/beyond10x/sdc/d
 ## Decided
 
 Option A of § Decision needed: the three fields `author`, `revises` and `decided_by`, with the enum `canon.protocol.Author`. The `canon diff` directions of § Outcome 5 stand unless the unit finds that a precedent in the tree contradicts them; it then reports the precedent and builds what the precedent says. Decided on 2026-11-21 by the wave coordinator on the drafter's recommendation; the operator accepted the story without choosing (`approval-record:accept-sdc-requests-9-11-2026-11-21`). The unit builds this option and does not reopen the choice.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w5 from the implementor's reports, the adversary's report (`review-result:adversary-judgement-marking-pass-1`) and the merge of `impl/judgement-marking` (`5b37414`). It corrects the body where the two differ.
+
+- The `revises` check is validation step 9, not 8; its place in the order is the one § Outcome 2 states: after the action's `may_produce` kinds, each listing of `revises` in turn, then the subject of `case_open`.
+- A change of `author` also prints one `canon diff` line for each kind of that action that declares no `decided_by` and is produced in both revisions, because `canon-ir/1` holds the resolved value; the lines come in kind order after the `author` line. Writing the old value as `decided_by` on each production leaves only the `author` line. § Outcome 5 does not name these lines; the concept page does.
+- A kind added to `may_produce` under a judgement action is `EXPANSION` only, a removed one `BREAKING` only, as before the fields existed.
+- The IR read-back refuses every spelling the writer does not write as `malformed-input`: `author` or `decided_by` written as `program`, any other value, `revises` empty, unsorted, repeated or naming an undeclared artifact, a production listed twice. A `decided_by` on a kind the action may not produce cannot be written in `canon-ir/1`, because the key sits on the production entry.
+- Imports: an imported action keeps the three fields. Two imports of one action that differ in a resolved value are `conflicting-imports`; two spellings of one resolved value are one declaration. A root action may revise an artifact only an import declares; an import that revises an artifact only the root declares is refused as `invalid-import`, as a `case_open` subject is.
+- No precedent in `crates/canon/src/diff/mod.rs` contradicts the directions of § Outcome 5; they are built as written.
+- Only the story's named test was written before the code; four more tests in `crates/canon/tests/judgement_marking.rs` and four unit tests were written after it. The adversary's 98 compiled documents, 31 hand-edited IRs and 20 source forms found nothing they miss.
+- In § Scope and not edited: `crates/canon-docs/src/source.rs`, `crates/canon/tests/ess_model_matches.rs`.
+- The follow-up "a revise step from `revises` in `canon simulate`" of § Order is story:simulate-revise-step.

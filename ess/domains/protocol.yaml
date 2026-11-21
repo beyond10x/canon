@@ -1,6 +1,8 @@
 # Retrofitted from the protocol/1 source model in crates/canon/src/model/ (story:protocol-source-model).
-# This is the typed model, not the protocol/1 surface syntax: parsing that syntax, and every
-# validation rule (duplicate identifiers, references that resolve), is tested by Canon itself.
+# This is the typed model, not the protocol/1 surface syntax: parsing that syntax, writing a model
+# back out as canonical JSON text (b10x_canon::model::write, story:protocol-writer) with the round
+# trip between the two (for keys of at most 1022 bytes as written), and every validation rule
+# (duplicate identifiers, references that resolve), is tested by Canon itself.
 # The evaluation documents (canon-case/1, canon-evidence/1, canon-decision/1) are specified first
 # here (story:three-valued-claims), and the explicit decisions an evaluation reads
 # (canon-decisions/1) too (story:decision-outcomes), and the authority decisions it reads
@@ -87,11 +89,11 @@ types:
       - name: description
         type: Optional<String>
 
-  # read from: crates/canon/src/model/mod.rs:68-73
+  # read from: crates/canon/src/model/mod.rs:179-198
   - name: canon.protocol.EvidenceKind
     kind: struct
     fields:
-      # read from: crates/canon/src/model/mod.rs:72
+      # read from: crates/canon/src/model/mod.rs:183-184
       - name: description
         type: Optional<String>
       # How old evidence of this kind may be and still apply. At an evaluation instant later than
@@ -104,6 +106,23 @@ types:
       # read from: docs/design/canon-protocol-calculus-design.md:477
       - name: max_age
         type: Optional<canon.protocol.Age>
+      # The protocol whose cases produce records of this kind (story:supplied-evidence): any
+      # protocol but this one, its parent's, an ancestor's, a sibling's or a child's. It is a name,
+      # like CaseOpening.protocol: compile, evaluate and check each read one document, and nothing
+      # resolves it. The runner copies such a record unchanged from a case under that protocol.
+      # canon validate refuses the protocol's own id (self-supplied-evidence), naming the kind.
+      # canon check counts the kind as produced. A kind that declares supplied_by counts as
+      # produced without authority and stays governed when an action that requires a capability
+      # may also produce it, so canon check reports authority-bypass on an outcome a supplied
+      # record alone makes legitimate. Absent, no key is compiled, so the canon-ir/1 of a
+      # protocol without it is unchanged. A record of such a kind may name upstream artifacts this protocol does not
+      # declare (EvidenceRecord.upstream_revisions).
+      # read from: .engineering/planning/story/supplied-evidence.md:51-58
+      # read from: .engineering/planning/story/supplied-evidence.md:185-191
+      # read from: .engineering/planning/story/supplied-evidence.md:235-252
+      # read from: crates/canon/src/model/mod.rs:189-197
+      - name: supplied_by
+        type: Optional<canon.protocol.ProtocolId>
 
   # read from: crates/canon/src/model/mod.rs:76-82
   - name: canon.protocol.Claim
@@ -162,9 +181,27 @@ types:
       # read from: crates/canon/src/model/mod.rs:106
       - name: may_produce
         type: List<canon.protocol.EvidenceProduction>
+      # The kinds one run of the action records together, all of them or none
+      # (story:simulate-record-groups). Absent means no group. canon validate refuses a group with
+      # fewer than two distinct kinds, a kind its may_produce does not list, a kind an earlier
+      # group of the action names, and case_outcome on an action that opens a child case (its
+      # child's outcome arrives on its own), each as invalid-record-group naming the action. No
+      # evaluation reads it: canon evaluate, canon check and canon generate give the same bytes
+      # with or without it, and canon diff reports a group added, removed or changed as NO
+      # SEMANTIC CHANGE. canon simulate adds a group's records in one step, one record of each
+      # member kind, and never offers a grouped kind alone. canon-ir/1 writes
+      # `"records_together"` only when the list is not empty, the groups sorted and the kinds
+      # sorted within each group, each kind once.
+      # read from: .engineering/planning/story/simulate-record-groups.md:48-67
+      # read from: .engineering/planning/story/simulate-record-groups.md:233-235
+      # read from: crates/canon/src/model/mod.rs:242-248
+      - name: records_together
+        type: List<canon.protocol.RecordGroup>
       # The one argument schema the action declares (story:action-arguments). Absent: the action
-      # takes no arguments; a runner accepts only `{}`. Canon never validates arguments at run
-      # time: the runner that calls the action validates them against this schema. The schema is a JSON
+      # takes no arguments; a runner accepts only `{}`. Canon evaluates no call and never calls an
+      # action. The library function b10x_canon::validate::check_arguments (story:argument-validator)
+      # checks one call's arguments against this schema with JSON Schema 2020-12 meaning, reporting
+      # every refusal; a runner uses it or any 2020-12 validator. The schema is a JSON
       # Schema in Canon's argument-schema dialect, a subset of JSON Schema 2020-12 with the same
       # meaning and no reference at all: every schema, the top level and each nested one, names
       # exactly one `type` (object, array, string, integer, number, boolean or null), the top level
@@ -180,6 +217,7 @@ types:
       # Pointer. Json here, not a typed schema: the dialect is checked by Canon's validator and its
       # conformance tests, like every other validation rule.
       # read from: .engineering/planning/story/action-arguments.md:36-72
+      # read from: .engineering/planning/story/argument-validator.md:39-64
       - name: arguments
         type: Optional<Json>
       # The child case the action opens (story:case-composition, the action case.open of Atlas
@@ -199,6 +237,43 @@ types:
       # read from: crates/canon/src/model/mod.rs:212-218
       - name: case_open
         type: Optional<canon.protocol.CaseOpening>
+      # Who writes the action's arguments and the content of the artifacts it revises
+      # (story:judgement-marking): `program`, a reproducible function of the action's inputs, or
+      # `judgement`, a person or a model. Absent means program. Canon gives it no evaluation
+      # meaning: canon evaluate, canon check and canon generate give the same bytes with or without
+      # it. It names no executor, harness, model or tool, and Canon cannot prove that a runner
+      # honours it. canon-ir/1 writes `"author": "judgement"` only on a judgement action, so
+      # `author: program` written out compiles to the bytes of no key. canon diff: program to
+      # judgement is TIGHTENING, judgement to program RELAXATION, each naming the action.
+      # read from: .engineering/planning/story/judgement-marking.md:50
+      # read from: .engineering/planning/story/judgement-marking.md:53-57
+      # read from: crates/canon/src/model/mod.rs:252-257
+      - name: author
+        type: Optional<canon.protocol.Author>
+      # The artifacts the action may move to a new revision (story:judgement-marking). Absent
+      # means none. canon validate refuses an id that is not a declared artifact
+      # (undeclared-artifact), naming the action, after the evidence kinds it may produce and
+      # before the subject of its case_open. canon-ir/1 writes `"revises"` only when the list is
+      # not empty, sorted, each id once. No evaluation reads it, and Canon never refuses a runner
+      # that moves an artifact outside it: that needs a record Canon does not receive. canon diff:
+      # an artifact added is RELAXATION, one removed TIGHTENING, each naming the action and the
+      # artifact.
+      # read from: .engineering/planning/story/judgement-marking.md:51
+      # read from: .engineering/planning/story/judgement-marking.md:53-57
+      # read from: crates/canon/src/model/mod.rs:258-262
+      - name: revises
+        type: List<canon.protocol.ArtifactId>
+
+  # Who decides a judgement-marked result (story:judgement-marking): `program`, a reproducible
+  # procedure, or `judgement`, a person or a model. On an action (`author`) it says who writes its
+  # arguments and the artifacts it revises; on a production (`decided_by`) who decides the record's
+  # result. Neither has any evaluation meaning.
+  # read from: .engineering/planning/story/judgement-marking.md:50-52
+  # read from: .engineering/planning/story/judgement-marking.md:99
+  # read from: crates/canon/src/model/mod.rs:265-275
+  - name: canon.protocol.Author
+    kind: enum
+    variants: ["program", "judgement"]
 
   # What an action's `case_open` names: the protocol a child case is governed by and the artifact
   # it is about, never an existing case, so no run-time check guards against a case opening its
@@ -256,6 +331,29 @@ types:
       # read from: crates/canon/src/model/mod.rs:120
       - name: evidence
         type: canon.protocol.EvidenceKindId
+      # Who decides the result of a record of this kind the action produces
+      # (story:judgement-marking). Absent means the action's `author`. `decided_by: program` on a
+      # judgement action covers a record the runner writes from the effect it applied, such as
+      # provenance. No evaluation reads it. canon-ir/1 writes `"decided_by": "judgement"` only on
+      # a production whose resolved value is judgement; when one action lists a kind twice,
+      # judgement wins. canon diff: a production becoming judgement-decided is TIGHTENING, one
+      # becoming program-decided RELAXATION, each naming the action and the kind.
+      # read from: .engineering/planning/story/judgement-marking.md:52-56
+      # read from: crates/canon/src/model/mod.rs:322-327
+      - name: decided_by
+        type: Optional<canon.protocol.Author>
+
+  # One group of an action's records_together (story:simulate-record-groups): kinds one run of
+  # the action records together, all of them or none. A named type, not a list of lists.
+  # read from: .engineering/planning/story/simulate-record-groups.md:48-52
+  # read from: crates/canon/src/model/mod.rs:340-348
+  - name: canon.protocol.RecordGroup
+    kind: struct
+    fields:
+      # The kinds of the group: two or more distinct kinds the action may produce.
+      # read from: crates/canon/src/model/mod.rs:345-347
+      - name: kinds
+        type: List<canon.protocol.EvidenceKindId>
 
   # read from: crates/canon/src/model/mod.rs:124-130
   - name: canon.protocol.Outcome
@@ -296,11 +394,13 @@ types:
     kind: newtype
     of: String
 
-  # Who took an explicit decision (lead-investigator), or who produced an evidence record
-  # (EvidenceRecord.producer, story:evidence-independence). Canon resolves no identity and proves
-  # no production: the principal is recorded as given, an identifier like every other.
+  # Who took an explicit decision (lead-investigator) or an authority decision
+  # (AuthorityDecision.principal, story:authority-revision-binding), or who produced an evidence
+  # record (EvidenceRecord.producer, story:evidence-independence). Canon resolves no identity and
+  # proves no production: the principal is recorded as given, an identifier like every other.
   # read from: .engineering/planning/story/decision-outcomes.md:47
   # read from: .engineering/planning/story/evidence-independence.md:68-69
+  # read from: .engineering/planning/story/authority-revision-binding.md:57
   # read from: docs/design/canon-protocol-calculus-design.md:501
   - name: canon.protocol.Principal
     kind: newtype
@@ -407,16 +507,16 @@ types:
   # the value where there is one. canon-ir/1 writes it
   # `{"input": {"id": <id>, "in": [...]}}`, its values each once, in identifier order.
   # read from: .engineering/planning/story/case-inputs.md:77-81
-  # read from: crates/canon/src/model/predicate.rs:278-285
+  # read from: crates/canon/src/model/predicate.rs:359-366
   - name: canon.protocol.InputTest
     kind: struct
     fields:
       # read from: .engineering/planning/story/case-inputs.md:77
-      # read from: crates/canon/src/model/predicate.rs:282
+      # read from: crates/canon/src/model/predicate.rs:363
       - name: input
         type: canon.protocol.InputId
       # read from: .engineering/planning/story/case-inputs.md:77-78
-      # read from: crates/canon/src/model/predicate.rs:283-284
+      # read from: crates/canon/src/model/predicate.rs:364-365
       - name: in
         type: List<canon.protocol.InputValue>
 
@@ -483,7 +583,7 @@ types:
         type: List<String>
 
   # A three-valued truth value; unknown is not false.
-  # read from: crates/canon/src/model/predicate.rs:69-75
+  # read from: crates/canon/src/model/predicate.rs:86-92
   - name: canon.protocol.Truth
     kind: enum
     variants: ["true", "false", "unknown"]
@@ -491,7 +591,7 @@ types:
   # Source text writes a predicate as a map with exactly one of the keys all, any, not, evidence,
   # claim, input, first, before, after, since or children (crates/canon/src/model/predicate.rs);
   # the typed model is this union.
-  # read from: crates/canon/src/model/predicate.rs:110-137
+  # read from: crates/canon/src/model/predicate.rs:127-154
   # read from: .engineering/planning/story/evidence-order-predicate.md:71-74
   # read from: .engineering/planning/story/evidence-order-after.md:70-75
   # read from: .engineering/planning/story/evidence-order-since.md:33-38
@@ -500,51 +600,51 @@ types:
     kind: union
     tag: kind
     variants:
-      # read from: crates/canon/src/model/predicate.rs:115
+      # read from: crates/canon/src/model/predicate.rs:132
       all: List<canon.protocol.Predicate>
-      # read from: crates/canon/src/model/predicate.rs:117
+      # read from: crates/canon/src/model/predicate.rs:134
       any: List<canon.protocol.Predicate>
-      # read from: crates/canon/src/model/predicate.rs:118
+      # read from: crates/canon/src/model/predicate.rs:135
       not: canon.protocol.Predicate
-      # read from: crates/canon/src/model/predicate.rs:119
-      evidence: canon.protocol.EvidenceMatch
       # read from: crates/canon/src/model/predicate.rs:136
+      evidence: canon.protocol.EvidenceMatch
+      # read from: crates/canon/src/model/predicate.rs:153
       claim: canon.protocol.ClaimTest
       # read from: .engineering/planning/story/case-inputs.md:77-81
-      # read from: crates/canon/src/model/predicate.rs:120-121
+      # read from: crates/canon/src/model/predicate.rs:137-138
       input: canon.protocol.InputTest
       # Whether the first record of a kind has a result (story:evidence-order-predicate).
       # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
-      # read from: crates/canon/src/model/predicate.rs:122-123
+      # read from: crates/canon/src/model/predicate.rs:139-140
       first: canon.protocol.FirstResult
       # Whether the first record of one kind was observed strictly before the first of another.
       # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
-      # read from: crates/canon/src/model/predicate.rs:124-126
+      # read from: crates/canon/src/model/predicate.rs:141-143
       before: canon.protocol.EvidenceOrder
       # Whether a record of a kind with a result was observed strictly after the first record of
       # another kind, or of the same one (story:evidence-order-after).
       # read from: .engineering/planning/story/evidence-order-after.md:70-75
-      # read from: crates/canon/src/model/predicate.rs:127-129
+      # read from: crates/canon/src/model/predicate.rs:144-146
       after: canon.protocol.EvidenceAfter
       # Whether a record of a kind with a result, at the subject revision of the latest record of
       # another kind (or of the same one), was observed after it (story:evidence-order-since).
       # read from: .engineering/planning/story/evidence-order-since.md:33-38
-      # read from: crates/canon/src/model/predicate.rs:130-132
+      # read from: crates/canon/src/model/predicate.rs:147-149
       since: canon.protocol.EvidenceSince
       # Whether every child case of the case ended with one of the outcomes listed
       # (story:case-composition).
       # read from: .engineering/planning/story/case-composition.md:64-67
-      # read from: crates/canon/src/model/predicate.rs:133-135
+      # read from: crates/canon/src/model/predicate.rs:150-152
       children: canon.protocol.ChildOutcomes
 
-  # read from: crates/canon/src/model/predicate.rs:228-245
+  # read from: crates/canon/src/model/predicate.rs:245-262
   - name: canon.protocol.EvidenceMatch
     kind: struct
     fields:
-      # read from: crates/canon/src/model/predicate.rs:236
+      # read from: crates/canon/src/model/predicate.rs:253
       - name: kind
         type: canon.protocol.EvidenceKindId
-      # read from: crates/canon/src/model/predicate.rs:238
+      # read from: crates/canon/src/model/predicate.rs:255
       - name: result
         type: Optional<String>
       # The declared artifact a record must be about to match. A match that names one is decided
@@ -554,7 +654,7 @@ types:
       # artifact, as before. It names an artifact the protocol declares.
       # read from: .engineering/planning/story/subject-bound-evidence-match.md:13-16
       # read from: .engineering/planning/story/subject-bound-evidence-match.md:26-28
-      # read from: crates/canon/src/model/predicate.rs:240
+      # read from: crates/canon/src/model/predicate.rs:257
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
       # The independence the match demands of its records (story:evidence-independence): a record
@@ -585,21 +685,21 @@ types:
   # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
   # read from: .engineering/planning/story/evidence-order-predicate.md:76-95
   # read from: .engineering/planning/story/evidence-order-subsecond.md:40-66
-  # read from: crates/canon/src/model/predicate.rs:139-154
+  # read from: crates/canon/src/model/predicate.rs:156-171
   - name: canon.protocol.FirstResult
     kind: struct
     fields:
       # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
-      # read from: crates/canon/src/model/predicate.rs:145-147
+      # read from: crates/canon/src/model/predicate.rs:162-164
       - name: kind
         type: canon.protocol.EvidenceKindId
       # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
-      # read from: crates/canon/src/model/predicate.rs:148-150
+      # read from: crates/canon/src/model/predicate.rs:165-167
       - name: result
         type: String
       # A declared artifact: only records about it are read.
       # read from: .engineering/planning/story/evidence-order-predicate.md:65-66
-      # read from: crates/canon/src/model/predicate.rs:151-153
+      # read from: crates/canon/src/model/predicate.rs:168-170
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
 
@@ -613,21 +713,21 @@ types:
   # read from: .engineering/planning/story/evidence-order-predicate.md:97-104
   # read from: .engineering/planning/story/evidence-order-predicate.md:108-110
   # read from: .engineering/planning/story/evidence-order-subsecond.md:40-66
-  # read from: crates/canon/src/model/predicate.rs:156-173
+  # read from: crates/canon/src/model/predicate.rs:173-190
   - name: canon.protocol.EvidenceOrder
     kind: struct
     fields:
       # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
-      # read from: crates/canon/src/model/predicate.rs:163-165
+      # read from: crates/canon/src/model/predicate.rs:180-182
       - name: first
         type: canon.protocol.EvidenceKindId
       # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
-      # read from: crates/canon/src/model/predicate.rs:166-168
+      # read from: crates/canon/src/model/predicate.rs:183-185
       - name: then
         type: canon.protocol.EvidenceKindId
       # A declared artifact: only records about it are read, of either kind.
       # read from: .engineering/planning/story/evidence-order-predicate.md:67-69
-      # read from: crates/canon/src/model/predicate.rs:169-172
+      # read from: crates/canon/src/model/predicate.rs:186-189
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
 
@@ -644,21 +744,21 @@ types:
   # read from: .engineering/planning/story/evidence-order-after.md:70-75
   # read from: .engineering/planning/story/evidence-order-after.md:89-111
   # read from: .engineering/planning/story/evidence-order-subsecond.md:40-66
-  # read from: crates/canon/src/model/predicate.rs:175-193
+  # read from: crates/canon/src/model/predicate.rs:192-210
   - name: canon.protocol.EvidenceAfter
     kind: struct
     fields:
       # read from: .engineering/planning/story/evidence-order-after.md:70-72
-      # read from: crates/canon/src/model/predicate.rs:183-185
+      # read from: crates/canon/src/model/predicate.rs:200-202
       - name: first
         type: canon.protocol.EvidenceKindId
       # read from: .engineering/planning/story/evidence-order-after.md:70-72
-      # read from: crates/canon/src/model/predicate.rs:186-188
+      # read from: crates/canon/src/model/predicate.rs:203-205
       - name: then
         type: canon.protocol.LaterRecord
       # A declared artifact: only records about it are read, of either kind.
       # read from: .engineering/planning/story/evidence-order-after.md:70-72
-      # read from: crates/canon/src/model/predicate.rs:189-192
+      # read from: crates/canon/src/model/predicate.rs:206-209
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
 
@@ -676,21 +776,21 @@ types:
   # (conformance/scenarios/evidence-order-since.yaml), not this file.
   # read from: .engineering/planning/story/evidence-order-since.md:33-38
   # read from: .engineering/planning/story/evidence-order-since.md:49-61
-  # read from: crates/canon/src/model/predicate.rs:195-213
+  # read from: crates/canon/src/model/predicate.rs:212-230
   - name: canon.protocol.EvidenceSince
     kind: struct
     fields:
       # read from: .engineering/planning/story/evidence-order-since.md:33-36
-      # read from: crates/canon/src/model/predicate.rs:203-205
+      # read from: crates/canon/src/model/predicate.rs:220-222
       - name: last
         type: canon.protocol.EvidenceKindId
       # read from: .engineering/planning/story/evidence-order-since.md:33-38
-      # read from: crates/canon/src/model/predicate.rs:206-208
+      # read from: crates/canon/src/model/predicate.rs:223-225
       - name: then
         type: canon.protocol.LaterRecord
       # A declared artifact: only records about it are read, of either kind.
       # read from: .engineering/planning/story/evidence-order-since.md:33-36
-      # read from: crates/canon/src/model/predicate.rs:209-212
+      # read from: crates/canon/src/model/predicate.rs:226-229
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
 
@@ -698,16 +798,16 @@ types:
   # the latest record of its `last` kind: a record of `kind` with `result`.
   # read from: .engineering/planning/story/evidence-order-after.md:70-75
   # read from: .engineering/planning/story/evidence-order-since.md:37-38
-  # read from: crates/canon/src/model/predicate.rs:215-226
+  # read from: crates/canon/src/model/predicate.rs:232-243
   - name: canon.protocol.LaterRecord
     kind: struct
     fields:
       # read from: .engineering/planning/story/evidence-order-after.md:70-72
-      # read from: crates/canon/src/model/predicate.rs:220-222
+      # read from: crates/canon/src/model/predicate.rs:237-239
       - name: kind
         type: canon.protocol.EvidenceKindId
       # read from: .engineering/planning/story/evidence-order-after.md:70-72
-      # read from: crates/canon/src/model/predicate.rs:223-225
+      # read from: crates/canon/src/model/predicate.rs:240-242
       - name: result
         type: String
 
@@ -715,9 +815,9 @@ types:
   # (story:case-composition): whether every child case ended with one of the outcomes listed. It
   # reads every case_outcome record the evidence check accepted, one per child case: its
   # child_case names the child, its result the child's outcome, `open` while the child runs,
-  # otherwise its terminal outcome (accepted, declined, inconclusive, abandoned, ...). It reads
-  # them as the order forms read the history, at whatever revision of their subject, expired or
-  # invalidated: a child's outcome is a fact about the child case, which a later revision of the
+  # otherwise its terminal outcome (accepted, declined, inconclusive, abandoned, ...). Without
+  # `revision: current` (the field below) it reads them as the order forms read the history, at
+  # whatever revision of their subject, expired or invalidated: a child's outcome is a fact about the child case, which a later revision of the
   # parent's artifact does not undo, and a child left out would let the parent conclude without
   # it. No record is unknown, since no applicable evidence is unknown; a record whose outcome is
   # neither listed nor `open`, a child that ended outside the set, is false; otherwise any child
@@ -728,26 +828,83 @@ types:
   # and does not declare the evidence kind case_outcome (undeclared-evidence-kind). A set:
   # canon-ir/1 writes `{"children": {"in": [...]}}`, each outcome once, in code-point order. What
   # it means is CANON-COMPOSE-001 (conformance/scenarios/case-composition.yaml), not this file.
+  # The form counts only the records it is given: Canon reads no record that a child was opened,
+  # so a child with no record takes no part. Canon does not write the records; the runner that
+  # opens the child cases does (story:child-outcome-subject), with two duties beside the one on
+  # ChildRevision: a case_outcome record's subject is the case_open subject of the action that
+  # opened the child, and the runner writes a record with result `open` when it opens a child.
   # read from: .engineering/planning/story/case-composition.md:58-67
-  # read from: crates/canon/src/model/predicate.rs:256-269
+  # read from: .engineering/planning/story/child-outcome-subject.md:51
+  # read from: .engineering/planning/story/child-outcome-subject.md:64-70
+  # read from: crates/canon/src/model/predicate.rs:273-300
   - name: canon.protocol.ChildOutcomes
     kind: struct
     fields:
       # The outcomes a child case may have ended with: not empty, each once, never `open`.
       # read from: .engineering/planning/story/case-composition.md:64-67
-      # read from: crates/canon/src/model/predicate.rs:265-268
+      # read from: crates/canon/src/model/predicate.rs:286-289
       - name: in
         type: List<String>
+      # Which records the form reads (story:child-outcome-revision): absent or `any`, every
+      # case_outcome record the evidence check accepted, as above; `current`, only those whose
+      # subject_revision is the case snapshot's current revision of their subject. A record about
+      # an earlier revision is then not read: it neither establishes nor contradicts the form and
+      # is not listed in excluded_evidence, and with no record read the form is unknown. canon-ir/1
+      # writes `"revision": "current"` only when the form says `current`, so `any` and absent
+      # compile to one form, and the IR of a protocol without the key is unchanged. A blocked
+      # action's or outcome's reason and the explanation name the form with the key the same way.
+      # What it means is CANON-COMPOSE-002 (conformance/scenarios/child-outcome-revision.yaml), not
+      # this file.
+      # read from: .engineering/planning/story/child-outcome-revision.md:51-64
+      # read from: .engineering/planning/story/child-outcome-revision.md:109
+      # read from: .engineering/planning/story/child-outcome-revision.md:126-128
+      # read from: crates/canon/src/model/predicate.rs:290-294
+      - name: revision
+        type: Optional<canon.protocol.ChildRevision>
+      # The declared artifact the records are about (story:child-outcome-subject): absent, every
+      # case_outcome record, about whatever artifact; named, only those whose subject is that
+      # artifact, and with `revision: current` too, only those among them whose subject_revision
+      # is the case snapshot's current revision of it. A record about another artifact is then not
+      # read: it neither establishes nor contradicts the form and is not listed in
+      # excluded_evidence. canon validate refuses an artifact the protocol does not declare
+      # (undeclared-artifact), naming the declaration the form is written in, after the evidence
+      # kind case_outcome, as for an evidence match's subject. canon-ir/1 writes `"subject"` only
+      # when the form names one, so the IR of a protocol without the key is unchanged; two forms
+      # that differ only in it are two members, no subject first. A blocked action's or outcome's
+      # reason and the explanation name the form with `"subject"` the same way, two forms that
+      # differ only in it being two reasons, no subject first and then in subject order. What it
+      # means is CANON-COMPOSE-003 (conformance/scenarios/child-outcome-subject.yaml), not this
+      # file.
+      # read from: .engineering/planning/story/child-outcome-subject.md:51
+      # read from: .engineering/planning/story/child-outcome-subject.md:81
+      # read from: .engineering/planning/story/child-outcome-subject.md:133-144
+      # read from: crates/canon/src/model/predicate.rs:295-299
+      - name: subject
+        type: Optional<canon.protocol.ArtifactId>
 
-  # Source text may leave `is` out; it then reads as true (crates/canon/src/model/predicate.rs:501).
-  # read from: crates/canon/src/model/predicate.rs:271-276
+  # Which case_outcome records a `children` form reads (story:child-outcome-revision): `any`, every
+  # one the evidence check accepted; `current`, only one whose subject_revision is the case
+  # snapshot's current revision of its subject. A terminal record's subject_revision is the revision
+  # the child's outcome was computed against: the child's own revision of the subject at its
+  # terminating evaluation when the child protocol declares the subject artifact, otherwise the
+  # parent's revision of the subject when the child was opened. Canon does not write the record and
+  # compares only that revision with the snapshot's.
+  # read from: .engineering/planning/story/child-outcome-revision.md:126-128
+  # read from: .engineering/planning/story/child-outcome-revision.md:263-276
+  # read from: crates/canon/src/model/predicate.rs:302-317
+  - name: canon.protocol.ChildRevision
+    kind: enum
+    variants: ["any", "current"]
+
+  # Source text may leave `is` out; it then reads as true (crates/canon/src/model/predicate.rs:582).
+  # read from: crates/canon/src/model/predicate.rs:352-357
   - name: canon.protocol.ClaimTest
     kind: struct
     fields:
-      # read from: crates/canon/src/model/predicate.rs:274
+      # read from: crates/canon/src/model/predicate.rs:355
       - name: claim
         type: canon.protocol.ClaimId
-      # read from: crates/canon/src/model/predicate.rs:275
+      # read from: crates/canon/src/model/predicate.rs:356
       - name: is
         type: canon.protocol.Truth
 
@@ -763,9 +920,10 @@ types:
     kind: newtype
     of: String
 
-  # A revision of an artifact, or of the case itself (Case.revision, ExplicitDecision.case_revision):
-  # opaque text, compared for equality only (design § 9).
+  # A revision of an artifact, or of the case itself (Case.revision, ExplicitDecision.case_revision,
+  # AuthorityDecision.case_revision): opaque text, compared for equality only (design § 9).
   # read from: .engineering/planning/story/three-valued-claims.md:57-60
+  # read from: .engineering/planning/story/authority-revision-binding.md:50-53
   - name: canon.protocol.Revision
     kind: newtype
     of: String
@@ -820,7 +978,14 @@ types:
       # read from: .engineering/planning/story/three-valued-claims.md:59
       - name: format
         type: String
-      # read from: .engineering/planning/story/three-valued-claims.md:59
+      # Used once in an evaluation's evidence set, except that a record given more than once
+      # counts once when every copy equals the first (story:evidence-redelivery): equal in kind,
+      # result, subject, subject_revision, observed_at as written text, producer, child_case and
+      # upstream_revisions (the same pairs in any order). The evaluator keeps the first copy, in
+      # the order given, and every later stage reads each id once. A copy that differs in any of
+      # these is refused as duplicate-identifier, "evidence `e1` is given more than once with
+      # different content". Where the evaluator does this: crates/canon/src/eval/evidence.rs.
+      # read from: crates/canon/src/model/evidence.rs:21-22
       - name: id
         type: canon.protocol.EvidenceId
       # read from: .engineering/planning/story/three-valued-claims.md:59
@@ -848,10 +1013,16 @@ types:
       # upstream revision and is never invalidated, so no earlier expectation changes. Each key is
       # an artifact the protocol declares and each revision an identifier; the evaluator refuses
       # an undeclared one as undeclared-artifact, naming the record and the artifact, as it
-      # refuses an undeclared subject.
+      # refuses an undeclared subject. One exception (story:supplied-evidence, option B): a record
+      # of a kind that declares supplied_by may name artifacts the protocol does not declare, so a
+      # record copied unchanged from the supplier's case is read; those entries are carried and
+      # neither checked nor read, so no invalidation rule moves the record on them. Each key is
+      # still named once, each revision is still an identifier, and an entry for a declared
+      # artifact is read as from any other record.
       # read from: .engineering/planning/story/invalidation-rules.md:43-45
       # read from: .engineering/planning/story/invalidation-rules.md:50-51
       # read from: .engineering/planning/story/invalidation-rules.md:69-70
+      # read from: .engineering/planning/story/supplied-evidence.md:235-252
       - name: upstream_revisions
         type: Map<canon.protocol.ArtifactId, canon.protocol.Revision>
       # Who produced the record (story:evidence-independence): an opaque principal id, recorded as
@@ -880,11 +1051,29 @@ types:
   # One explicit decision of a canon-decisions/1 document. `canon evaluate --decisions` names that
   # document: a YAML (or JSON) list of these entries, the way canon-authority/1 is a list of
   # authority decisions; an empty list decides nothing. A decision applies to the outcome it names
-  # when the outcome requires a decision of its name and its case_revision is the case snapshot's
-  # revision; a decision taken at a superseded case revision does not apply, and the outcome stays
-  # blocked (CANON-OUTCOME-002).
+  # when the outcome requires a decision of its name, its case_revision is the case snapshot's
+  # revision and every ground it rested on holds (ground_revisions, ground_evidence,
+  # story:decision-grounds); a decision taken at a superseded case revision, or set aside by a
+  # ground, does not apply, and the outcome stays blocked (CANON-OUTCOME-002). Its reason
+  # {"decision", "present": false} then lists under stale_grounds each failed ground of the
+  # decisions for it taken at the snapshot's revision, each once, artifact grounds by artifact and
+  # revision, then evidence grounds by id; a decision taken at another case revision adds none of
+  # its grounds, because it would not apply whatever its grounds do, so naming them would ask for a
+  # ground to hold again that restores nothing (CANON-GROUND-001). Two entries equal in decision,
+  # outcome, principal and case revision are a duplicate, whatever their grounds. Refused, in this
+  # order: text that is not such a list, or an entry with another key or a missing one, as
+  # malformed-input; then, entry by entry in the order given, a decision, outcome, principal, case
+  # revision, ground artifact, ground revision or ground evidence id that is not an identifier as
+  # invalid-identifier, then an entry equal to an earlier one as duplicate-identifier; then a
+  # ground artifact the protocol does not declare as undeclared-artifact; then a decision for an
+  # outcome the protocol does not declare as undeclared-outcome, and one for an outcome that does
+  # not require a decision of its name as undeclared-decision. canon evaluate's computed_from
+  # records each entry's grounds, ground_evidence sorted and without repeats, and leaves an empty
+  # ground field out.
   # read from: .engineering/planning/story/decision-outcomes.md:46-48
   # read from: .engineering/planning/story/decision-outcomes.md:53-54
+  # read from: .engineering/planning/story/decision-grounds.md:65-79
+  # read from: crates/canon/src/eval/decisions.rs:1-42
   - name: canon.protocol.ExplicitDecision
     kind: struct
     fields:
@@ -906,54 +1095,141 @@ types:
       # read from: .engineering/planning/story/decision-outcomes.md:106-108
       - name: case_revision
         type: canon.protocol.Revision
+      # The artifact revisions the decision rested on, keyed by artifact id, in the form of
+      # EvidenceRecord.upstream_revisions (story:decision-grounds). Optional: absent, it is empty.
+      # A ground holds while its revision equals the case snapshot's current revision of the
+      # artifact, compared for equality. The decision applies only while every ground holds, as
+      # well as at its case_revision; one that does not apply leaves its outcome blocked, and the
+      # reason {"decision", "present": false} lists the ground under stale_grounds as {"artifact",
+      # "reason": "revision_mismatch", "revision"}. Each key is an artifact the protocol declares,
+      # else undeclared-artifact, and each key and revision an identifier, else
+      # invalid-identifier. Grounds do not tell two entries apart.
+      # read from: .engineering/planning/story/decision-grounds.md:58-61
+      # read from: .engineering/planning/story/decision-grounds.md:65-79
+      # read from: crates/canon/src/model/explicit.rs:41-45
+      - name: ground_revisions
+        type: Map<canon.protocol.ArtifactId, canon.protocol.Revision>
+      # The evidence records the decision rested on, by id (story:decision-grounds). Optional:
+      # absent, it is empty. A ground holds while a record with that id is applicable: given, left
+      # by the revision-binding and freshness stages, and listed in no claim's excluded_evidence
+      # (CANON-FRONTIER-001). A failed one is listed under stale_grounds as {"evidence", "reason"}
+      # with the reason the record was excluded with, or {"evidence", "present": false} when no
+      # record has the id, which is not refused. Each id an identifier, else invalid-identifier.
+      # read from: .engineering/planning/story/decision-grounds.md:60
+      # read from: .engineering/planning/story/decision-grounds.md:62-64
+      # read from: .engineering/planning/story/decision-grounds.md:69-73
+      # read from: crates/canon/src/model/explicit.rs:46-52
+      - name: ground_evidence
+        type: List<canon.protocol.EvidenceId>
 
   # One authority decision of a canon-authority/1 document. `canon evaluate --authority` names that
   # document: a YAML (or JSON) list of these entries; an empty list decides nothing, and an empty
   # document is not a list. Canon grants nothing and resolves no identity: whoever runs the
   # evaluation decides which capabilities are granted, at which scope, and passes those decisions
-  # in (design § 33). A capability no action requires may be decided; it changes no action. One
-  # capability may be decided at several scopes; two decisions on one capability with equal scopes
-  # (the same keys with the same values, in any order) are a duplicate. Refused, in this order:
-  # text that is not such a list (a scope that names a key twice included), or an entry with
-  # another key, another decision or a missing key, as malformed-input, naming the key an entry
-  # leaves out; then, entry by entry in the order given, a capability that is not an identifier as
-  # invalid-identifier, then a scope key or value that is not one as invalid-identifier, then a
-  # capability decided a second time at an equal scope as duplicate-identifier.
-  # read from: crates/canon/src/eval/authority.rs:1-29
-  # read from: crates/canon/src/model/authority.rs:33-48
+  # in (design § 33). A capability no action requires may be decided; it changes no action. An
+  # entry may be bound to a case revision and may name the principal who took it
+  # (story:authority-revision-binding). A bound entry, whatever its decision, applies only while
+  # its case_revision is the case snapshot's revision, compared for equality, and to nothing when
+  # the snapshot has no revision; an unbound entry applies at every case revision. An entry that
+  # names grounds (ground_revisions, ground_evidence, story:decision-grounds) applies only while
+  # every ground holds, whatever its decision, so a denial whose ground moved lapses too. Only the
+  # entries that apply take part in coverage and precedence, so a requirement covered only by
+  # entries that do not apply is not decided; its reason {"capability", "decision": "none"} then
+  # lists under stale_grounds each failed ground of the entries on its capability that cover it
+  # and apply at the case revision, each once, artifact grounds by artifact and revision, then
+  # evidence grounds by id. An entry bound to another case revision adds none of its grounds,
+  # because it would not apply whatever its grounds do, so naming them would ask for a ground to
+  # hold again that restores nothing (CANON-GROUND-001). One capability may be decided at several
+  # scopes and at several case revisions; two entries equal in capability, scope (the same keys
+  # with the same values, in any order), case revision and principal are a duplicate, whatever
+  # their decisions and grounds. Refused, in this order: text that is not such a list (a scope or
+  # ground_revisions that names a key twice included), or an entry with another key, another
+  # decision or a missing key, as malformed-input, naming the key an entry leaves out; then, entry
+  # by entry in the order given, a capability that is not an identifier as invalid-identifier,
+  # then a scope key or value that is not one, then a principal, then a case revision, then a
+  # ground artifact or its revision, then a ground evidence id, each as invalid-identifier, then
+  # an entry equal to an earlier one as duplicate-identifier; then, once the explicit decisions are
+  # read too, a ground artifact the protocol does not declare as undeclared-artifact. canon
+  # evaluate's computed_from records each entry's grounds, ground_evidence sorted and without
+  # repeats, and leaves an empty ground field out.
+  # read from: crates/canon/src/eval/authority.rs:1-50
+  # read from: crates/canon/src/model/authority.rs:37-75
   # read from: .engineering/planning/story/review-hardening-w7.md:28
   # read from: .engineering/planning/story/review-hardening-w7.md:31
   # read from: .engineering/planning/story/capability-scope.md:74-76
   # read from: .engineering/planning/story/capability-scope.md:156-158
+  # read from: .engineering/planning/story/authority-revision-binding.md:46-62
   - name: canon.protocol.AuthorityDecision
     kind: struct
     fields:
       # The capability decided, an identifier an action's `requires` may name.
-      # read from: crates/canon/src/model/authority.rs:39-40
+      # read from: crates/canon/src/model/authority.rs:43-45
       - name: capability
         type: canon.protocol.CapabilityId
       # The scope the decision covers: one value for each key it names, each key once. It covers
       # a requirement of its capability when the requirement gives each of those keys the same
       # value; a key it leaves out covers every value of it. Absent or empty, it covers every
       # scope of the capability (canon.protocol.CapabilityRequirement).
-      # read from: crates/canon/src/model/authority.rs:41-45
+      # read from: crates/canon/src/model/authority.rs:46-50
       - name: scope
         type: Map<canon.protocol.ScopeKey, canon.protocol.ScopeValue>
       # Whether it is granted.
-      # read from: crates/canon/src/model/authority.rs:46-47
+      # read from: crates/canon/src/model/authority.rs:51-52
       - name: decision
         type: canon.protocol.Grant
+      # Who took the decision, an identifier. Canon records it as given and matches it against
+      # nothing, since it resolves no identity (design § 23): it does not change admissibility.
+      # read from: crates/canon/src/model/authority.rs:53-56
+      # read from: .engineering/planning/story/authority-revision-binding.md:49
+      # read from: .engineering/planning/story/authority-revision-binding.md:57
+      - name: principal
+        type: Optional<canon.protocol.Principal>
+      # The case revision the decision was taken at, an identifier, compared for equality with the
+      # case snapshot's revision (Case.revision): the decision applies only at that revision, as an
+      # explicit decision does (ExplicitDecision.case_revision). Absent, it applies at every case
+      # revision. A grant does not hold at a later revision descended from it.
+      # read from: crates/canon/src/model/authority.rs:57-61
+      # read from: .engineering/planning/story/authority-revision-binding.md:50-56
+      - name: case_revision
+        type: Optional<canon.protocol.Revision>
+      # The artifact revisions the decision rested on, keyed by artifact id, in the form of
+      # EvidenceRecord.upstream_revisions (story:decision-grounds). Optional: absent, it is empty.
+      # A ground holds while its revision equals the case snapshot's current revision of the
+      # artifact, compared for equality. The decision applies only while every ground holds, as
+      # well as at its case_revision when it has one, whatever it decided, so a denial whose ground
+      # moved lapses too. A requirement covered only by entries that do not apply is not decided,
+      # and its reason {"capability", "decision": "none"} lists under stale_grounds the ground as
+      # {"artifact", "reason": "revision_mismatch", "revision"}. Each key is an artifact the
+      # protocol declares, else undeclared-artifact, and each key and revision an identifier, else
+      # invalid-identifier. Grounds do not tell two entries apart.
+      # read from: .engineering/planning/story/decision-grounds.md:58-61
+      # read from: .engineering/planning/story/decision-grounds.md:65-79
+      # read from: crates/canon/src/model/authority.rs:62-67
+      - name: ground_revisions
+        type: Map<canon.protocol.ArtifactId, canon.protocol.Revision>
+      # The evidence records the decision rested on, by id (story:decision-grounds). Optional:
+      # absent, it is empty. A ground holds while a record with that id is applicable: given, left
+      # by the revision-binding and freshness stages, and listed in no claim's excluded_evidence
+      # (CANON-FRONTIER-001). A failed one is listed under stale_grounds as {"evidence", "reason"}
+      # with the reason the record was excluded with, or {"evidence", "present": false} when no
+      # record has the id, which is not refused. Each id an identifier, else invalid-identifier.
+      # read from: .engineering/planning/story/decision-grounds.md:60
+      # read from: .engineering/planning/story/decision-grounds.md:62-64
+      # read from: .engineering/planning/story/decision-grounds.md:69-73
+      # read from: crates/canon/src/model/authority.rs:68-74
+      - name: ground_evidence
+        type: List<canon.protocol.EvidenceId>
 
   # A key of a capability scope (cluster, namespace): what the scope narrows the capability to. An
   # identifier: not empty, no whitespace, control or Unicode format characters.
-  # read from: crates/canon/src/model/authority.rs:23-27
+  # read from: crates/canon/src/model/authority.rs:27-31
   # read from: .engineering/planning/story/capability-scope.md:155
   - name: canon.protocol.ScopeKey
     kind: newtype
     of: String
 
   # The value a capability scope gives one key (prod-eu). An identifier, as a scope key is.
-  # read from: crates/canon/src/model/authority.rs:28-31
+  # read from: crates/canon/src/model/authority.rs:32-35
   # read from: .engineering/planning/story/capability-scope.md:155
   - name: canon.protocol.ScopeValue
     kind: newtype
@@ -965,8 +1241,8 @@ types:
   # true is admissible when every requirement is granted; blocked when one is denied, naming each
   # denied requirement; and approval-required when none is denied and one requires approval or is
   # not decided, naming each such requirement (CANON-AUTHORITY-001, CANON-SCOPE-001).
-  # read from: crates/canon/src/model/authority.rs:50-64
-  # read from: crates/canon/src/eval/actions.rs:39-57
+  # read from: crates/canon/src/model/authority.rs:77-91
+  # read from: crates/canon/src/eval/actions.rs:41-70
   # read from: .engineering/planning/story/capability-scope.md:65-72
   - name: canon.protocol.Grant
     kind: enum
@@ -1071,6 +1347,43 @@ types:
         type: Optional<Json>
       # Filled by story:explanation; its shape is fixed by that story's conformance scenarios.
       - name: explanation
+        type: Optional<Json>
+      # Filled by story:missing-evidence: for each admissible action whose may_produce is not
+      # empty, the evidence kinds of that list that have no applicable record, in kind-identifier
+      # order; an empty list means every kind it may produce has one. Written only when some
+      # action qualifies. A record is applicable when the revision-binding and freshness stages
+      # leave it and no claim lists it in its excluded_evidence (as invalidated or
+      # not_independent); a kind lacks an applicable record when none of its records is. An action
+      # that is blocked or approval-required, and one whose may_produce is empty, is not a key. The
+      # section reads only may_produce and the records: a kind that declares supplied_by is listed
+      # like any other. It does not predict that the action succeeds or produces the kind, that a
+      # new record would be accepted by an independence demand, or that any claim would become
+      # true, and it reads no run history.
+      # read from: .engineering/planning/story/missing-evidence.md:58-66
+      - name: missing_evidence
+        type: Optional<Map<canon.protocol.ActionId, List<canon.protocol.EvidenceKindId>>>
+      # Filled by story:pending-decisions: the decisions the evaluation waits on, each a
+      # canon-authority/1 or canon-decisions/1 entry that would change a status in the same
+      # decision. An object with up to two members, each written only when it has an entry, and
+      # the section only when one of them is. authority: one entry per reason {"capability",
+      # "decision": "none" | "require_approval", "scope"?} of an approval-required action in the
+      # actions section, {"action", "capability", "scope"?, "current", "case_revision"?,
+      # "options": ["granted", "denied"]}; current is that reason's decision, scope is written
+      # when the requirement has one and case_revision is the case snapshot's revision, written
+      # when it has one. A blocked action has no entry. Ordered by action id, then capability, then
+      # scope: no scope first, two scopes by their key-value pairs in key order, pair by pair,
+      # key before value, by code point, a scope that is a prefix of the other first. decisions:
+      # one entry per outcome blocked with the reason {"decision": <name>, "present": false},
+      # {"outcome", "decision", "case_revision"?, "options"}, in outcome-id order; options is
+      # ["taken"] when the snapshot has a revision and [] with no case_revision when it has none,
+      # since a canon-decisions/1 entry applies only at the snapshot's revision. An option is the
+      # value of the entry a caller would add with its own principal; precedence is unchanged, so
+      # a granted entry decides a requirement whose current is require_approval only when no
+      # require_approval entry still covers it. Computed from the inputs canon evaluate takes;
+      # principal, holder, expiry, routing and grounds are not. Its shape is fixed by
+      # CANON-PENDING-001.
+      # read from: .engineering/planning/story/pending-decisions.md:46-63
+      - name: pending_decisions
         type: Optional<Json>
 
 entities:
@@ -1182,12 +1495,14 @@ entities:
       # read from: .engineering/planning/story/outcomes.md:38-39
       - name: termination
         type: Optional<canon.protocol.OutcomeId>
-      # The case's own current revision, which an explicit decision is bound to: a decision applies
-      # only while its case_revision is this one (story:decision-outcomes). A snapshot without one
-      # has no current revision, so no explicit decision applies to it and every earlier
-      # expectation holds.
+      # The case's own current revision, which an explicit decision, and an authority decision that
+      # gives a case_revision, is bound to: such a decision applies only while its case_revision is
+      # this one (story:decision-outcomes, story:authority-revision-binding). A snapshot without one
+      # has no current revision, so no explicit decision and no bound authority decision applies to
+      # it, and every earlier expectation holds.
       # read from: .engineering/planning/story/decision-outcomes.md:47-48
       # read from: .engineering/planning/story/decision-outcomes.md:53-54
+      # read from: .engineering/planning/story/authority-revision-binding.md:52-53
       # read from: docs/design/canon-protocol-calculus-design.md:1604
       - name: revision
         type: Optional<canon.protocol.Revision>

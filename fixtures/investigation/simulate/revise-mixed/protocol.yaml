@@ -1,0 +1,39 @@
+format: protocol/1
+
+protocol:
+  id: simulate.revise.mixed
+  revision: 1
+  description: Approve a document whose approval may record approved or another result; two different results leave the approval unknown, and revising the document sets both aside.
+
+artifacts:
+  doc:
+    description: The document being approved.
+
+evidence_kinds:
+  approval:
+    description: An approval of the document; its result is approved or another.
+
+claims:
+  doc.approved:
+    description: The current revision of the document has been approved.
+    true_when:
+      evidence:
+        kind: approval
+        subject: doc
+        result: approved
+
+actions:
+  approve:
+    description: Record an approval of the document, approved or another result, at any time.
+    may_produce:
+      - evidence: approval
+
+  fix:
+    description: Revise the document; it records nothing.
+    revises: [doc]
+
+outcomes:
+  approved:
+    description: The document is approved.
+    requires:
+      claim: doc.approved

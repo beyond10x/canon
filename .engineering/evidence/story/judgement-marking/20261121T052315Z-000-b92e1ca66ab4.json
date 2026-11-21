@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T05:23:15Z",
+  "actor": "human:timo",
+  "artifact": "story:judgement-marking",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "on 5f34e2a (specification only): specification_and_model_are_equal names Action.author, Action.revises, EvidenceProduction.decided_by and the enum Author; judgement_marking_compiles_and_means_nothing_yet fails on the unknown field author; on 7c495e5: workspace 1026 passed, 0 failed, conform 24 passed, 25 covered; only the named test was written before the code, which the adversary is told; VERIFIED by the coordinator from the unit's logs",
+    "reference": "w5/judgement-marking/red.log vs gate logs (session scratch)"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T08:15:25Z",
+  "actor": "human:timo",
+  "artifact": "story:argument-validator",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "validate and compile accepted an enum of two numbers the base refused: decided D1 (numbers compare by exact value everywhere); the adversary re-pinned its case to the new answer in pass 2",
+    "reference": "impl/argument-validator e33bfcd, 2b76d32",
+    "review": "review-result:adversary-argument-validator-pass-1",
+    "outcome": "fixed"
+  }
+}

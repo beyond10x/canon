@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T06:20:18Z",
+  "actor": "human:timo",
+  "artifact": "story:canon-simulate",
+  "kind": "story",
+  "revision": 21,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "the expiry step dropped a child outcome the evaluator still counts: R2a (bbe8f00); the adversary confirmed with the evaluator that the cycle the walk now prints on its case is true and re-pinned the case (56a975c)",
+    "reference": "impl/canon-simulate bbe8f00, 56a975c",
+    "review": "review-result:adversary-canon-simulate-pass-2",
+    "outcome": "fixed"
+  }
+}

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:protocol-writer
 kind: story
-status: active
+status: implemented
 title: Write a protocol/1 model out as canonical JSON text with a pure library function
 tags:
 - from-request
@@ -18,14 +18,17 @@ scope:
   path: crates/canon/src/model/mod.rs
 - confidence: inferred
   path: crates/canon/src/model/write.rs
+- confidence: cited
+  path: crates/canon/tests/adversary_protocol_write.rs
 - confidence: inferred
   path: crates/canon/tests/protocol_write.rs
 - confidence: cited
   path: ess/domains/protocol.yaml
-revision: 8
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T23:28:16Z", actor: "human:timo", revision: 7, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T23:28:16Z", actor: "human:timo", revision: 8, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "active", to: "implemented", at: "2026-11-21T16:01:29Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"test_result":1,"review_outcome":6}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w7"}
 ---
 ## Outcome
 
@@ -156,3 +159,80 @@ Request 9 (prompt), `$HOME/beyond10x/sdc/docs/canon-requests.md:48-58`, `$HOME/b
 ## Decided
 
 Option A of § Decision needed: the canonical JSON writer `model::write` only. A builder waits for a story whose consumer names its API. Decided on 2026-11-21 by the wave coordinator on the drafter's recommendation; the operator accepted the story without choosing (`approval-record:accept-sdc-requests-9-11-2026-11-21`). The unit builds this option and does not reopen the choice.
+
+## Decided in review, after adversary pass 1
+
+The adversary pass (`review-result:adversary-protocol-writer-pass-1`) was red: four findings, all
+introduced by the unit, six red cases and four green cases that kill mutants the unit's suite let
+through. Decided on 2026-11-21 by the wave coordinator; the session the operator named
+orchestrator of this plan may overrule it.
+
+- **D1, the round trip holds for keys of at most 1022 bytes as written.** The YAML reader behind
+  `parse` drops a simple key whose text runs more than 1024 bytes before its `:`, the two quotes
+  included. `parse` itself gives longer keys: a plain key of 1023 or 1024 bytes, an explicit `?`
+  key of any length, and a key whose escapes grow it past the limit when written. JSON has one
+  spelling for a key, so no JSON text reads such a key back through `parse`. The three ways out
+  were: narrow the guarantee, have `parse` refuse such keys, or write those keys in a YAML form
+  that is not JSON. The second changes which `protocol/1` documents `parse` accepts, one day
+  after 0.10.0; the third gives up § Decided option A. The guarantee is narrowed. § Outcome reads
+  from now on: `parse(&write(&p)) == Ok(p)` for every `p` that `parse` gives in which every
+  key, as written with its escapes, is at most 1022 bytes; this holds for identifiers and for
+  property names inside `arguments`. For a longer key `write` still returns JSON that
+  `serde_json` reads with the key intact, and `parse` refuses that text. The module docs state
+  the limit in bytes of written text, not in characters, and no longer say `parse` gives no such
+  key. Tests pin both sides of the limit (1022 reads back, 1023 does not) for a plain key, a key
+  grown by escapes and a property name inside `arguments`, and that the text for a longer key is
+  JSON holding the key.
+- **D2, `write` recurses once per nesting level, and the docs say so.** A predicate or an
+  `arguments` value built in Rust and nested 5000 deep overflows a 2 MiB stack inside `write`.
+  `parse` gives at most 123 levels of predicate and 125 of `arguments`, so no parsed model
+  reaches it. The writer stays recursive: an explicit stack would change every function of a
+  769-line file for a model no reader of protocol text can produce. § Outcome's "total" reads from
+  now on: `write` returns for every model whose nesting the calling thread's stack holds; it
+  uses stack in proportion to the nesting depth. The module docs drop the sentence that a model
+  nested deeper than `parse` reads "is still written" and state this instead. A test holds a
+  model built in Rust at 1000 levels on a thread with a 2 MiB stack.
+- **D3, the adversary's cases.** The four green cases stay as they are. The six red cases are
+  rewritten by the correction to pin D1 and D2: each keeps its input and asserts the behaviour
+  decided above. The case at 5000 levels becomes the case at 1000 levels.
+
+- **D4, the depth test holds 500 levels, not 1000.** Added on 2026-11-21 after correction 1
+  (`94150485`) measured the stack: in a debug build on the workstation's compiler a predicate
+  1150 deep is written on a 2 MiB stack and one 1200 deep overflows it. 1000 levels leave about
+  15 percent, and a stack overflow aborts the whole test binary; the compiler in continuous
+  integration is a release newer and its frames may be larger. The test and the module docs name
+  500 levels, which leaves a factor of two. D2 is otherwise unchanged.
+
+## Decided in review, after adversary pass 2
+
+The second and last adversary pass (`review-result:adversary-protocol-writer-pass-2`) was green:
+the four findings of pass 1 are closed, the key limit is 1022 bytes in 135 combinations of place
+and key form, and `parse` refuses every longer key it was given. It returned one warning and one
+note, both introduced by the unit, and three green cases (`26b7de25`). Decided on 2026-11-21 by
+the wave coordinator; the session the operator named orchestrator of this plan may overrule it.
+
+- **D5, the depth figure is 400 levels, for every predicate shape.** D4 took 500 levels from a
+  measurement of `not` alone. Pass 2 measured each shape on a 2 MiB stack in a debug build: `not`
+  holds 1152 levels, `all` and `any` hold 808, an `arguments` array 2209 and an `arguments`
+  object 1945. `all` and `any` take two calls per level, so 500 levels leave them a factor of
+  1.62. The module docs and both depth cases (`not`, and the `all` case pass 2 added) name 400
+  levels, which leaves a factor of two for the deepest-running shape. The docs sentence "recurses
+  once per level" is corrected to say that `all` and `any` take two calls per level. This is the
+  correction after the last pass; the coordinator reads its diff.
+- **D6, the note.** The two mutants the unit's cases let through (a backspace written in six
+  bytes, more stack in the list of predicates) are killed by the pass's cases, which stay.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w7 from the implementor's reports, the two adversary reports (`review-result:adversary-protocol-writer-pass-1`, red; `review-result:adversary-protocol-writer-pass-2`, green) and the merge of `impl/protocol-writer` (`aa53d6ae`). It corrects the body where the two differ.
+
+- `b10x_canon::model::write(&Protocol) -> String` is in the new `crates/canon/src/model/write.rs`; `crates/canon/src/model/mod.rs` gains `mod write;`, `pub use write::write;` and one doc sentence. No `Serialize` derive, no change under `ir/`, no change to the command line.
+- The round trip `parse(&write(&p)) == Ok(p)` holds for every `p` that `parse` gives in which every key is at most 1022 bytes as written with its escapes (Decided in review, D1). § Outcome said it for every `p` that `parse` gives. For a longer key `write` returns JSON that `serde_json` reads with the key intact, and `parse` refuses that text. Pass 2 measured 1022 and 1023 in 135 combinations of 15 places and 9 key forms; indentation does not count toward the limit.
+- `write` is infallible and recursive: one call per level of nesting and two per level of `all` or `any`. It returns for every model whose nesting the calling thread's stack holds (D2); the docs and two cases name 400 levels on a 2 MiB stack in a debug build (D5), where `all` and `any` hold 808 levels and `not` holds 1152. `parse` gives at most 123 levels of `not`, 61 of `all` and 125 of `arguments`.
+- An integer beyond 64 bits is written as a double in the build that holds doubles; a number beyond the range of a double (`1e400`) is written as its text and reads back as a string, in any document. `arguments: Some(null)` has no `protocol/1` spelling. The module docs state the three.
+- Over the corpus, 128 of 128 files read back equal and are fixpoints of `write` after `parse`, in both builds of `serde_json`.
+- Every model struct is destructured with no `..`; `writer_covers_every_specified_field` reads `ess/domains/protocol.yaml` and fails naming a field of the specification no corpus protocol writes.
+- The escape set equals that of `generate::quote`; the rule is copied, not shared.
+- `ess/domains/protocol.yaml`: the header comment only, which names the writer and the key limit.
+- Added by the unit: `crates/canon/src/model/write.rs`, `crates/canon/tests/protocol_write.rs` (34 cases). Added by the adversary: `crates/canon/tests/adversary_protocol_write.rs` (13 cases: five pin D1 on inputs `parse` gives, two pin the depth figure, six hold what a mutant passed the unit's suite on). 19 of 19 mutants of pass 1 and 3 of 3 of pass 2 are killed at the merge.
+- No scenario and no requirement: the writer is a library function with no evaluation meaning.

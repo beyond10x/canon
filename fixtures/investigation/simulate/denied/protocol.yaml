@@ -1,0 +1,35 @@
+format: protocol/1
+
+protocol:
+  id: simulate.denied
+  revision: 1
+  description: Approve a release under authority; a denial leaves the case with nothing to do.
+
+artifacts:
+  release:
+    description: The release being approved.
+
+evidence_kinds:
+  approval:
+    description: An approval of the release.
+
+claims:
+  release.approved:
+    description: The release has been approved.
+    true_when:
+      evidence:
+        kind: approval
+
+actions:
+  approve:
+    description: Approve the release, under authority.
+    requires:
+      - capability: sign
+    may_produce:
+      - evidence: approval
+
+outcomes:
+  approved:
+    description: The release is approved.
+    requires:
+      claim: release.approved

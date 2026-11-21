@@ -49,8 +49,10 @@ writes a `canon-decision/1` document with:
   evidence records that applied or were excluded.
 
 A case snapshot that records termination through an undeclared or blocked outcome is refused. The
-order of the evidence does not matter, and the same inputs give the same bytes. Inputs that do not
-fit the protocol are refused with a stable code. See the
+order of the evidence does not matter, and the same inputs give the same bytes. An evidence record
+given more than once counts once when every copy is equal to the first, so a runner that delivers
+at least once can evaluate its stored inputs again; a copy that differs is refused as
+`duplicate-identifier`. Inputs that do not fit the protocol are refused with a stable code. See the
 [evaluation reference](../reference/evaluation.md) and the
 [evaluation documents](../reference/documents.md).
 

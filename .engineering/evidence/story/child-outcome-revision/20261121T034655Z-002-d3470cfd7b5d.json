@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T03:46:55Z",
+  "actor": "human:timo",
+  "artifact": "story:child-outcome-revision",
+  "kind": "story",
+  "revision": 23,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "generated sliced-against-whole check tests never wrote revision: current: generators write it on half the forms in 03d0692; the unit's mutation of evidence_reached turns 4 tests red",
+    "reference": "impl/child-outcome-revision 03d0692; w4/child-outcome-revision/p1-mutant.log (session scratch)",
+    "review": "review-result:adversary-child-outcome-revision-pass-1",
+    "outcome": "fixed"
+  }
+}

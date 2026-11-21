@@ -14,4 +14,5 @@ pub mod floor;
 pub mod generate;
 pub mod ir;
 pub mod model;
+pub mod simulate;
 pub mod validate;

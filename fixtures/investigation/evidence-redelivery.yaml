@@ -1,0 +1,63 @@
+format: protocol/1
+
+protocol:
+  id: redelivery
+  revision: 1
+  description: Review findings and resolve them through child cases, from evidence a runner may deliver more than once.
+
+artifacts:
+  findings:
+    description: The findings under review; each change they call for is worked in a child case about them.
+  source:
+    description: The material the review was made against.
+  data:
+    description: The data the review was made against.
+
+evidence_kinds:
+  review:
+    description: A reviewer's verdict on the findings; its result is approved or rejected.
+  scan:
+    description: A scan of the source, recorded against the source revision it read.
+  case_outcome:
+    description: The outcome of one child case opened for a finding, one record per child; open while the child runs.
+
+claims:
+  findings.reviewed:
+    description: A reviewer approved the findings.
+    true_when:
+      evidence:
+        kind: review
+        result: approved
+  findings.resolved:
+    description: Every child case ended accepted or declined.
+    true_when:
+      children:
+        in: [declined, accepted]
+
+actions:
+  request_review:
+    description: Ask a reviewer for a verdict on the findings.
+    may_produce:
+      - evidence: review
+  open_change:
+    description: Open a child case for a finding, worked by another party.
+    requires:
+      - capability: case.open
+    case_open:
+      protocol: software.change
+      subject: findings
+  close:
+    description: Close the review once every child case ended accepted or declined.
+    precondition:
+      children:
+        in: [accepted, declined]
+
+outcomes:
+  reviewed:
+    description: The findings were reviewed and approved.
+    requires:
+      claim: findings.reviewed
+  resolved:
+    description: Every finding was resolved through its child case.
+    requires:
+      claim: findings.resolved

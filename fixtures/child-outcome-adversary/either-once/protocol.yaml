@@ -1,0 +1,52 @@
+format: protocol/1
+
+protocol:
+  id: adversary.either_once
+  revision: 1
+  description: Open one child case once, and end when it ended alpha or beta.
+
+artifacts:
+  thing:
+    description: The thing the child case settles.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child case.
+  opened:
+    description: The child case was opened.
+
+claims:
+  started:
+    description: The child case was opened.
+    true_when:
+      evidence:
+        kind: opened
+
+  settled:
+    description: Every child ended alpha, or every child ended beta.
+    true_when:
+      any:
+        - children:
+            in: [alpha]
+        - children:
+            in: [beta]
+
+actions:
+  open:
+    description: Open the child case once.
+    precondition:
+      claim: started
+      is: unknown
+    case_open:
+      protocol: adversary.task
+      subject: thing
+    may_produce:
+      - evidence: opened
+
+outcomes:
+  done:
+    description: The child ended alpha or beta.
+    requires:
+      all:
+        - claim: started
+        - claim: settled

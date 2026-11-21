@@ -1,0 +1,34 @@
+format: protocol/1
+
+protocol:
+  id: simulate.ordered
+  revision: 1
+  description: Reproduce a defect when the first test run fails; the order of runs is read, which canon simulate does not walk.
+
+artifacts:
+  change:
+    description: The change under test.
+
+evidence_kinds:
+  test_result:
+    description: A run of the test; its result is failed or another.
+
+claims:
+  defect.reproduced:
+    description: The first run of the test failed.
+    true_when:
+      first:
+        kind: test_result
+        result: failed
+
+actions:
+  run_test:
+    description: Run the test.
+    may_produce:
+      - evidence: test_result
+
+outcomes:
+  reproduced:
+    description: The defect is reproduced.
+    requires:
+      claim: defect.reproduced

@@ -64,7 +64,16 @@
 //!   `open` while the child runs. It is `unknown` with no record, `false` when a record's outcome
 //!   is neither listed nor `open` (a child that ended outside the set), otherwise `unknown` while a
 //!   child is `open` and `true` when every child ended with a listed outcome (CANON-COMPOSE-001).
-//!   No record is listed in `excluded_evidence` because of it.
+//!   With `revision: current`, `{children: {in: [O, ...], revision: current}}`
+//!   (story:child-outcome-revision), it reads only the records whose `subject_revision` is the
+//!   case snapshot's current revision of their `subject`, by the same rules: a record about
+//!   another revision neither establishes nor contradicts it, and with no record read it is
+//!   `unknown` (CANON-COMPOSE-002). `revision: any` reads what no key reads. With `subject: A`
+//!   (story:child-outcome-subject), it reads only the records whose `subject` is `A`, and with
+//!   `revision: current` too only those at the current revision of `A`: a record about another
+//!   artifact neither establishes nor contradicts it (CANON-COMPOSE-003). No record is listed in
+//!   `excluded_evidence` because of it, and a reason names it with its `revision` and its
+//!   `subject` when the IR writes them.
 //!
 //! `unknown` and `false` are never collapsed, and only `true` satisfies a positive requirement.
 //!
@@ -89,13 +98,20 @@
 //! `child_case` when given), its
 //! `observed_at` when given (an instant, a fraction of one to nine digits allowed, else
 //! `invalid-instant`), its id
-//! (used once in the set), its kind (declared by the protocol) and each upstream artifact
-//! (declared by the protocol, else `undeclared-artifact`, naming the record and the artifact; named
-//! once, else `duplicate-identifier`), then, for a `case_outcome` record, its child case (named,
+//! (used once in the set: a copy equal to the first counts once, and a copy that differs is
+//! refused as `duplicate-identifier`, `` evidence `e1` is given more than once with different
+//! content ``, story:evidence-redelivery), its kind (declared by the protocol) and each upstream
+//! artifact
+//! (declared by the protocol, else `undeclared-artifact`, naming the record and the artifact, unless
+//! the record's kind declares `supplied_by`: such a record, copied unchanged from a case under its
+//! supplier, may name artifacts only the supplier declares, carried and neither checked nor read,
+//! story:supplied-evidence; named once, else `duplicate-identifier`), then, for a `case_outcome`
+//! record, its child case (named,
 //! else `missing-child-case`) and its outcome (a `result`, else `missing-child-outcome`), and for a
 //! record of any other kind no child case (else `misplaced-child-case`); then, over the whole set,
 //! one `case_outcome` record per child case, whatever its revision (else `duplicate-child-case`,
-//! naming the least such child and its records in evidence-id order, citing each). A record's
+//! naming the least such child and its records in evidence-id order, citing each; an equal copy of
+//! a record is not another record, and counts once). A record's
 //! subject and subject revision are checked here as identifiers only; the revision-binding stage
 //! reads them. Every refusal of a record names it (`` evidence `e2` format is `canon-evidence/2`,
 //! expected `canon-evidence/1` ``, `` evidence `e2` kind identifier `k k` is empty or … ``), and
@@ -113,7 +129,10 @@
 //! `authority.rs` as `canon-authority/1`, refused as the section "Authority decisions" below
 //! says. The instant is read by `freshness.rs` and refused as `invalid-instant` when it is not
 //! one. The explicit decisions are read by `decisions.rs` as `canon-decisions/1`, refused as the
-//! section "Explicit decisions" below says.
+//! section "Explicit decisions" below says. Then a ground artifact the protocol does not declare
+//! (story:decision-grounds) is refused as `undeclared-artifact`, naming the entry and the artifact
+//! (`grounds.rs`): each authority entry's, in capability, scope, case revision and principal order,
+//! then each explicit decision's, in the order given, each entry's artifacts in id order.
 //!
 //! Then the exclusion stages run, in pipeline order: revision binding, freshness, invalidation.
 //! Each may refuse the inputs it reads. Revision binding checks each record in the order given: a
@@ -170,7 +189,8 @@
 //! concept; this module holds only the order:
 //!
 //! 1. check the compiled protocol's depth (`depth.rs`), the case snapshot (`case.rs`) and the
-//!    evidence set (`evidence.rs`);
+//!    evidence set (`evidence.rs`), which keeps the first of any records equal under one id, so
+//!    every later step reads each id once;
 //! 2. read the supplied inputs: authority decisions (`authority.rs`), the evaluation instant
 //!    (`freshness.rs`) and explicit decisions (`decisions.rs`);
 //! 3. run the exclusion stages in order: revision binding (`binding.rs`), freshness
@@ -204,7 +224,13 @@
 //!    and forms over the child cases over every record accepted), each with the case's input
 //!    values, which every input test reads. The invalidation stage keeps a record from claims
 //!    only, so these predicates' own evidence matches read it. An outcome that requires an explicit
-//!    decision is decided by the explicit decisions instead.
+//!    decision is decided by the explicit decisions instead. Before the `actions` and `outcomes`
+//!    sections, which authority and explicit decisions apply is decided once
+//!    (`authority::Authority::applying_at`, `decisions::Decisions::applying_at`): an entry applies
+//!    at the case snapshot's `revision` (an authority entry without a case revision at every one)
+//!    and only while every ground it rested on holds (`grounds.rs`), which reads the claim entries
+//!    of step 4; those read no decision, so computing them first changes nothing. The two
+//!    sections read only the entries that apply; the explanation records every decision given.
 //!
 //! Revision binding excludes a record bound to another revision as `revision_mismatch`, and
 //! freshness a record older than its kind's `max_age` at the evaluation instant as `expired`,
@@ -239,7 +265,9 @@
 //!   <its value>}`, `{"first": <kind>, "result": <result>, "value": <its value>}` or `{"since":
 //!   <kind>, "then": <kind>, "result": <result>, "value": <its value>}`, with `"subject"` added
 //!   when it names one, then each form over the child cases that decides it, `{"children":
-//!   [<outcome>, ...], "value": <its value>}`, or
+//!   [<outcome>, ...], "value": <its value>}`, with `"revision": "current"` added when the form
+//!   reads only the current revision (story:child-outcome-revision) and `"subject": <artifact>`
+//!   when it names one (story:child-outcome-subject), or
 //!   `{"requirement": "unsatisfiable"}` when none does. `blocked` too when the precondition is
 //!   `true` and the authority decisions deny a requirement of the action, each a reason
 //!   `{"capability": <id>, "decision": "denied"}`. `approval-required` when the precondition is
@@ -248,8 +276,11 @@
 //!   "decision": "none"}`. A requirement with a scope adds `"scope": {<key>: <value>, ...}` to its
 //!   reason. `admissible` when the precondition is `true` and every requirement is granted
 //!   (CANON-AUTHORITY-001). A requirement is decided by the decisions on its capability that
-//!   cover its scope, `denied` over `require_approval` over `granted`, as `actions.rs` says
-//!   (CANON-SCOPE-001).
+//!   apply at the case snapshot's `revision`, whose grounds all hold, and cover its scope, `denied`
+//!   over `require_approval` over `granted`, as `actions.rs` says (CANON-SCOPE-001,
+//!   CANON-AUTHORITY-002). A `"decision": "none"` reason adds `"stale_grounds": [...]`, the failed
+//!   grounds of the entries that would have covered it but for their grounds, as "Authority
+//!   decisions" below says (CANON-GROUND-001).
 //! - `outcomes` maps each declared outcome to `{"status": "legitimate"}` when its `requires`
 //!   predicate is `true` over the claim values and the evidence left, and otherwise to
 //!   `{"status": "blocked", "reasons": [...]}`. Its reasons follow the one rule an action
@@ -257,28 +288,79 @@
 //!   `false` members decide it, with polarity carried through `not`.
 //!   An outcome that requires an explicit decision (`requires: decision: <name>`) is
 //!   `legitimate` only when an explicit decision of that name, for that outcome, was taken at the
-//!   case snapshot's `revision`, and its entry then records who decided (design § 37):
-//!   `{"status": "legitimate", "decided_by": {"decision": <name>, "principals": [...]}}`, every
-//!   principal whose decision applied, sorted by Unicode code point; otherwise it is blocked with
-//!   the one reason `{"decision": <name>, "present": false}` (CANON-OUTCOME-002). The case snapshot's
+//!   case snapshot's `revision` and its grounds all hold, and its entry then records who decided
+//!   (design § 37): `{"status": "legitimate", "decided_by": {"decision": <name>, "principals":
+//!   [...]}}`, every principal whose decision applied, sorted by Unicode code point; otherwise it
+//!   is blocked with the one reason `{"decision": <name>, "present": false}` (CANON-OUTCOME-002),
+//!   which adds `"stale_grounds": [...]` when a decision taken at that revision was set aside by
+//!   its grounds, as "Explicit decisions" below says (CANON-GROUND-001). The case snapshot's
 //!   `termination` is checked against it, as the refusals above say (CANON-OUTCOME-001).
 //! - `explanation` is written for every decision: what the decision was computed from (design
 //!   § 37), and why each claim that is not `true`, each open obligation, each action that is not
 //!   admissible and each blocked outcome has its status, down to the evidence records that applied
 //!   or were excluded. Its shape is given by `crate::explain` (CANON-EXPLAIN-001).
+//! - `missing_evidence` maps each `admissible` action whose `may_produce` is not empty to the kinds
+//!   of that list that have no applicable record, in kind-identifier order; an empty list means
+//!   every kind it may produce has one. A record is applicable when the revision-binding and
+//!   freshness stages leave it and no claim lists it in `excluded_evidence` (`missing.rs`,
+//!   `applicable`). It is written only when some action is listed: an action that is `blocked` or
+//!   `approval-required`, and one with an empty `may_produce`, is not. It reads `may_produce` and
+//!   the records, so a kind that declares `supplied_by` is listed like any other, and it claims
+//!   nothing about running the action (CANON-FRONTIER-001).
+//! - `pending_decisions` lists the decisions the evaluation waits on (`pending.rs`). Under
+//!   `authority`, one entry per reason `{"capability", "decision": "none" | "require_approval",
+//!   "scope"?}` of an `approval-required` action, `{"action", "capability", "scope"?, "current",
+//!   "case_revision"?, "options": ["granted", "denied"]}`, by action, then capability, then scope
+//!   (no scope first, then by key-value pairs in key order, key before value, a prefix first);
+//!   a `blocked` action has none. Under `decisions`, one entry per outcome reason `{"decision":
+//!   <name>, "present": false}`, `{"outcome", "decision", "case_revision"?, "options"}`, by
+//!   outcome, the options `["taken"]`, or `[]` for a snapshot without a revision. `case_revision`
+//!   is the snapshot's `revision`, written when it has one. Each list, and the section, is written
+//!   only when it has an entry. It reads the reasons of those two sections and the case revision,
+//!   and nothing else, so it decides no coverage or lapse of its own; precedence does not change, so
+//!   a `granted` entry decides a `require_approval` requirement only when no `require_approval`
+//!   entry still covers it (CANON-PENDING-001).
 //!
 //! # Authority decisions
 //!
 //! `--authority` names a `canon-authority/1` document: a YAML (or JSON) list of decisions, each a
-//! capability, the scope it covers (optional: absent, every scope) and the decision,
-//! `- {capability: metrics.read, scope: {cluster: prod-eu}, decision: granted}` (or
-//! `require_approval`, or `denied`). An empty list decides nothing. Canon grants nothing and
-//! resolves no identity: the caller decides and passes the decisions in. Refused, in this order:
-//! text that is not such a list, or an entry with another key, another decision or a missing
-//! key, as `malformed-input`, naming the entry by its position, counting from 1, and a missing key
-//! by name (`` entry 2: missing field `capability` ``); then, entry by entry, a capability, scope
-//! key or scope value that is not an identifier as `invalid-identifier`, and a capability decided
-//! a second time at an equal scope as `duplicate-identifier` (`authority.rs`).
+//! capability, the scope it covers (optional: absent, every scope), the decision and, optionally,
+//! the principal who took it and the case revision it was taken at,
+//! `- {capability: metrics.read, scope: {cluster: prod-eu}, decision: granted, principal: ops-lead,
+//! case_revision: c2}` (or `require_approval`, or `denied`). An empty list decides nothing. Canon
+//! grants nothing and resolves no identity: the caller decides and passes the decisions in, and a
+//! principal is recorded as given and changes no decision. A decision with a case revision, whatever
+//! it decides, applies only while that revision is the case snapshot's `revision`, and to nothing
+//! when the snapshot has none; one without applies at every case revision (CANON-AUTHORITY-002).
+//!
+//! An entry may name the grounds it rested on (story:decision-grounds, CANON-GROUND-001):
+//! `ground_revisions: {<artifact>: <revision>, ...}` and `ground_evidence: [<evidence id>, ...]`,
+//! both optional. An artifact ground holds while its revision is the case snapshot's current
+//! revision of the artifact, compared for equality; an evidence ground while a record with its id
+//! is applicable, as `missing_evidence` defines it (given, left by the revision-binding and
+//! freshness stages, listed in no claim's `excluded_evidence`); an id no record has does not hold
+//! and is not refused. An entry applies only while every ground holds, whatever it decides, so a
+//! denial whose ground moved lapses too. A requirement covered only by entries that do not apply is
+//! not decided, and its reason `{"capability": <id>, "decision": "none"}` adds `"stale_grounds"`:
+//! every failed ground of the entries on its capability that cover it and are set aside by their
+//! grounds alone, each once, artifact grounds first by artifact and then revision, `{"artifact":
+//! <id>, "reason": "revision_mismatch", "revision": <the ground's revision>}`, then evidence grounds
+//! by id, `{"evidence": <id>, "reason": <reason>}` with the reason the record was excluded with
+//! (the revision-binding or freshness stage's, else that of the first claim listing it in claim-id
+//! order), or `{"evidence": <id>, "present": false}` when no record has the id. An entry set aside
+//! by its case revision adds none of its grounds: it would not apply whatever its grounds do, so
+//! naming them would ask for a ground to hold again that restores nothing. So the order of the
+//! entries does not change the result (`grounds.rs`). `pending_decisions` lists such a requirement as it lists any other that
+//! is not decided, without the grounds.
+//!
+//! Refused, in this order: text that is not such a list, or an entry with another key, another
+//! decision or a missing key, as `malformed-input`, naming the entry by its position, counting
+//! from 1, and a missing key by name (`` entry 2: missing field `capability` ``); then, entry by
+//! entry, a capability, scope key, scope value, principal, case revision, ground artifact, ground
+//! revision or ground evidence id that is not an identifier as `invalid-identifier`, and an entry
+//! equal to an earlier one in capability, scope, case revision and principal, whatever its decision
+//! and grounds, as `duplicate-identifier` (`authority.rs`); then, after the explicit decisions are
+//! read, a ground artifact the protocol does not declare as `undeclared-artifact`.
 //!
 //! # Explicit decisions
 //!
@@ -288,14 +370,21 @@
 //! principal: lead-investigator, case_revision: c2}`. An empty list decides nothing. Canon decides
 //! nothing and resolves no identity: the caller passes in the decisions that were taken. A
 //! decision applies only while its case revision is the case snapshot's `revision`: one taken at a
-//! superseded revision, or given for a snapshot without a revision, applies to nothing. Refused,
-//! in this order: text that is not such a list, or an entry with another key or a missing one, as
-//! `malformed-input`, naming the entry by its position and a missing key by name (`` entry 1:
-//! missing field `case_revision` ``); then, entry by entry, a decision, outcome, principal or case revision that
-//! is not an identifier as `invalid-identifier`, and an entry that repeats an earlier one exactly as
-//! `duplicate-identifier`, naming it; then, in the `outcomes` section and at any case revision, a
-//! decision for an outcome the protocol does not declare as `undeclared-outcome`, and one for an
-//! outcome that does not require a decision of its name as `undeclared-decision`.
+//! superseded revision, or given for a snapshot without a revision, applies to nothing. A decision
+//! may name grounds as an authority entry does, and applies only while every one holds; an outcome
+//! left blocked by a decision at the snapshot's `revision` that its grounds set aside adds
+//! `"stale_grounds"` to its reason `{"decision": <name>, "present": false}`, by the rules
+//! "Authority decisions" gives, and `pending_decisions` lists it as it lists any other outcome
+//! waiting on a decision (CANON-GROUND-001). Refused, in this order: text that is not such a list,
+//! or an entry with another key or a missing one, as `malformed-input`, naming the entry by its
+//! position and a missing key by name (`` entry 1: missing field `case_revision` ``); then, entry
+//! by entry, a decision, outcome, principal, case revision, ground artifact, ground revision or
+//! ground evidence id that is not an identifier as `invalid-identifier`, and an entry that repeats
+//! an earlier one in its decision, outcome, principal and case revision, whatever its grounds, as
+//! `duplicate-identifier`, naming it; then a ground artifact the protocol does not declare as
+//! `undeclared-artifact`; then, in the `outcomes` section and at any case revision, a decision for
+//! an outcome the protocol does not declare as `undeclared-outcome`, and one for an outcome that
+//! does not require a decision of its name as `undeclared-decision`.
 
 mod actions;
 mod authority;
@@ -308,12 +397,15 @@ mod decisions;
 mod depth;
 mod evidence;
 mod freshness;
+mod grounds;
 mod independence;
 mod invalidation;
 mod json;
+mod missing;
 mod obligations;
 mod order;
 mod outcomes;
+mod pending;
 mod read;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -412,10 +504,12 @@ pub fn evaluate_with(
 ) -> Result<Decision, Refusal> {
     depth::check(ir)?;
     case::check(ir, case)?;
-    evidence::check(ir, evidence)?;
+    let distinct = evidence::check(ir, evidence)?;
+    let evidence = distinct.as_slice();
     let authority = authority::read(supplied.authority)?;
     let at = freshness::instant(supplied.at)?;
     let decisions = decisions::read(supplied.decisions)?;
+    grounds::declared(ir, authority.as_ref(), decisions.as_ref())?;
     on_deep_stack(|| {
         let case_inputs: Inputs = case
             .inputs
@@ -438,12 +532,12 @@ pub fn evaluate_with(
             left: &applicable,
             history: evidence,
             independence: Some(&independence),
+            artifacts: Some(&case.artifacts),
         };
         let values = claims::values(ir, sets, &invalidated, &case_inputs)?;
         let obligations = obligations::section(ir, &values, &case_inputs);
-        let actions = actions::section(ir, &values, &case_inputs, sets, authority.as_ref());
-        let outcomes =
-            outcomes::section(ir, case, &values, &case_inputs, sets, decisions.as_ref())?;
+        // The claim entries read no authority or explicit decision; they come before the sections
+        // that read those, since an evidence ground holds only for a record no claim lists.
         let record_of: BTreeMap<&EvidenceId, &EvidenceRecord> =
             evidence.iter().map(|record| (&record.id, record)).collect();
         let reached = invalidation::reached_by_claim(ir);
@@ -465,16 +559,54 @@ pub fn evaluate_with(
                 (id.clone(), entry)
             })
             .collect();
+        let claims = Declarations::new(claims);
+        // Which entries apply is decided once, here: at the case revision, with every ground
+        // holding. Only those decide a requirement or an outcome; the explanation records every
+        // entry as given.
+        let standing = grounds::Standing::new(
+            case,
+            &applicable,
+            &excluded,
+            claims.iter().map(|(_, entry)| entry),
+        );
+        let applying = authority
+            .as_ref()
+            .map(|authority| authority.applying_at(case.revision.as_ref(), &standing));
+        let applying_decisions = decisions
+            .as_ref()
+            .map(|decisions| decisions.applying_at(case.revision.as_ref(), &standing));
+        let actions = actions::section(ir, &values, &case_inputs, sets, applying.as_ref());
+        let outcomes = outcomes::section(
+            ir,
+            case,
+            &values,
+            &case_inputs,
+            sets,
+            decisions.as_ref(),
+            applying_decisions.as_ref(),
+        )?;
+        // The records the binding and freshness stages left, less those a claim lists.
+        let missing_evidence = missing::section(
+            ir,
+            actions.as_ref(),
+            &applicable,
+            claims.iter().map(|(_, entry)| entry),
+        );
+        // Read from the reasons the two stages gave, so coverage and lapse are decided once.
+        let pending_decisions =
+            pending::section(actions.as_ref(), outcomes.as_ref(), case.revision.as_ref());
         let mut decision = Decision {
             format: DECISION_FORMAT.to_owned(),
             case: case.id.clone(),
             protocol: ir.protocol.id.clone(),
             protocol_revision: ir.protocol.revision,
-            claims: Declarations::new(claims),
+            claims,
             obligations,
             actions,
             outcomes,
             explanation: None,
+            missing_evidence,
+            pending_decisions,
         };
         let inputs = crate::explain::Inputs {
             authority: authority.as_ref(),
@@ -517,12 +649,15 @@ pub(crate) fn order_reasons<'a>(
 }
 
 /// The reason each `children` form among `forms` gives, as a blocked action names it, with its
-/// value over the `history` (`composition.rs`): each form once, in the order of its outcome list.
+/// value over the records it reads of the `history`, against the current revisions of the case's
+/// `artifacts` (`composition.rs`): each form once, by its outcome list, then its `revision`, then
+/// its `subject`.
 pub(crate) fn children_reasons<'a>(
     forms: impl IntoIterator<Item = &'a ChildOutcomes>,
     history: &[EvidenceRecord],
+    artifacts: &Declarations<ArtifactId, crate::model::CaseArtifact>,
 ) -> Vec<crate::model::Json> {
-    composition::reasons(forms.into_iter().map(|form| form.r#in.as_slice()), history)
+    composition::reasons(forms, history, Some(artifacts))
 }
 
 /// Moves the records one exclusion stage excluded out of `applicable` and into `excluded`. A stage
@@ -820,9 +955,9 @@ mod tests {
             ),
             (
                 CASE.to_owned(),
-                vec![pass.clone(), pass.clone()],
+                vec![pass.clone(), record("e1", "fail")],
                 "duplicate-identifier",
-                "evidence `e1` is given more than once",
+                "evidence `e1` is given more than once with different content",
             ),
             (
                 CASE.to_owned(),
@@ -1231,5 +1366,43 @@ mod tests {
                 {"claim": "red_first", "value": "true"},
             ])
         );
+    }
+
+    /// A record given more than once counts once when every copy equals the first
+    /// (story:evidence-redelivery): the decision is the one without the copy, byte for byte, the
+    /// explanation included, wherever the copy stands, and the explanation lists the id once.
+    #[test]
+    fn an_equal_copy_of_a_record_counts_once() {
+        let (pass, fail) = (record("e1", "pass"), record("e2", "fail"));
+        let single = decide(CASE, &[pass.clone(), fail.clone()]).expect("decides");
+        let expected = render(&single);
+        for evidence in [
+            vec![pass.clone(), fail.clone(), pass.clone()],
+            vec![pass.clone(), pass.clone(), fail.clone()],
+            vec![fail.clone(), pass.clone(), pass.clone(), pass.clone()],
+        ] {
+            let decision = decide(CASE, &evidence).expect("an equal copy is not refused");
+            assert_eq!(render(&decision), expected, "{evidence:?}");
+            assert_eq!(
+                decision.explanation.as_ref().expect("explained")["computed_from"]["evidence"],
+                serde_json::json!(["e1", "e2"])
+            );
+        }
+    }
+
+    /// A copy that differs from the first is refused as `duplicate-identifier`, naming and citing
+    /// the record, whichever copy comes first.
+    #[test]
+    fn a_differing_copy_of_a_record_is_refused() {
+        let (pass, fail) = (record("e1", "pass"), record("e1", "fail"));
+        for evidence in [vec![pass.clone(), fail.clone()], vec![fail, pass]] {
+            let refusal = decide(CASE, &evidence).expect_err("refused");
+            assert_eq!(refusal.code(), "duplicate-identifier");
+            assert_eq!(
+                refusal.to_string(),
+                "evidence `e1` is given more than once with different content"
+            );
+            assert_eq!(refusal.evidence(), [EvidenceId::new("e1")]);
+        }
     }
 }

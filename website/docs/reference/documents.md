@@ -76,6 +76,8 @@ A `canon-decision/1` document. A section slot that is `None` is not serialized.
 | `actions` | any JSON value | when present | Each declared action, `admissible`, `approval-required` or `blocked`, with the reasons for a status other than `admissible`; written when the protocol declares an action. Its shape is fixed by CANON-AUTHORITY-001. |
 | `outcomes` | any JSON value | when present | Each declared outcome, `legitimate` or `blocked`, with the reasons it is blocked; written when the protocol declares an outcome. Its shape is fixed by CANON-OUTCOME-001 and, for an outcome that requires an explicit decision, by CANON-OUTCOME-002: a legitimate one records `decided_by` (`{"decision": <name>, "principals": [...]}`), and a blocked one gives the reason `{"decision": <name>, "present": false}`. |
 | `explanation` | any JSON value | when present | Why each claim that is not `true`, each open obligation, each action that is not admissible and each blocked outcome has its status, traced to the evidence records that applied or were excluded, and what the decision was computed from (`computed_from`); the evaluator writes it on every decision. Its shape is fixed by CANON-EXPLAIN-001. |
+| `missing_evidence` | map from [identifier](#identifiers) (`ActionId`) to list of [identifier](#identifiers) (`EvidenceKindId`) | when present | For each admissible action whose `may_produce` is not empty, the evidence kinds of that list that have no applicable record, in kind-identifier order; an empty list means every kind it may produce has one. Written only when some action qualifies. An action that is blocked or approval-required, and one whose `may_produce` is empty, is not listed. A record is applicable when the revision-binding and freshness stages leave it and no claim lists it in its `excluded_evidence`. Its shape is fixed by CANON-FRONTIER-001. |
+| `pending_decisions` | any JSON value | when present | The decisions the evaluation waits on, each a `canon-authority/1` or `canon-decisions/1` entry that would change a status in this decision; written only when there is one. Under `authority`, one entry per requirement an `approval-required` action names with the decision `none` or `require_approval`: `{"action", "capability", "scope", "current", "case_revision", "options": ["granted", "denied"]}`, `current` being that decision, `scope` written when the requirement has one and `case_revision`, the case snapshot's revision, when it has one. A blocked action has none. Ordered by action, then capability, then scope: no scope first, then two scopes by their key-value pairs in key order, compared pair by pair, key before value, a scope that is a prefix of the other first. Under `decisions`, one entry per outcome blocked for want of an explicit decision, `{"outcome", "decision", "case_revision", "options": ["taken"]}`, in outcome order; for a snapshot without a revision it has no `case_revision` and the options `[]`, as no explicit decision can apply. Each list is left out when empty. An option is the value of the entry a caller would add, with its own principal; precedence does not change, so a `granted` entry decides a requirement whose `current` is `require_approval` only when no `require_approval` entry still covers it. Its shape is fixed by CANON-PENDING-001. |
 
 ### `ClaimDecision`
 
@@ -109,18 +111,23 @@ evidence matches that demand an independence its producer lacks.
 
 ## `canon-authority/1`
 
-Read by `canon evaluate --authority`: a list of `AuthorityDecision` entries; an empty list is allowed. A capability decided twice at an equal scope (the same keys with the same values, in any order) is refused, whatever the decision; the JSON Schema cannot express that, and refuses only an entry repeated exactly. The [JSON Schema](https://beyond10x.github.io/canon/schemas/authority-1.schema.json) is generated from the same types.
+Read by `canon evaluate --authority`: a list of `AuthorityDecision` entries; an empty list is allowed. Two entries equal in capability, scope (the same keys with the same values, in any order), case revision and principal are refused, whatever the decision; the JSON Schema cannot express that, and refuses only an entry repeated exactly. The [JSON Schema](https://beyond10x.github.io/canon/schemas/authority-1.schema.json) is generated from the same types.
 
 ### `AuthorityDecision`
 
-One entry of a `canon-authority/1` document: a capability, the scope the decision covers and
-the decision.
+One entry of a `canon-authority/1` document: a capability, the scope the decision covers, the
+decision and, optionally, who took it, the case revision it was taken at and the grounds it
+rested on.
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `capability` | [identifier](#identifiers) (`CapabilityId`) | required | The capability decided, an identifier an action's `requires` may name. |
 | `scope` | map from [identifier](#identifiers) (`ScopeKey`) to [identifier](#identifiers) (`ScopeValue`) | optional | The scope the decision covers: one value for each key it names, each key once. It covers a requirement of its capability when the requirement gives each of those keys the same value; a key it leaves out covers every value of it. Absent or empty, it covers every scope. |
 | `decision` | [`Grant`](#grant) | required | Whether it is granted. |
+| `principal` | [identifier](#identifiers) (`Principal`) | optional | Who took it, an identifier, recorded as given: Canon resolves no identity, so it is matched against nothing and does not change admissibility. |
+| `case_revision` | [identifier](#identifiers) (`Revision`) | optional | The case revision it was taken at, an identifier: the decision applies only while the case snapshot's `revision` equals it, and to nothing when the snapshot has none. Absent, it applies at every case revision. |
+| `ground_revisions` | map from [identifier](#identifiers) (`ArtifactId`) to [identifier](#identifiers) (`Revision`) | optional | The artifact revisions the decision rested on, keyed by artifact, each key once (story:decision-grounds): a ground holds while its revision is the case snapshot's current revision of the artifact, compared for equality. The decision applies only while every ground holds, whatever it decided. Absent or empty, it rests on no artifact. |
+| `ground_evidence` | list of [identifier](#identifiers) (`EvidenceId`) | optional | The evidence records the decision rested on, by id: a ground holds while a record with that id is applicable, the rule of `missing_evidence` (given, left by the revision-binding and freshness stages, and listed in no claim's `excluded_evidence`), so expiry and invalidation reach the decision through it. An id no record has does not hold and is not refused. Absent or empty, it rests on no record. |
 
 ### `Grant`
 
@@ -143,7 +150,8 @@ Read by `canon evaluate --decisions`: a list of `ExplicitDecision` entries; an e
 ### `ExplicitDecision`
 
 One entry of a `canon-decisions/1` document. It applies to `outcome` when the outcome requires
-a decision named `decision` and `case_revision` is the case snapshot's revision.
+a decision named `decision`, `case_revision` is the case snapshot's revision and every ground
+holds.
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|
@@ -151,6 +159,8 @@ a decision named `decision` and `case_revision` is the case snapshot's revision.
 | `outcome` | [identifier](#identifiers) (`OutcomeId`) | required | The outcome it was taken for. |
 | `principal` | [identifier](#identifiers) (`Principal`) | required | Who took it. |
 | `case_revision` | [identifier](#identifiers) (`Revision`) | required | The case revision it was taken at. |
+| `ground_revisions` | map from [identifier](#identifiers) (`ArtifactId`) to [identifier](#identifiers) (`Revision`) | optional | The artifact revisions the decision rested on, keyed by artifact, each key once (story:decision-grounds): a ground holds while its revision is the case snapshot's current revision of the artifact, compared for equality. Absent or empty, it rests on no artifact. |
+| `ground_evidence` | list of [identifier](#identifiers) (`EvidenceId`) | optional | The evidence records the decision rested on, by id: a ground holds while a record with that id is applicable, the rule of `missing_evidence` (given, left by the revision-binding and freshness stages, and listed in no claim's `excluded_evidence`), so expiry and invalidation reach the decision through it. An id no record has does not hold and is not refused. Absent or empty, it rests on no record. |
 
 ## `canon-properties/1`
 

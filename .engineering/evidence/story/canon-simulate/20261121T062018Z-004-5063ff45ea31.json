@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T06:20:18Z",
+  "actor": "human:timo",
+  "artifact": "story:canon-simulate",
+  "kind": "story",
+  "revision": 21,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "the search for the smallest states was pairwise: grouped by case inputs and ordered by size (bbe8f00), 157.7 s to 9.0 s on 65536 stuck states; the remaining cost is stated in the module documentation",
+    "reference": "impl/canon-simulate bbe8f00",
+    "review": "review-result:adversary-canon-simulate-pass-2",
+    "outcome": "fixed"
+  }
+}

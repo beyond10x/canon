@@ -221,15 +221,24 @@
 //! # Child cases
 //!
 //! A `children` form (story:case-composition) reads every `case_outcome` record the evidence check
-//! accepts, about any artifact and at any revision, as the order forms read the history: each
-//! outcome it lists and `open` are classes of every `case_outcome` dimension, as an evidence
+//! accepts, about any artifact and at any revision, as the order forms read the history; one with
+//! `revision: current` (story:child-outcome-revision) reads only those whose `subject_revision` is
+//! the snapshot's current revision of their subject. Each outcome it lists and `open` are classes of every `case_outcome` dimension, as an evidence
 //! match's result is, and each such dimension has a history dimension, as one an order form reads
 //! has, but no place in the order of first observations: the form does not read when a record was
 //! observed, so its records carry no `observed_at` and it adds no order dimension. Its value
 //! depends only on which of those outcomes, or another, some child has, among the current records
 //! the evidence matches read and the earlier records at a superseded revision they do not: so every
 //! value of every `children` form, jointly with the evidence matches over the same records, is
-//! reached by some state. Each `case_outcome` record of a state is the outcome of a child case of
+//! reached by some state. A state lists every artifact at one revision and puts a dimension's
+//! current records at it and its earlier records at a superseded one, so a form with `revision:
+//! current` reads exactly the current records and never the history dimension's earlier ones,
+//! which only a form without the key reads: the same space reaches every value of both together,
+//! and the key adds no dimension. A form with `subject` (story:child-outcome-subject) reads the
+//! `case_outcome` dimension about that artifact, which it binds as an evidence match's subject
+//! does, and not the one about an artifact nothing names, which stands for the records only a form
+//! without `subject` reads; a slice holds only the `case_outcome` dimensions its forms read, as it
+//! holds those an evidence match with a subject reads. Each `case_outcome` record of a state is the outcome of a child case of
 //! its own, named by the record's id, and a record of the class without a result carries an outcome
 //! no predicate names (`other`, primed until it is none), since a `case_outcome` record must give
 //! one; the state still writes it `` evidence `case_outcome` ``. A protocol with no `children` form
@@ -297,22 +306,33 @@
 //! - `unproduced-evidence`: a predicate that reads, directly or through the claims it tests, an
 //!   evidence kind no action may produce: none lists it in `may_produce`, and, for `case_outcome`,
 //!   none opens a child case (`case_open`), whose outcome comes back as a `case_outcome` record.
-//!   An action that opens a child case may produce `case_outcome` for `authority-bypass` too.
+//!   An action that opens a child case may produce `case_outcome` for `authority-bypass` too, in
+//!   the dimension about its `case_open` subject, or, when nothing reads that artifact by name, in
+//!   the one standing for the artifacts nothing names (story:child-outcome-subject).
 //!   Every predicate is read: each claim's
 //!   `true_when`, each obligation's `discharged_when`, each action's precondition and each outcome's
 //!   requirement, in that order, each section in identifier order; one finding per declaration and
-//!   kind, kinds in identifier order.
+//!   kind, kinds in identifier order. A kind that declares `supplied_by` is produced, by another
+//!   protocol's cases (story:supplied-evidence): no finding names it, and for `authority-bypass`
+//!   it is produced without authority, its supplier's authority being that protocol's to check.
+//!   A kind that declares `supplied_by` counts as produced without authority and stays governed
+//!   when an action that requires a capability may also produce it, so `canon check` reports
+//!   `authority-bypass` on an outcome a supplied record alone makes legitimate.
+//!   Production reads no state, so the slices, their sizes and the states are those of the
+//!   protocol without `supplied_by`; it decides only which states witness a bypass.
 //! - `authority-bypass`: an outcome that reads governed evidence where its presence helps it hold,
 //!   and that is legitimate without authority because of evidence present. Governed evidence is
-//!   each kind some action that requires a capability may produce. A requirement reads an evidence
+//!   each evidence dimension some action that requires a capability may produce: every dimension
+//!   of a kind it lists in `may_produce`, and for `case_outcome` only the dimension about the
+//!   artifact it opens child cases about, as above. A requirement reads an evidence
 //!   match positively unless it sits under an odd number of flips, through the claims it tests: a
 //!   `not`, a claim test `is: false` and a claim test `is: unknown` each flip, and `all`, `any` and
 //!   `is: true` do not. It reads every kind an order form reads positively, under any number of
 //!   flips: with no record of its kinds an order form is `unknown`, and so is its negation, so a
 //!   record helps the requirement hold in either position. The outcome is a bypass when some
-//!   evidence dimension it reads positively is of a governed kind, and it is legitimate in a state
-//!   that takes no authority decision, whose
-//!   every present evidence kind some action requiring no capability may produce, and from which
+//!   evidence dimension it reads positively is governed, and it is legitimate in a state that
+//!   takes no authority decision, whose every present evidence dimension some action requiring no
+//!   capability may produce or is of a supplied kind (`supplied_by`), and from which
 //!   taking away one positively read dimension that is present blocks it. Each such dimension is
 //!   judged alone, so the outcome may rest on governed evidence produced without authority or on
 //!   other evidence beside it. An outcome that holds only because governed evidence is absent,
@@ -375,7 +395,7 @@ use crate::model::{
     ProtocolId, Revision, one_line,
 };
 
-pub(crate) use space::{REVISION, Slice, Space, State};
+pub(crate) use space::{REVISION, Slice, Space, State, Walked};
 
 /// The most states [`check`] evaluates; a larger space is refused.
 pub const STATE_BOUND: u128 = 65_536;
@@ -742,18 +762,6 @@ pub(crate) fn check_by(
         }
     }
 
-    let governed: BTreeSet<&EvidenceKindId> = ir
-        .actions
-        .values()
-        .filter(|action| !action.requires.is_empty())
-        .flat_map(|action| produces(ir, action))
-        .collect();
-    let free: BTreeSet<&EvidenceKindId> = ir
-        .actions
-        .values()
-        .filter(|action| action.requires.is_empty())
-        .flat_map(|action| produces(ir, action))
-        .collect();
     let mut decided: Vec<Decided> = subjects.iter().map(|_| Decided::default()).collect();
     for (slice, members) in &plan {
         let sliced;
@@ -772,7 +780,7 @@ pub(crate) fn check_by(
                         .evaluated
                         .iter()
                         .any(|e| e.outcomes[*position] == "legitimate"),
-                    finding: bypass(ir, &enumerated, *position, id, outcome, &governed, &free),
+                    finding: bypass(ir, &enumerated, *position, id, outcome),
                 },
                 Subject::Action(position, _) => Decided {
                     holds: enumerated.evaluated.iter().any(|e| {
@@ -814,6 +822,7 @@ pub(crate) fn check_by(
         .actions
         .values()
         .flat_map(|action| produces(ir, action))
+        .chain(supplied(ir))
         .collect();
     for (reader, predicate) in space::readers(ir) {
         for kind in space::kinds_read(ir, predicate) {
@@ -927,8 +936,19 @@ fn enumerate<'s, 'a>(ir: &Ir, space: &'s Space<'a>) -> Result<Enumerated<'s, 'a>
 
 /// Evaluates one state with the evaluator and keeps each action's and outcome's status.
 pub(crate) fn evaluate(ir: &Ir, space: &Space<'_>, state: &State) -> Result<Evaluated, Refusal> {
+    evaluate_records(ir, space, state, space.evidence(state))
+}
+
+/// [`evaluate`] over `evidence` in place of the records of `state`'s evidence dimensions, whose
+/// capabilities, decisions and case inputs it still reads: how `canon simulate` evaluates a state
+/// of its walk, which holds its records itself (story:canon-simulate).
+pub(crate) fn evaluate_records(
+    ir: &Ir,
+    space: &Space<'_>,
+    state: &State,
+    evidence: Vec<crate::model::EvidenceRecord>,
+) -> Result<Evaluated, Refusal> {
     let revision = Revision::new(space::REVISION);
-    let evidence = space.evidence(state);
     let case = Case {
         format: CASE_FORMAT.to_owned(),
         independence: space.independence(&evidence),
@@ -993,12 +1013,21 @@ pub(crate) fn witness(
 
 /// The evidence kinds `action` may produce: each its `may_produce` lists and, when it opens a child
 /// case (story:case-composition), `case_outcome`, which carries the child's outcome back.
-fn produces<'a>(
+pub(crate) fn produces<'a>(
     ir: &'a Ir,
     action: &'a crate::ir::Action,
 ) -> impl Iterator<Item = &'a EvidenceKindId> {
     let opened = action.case_open.as_ref().and(space::case_outcome(ir));
     action.may_produce.iter().chain(opened)
+}
+
+/// The evidence kinds another protocol's cases produce (story:supplied-evidence): each that
+/// declares `supplied_by`. Produced, as an action's are, and without authority in this protocol.
+pub(crate) fn supplied(ir: &Ir) -> impl Iterator<Item = &EvidenceKindId> {
+    ir.evidence_kinds
+        .iter()
+        .filter(|(_, kind)| kind.supplied_by.is_some())
+        .map(|(id, _)| id)
 }
 
 /// The `authority-bypass` finding of the outcome at `at`, decided over `enumerated`.
@@ -1008,8 +1037,6 @@ fn bypass(
     at: usize,
     id: &OutcomeId,
     outcome: &crate::ir::Outcome,
-    governed: &BTreeSet<&EvidenceKindId>,
-    free: &BTreeSet<&EvidenceKindId>,
 ) -> Option<Finding> {
     let Enumerated {
         space,
@@ -1017,14 +1044,34 @@ fn bypass(
         evaluated,
     } = enumerated;
     let requirement = outcome.requires.predicate()?;
+    // The evidence dimensions some action that requires a capability may produce records of, and
+    // those produced without authority: by an action that requires none, or supplied. A supplied
+    // kind is produced without authority in this protocol: its supplier's authority is checked in
+    // the supplier's protocol, so a state where it is present can be a witness. It is not taken out
+    // of `governed`: an action requiring a capability that may produce it keeps it governed, and a
+    // supplied record alone can then witness a bypass. A child's `case_outcome` record is produced
+    // only in the dimension about the artifact its opening action opens it about (D1).
+    let produced = |governed: bool| -> BTreeSet<usize> {
+        ir.actions
+            .values()
+            .filter(|action| action.requires.is_empty() != governed)
+            .flat_map(|action| space.produced_by(ir, action))
+            .collect()
+    };
+    let governed = produced(true);
+    let mut free = produced(false);
+    free.extend(space.dimensions_of_kinds(&supplied(ir).collect()));
     let legitimate = |state: &State| {
         let index = usize::try_from(space.index(state)).expect("the space is within the bound");
         evaluated[index].outcomes[at] == "legitimate"
     };
     // The evidence dimensions the requirement reads where a record helps it hold. It is meant to
-    // rest on authority only when one of them is of a governed kind.
+    // rest on authority only when one of them is governed.
     let positive = space.dimensions_read_positively(ir, requirement);
-    if !positive.values().any(|kind| governed.contains(kind)) {
+    if !positive
+        .keys()
+        .any(|dimension| governed.contains(dimension))
+    {
         return None;
     }
     // Legitimate with no authority decision and only evidence no authority is needed for, and
@@ -1032,8 +1079,8 @@ fn bypass(
     // present blocks it. A state where it holds only on absent evidence is no witness.
     let candidates = (0..states.len()).filter(|index| {
         let state = &states[*index];
-        let without_authority = !space.decides_authority(state)
-            && space.present(state).iter().all(|kind| free.contains(kind));
+        let without_authority =
+            !space.decides_authority(state) && space.present_dimensions(state).is_subset(&free);
         without_authority
             && legitimate(state)
             && positive.keys().any(|dimension| {

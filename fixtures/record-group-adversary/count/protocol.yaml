@@ -1,0 +1,95 @@
+format: protocol/1
+protocol:
+  id: adversary.count
+  revision: 1
+  description: one action with a kind in no group, a group of three kinds and a group of two; its guard closes on its first run
+artifacts:
+  doc:
+    description: the document checked
+evidence_kinds:
+  a:
+    description: result ok or another
+  b:
+    description: result ok or another
+  c:
+    description: no result read
+  d:
+    description: result ok or another
+  e:
+    description: result ok or another
+  f:
+    description: result ok or another, in no group
+  w:
+    description: a kind no action produces
+claims:
+  a_ok:
+    true_when:
+      evidence:
+        kind: a
+        result: ok
+        subject: doc
+  b_ok:
+    true_when:
+      evidence:
+        kind: b
+        result: ok
+        subject: doc
+  c_any:
+    true_when:
+      evidence:
+        kind: c
+        subject: doc
+  d_ok:
+    true_when:
+      evidence:
+        kind: d
+        result: ok
+        subject: doc
+  e_ok:
+    true_when:
+      evidence:
+        kind: e
+        result: ok
+        subject: doc
+  f_ok:
+    true_when:
+      evidence:
+        kind: f
+        result: ok
+        subject: doc
+  has_w:
+    true_when:
+      evidence:
+        kind: w
+        subject: doc
+outcomes:
+  done:
+    requires:
+      all:
+        - claim: has_w
+        - claim: a_ok
+        - claim: b_ok
+        - claim: c_any
+        - claim: d_ok
+        - claim: e_ok
+        - claim: f_ok
+actions:
+  act:
+    precondition:
+      all:
+        - claim: a_ok
+          is: unknown
+        - claim: d_ok
+          is: unknown
+        - claim: f_ok
+          is: unknown
+    may_produce:
+      - evidence: f
+      - evidence: e
+      - evidence: d
+      - evidence: c
+      - evidence: b
+      - evidence: a
+    records_together:
+      - kinds: [e, d]
+      - kinds: [c, b, a]

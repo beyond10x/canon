@@ -25,15 +25,19 @@ does not depend on the order the sections are written in:
    claims, obligations, actions, outcomes, invalidation rules, case inputs and independence
    dimensions, in that section order, then the capabilities actions name, each followed by the
    keys and values of its scope in the order written, the effect classes actions name and the
-   protocol each action's `case_open` names, in action order, then the decisions outcomes
-   require, in outcome order, then the values case inputs declare, in input order;
+   protocol each action's `case_open` names, in action order, then the protocol each evidence
+   kind's `supplied_by` names, in evidence kind order, then the decisions outcomes require, in
+   outcome order, then the values case inputs declare, in input order;
 4. duplicate identifiers, in the same section order;
 5. capability requirements whose scope names a key more than once (`duplicate-scope-key`,
    naming the action, the capability and the key, once for every naming after its first), in
    the order the actions and their requirements are written;
 6. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
-   or `d`, or that are but are too long to count in seconds (each with its own message), in the
-   order the evidence kinds are written;
+   or `d`, or that are but are too long to count in seconds (each with its own message), and
+   evidence kinds whose `supplied_by` names the protocol's own id (`self-supplied-evidence`,
+   naming the kind; story:supplied-evidence), each kind's in that order, in the order the
+   evidence kinds are written. Any other protocol may supply a kind, and nothing resolves the
+   name;
 7. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
    more than once (`duplicate-input-value`, naming the input and the value, once for every
    listing after its first), in the order the inputs are written;
@@ -59,16 +63,26 @@ does not depend on the order the sections are written in:
    an empty `in` list, `empty-child-outcomes`, or an outcome it lists more than once,
    `duplicate-child-outcome`, once for every listing after its first, then `open` listed,
    `open-child-outcome`, once, then the evidence kind `case_outcome` when it is not declared,
-   `undeclared-evidence-kind`, every one naming the declaration the form is written in): those
+   `undeclared-evidence-kind`, then the artifact it names as its `subject` when that is not
+   declared, `undeclared-artifact` (story:child-outcome-subject), every one naming the
+   declaration the form is written in): those
    in claims first, then those in obligations (each obligation's discharge predicate, followed
    by every evidence match, order form and `children` form it holds, which a discharge
    predicate may not: it tests only claim values, each kind an order form names once, the kind
    `case_outcome` for a `children` form; then its applicability predicate, followed likewise by
    every evidence match, order form and `children` form it holds, `evidence-in-applicability`:
    it tests only claim values and case inputs), then those in actions (each action's
-   precondition, then each evidence kind it may produce, then the subject of the case it opens,
-   `undeclared-artifact`, then an opening under the protocol's own id, `self-opened-case`, both
-   naming the action), then those in outcomes, then those in invalidation rules (the upstream
+   precondition, then each evidence kind it may produce, then each artifact it `revises`
+   (story:judgement-marking), `undeclared-artifact`, once for every listing, in the order
+   listed, then the subject of the case it opens, `undeclared-artifact`, then an opening under
+   the protocol's own id, `self-opened-case`, then each group of its `records_together`
+   (story:simulate-record-groups), in the order written, `invalid-record-group`: a group with
+   fewer than two distinct kinds, then for each kind it names, once, in the order named:
+   `case_outcome` on an action that opens a child case (a child's outcome arrives when the
+   child ends, never with a record of the run that opened it), or else a kind its
+   `may_produce` does not list, and then a kind an earlier group of the action names, every
+   one naming the action and the group, counted from 1), then those in
+   outcomes, then those in invalidation rules (the upstream
    artifact, then each claim the rule invalidates); within a section, in the order its
    declarations are written, and within a declaration, in the order its references are
    written;
@@ -96,6 +110,10 @@ offline, so it has no reference at all.
   `array`, `string`, `integer`, `number`, `boolean` or `null`. The top level is `type: object`.
 - `title` and `description`, strings, anywhere.
 - `enum`, on any type: a non-empty list of distinct JSON scalars, each of the schema's type.
+  Two numbers are the same value when their values are equal exactly (see
+  [Numbers](#numbers)): `1` and `1.0` are one value, `9007199254740993` and
+  `9007199254740992.0` two. `canon validate` refuses a value listed twice by that rule, and
+  `canon diff` adds and removes `enum` values by it.
 - `object`: `properties` (a map of name to schema), `required` (a list of distinct names, each
   declared in `properties`), `additionalProperties` (a boolean only).
 - `array`: `items` (one schema), `minItems`, `maxItems`.
@@ -117,6 +135,90 @@ names no `type` or nests too deep is reported at its own pointer. A schema whose
 missing or not one of the seven has its other keywords checked only for being in the dialect,
 since which apply depends on the type. Problems come in document order, the keys of every
 object in code-point order, and the walk keeps a stack of its own, never recursing.
+
+### Checking a call (story:argument-validator)
+
+`check_arguments` checks one call's arguments against an action's schema. It is a pure
+function: it reads nothing but its two arguments, evaluates no call and takes no decision. A
+runner that holds an `ir::Action` passes `action.arguments.as_ref()`; one that holds
+`canon-ir/1` as JSON passes `ir["actions"][id]["arguments"]`, `None` when the key is absent.
+
+- An absent schema is `{"type": "object", "additionalProperties": false}`: the action takes
+  only `{}`.
+- A schema outside the dialect, which only a caller-built IR can hold, is returned as
+  `ArgumentsRefused::Schema`, the pairs of JSON Pointer inside the schema and reason that
+  `check` gives `canon validate`, unchanged; no argument is checked.
+- Otherwise every refusal is reported as `ArgumentsRefused::Arguments`, each an
+  `ArgumentRefusal`: the RFC 6901 pointer into the arguments (`""` for the whole document),
+  the keyword that refused and one line of text. Meaning is that of JSON Schema 2020-12.
+- `type`: an `integer` is any number with no fractional part, so `1.0` is an integer. When
+  `type` refuses at a location, no other keyword of that schema is checked there.
+- `enum`: values are equal when they are equal in JSON Schema's sense, numbers when their
+  values are equal exactly: `1` and `1.0` are one value, and two integers a double cannot tell
+  apart are two.
+- `required`: a missing name is refused at the object's pointer, the reason naming it, in the
+  order the schema lists the names.
+- `additionalProperties: false`: an undeclared member is refused at the member's pointer.
+- `properties` and `items` descend into the members and items a schema describes, and only
+  those, so the depth reached is at most `MAX_SCHEMA_DEPTH`.
+- `minItems`, `maxItems` count the array's items; `minLength`, `maxLength` count the string's
+  Unicode code points.
+- `minimum`, `maximum` compare exactly, by the value [Numbers](#numbers) states.
+- `title` and `description` never refuse.
+
+Refusals come in document order: a location's own refusals first, its keywords in code-point
+order (`enum`, the maximums, the minimums, then `required`), then its members in code-point
+order of their names, or its items in order. The same input gives the same refusals.
+
+### Numbers
+
+Two numbers are the same when the values Canon reads for them are equal exactly, and one is
+above the other when its value is. Which value Canon reads for a number depends on how
+`serde_json` is built, and is stated below; a protocol's number is first read by the YAML
+reader, which may already have rounded it. One comparison decides `minimum`, `maximum`, `enum`
+and `type: integer` in `check_arguments`, the duplicate `enum` value `canon validate`
+refuses, and the `enum` values `canon diff` finds added or removed. No comparison goes through
+a double that cannot hold the value read.
+
+Cargo builds `serde_json` once per build with the features of every crate in it, and this crate
+cannot see them at compile time, so it reads once at run time whether `serde_json` writes `0.10`
+back as `0.10` (the text is held) or as `0.1` (a double is held).
+
+- **Text held**: `serde_json` has `arbitrary_precision`, which `b10x-canon-expr` turns on. A
+  build of the workspace has it: `cargo build --workspace`, and every command-line test of the
+  gate. A number's value is the decimal its text writes, its sign, digits and exponent, of any
+  length: `9007199254740992.5` is above `maximum: 9007199254740992` and not an integer;
+  `-9223372036854775809` is below `minimum: -9223372036854775808`; `1e400`, which has no
+  finite double, is above every finite bound and below none, an integer, and the same only as a
+  number of the same value (`10e399`), and `-1e400` likewise below; `1e-400` is above `0` and
+  not an integer. One exception, for a schema's number only (D4): `serde_json` writes a double
+  as the shortest text that reads back as it, and a schema number whose text is that of a
+  double which is an integer an `i64` or a `u64` holds, and which the text does not write
+  exactly, is that integer. A protocol's `1152921504606846976.0` is the double 2^60, written
+  `1.152921504606847e+18`, and is compared as 2^60. A document's number is never read so.
+- **Double held**: no `arbitrary_precision`. The binary a user installs with
+  `cargo install --locked --git … canon-cli` holds doubles, and so does
+  `cargo test -p b10x-canon`. A number's value is the 64-bit integer or finite double
+  `serde_json` read, compared exactly, so an integer is never rounded to a double. A literal
+  with a fraction or an exponent is the nearest double: `9007199254740993.0` is 2^53. An integer
+  literal beyond the 64-bit range, below -2^63 or above 2^64 - 1, is the nearest double as well:
+  `-9223372036854775809` is -2^63 and meets `minimum: -9223372036854775808`. A literal beyond the
+  double range, such as `1e400`, is refused by `serde_json`, so no caller holds one; `1e-400` is
+  the double 0.
+
+A runner's `check_arguments` reads what its own `serde_json` holds. The two builds answer
+differently in these cases only:
+
+- a literal that is not exactly the integer or double read without `arbitrary_precision`, as in
+  each example above, in the arguments, or in a schema a caller builds unless D4 reads it;
+- a protocol literal the YAML reader rounds (D5): `9007199254740993.0` in a protocol reads as the
+  double 2^53, and Canon compares what it read, so the arguments `9007199254740993.0` are
+  another value where the text is held and the same value where a double is;
+- a schema double that is an integer beyond the 64-bit range (D5): where the text is held it is
+  its shortest text (a protocol's `1e30` is 10^30), where a double is held the double
+  (1000000000000000019884624838656);
+- a bound or an `integer` `enum` value written `-0`: the integer 0 where the text is held, and
+  where a double is held the double -0.0, which `canon validate` refuses as not an integer.
 
 ## Problem codes
 
@@ -147,6 +249,8 @@ object in code-point order, and the walk keeps a stack of its own, never recursi
 | `duplicate-child-outcome` | A `children` form lists an outcome more than once. |
 | `open-child-outcome` | A `children` form lists `open`, which is a running child case's outcome, never a terminal one: the form is unknown while a child is open. |
 | `self-opened-case` | An action opens a child case under the protocol's own id: a case could then open cases under its own protocol without end (D206). |
+| `invalid-record-group` | A group of an action's `records_together` (story:simulate-record-groups) is not one run's records: `group` counts the action's groups from 1, in the order written. |
+| `self-supplied-evidence` | An evidence kind names the protocol's own id as the protocol that supplies its records (story:supplied-evidence): records of it come from outside the protocol, or from its own actions, never from a case of the same protocol through `supplied_by`. |
 | `claim-cycle` | Claims whose predicates test each other in a cycle; the first claim is repeated at the end. |
 | `action-arguments` | An action's argument schema is outside the argument-schema dialect: `pointer` is the JSON Pointer of the offending keyword inside the schema (`""` for the schema itself) and `reason` why it is refused. |
 | `invalid-import-digest` | An import pins a digest not written `sha256:` followed by 64 lowercase hexadecimal digits. |

@@ -1,0 +1,484 @@
+format: canon-conformance/1
+id: CANON-COMPOSE-003
+covers: [CANON-COMPOSE-003]
+fixture: fixtures/investigation/child-outcome-subject.yaml
+# The fixture opens idea child cases about the intake and story child cases about the wave. Claim
+# wave.passed is `{children: {in: [passed], subject: wave, revision: current}}`: it reads only the
+# case_outcome records whose subject is the wave and whose subject_revision is the case snapshot's
+# current revision of the wave. Claim all.passed is the same form without `subject`, which reads
+# the records about the current revision of every artifact, as CANON-COMPOSE-002's form does.
+# Claim wave.troubled is `not` over `{children: {in: [passed], subject: wave}}`, without
+# `revision`: the form reads the records about the wave at every revision, so it is TRUE once a
+# wave story ended outside the set at any revision, and it reads no record about the intake.
+# Action wave.close requires either form; outcome wave.done requires wave.passed. Over the records
+# it reads, each form follows CANON-COMPOSE-001: FALSE once a child ended outside the set,
+# otherwise UNKNOWN while a child is open or with no record read, TRUE when every child ended
+# passed. A record about another artifact is not read by the form with `subject`: it neither
+# establishes nor contradicts it. The form counts only the records it is given. Expectation 7, a
+# `subject` the protocol does not declare refused as undeclared-artifact, is a protocol canon
+# validate refuses, which no step of a scenario compiles: crates/canon/tests/child_outcome_subject.rs
+# states it. Expectation 8 is CANON-COMPOSE-001 and CANON-COMPOSE-002 passing in the same registry.
+steps:
+  # Expectation 1. `"subject": "wave"` is written for wave.passed, and no `subject` key for
+  # all.passed, which compiles as every form did before the key existed. In wave.close's `any`
+  # the two forms differ only in `subject`: two members, the one without it first.
+  - id: compile
+    compile: {}
+    expect:
+      canon-ir: |
+        {
+          "actions": {
+            "ideas.open": {
+              "case_open": {
+                "protocol": "idea",
+                "subject": "intake"
+              },
+              "description": "Open an idea child case about the intake.",
+              "effect": null,
+              "may_produce": [],
+              "precondition": {
+                "all": []
+              },
+              "requires": []
+            },
+            "stories.open": {
+              "case_open": {
+                "protocol": "story",
+                "subject": "wave"
+              },
+              "description": "Open a story child case about the wave.",
+              "effect": null,
+              "may_produce": [],
+              "precondition": {
+                "all": []
+              },
+              "requires": []
+            },
+            "wave.close": {
+              "description": "Close the wave once its stories, or every child case, passed at the current revision.",
+              "effect": null,
+              "may_produce": [],
+              "precondition": {
+                "any": [
+                  {
+                    "children": {
+                      "in": [
+                        "passed"
+                      ],
+                      "revision": "current"
+                    }
+                  },
+                  {
+                    "children": {
+                      "in": [
+                        "passed"
+                      ],
+                      "revision": "current",
+                      "subject": "wave"
+                    }
+                  }
+                ]
+              },
+              "requires": []
+            }
+          },
+          "artifacts": {
+            "intake": {
+              "description": "The intake; each idea child case is opened about it."
+            },
+            "wave": {
+              "description": "The wave; each story child case is opened about it."
+            }
+          },
+          "claims": {
+            "all.passed": {
+              "description": "Every child case about the current revision of its artifact ended passed, whatever the artifact.",
+              "true_when": {
+                "children": {
+                  "in": [
+                    "passed"
+                  ],
+                  "revision": "current"
+                }
+              }
+            },
+            "wave.passed": {
+              "description": "Every child case about the wave's current revision ended passed.",
+              "true_when": {
+                "children": {
+                  "in": [
+                    "passed"
+                  ],
+                  "revision": "current",
+                  "subject": "wave"
+                }
+              }
+            },
+            "wave.troubled": {
+              "description": "Not every child case about the wave, at whatever revision, ended passed.",
+              "true_when": {
+                "not": {
+                  "children": {
+                    "in": [
+                      "passed"
+                    ],
+                    "subject": "wave"
+                  }
+                }
+              }
+            }
+          },
+          "evidence_kinds": {
+            "case_outcome": {
+              "description": "The outcome of one child case, one record per child, about the artifact the child was opened about, at the revision its outcome was computed against; open from the moment the child is opened while it runs."
+            }
+          },
+          "format": "canon-ir/1",
+          "obligations": {},
+          "outcomes": {
+            "wave.done": {
+              "description": "The wave is done; every story opened about it as it stands passed.",
+              "requires": {
+                "claim": {
+                  "id": "wave.passed",
+                  "is": "true"
+                }
+              }
+            }
+          },
+          "protocol": {
+            "description": "Turn an intake into ideas and a wave into stories, each a child case; the wave is done once its stories passed the wave as it stands.",
+            "id": "orchestrate",
+            "revision": 1
+          }
+        }
+
+  # Expectation 2. The wave is at w2. c1 passed and c2 dropped about w1, c3 and c4 passed about
+  # w2, and the idea child i1 is open about the current intake. wave.passed reads c3 and c4 alone:
+  # TRUE. all.passed reads c3, c4 and i1: UNKNOWN while i1 is open. wave.close is admissible
+  # through the form with `subject`, and wave.done is legitimate. wave.troubled reads c2, dropped
+  # about w1: TRUE.
+  - id: an-open-idea-beside-the-wave-stories
+    evaluate:
+      case:
+        format: canon-case/1
+        id: ORCH-1
+        protocol: orchestrate
+        artifacts:
+          intake: {revision: n1}
+          wave: {revision: w2}
+      evidence:
+        - {format: canon-evidence/1, id: c1, kind: case_outcome, result: passed, subject: wave, subject_revision: w1, child_case: STORY-1}
+        - {format: canon-evidence/1, id: c2, kind: case_outcome, result: dropped, subject: wave, subject_revision: w1, child_case: STORY-2}
+        - {format: canon-evidence/1, id: c3, kind: case_outcome, result: passed, subject: wave, subject_revision: w2, child_case: STORY-3}
+        - {format: canon-evidence/1, id: c4, kind: case_outcome, result: passed, subject: wave, subject_revision: w2, child_case: STORY-4}
+        - {format: canon-evidence/1, id: i1, kind: case_outcome, result: open, subject: intake, subject_revision: n1, child_case: IDEA-1}
+    expect:
+      decision: |
+        {
+          "actions": {
+            "ideas.open": {
+              "status": "admissible"
+            },
+            "stories.open": {
+              "status": "admissible"
+            },
+            "wave.close": {
+              "status": "admissible"
+            }
+          },
+          "claims": {
+            "all.passed": {
+              "value": "unknown"
+            },
+            "wave.passed": {
+              "value": "true"
+            },
+            "wave.troubled": {
+              "value": "true"
+            }
+          },
+          "outcomes": {
+            "wave.done": {
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # Expectation 3. As in 2, with i1 ended operating, an outcome outside the set: all.passed is
+  # FALSE, and wave.passed, which does not read a record about the intake, stays TRUE.
+  - id: an-idea-ended-outside-the-set
+    evaluate:
+      case:
+        format: canon-case/1
+        id: ORCH-1
+        protocol: orchestrate
+        artifacts:
+          intake: {revision: n1}
+          wave: {revision: w2}
+      evidence:
+        - {format: canon-evidence/1, id: c1, kind: case_outcome, result: passed, subject: wave, subject_revision: w1, child_case: STORY-1}
+        - {format: canon-evidence/1, id: c2, kind: case_outcome, result: dropped, subject: wave, subject_revision: w1, child_case: STORY-2}
+        - {format: canon-evidence/1, id: c3, kind: case_outcome, result: passed, subject: wave, subject_revision: w2, child_case: STORY-3}
+        - {format: canon-evidence/1, id: c4, kind: case_outcome, result: passed, subject: wave, subject_revision: w2, child_case: STORY-4}
+        - {format: canon-evidence/1, id: i1, kind: case_outcome, result: operating, subject: intake, subject_revision: n1, child_case: IDEA-1}
+    expect:
+      decision: |
+        {
+          "claims": {
+            "all.passed": {
+              "value": "false"
+            },
+            "wave.passed": {
+              "value": "true"
+            },
+            "wave.troubled": {
+              "value": "true"
+            }
+          },
+          "outcomes": {
+            "wave.done": {
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # Expectation 4, first half. As in 2, with c4 dropped about w2: wave.passed is FALSE, and so is
+  # all.passed. wave.close is blocked; its reasons name both forms, the one without `subject`
+  # first, each with its value.
+  - id: a-wave-story-dropped-at-the-current-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: ORCH-1
+        protocol: orchestrate
+        artifacts:
+          intake: {revision: n1}
+          wave: {revision: w2}
+      evidence:
+        - {format: canon-evidence/1, id: c1, kind: case_outcome, result: passed, subject: wave, subject_revision: w1, child_case: STORY-1}
+        - {format: canon-evidence/1, id: c2, kind: case_outcome, result: dropped, subject: wave, subject_revision: w1, child_case: STORY-2}
+        - {format: canon-evidence/1, id: c3, kind: case_outcome, result: passed, subject: wave, subject_revision: w2, child_case: STORY-3}
+        - {format: canon-evidence/1, id: c4, kind: case_outcome, result: dropped, subject: wave, subject_revision: w2, child_case: STORY-4}
+        - {format: canon-evidence/1, id: i1, kind: case_outcome, result: open, subject: intake, subject_revision: n1, child_case: IDEA-1}
+    expect:
+      decision: |
+        {
+          "actions": {
+            "ideas.open": {
+              "status": "admissible"
+            },
+            "stories.open": {
+              "status": "admissible"
+            },
+            "wave.close": {
+              "reasons": [
+                {
+                  "children": [
+                    "passed"
+                  ],
+                  "revision": "current",
+                  "value": "false"
+                },
+                {
+                  "children": [
+                    "passed"
+                  ],
+                  "revision": "current",
+                  "subject": "wave",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "all.passed": {
+              "value": "false"
+            },
+            "wave.passed": {
+              "value": "false"
+            },
+            "wave.troubled": {
+              "value": "true"
+            }
+          }
+        }
+
+  # Expectation 4, second half. As in 2, with c4 open about w2 instead: wave.passed is UNKNOWN.
+  - id: a-wave-story-open-at-the-current-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: ORCH-1
+        protocol: orchestrate
+        artifacts:
+          intake: {revision: n1}
+          wave: {revision: w2}
+      evidence:
+        - {format: canon-evidence/1, id: c1, kind: case_outcome, result: passed, subject: wave, subject_revision: w1, child_case: STORY-1}
+        - {format: canon-evidence/1, id: c2, kind: case_outcome, result: dropped, subject: wave, subject_revision: w1, child_case: STORY-2}
+        - {format: canon-evidence/1, id: c3, kind: case_outcome, result: passed, subject: wave, subject_revision: w2, child_case: STORY-3}
+        - {format: canon-evidence/1, id: c4, kind: case_outcome, result: open, subject: wave, subject_revision: w2, child_case: STORY-4}
+        - {format: canon-evidence/1, id: i1, kind: case_outcome, result: open, subject: intake, subject_revision: n1, child_case: IDEA-1}
+    expect:
+      decision: |
+        {
+          "claims": {
+            "all.passed": {
+              "value": "unknown"
+            },
+            "wave.passed": {
+              "value": "unknown"
+            },
+            "wave.troubled": {
+              "value": "true"
+            }
+          }
+        }
+
+  # Expectation 5. Only c1 and c2 are given, both about w1. wave.passed reads no record: UNKNOWN,
+  # and wave.done is blocked. wave.close is blocked; its reasons name the form with
+  # `"subject": "wave"`, after the form without it, each UNKNOWN.
+  - id: only-wave-stories-about-an-earlier-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: ORCH-1
+        protocol: orchestrate
+        artifacts:
+          intake: {revision: n1}
+          wave: {revision: w2}
+      evidence:
+        - {format: canon-evidence/1, id: c1, kind: case_outcome, result: passed, subject: wave, subject_revision: w1, child_case: STORY-1}
+        - {format: canon-evidence/1, id: c2, kind: case_outcome, result: dropped, subject: wave, subject_revision: w1, child_case: STORY-2}
+    expect:
+      decision: |
+        {
+          "actions": {
+            "ideas.open": {
+              "status": "admissible"
+            },
+            "stories.open": {
+              "status": "admissible"
+            },
+            "wave.close": {
+              "reasons": [
+                {
+                  "children": [
+                    "passed"
+                  ],
+                  "revision": "current",
+                  "value": "unknown"
+                },
+                {
+                  "children": [
+                    "passed"
+                  ],
+                  "revision": "current",
+                  "subject": "wave",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "all.passed": {
+              "value": "unknown"
+            },
+            "wave.passed": {
+              "value": "unknown"
+            },
+            "wave.troubled": {
+              "value": "true"
+            }
+          },
+          "outcomes": {
+            "wave.done": {
+              "reasons": [
+                {
+                  "claim": "wave.passed",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 6. Only c3 is given, c4 absent: wave.passed is TRUE. Canon counts only the records
+  # it is given; a child opened without a record takes no part. wave.troubled is FALSE.
+  - id: only-one-wave-story-given
+    evaluate:
+      case:
+        format: canon-case/1
+        id: ORCH-1
+        protocol: orchestrate
+        artifacts:
+          intake: {revision: n1}
+          wave: {revision: w2}
+      evidence:
+        - {format: canon-evidence/1, id: c3, kind: case_outcome, result: passed, subject: wave, subject_revision: w2, child_case: STORY-3}
+    expect:
+      decision: |
+        {
+          "claims": {
+            "all.passed": {
+              "value": "true"
+            },
+            "wave.passed": {
+              "value": "true"
+            },
+            "wave.troubled": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "wave.done": {
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # The story's outcome, beyond its eight expectations: a record about another artifact does not
+  # establish the form with `subject` either. One idea child passed about the current intake and
+  # no record about the wave: wave.passed is UNKNOWN, all.passed TRUE, and wave.troubled, `not`
+  # over a form that reads no record, UNKNOWN.
+  - id: only-an-idea-passed
+    evaluate:
+      case:
+        format: canon-case/1
+        id: ORCH-1
+        protocol: orchestrate
+        artifacts:
+          intake: {revision: n1}
+          wave: {revision: w2}
+      evidence:
+        - {format: canon-evidence/1, id: i1, kind: case_outcome, result: passed, subject: intake, subject_revision: n1, child_case: IDEA-1}
+    expect:
+      decision: |
+        {
+          "claims": {
+            "all.passed": {
+              "value": "true"
+            },
+            "wave.passed": {
+              "value": "unknown"
+            },
+            "wave.troubled": {
+              "value": "unknown"
+            }
+          },
+          "outcomes": {
+            "wave.done": {
+              "reasons": [
+                {
+                  "claim": "wave.passed",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }

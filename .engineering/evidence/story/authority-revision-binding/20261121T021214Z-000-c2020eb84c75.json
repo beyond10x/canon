@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T02:12:14Z",
+  "actor": "human:timo",
+  "artifact": "story:authority-revision-binding",
+  "kind": "story",
+  "revision": 16,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "no scenario step bound a require_approval; 24a2f90 adds two steps to CANON-AUTHORITY-002 that fail on the mutant (stale-approval-takes-no-part), and the adversary's case 88b78c0 pins it in a test; scenario-only diff read by the coordinator; workspace 974 passed, 0 failed",
+    "reference": "impl/authority-revision-binding 24a2f90",
+    "review": "review-result:adversary-authority-revision-binding-pass-1",
+    "outcome": "fixed"
+  }
+}

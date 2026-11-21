@@ -1,0 +1,4 @@
+cycle: state {evidence `observation`}: no outcome is legitimate, no action is approval-required, and every step of action `renew` returns this state; path: action `renew` produces evidence `observation`
+unreached-outcome: outcome `sealed` is legitimate in no reachable state
+no-outcome-reachable: protocol `simulate.renew` revision 1 reaches no state in which an outcome is legitimate
+simulated: protocol `simulate.renew` revision 1: 2 reachable states, 0 terminable (outcome `sealed` 0), 0 waiting on supplied evidence or expiry, 3 findings (1 stuck or cycle state)

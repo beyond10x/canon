@@ -217,6 +217,87 @@ fn an_outcome_that_holds_on_absent_governed_evidence_is_no_bypass() {
     );
 }
 
+/// story:supplied-evidence: a kind that declares `supplied_by` is produced, so no
+/// `unproduced-evidence` names it, and produced without authority, so a state where it is present
+/// witnesses the bypass of `granted` through the governed `k` that `self_approve` also produces.
+/// The kind `w`, which only `other` reads, makes the whole product four times `granted`'s slice,
+/// so `canon check` decides each subject over its slice, and the three strategies agree. Without
+/// `supplied_by`, `s` is unproduced, a state holding it is no witness and the bypass is hidden.
+/// The state count does not change: production reads no state.
+#[test]
+fn a_supplied_kind_is_produced_without_authority_in_every_slice() {
+    let supplied = "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}}\n\
+        evidence_kinds: {k: {}, s: {supplied_by: q}, w: {}}\n\
+        claims: {approved: {true_when: {evidence: {kind: k}}}, \
+        reviewed: {true_when: {evidence: {kind: s}}}}\n\
+        actions:\n\
+        \x20\x20approve: {requires: [{capability: c}], may_produce: [{evidence: k}]}\n\
+        \x20\x20self_approve: {may_produce: [{evidence: k}]}\n\
+        \x20\x20watch: {may_produce: [{evidence: w}]}\n\
+        outcomes:\n\
+        \x20\x20granted: {requires: {all: [{claim: approved}, {claim: reviewed}]}}\n\
+        \x20\x20other: {requires: {evidence: {kind: w}}}\n";
+    let ir = compiled(supplied);
+    assert_eq!(
+        check(&ir, None).expect("checked").to_string(),
+        "authority-bypass: outcome `granted` is legitimate without authority in state \
+         {evidence `k`, evidence `s`}\n\
+         checked: protocol `p` revision 1: 24 states, 0 properties, 1 finding\n"
+    );
+    let (widest, whole) = assert_slices_agree(&ir, None, supplied);
+    assert!(widest * 2 < whole, "{widest} of {whole}");
+
+    let unsupplied = supplied.replace("s: {supplied_by: q}", "s: {}");
+    let ir = compiled(&unsupplied);
+    assert_eq!(
+        check(&ir, None).expect("checked").to_string(),
+        "unproduced-evidence: claim `reviewed` reads evidence kind `s`, which no action may produce\n\
+         unproduced-evidence: outcome `granted` reads evidence kind `s`, which no action may produce\n\
+         checked: protocol `p` revision 1: 24 states, 0 properties, 2 findings\n"
+    );
+    assert_slices_agree(&ir, None, &unsupplied);
+}
+
+/// story:supplied-evidence, decided in review on 2026-11-21: a kind that declares `supplied_by`
+/// counts as produced without authority and stays governed when an action that requires a
+/// capability may also produce it, so `canon check` reports `authority-bypass` on an outcome a
+/// supplied record alone makes legitimate. Without `supplied_by` only the governed action produces
+/// the kind, so nothing is found; with a capability-free action producing it too, the bypass is
+/// reported as it was before the field existed.
+#[test]
+fn a_supplied_kind_an_authority_action_produces_stays_governed() {
+    let supplied = "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}}\n\
+        evidence_kinds: {s: {supplied_by: q}}\n\
+        claims: {ok: {true_when: {evidence: {kind: s}}}}\n\
+        actions:\n\
+        \x20\x20approve: {requires: [{capability: c}], may_produce: [{evidence: s}]}\n\
+        outcomes:\n\
+        \x20\x20done: {requires: {claim: ok}}\n";
+    let bypass = "authority-bypass: outcome `done` is legitimate without authority in state \
+        {evidence `s`}\n\
+        checked: protocol `p` revision 1: 6 states, 0 properties, 1 finding\n";
+    let ir = compiled(supplied);
+    assert_eq!(check(&ir, None).expect("checked").to_string(), bypass);
+    assert_slices_agree(&ir, None, supplied);
+
+    let unsupplied = supplied.replace("s: {supplied_by: q}", "s: {}");
+    assert_eq!(
+        check(&compiled(&unsupplied), None)
+            .expect("checked")
+            .to_string(),
+        "checked: protocol `p` revision 1: 6 states, 0 properties, 0 findings\n"
+    );
+
+    let free = unsupplied.replace(
+        "outcomes:\n",
+        "\x20\x20self_approve: {may_produce: [{evidence: s}]}\noutcomes:\n",
+    );
+    assert_eq!(
+        check(&compiled(&free), None).expect("checked").to_string(),
+        bypass
+    );
+}
+
 /// Adversary pass 1, finding 7: the bound refusal the module docs show is one `check` gives, so
 /// its count is the product of its dimensions. Reads the module source at run time. The slice of
 /// `act` holds `k`, `m` and `c`, not the decision `d` only `o` reads (story:check-subject-slices).
@@ -1783,7 +1864,8 @@ fn assert_slices_agree(ir: &Ir, properties: Option<&Properties>, source: &str) -
 /// optional case input, up to four claims, three actions and three outcomes over every predicate
 /// form, an optional invalidation rule and up to two properties. One in four is small around one
 /// order form, whose history and order dimensions make a space large (an `after` or a `since`
-/// over one kind keeps it within [`GENERATED_STATES`]), and one in four reads child cases.
+/// over one kind keeps it within [`GENERATED_STATES`]), and one in four reads child cases, half of
+/// its `children` forms with `revision: current`.
 fn generated(rng: &mut Rng) -> (String, Option<String>) {
     let family = rng.below(4);
     let ordered = family == 0;
@@ -1833,10 +1915,7 @@ fn generated(rng: &mut Rng) -> (String, Option<String>) {
     for claim in 0..claims {
         let predicate = match (claim, ordered, children) {
             (0, true, _) => order_form(rng),
-            (0, _, true) => format!(
-                "{{children: {{in: [{}]}}}}",
-                ["accepted", "p"][rng.below(2)]
-            ),
+            (0, _, true) => children_form(rng, artifacts),
             _ => context.predicate(rng, depth, claim),
         };
         source.push_str(&format!("  c{claim}: {{true_when: {predicate}}}\n"));
@@ -1866,6 +1945,9 @@ fn generated(rng: &mut Rng) -> (String, Option<String>) {
         }
         if children && action == 0 {
             fields.push("case_open: {protocol: q, subject: a}".to_owned());
+        }
+        if children && two && action == 1 {
+            fields.push("case_open: {protocol: q, subject: b}".to_owned());
         }
         source.push_str(&format!("  a{action}: {{{}}}\n", fields.join(", ")));
     }
@@ -1901,6 +1983,30 @@ fn generated(rng: &mut Rng) -> (String, Option<String>) {
         body
     });
     (source, properties)
+}
+
+/// One `children` form listing `accepted` or `p`, half of them with `revision: current`
+/// (story:child-outcome-revision) and, independently, half of them with `subject` naming one of
+/// `artifacts` (story:child-outcome-subject). One draw decides all three: its remainder by 2 the
+/// outcome as a draw below 2 did before the keys existed, its remainder by 4 the revision as a
+/// draw below 4 did before `subject` existed, so every later draw, and every protocol a seed
+/// generates but for the keys, is what it was.
+fn children_form(rng: &mut Rng, artifacts: &[&str]) -> String {
+    let draw = rng.below(16);
+    let revision = if draw % 4 >= 2 {
+        ", revision: current"
+    } else {
+        ""
+    };
+    let subject = if (draw / 4) % 2 == 1 {
+        format!(", subject: {}", artifacts[(draw / 8) % artifacts.len()])
+    } else {
+        String::new()
+    };
+    format!(
+        "{{children: {{in: [{}]{subject}{revision}}}}}",
+        ["accepted", "p"][draw % 2]
+    )
 }
 
 /// One order form over `k` and `m`, or over `k` alone for half of the `after` and `since` forms.
@@ -1996,12 +2102,7 @@ impl Context<'_> {
                     subject(rng)
                 ),
             },
-            5 if self.children => {
-                format!(
-                    "{{children: {{in: [{}]}}}}",
-                    ["accepted", "p"][rng.below(2)]
-                )
-            }
+            5 if self.children => children_form(rng, &self.artifacts),
             7 => format!("{{not: {}}}", self.predicate(rng, depth - 1, claims)),
             8 | 9 => {
                 let members: Vec<String> = (0..1 + rng.below(3))
@@ -2078,13 +2179,17 @@ fn generated_protocols_agree(seed: u64, wanted: usize) -> (usize, usize) {
 }
 
 /// What the generated protocols must reach, in the source or the report: every order form, child
-/// cases, invalidation, independence, inputs, and each finding that reads states.
-const GENERATED_FEATURES: [&str; 11] = [
+/// cases, a `children` form bound to the current revision (story:child-outcome-revision), one
+/// naming a subject (story:child-outcome-subject, written `], subject:` only by a `children` form),
+/// invalidation, independence, inputs, and each finding that reads states.
+const GENERATED_FEATURES: [&str; 13] = [
     "inputs:",
     "first:",
     "since:",
     "after:",
     "children:",
+    "revision: current",
+    "], subject:",
     "invalidation:",
     "independent_on",
     "unreachable-outcome",

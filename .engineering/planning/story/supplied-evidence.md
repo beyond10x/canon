@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:supplied-evidence
 kind: story
-status: active
+status: implemented
 title: 'Declare evidence kinds supplied by another protocol: supplied_by, and canon check counts them as produced'
 tags:
 - from-request
@@ -19,12 +19,24 @@ scope:
   path: conformance/requirements.yaml
 - confidence: inferred
   path: conformance/scenarios/supplied-evidence.yaml
+- confidence: cited
+  path: crates/canon-cli/src/lib.rs
+- confidence: cited
+  path: crates/canon-cli/tests/adversary_conformance_suite_cli.rs
+- confidence: cited
+  path: crates/canon-cli/tests/conform_requirements.rs
 - confidence: inferred
   path: crates/canon-cli/tests/supplied_evidence.rs
 - confidence: cited
   path: crates/canon/src/check/mod.rs
 - confidence: cited
+  path: crates/canon/src/check/tests.rs
+- confidence: cited
   path: crates/canon/src/diff/mod.rs
+- confidence: cited
+  path: crates/canon/src/eval/evidence.rs
+- confidence: cited
+  path: crates/canon/src/eval/mod.rs
 - confidence: inferred
   path: crates/canon/src/eval/read.rs
 - confidence: cited
@@ -34,15 +46,18 @@ scope:
 - confidence: cited
   path: crates/canon/src/validate/mod.rs
 - confidence: cited
+  path: crates/canon/tests/adversary_supplied_evidence.rs
+- confidence: cited
   path: ess/domains/protocol.yaml
 - confidence: inferred
   path: fixtures/investigation/invalid/supplied-by-self.yaml
 - confidence: inferred
   path: fixtures/investigation/supplied-evidence/
-revision: 22
+revision: 32
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 18, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 19, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "active", to: "implemented", at: "2026-11-21T02:24:51Z", actor: "human:timo", revision: 32, decided_on: {"recorded":{"test_result":1,"review_outcome":5,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w3"}
 ---
 ## Outcome
 
@@ -250,3 +265,64 @@ merges.
 This changes § Outcome 4: `canon evaluate` changes in this one refusal and in nothing else. The
 unit adds it as expectation 11 of the named test and as a step of `CANON-SUPPLY-001`, and reports
 whether `canon diff` can still class a changed `supplied_by` as `NO SEMANTIC CHANGE`.
+
+## Decided in review, 2026-11-21
+
+Adversary pass 1 (`review-result:adversary-supplied-evidence-pass-1`) found two places where the
+story and the unit disagree. The wave coordinator decides both; the operator did not choose, and
+each is reversible until the unit merges.
+
+**A kind that is both supplied and produced by an action that requires a capability.** § Outcome 3
+says "a supplied kind is not governed in this protocol". The unit built: a supplied kind counts as
+produced without authority, and it stays governed when an action that requires a capability may
+also produce it. For such a kind `canon check` reports `authority-bypass` on an outcome that a
+supplied record alone makes legitimate. The code stands and this sentence replaces the one in
+§ Outcome 3: the declaration says a record of the kind can arrive without the local capability,
+and the finding states that fact; a protocol that does not want it declares one of the two ways
+and not both. Taking a supplied kind out of the governed kinds would hide the finding when a
+capability-free local action also produces the kind. No protocol found needs the combination; the
+SDC receivers have no local action that requires a capability and produces the supplied kind.
+
+**`canon diff` for `supplied_by`.** § Outcome 5 says every change is `NO SEMANTIC CHANGE`, written
+before option B made an evaluation read the field. Built and kept: adding a supplier is
+`EXPANSION` (record sets once refused are read; no earlier decision changes), removing it is
+`BREAKING`. Changed here: replacing the supplier with another protocol is `BREAKING`, not
+`NO SEMANTIC CHANGE`, to match the classifier's precedent for a name the runner acts on and
+nothing resolves (a changed `case_open` protocol).
+
+Also from that pass: the requirement text of `CANON-SUPPLY-001` states only what its scenario pins
+(a scenario has compile and evaluate steps), and names the test that holds the `canon check` and
+`canon validate` rules.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w3 from the implementor's reports
+and the merge of `impl/supplied-evidence`. It corrects the body where the two differ; the two
+sections "Decided on 2026-11-21" and "Decided in review, 2026-11-21" above hold the decisions.
+
+- **§ Outcome 4 has one exception** (option B): a record of a supplied kind may name undeclared
+  upstream artifacts. The check is in `crates/canon/src/eval/evidence.rs`. No later stage looks an
+  undeclared entry up: the invalidation stage reads entries by a rule's `upstream`, which the
+  validator requires to be declared, and a decision lists evidence ids, never upstream revisions.
+- **§ Outcome 3, first bullet, is replaced**: a supplied kind stays governed when an action that
+  requires a capability may also produce it.
+- **§ Outcome 5 is replaced**: adding a supplier is `EXPANSION`, removing it or replacing it is
+  `BREAKING`.
+- The sliced checker reads production nowhere in a slice: `check_by` takes every supplied kind
+  into its `produced` and `free` sets through one function, so slices, slice sizes and state
+  counts are those of the protocol without the field.
+- Two imports that name different suppliers for one kind stay refused as `conflicting-imports`;
+  an import whose kind is supplied by the root composes into a protocol refused as
+  `self-supplied-evidence`.
+- Adding `supplied_by` changes a protocol's IR digest: a protocol that imports it pins a new
+  digest.
+- As the implementor ran them: `canon check` on the SDC epic limitation protocol reports 8
+  findings as it is and 0 with `supplied_by: sdc.direction` on `roadmap_approval`, 36864 states
+  both times; the saved SDC case with the copied record evaluates against an IR with the field.
+- Not in § Scope and edited: `crates/canon/src/eval/evidence.rs`, `crates/canon/src/check/tests.rs`,
+  the requirement counts in the two count tests, and, by the coordinator at the merge from the
+  unit's patches, the help text of `canon check` in `crates/canon-cli/src/lib.rs` and one
+  paragraph of the module documentation of `crates/canon/src/eval/mod.rs`.
+- Added by the adversary: `crates/canon/tests/adversary_supplied_evidence.rs` (9 cases).
+- The requirement `CANON-SUPPLY-001` states only what its scenario pins; the scenario's header
+  names the tests that hold the `canon validate` and `canon check` rules.

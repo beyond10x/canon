@@ -21,6 +21,9 @@
 //! | maximum age introduced or shortened | `TIGHTENING` |
 //! | maximum age removed or lengthened | `RELAXATION` |
 //! | maximum age rewritten with the same length (`60m`, `1h`) | `NO SEMANTIC CHANGE` |
+//! | supplier (`supplied_by`) introduced (a record of the kind may then name upstream artifacts the protocol does not declare) | `EXPANSION` |
+//! | supplier removed (such a record is refused again) | `BREAKING` |
+//! | supplier changed to another protocol (a name the runner acts on and nothing resolves, as a changed `case_open` protocol) | `BREAKING` |
 //! | claim added | `EXPANSION` |
 //! | claim removed | `BREAKING` |
 //! | claim's predicate changed | by implication, in the direction the protocol reads the claim (below) |
@@ -34,8 +37,15 @@
 //! | capability requirement added to an action (a requirement is a capability and its scope, so a changed scope is one removed and one added) | `TIGHTENING` |
 //! | capability requirement removed from an action | `RELAXATION` |
 //! | action effect changed | `BREAKING` |
+//! | action `author` changed from program to judgement (story:judgement-marking: a judgement mark only adds obligations) | `TIGHTENING` |
+//! | action `author` changed from judgement to program | `RELAXATION` |
 //! | evidence kind an action may produce added | `EXPANSION` |
 //! | evidence kind an action may produce removed | `BREAKING` |
+//! | evidence kind an action may produce in both revisions becoming judgement-decided (its resolved `decided_by`) | `TIGHTENING` |
+//! | evidence kind an action may produce in both revisions becoming program-decided | `RELAXATION` |
+//! | group of kinds an action records together (`records_together`) added or removed, a changed group being one removed and one added (no evaluation, check or generation reads it; story:simulate-record-groups) | `NO SEMANTIC CHANGE` |
+//! | artifact added to what an action `revises` (more may move) | `RELAXATION` |
+//! | artifact removed from what an action `revises` | `TIGHTENING` |
 //! | action argument schema introduced or removed (absent, the action takes only `{}`) | `BREAKING` |
 //! | action argument schema narrowed, widened, rewritten or changed | by the rules in `diff/arguments.rs` |
 //! | case an action opens (`case_open`) introduced, removed or changed | `BREAKING` |
@@ -117,10 +127,14 @@
 //! Changes come in a fixed order, so the same two inputs always give the same report: the protocol
 //! header, then artifacts, evidence kinds, claims, obligations, actions, outcomes, invalidation
 //! rules, case inputs and independence dimensions; within a section, by identifier; within a declaration, its description,
-//! then its fields in the order the IR declares them (an obligation's discharge predicate and
-//! applicability predicate; an action's precondition, capability requirements, effect, evidence
-//! it may produce, argument schema and the case it opens; a case input's values), each list in identifier order, removals before
-//! additions. Every IR declaration is destructured whole, so a field added to one does not compile
+//! then its fields in the order the IR declares them (an evidence kind's maximum age and
+//! supplier; an obligation's discharge predicate and
+//! applicability predicate; an action's precondition, capability requirements, effect, author,
+//! evidence it may produce, who decides each kind it may produce in both revisions, the artifacts
+//! it revises, argument schema and the case it opens; a case input's values), each list in
+//! identifier order, removals before additions. The IR holds a production's resolved
+//! `decided_by`, so an `author` changed on an action also changes who decides each kind that
+//! declares none, and each such kind is its own line after the author's. Every IR declaration is destructured whole, so a field added to one does not compile
 //! here until the classifier says what a change to it is.
 //!
 //! Out of scope (story:semantic-diff): live-case impact, which needs case data Canon does not hold
@@ -136,8 +150,8 @@ use crate::ir::{
     Outcome,
 };
 use crate::model::{
-    Age, ArtifactId, CaseOpening, ClaimId, EvidenceKindId, EvidenceMatch, IndependenceDimensionId,
-    Predicate, ProtocolId, Truth, one_line,
+    Age, ArtifactId, Author, CaseOpening, ClaimId, EvidenceKindId, EvidenceMatch,
+    IndependenceDimensionId, Predicate, ProtocolId, Truth, one_line,
 };
 
 /// What a change does to legitimate work (design § 31).
@@ -854,14 +868,23 @@ fn evidence_kind(changes: &mut Changes, id: &str, from: &EvidenceKind, to: &Evid
     let EvidenceKind {
         description: from_description,
         max_age: from_max_age,
+        supplied_by: from_supplier,
     } = from;
     let EvidenceKind {
         description: to_description,
         max_age: to_max_age,
+        supplied_by: to_supplier,
     } = to;
     changes.description(SECTION, id, from_description, to_description);
+    max_age(changes, id, from_max_age, to_max_age);
+    supplier(changes, id, from_supplier, to_supplier);
+}
+
+/// An evidence kind's maximum age, introduced, removed or changed.
+fn max_age(changes: &mut Changes, id: &str, from: &Option<Age>, to: &Option<Age>) {
+    const SECTION: &str = "evidence kind";
     let shown = |age: &Age| one_line(age.as_str());
-    let (category, what) = match (from_max_age, to_max_age) {
+    let (category, what) = match (from, to) {
         (None, None) => return,
         (None, Some(to)) => (
             Category::Tightening,
@@ -886,6 +909,39 @@ fn evidence_kind(changes: &mut Changes, id: &str, from: &EvidenceKind, to: &Evid
                 format!("maximum age {how} from {} to {}", shown(from), shown(to)),
             )
         }
+    };
+    changes.push(category, SECTION, id, what);
+}
+
+/// An evidence kind's supplier (story:supplied-evidence). An evaluation reads only whether there
+/// is one: a record of a supplied kind may name upstream artifacts the protocol does not declare.
+/// Introduced, a record set once refused is read, and every set read before decides as it did, as
+/// when a case input gains a value (`EXPANSION`); removed, such a record is refused again, as when
+/// one loses a value (`BREAKING`). Another supplier changes no evaluation, but it is a name the
+/// runner acts on and nothing resolves, like the protocol of a `case_open`, whose change is
+/// `BREAKING`; so is this one.
+fn supplier(changes: &mut Changes, id: &str, from: &Option<ProtocolId>, to: &Option<ProtocolId>) {
+    const SECTION: &str = "evidence kind";
+    let shown = |supplier: &ProtocolId| one_line(supplier.as_str());
+    let (category, what) = match (from, to) {
+        (None, None) => return,
+        (None, Some(to)) => (
+            Category::Expansion,
+            format!("supplier introduced: protocol `{}`", shown(to)),
+        ),
+        (Some(from), None) => (
+            Category::Breaking,
+            format!("supplier removed: was protocol `{}`", shown(from)),
+        ),
+        (Some(from), Some(to)) if from == to => return,
+        (Some(from), Some(to)) => (
+            Category::Breaking,
+            format!(
+                "supplier changed from protocol `{}` to protocol `{}`",
+                shown(from),
+                shown(to)
+            ),
+        ),
     };
     changes.push(category, SECTION, id, what);
 }
@@ -956,7 +1012,11 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         requires: _,
         scopes: _,
         effect: from_effect,
+        author: from_author,
         may_produce: from_may_produce,
+        judgement_decided: from_judged,
+        records_together: from_groups,
+        revises: from_revises,
         arguments: from_arguments,
         case_open: from_case_open,
     } = from;
@@ -966,7 +1026,11 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         requires: _,
         scopes: _,
         effect: to_effect,
+        author: to_author,
         may_produce: to_may_produce,
+        judgement_decided: to_judged,
+        records_together: to_groups,
+        revises: to_revises,
         arguments: to_arguments,
         case_open: to_case_open,
     } = to;
@@ -1003,6 +1067,23 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
             ),
         );
     }
+    // A judgement mark only adds obligations under the follow-up checks (story:judgement-marking).
+    if from_author != to_author {
+        let category = match to_author {
+            Author::Judgement => Category::Tightening,
+            Author::Program => Category::Relaxation,
+        };
+        changes.push(
+            category,
+            SECTION,
+            id,
+            format!(
+                "author changed from {} to {}",
+                from_author.as_str(),
+                to_author.as_str()
+            ),
+        );
+    }
     changes.members(
         SECTION,
         id,
@@ -1010,6 +1091,65 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         to_may_produce,
         (Category::Breaking, "may no longer produce evidence"),
         (Category::Expansion, "may now produce evidence"),
+    );
+    // Who decides a kind the action may produce in both revisions; a kind added or removed is
+    // the change above.
+    for kind in to_may_produce
+        .iter()
+        .filter(|kind| from_may_produce.contains(kind))
+    {
+        let (was, is) = (from_judged.contains(kind), to_judged.contains(kind));
+        if was != is {
+            let (category, by) = if is {
+                (Category::Tightening, Author::Judgement)
+            } else {
+                (Category::Relaxation, Author::Program)
+            };
+            changes.push(
+                category,
+                SECTION,
+                id,
+                format!(
+                    "now decides evidence `{}` by {}",
+                    one_line(kind.as_str()),
+                    by.as_str()
+                ),
+            );
+        }
+    }
+    // No evaluation, check or generation reads `records_together` (story:simulate-record-groups,
+    // Correction): a group removed, then a group added, each `NO SEMANTIC CHANGE`.
+    let together = |group: &Vec<EvidenceKindId>| {
+        let kinds: Vec<String> = group
+            .iter()
+            .map(|kind| format!("`{}`", one_line(kind.as_str())))
+            .collect();
+        match kinds.split_last() {
+            Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
+            _ => kinds.join(""),
+        }
+    };
+    for (groups, others, how) in [
+        (from_groups, to_groups, "no longer records together"),
+        (to_groups, from_groups, "now records together"),
+    ] {
+        for group in groups.iter().filter(|group| !others.contains(group)) {
+            changes.push(
+                Category::NoSemanticChange,
+                SECTION,
+                id,
+                format!("{how} evidence {}", together(group)),
+            );
+        }
+    }
+    // `revises` widens what may move.
+    changes.members(
+        SECTION,
+        id,
+        from_revises,
+        to_revises,
+        (Category::Tightening, "no longer revises artifact"),
+        (Category::Relaxation, "now revises artifact"),
     );
     if let Some((category, what)) =
         arguments::classify(from_arguments.as_ref(), to_arguments.as_ref())
@@ -1262,6 +1402,37 @@ mod tests {
         assert_eq!(category(&day, &hour), Category::Tightening);
     }
 
+    /// A supplier introduced admits records once refused and changes no other decision
+    /// (`EXPANSION`), one removed refuses them again (`BREAKING`), and another supplier
+    /// is `BREAKING`, as a changed `case_open` protocol is; each after the kind's maximum age.
+    #[test]
+    fn a_supplier_introduced_expands_and_removed_or_changed_breaks() {
+        let none = ir("evidence_kinds: {a: {max_age: 1h}}\n");
+        let parent = ir("evidence_kinds: {a: {max_age: 2h, supplied_by: parent}}\n");
+        let sibling = ir("evidence_kinds: {a: {max_age: 2h, supplied_by: sibling}}\n");
+        assert_eq!(
+            lines(&none, &parent),
+            [
+                "RELAXATION: evidence kind `a` maximum age lengthened from 1h to 2h",
+                "EXPANSION: evidence kind `a` supplier introduced: protocol `parent`",
+            ]
+        );
+        assert_eq!(
+            lines(&parent, &none),
+            [
+                "TIGHTENING: evidence kind `a` maximum age shortened from 2h to 1h",
+                "BREAKING: evidence kind `a` supplier removed: was protocol `parent`",
+            ]
+        );
+        assert_eq!(
+            lines(&parent, &sibling),
+            [
+                "BREAKING: evidence kind `a` supplier changed from protocol `parent` to protocol `sibling`"
+            ]
+        );
+        assert!(lines(&parent, &parent).is_empty());
+    }
+
     #[test]
     fn changes_come_in_section_then_identifier_order() {
         let from =
@@ -1317,6 +1488,112 @@ mod tests {
             .iter()
             .map(ToString::to_string)
             .collect()
+    }
+
+    /// story:judgement-marking: an author or a production turned to judgement tightens and turned
+    /// to program relaxes; an artifact added to `revises` relaxes and one removed tightens. A kind
+    /// added or removed is only its own line, whoever decides it; `author: program` written out is
+    /// no change. Each line names the action, after its effect and before its argument schema.
+    #[test]
+    fn judgement_marks_tighten_and_revises_relaxes() {
+        let kinds = "artifacts: {a: {}, b: {}}\nevidence_kinds: {k: {}, l: {}, m: {}}\n";
+        let program = ir(&format!(
+            "{kinds}actions: {{act: {{effect: write, revises: [a], may_produce: [{{evidence: k}}, {{evidence: l}}, \
+             {{evidence: m, decided_by: judgement}}], arguments: {{type: object}}}}}}\n"
+        ));
+        let judgement = ir(&format!(
+            "{kinds}actions: {{act: {{author: judgement, effect: write, revises: [b], may_produce: [{{evidence: k}}, \
+             {{evidence: l, decided_by: program}}, {{evidence: m}}], arguments: {{type: object, title: t}}}}}}\n"
+        ));
+        assert_eq!(
+            lines(&program, &judgement),
+            [
+                "TIGHTENING: action `act` author changed from program to judgement",
+                "TIGHTENING: action `act` now decides evidence `k` by judgement",
+                "TIGHTENING: action `act` no longer revises artifact `a`",
+                "RELAXATION: action `act` now revises artifact `b`",
+                "NO SEMANTIC CHANGE: action `act` arguments rewritten",
+            ]
+        );
+        assert_eq!(
+            lines(&judgement, &program),
+            [
+                "RELAXATION: action `act` author changed from judgement to program",
+                "RELAXATION: action `act` now decides evidence `k` by program",
+                "TIGHTENING: action `act` no longer revises artifact `b`",
+                "RELAXATION: action `act` now revises artifact `a`",
+                "NO SEMANTIC CHANGE: action `act` arguments rewritten",
+            ]
+        );
+
+        let without = ir(&format!(
+            "{kinds}actions: {{act: {{author: judgement, may_produce: [{{evidence: k}}]}}}}\n"
+        ));
+        let with = ir(&format!(
+            "{kinds}actions: {{act: {{author: judgement, may_produce: [{{evidence: k}}, {{evidence: l}}]}}}}\n"
+        ));
+        assert_eq!(
+            lines(&without, &with),
+            ["EXPANSION: action `act` may now produce evidence `l`"]
+        );
+        assert_eq!(
+            lines(&with, &without),
+            ["BREAKING: action `act` may no longer produce evidence `l`"]
+        );
+
+        let unwritten = ir(&format!("{kinds}actions: {{act: {{}}}}\n"));
+        let written = ir(&format!(
+            "{kinds}actions: {{act: {{author: program, revises: []}}}}\n"
+        ));
+        assert_eq!(lines(&unwritten, &written), Vec::<String>::new());
+    }
+
+    /// story:simulate-record-groups: no evaluation, check or generation reads `records_together`,
+    /// so a group removed and a group added are each `NO SEMANTIC CHANGE`, a changed group one of
+    /// each, after the kinds the action may produce and before what it revises; the same groups
+    /// written in another order are no change.
+    #[test]
+    fn a_record_group_added_removed_or_changed_is_no_semantic_change() {
+        let kinds = "artifacts: {a: {}}\nevidence_kinds: {k: {}, l: {}, m: {}, n: {}}\n";
+        let action = |rest: &str| {
+            ir(&format!(
+                "{kinds}actions: {{act: {{may_produce: [{{evidence: k}}, {{evidence: l}}, \
+                 {{evidence: m}}, {{evidence: n}}]{rest}}}}}\n"
+            ))
+        };
+        let none = action("");
+        let one = action(", records_together: [{kinds: [l, k]}]");
+        let two = action(", records_together: [{kinds: [n, m]}, {kinds: [k, l]}], revises: [a]");
+        let changed = action(", records_together: [{kinds: [k, l, m]}]");
+        assert_eq!(
+            lines(&none, &one),
+            ["NO SEMANTIC CHANGE: action `act` now records together evidence `k` and `l`"]
+        );
+        assert_eq!(
+            lines(&one, &none),
+            ["NO SEMANTIC CHANGE: action `act` no longer records together evidence `k` and `l`"]
+        );
+        assert_eq!(
+            lines(&one, &two),
+            [
+                "NO SEMANTIC CHANGE: action `act` now records together evidence `m` and `n`",
+                "RELAXATION: action `act` now revises artifact `a`",
+            ]
+        );
+        assert_eq!(
+            lines(&one, &changed),
+            [
+                "NO SEMANTIC CHANGE: action `act` no longer records together evidence `k` and `l`",
+                "NO SEMANTIC CHANGE: action `act` now records together evidence `k`, `l` and `m`",
+            ]
+        );
+        assert_eq!(
+            lines(
+                &two,
+                &action(", revises: [a], records_together: [{kinds: [l, k]}, {kinds: [m, n, m]}]")
+            ),
+            Vec::<String>::new()
+        );
     }
 
     /// An input `s` and a claim `c` for the protocols of the tests below.

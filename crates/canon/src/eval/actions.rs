@@ -34,8 +34,12 @@
 //!   `before`, then every `first`, then every `since`, each by its fields in the order written here
 //!   (no subject first), each form once. Each form over the child cases that decides it, by the same
 //!   rule, is a reason after those (story:case-composition), `{"children": [<outcome>, ...],
-//!   "value": <value>}`, its outcomes as the IR lists them, each form once, in the order of those
-//!   lists. Authority is not consulted.
+//!   "value": <value>}`, its outcomes as the IR lists them, with `"revision": "current"` added for
+//!   a form that reads only the records about the current revision (story:child-outcome-revision)
+//!   and `"subject": <artifact>` for a form that names one (story:child-outcome-subject), each form
+//!   once, two that differ only in `revision` or only in `subject` being two, in the order of those
+//!   lists, then no `revision` first, then no `subject` first and then in subject order. Authority
+//!   is not consulted.
 //! - `blocked`, when the precondition is `true` and the authority denies a requirement of the
 //!   action: each denied requirement is a reason, `{"capability": <id>, "decision": "denied"}`,
 //!   with `"scope": {<key>: <value>, ...}` added when the requirement has a scope. Asking again
@@ -43,12 +47,23 @@
 //! - `approval-required`, when the precondition is `true`, nothing is denied, and some requirement
 //!   requires approval or is not decided (no `--authority` decides nothing): each such requirement
 //!   is a reason, `{"capability": <id>, "decision": "require_approval"}` or `{"capability": <id>,
-//!   "decision": "none"}`, with its `"scope"` added likewise.
+//!   "decision": "none"}`, with its `"scope"` added likewise, and, on a `"none"` reason,
+//!   `"stale_grounds": [...]` when an entry set aside by its grounds would have covered it.
 //! - `admissible`, when the precondition is `true` and every requirement is granted. An action
 //!   with no precondition and no requirement is always admissible.
 //!
-//! A requirement is a capability at a scope, or without one (story:capability-scope). The
-//! authority decisions on its capability that cover it decide it: a decision covers it when the
+//! A requirement is a capability at a scope, or without one (story:capability-scope). Only the
+//! authority decisions that apply take part: at the case snapshot's `revision`
+//! (story:authority-revision-binding), one bound to a case revision applies only while the
+//! snapshot is at it, and to nothing when the snapshot has no revision, and one bound to none
+//! applies at every revision; and only while every ground it rested on holds
+//! (story:decision-grounds, `grounds.rs`), whatever it decides. The caller
+//! (`super::evaluate_with`) passes only those, decided once, so a requirement covered only by
+//! decisions that do not apply is not decided, and its reason is `{"capability": <id>,
+//! "decision": "none"}`. When some of those were set aside by their grounds alone, the reason adds
+//! `"stale_grounds"`, their failed grounds in the order and form `grounds.rs` gives; an entry set
+//! aside by its case revision adds none. A decision's principal changes nothing here. Of
+//! those, the decisions on its capability that cover it decide it: a decision covers it when the
 //! requirement gives every scope key the decision gives a value for that same value. So a key the
 //! decision leaves out covers every value of it, a decision without a scope covers every
 //! requirement of its capability, and coverage never widens inwards: a decision for `{cluster:
@@ -68,13 +83,15 @@ use super::authority::Authority;
 use super::claims::{EvidenceSets, Inputs, predicate};
 use crate::ir::{Action, Ir, Scope};
 use crate::model::{
-    ArtifactId, CapabilityId, ClaimId, EvidenceKindId, EvidenceMatch, Grant,
+    ArtifactId, CapabilityId, ChildOutcomes, ClaimId, EvidenceKindId, EvidenceMatch, Grant,
     IndependenceDimensionId, InputId, Json, Predicate, Truth,
 };
 
 /// The section, or `None` to leave the slot empty. `evidence` is what the claims were evaluated
 /// over (what the exclusion stages left, and the history the order forms read); a precondition is
-/// evaluated over it and `claims` with `super::claims::predicate`.
+/// evaluated over it and `claims` with `super::claims::predicate`. `authority` is the decisions
+/// that apply at the case revision with their grounds holding ([`Authority::applying_at`]): every
+/// one it holds takes part, and the ones it set aside by their grounds name their failed grounds.
 pub(super) fn section(
     ir: &Ir,
     claims: &BTreeMap<ClaimId, Truth>,
@@ -129,7 +146,14 @@ fn admissibility(
         decided
             .iter()
             .filter(|(_, _, grant)| wanted(*grant))
-            .map(|(capability, scope, grant)| requirement_reason(capability, scope, *grant))
+            .map(|(capability, scope, grant)| {
+                // Only a requirement no entry that applies decides names the set-aside ones.
+                let stale = match (grant, authority) {
+                    (None, Some(authority)) => authority.stale_grounds(capability, scope),
+                    _ => BTreeSet::new(),
+                };
+                requirement_reason(capability, scope, *grant, &stale)
+            })
             .collect()
     };
     let denied = named(&|grant| grant == Some(Grant::Denied));
@@ -144,8 +168,15 @@ fn admissibility(
 }
 
 /// A capability reason: `{"capability": <id>, "decision": <decision or "none">}`, with
-/// `"scope": {<key>: <value>, …}` when the requirement has a scope.
-fn requirement_reason(capability: &CapabilityId, scope: &Scope, grant: Option<Grant>) -> Value {
+/// `"scope": {<key>: <value>, …}` when the requirement has a scope and `"stale_grounds": [...]`
+/// when `stale`, the failed grounds of the entries set aside by their grounds that would have
+/// covered it, is not empty.
+fn requirement_reason(
+    capability: &CapabilityId,
+    scope: &Scope,
+    grant: Option<Grant>,
+    stale: &BTreeSet<super::grounds::Failed>,
+) -> Value {
     let mut entry = Map::from_iter([
         ("capability".to_owned(), Value::from(capability.as_str())),
         (
@@ -159,6 +190,9 @@ fn requirement_reason(capability: &CapabilityId, scope: &Scope, grant: Option<Gr
             .map(|(key, value)| (key.as_str().to_owned(), Value::from(value.as_str())))
             .collect();
         entry.insert("scope".to_owned(), Value::Object(members));
+    }
+    if let Some(stale) = super::grounds::stale_grounds(stale) {
+        entry.insert("stale_grounds".to_owned(), stale);
     }
     Value::Object(entry)
 }
@@ -183,8 +217,10 @@ struct Named<'a> {
     /// Each order form that decides it, in the order found; `order.rs` orders them and names each
     /// once.
     orders: Vec<&'a Predicate>,
-    /// Each form over the child cases that decides it, by the outcomes it lists.
-    children: BTreeSet<&'a [String]>,
+    /// Each form over the child cases that decides it; `composition.rs` names each once, by the
+    /// outcomes it lists, its `revision` and its `subject`, so two forms that differ only in
+    /// `revision`, or only in `subject`, are two reasons.
+    children: Vec<&'a ChildOutcomes>,
 }
 
 /// The reasons a precondition (not `true`) is unmet: each claim whose test decides it, with the
@@ -257,7 +293,8 @@ pub(super) fn unmet(
         ]))
     });
     let order_reasons = super::order::reasons(named.orders, evidence.history);
-    let children_reasons = super::composition::reasons(named.children, evidence.history);
+    let children_reasons =
+        super::composition::reasons(named.children, evidence.history, evidence.artifacts);
     claim_reasons
         .chain(evidence_reasons)
         .chain(input_reasons)
@@ -320,7 +357,7 @@ fn deciding<'a>(
         }
         Predicate::Children(form) => {
             if value(node) != goal {
-                named.children.insert(form.r#in.as_slice());
+                named.children.push(form);
             }
         }
         Predicate::Not(inner) => deciding(inner, !wanted, claims, inputs, evidence, named),

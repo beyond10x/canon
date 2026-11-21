@@ -42,15 +42,17 @@ fn inputs(dir: &Path) -> (PathBuf, PathBuf) {
     (ir, case)
 }
 
-/// A record refused after reading names every file holding a record of its id: a repeated id
-/// names both files, in file-name order; a record about an undeclared artifact names its own.
+/// A record refused after reading names every file holding a record of its id: an id repeated with
+/// different content names both files, in file-name order; a record about an undeclared artifact
+/// names its own.
 #[test]
 fn a_refusal_after_reading_names_the_file_of_each_record_it_cites() {
     for (name, second, expected) in [
         (
             "repeated",
-            "format: canon-evidence/1\nid: e1\nkind: k\nsubject: a\nsubject_revision: r1\n",
-            "error[duplicate-identifier]: {first}, {second}: evidence `e1` is given more than once",
+            "format: canon-evidence/1\nid: e1\nkind: k\nsubject: a\nsubject_revision: r2\n",
+            "error[duplicate-identifier]: {first}, {second}: evidence `e1` is given more than once \
+             with different content",
         ),
         (
             "undeclared-subject",
@@ -144,4 +146,55 @@ fn a_malformed_evidence_file_is_refused_naming_the_file_the_record_and_the_key()
              missing field `subject`"
         )
     );
+}
+
+/// Two evidence files holding equal records of one id are one record: the evaluation exits 0 with
+/// the decision the one file gives, byte for byte. Two holding records that differ exit 1 naming
+/// both files (story:evidence-redelivery).
+#[test]
+fn equal_records_in_two_files_are_one_record_and_differing_ones_are_refused() {
+    let dir = scratch("redelivered");
+    let (ir, case) = inputs(&dir);
+    let record = "format: canon-evidence/1\nid: e1\nkind: k\nsubject: a\nsubject_revision: r1\n";
+    let evaluated = |name: &str, files: &[(&str, &str)]| {
+        let evidence = dir.join(name);
+        std::fs::create_dir_all(&evidence).expect("created");
+        for (file, text) in files {
+            std::fs::write(evidence.join(file), text).expect("written");
+        }
+        canon(&[
+            Path::new("evaluate"),
+            Path::new("--ir"),
+            &ir,
+            Path::new("--case"),
+            &case,
+            Path::new("--evidence"),
+            &evidence,
+        ])
+    };
+    let one = evaluated("one", &[("a.yaml", record)]);
+    assert_eq!(one.status.code(), Some(0));
+    assert!(!one.stdout.is_empty());
+    let two = evaluated("two", &[("a.yaml", record), ("b.yaml", record)]);
+    assert_eq!(
+        String::from_utf8_lossy(&two.stderr),
+        "",
+        "equal records in two files"
+    );
+    assert_eq!(two.status.code(), Some(0));
+    assert_eq!(two.stdout, one.stdout);
+    let differing = record.replace("r1", "r2");
+    let refused = evaluated("differing", &[("a.yaml", record), ("b.yaml", &differing)]);
+    assert_eq!(refused.status.code(), Some(1));
+    let evidence = dir.join("differing");
+    assert_eq!(
+        String::from_utf8_lossy(&refused.stderr).trim_end(),
+        format!(
+            "error[duplicate-identifier]: {}, {}: evidence `e1` is given more than once with \
+             different content",
+            evidence.join("a.yaml").display(),
+            evidence.join("b.yaml").display()
+        )
+    );
+    std::fs::remove_dir_all(&dir).expect("scratch removed");
 }

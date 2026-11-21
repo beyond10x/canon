@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T17:26:44Z",
+  "actor": "human:timo",
+  "artifact": "story:simulate-revise-step",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "finding 1, crates/canon/src/simulate/mod.rs:1333, mutant: a revise step's record added before the revision passed the unit's tests; the adversary case a_revise_step_adds_its_record_after_the_revision fails on that mutant; the code was right",
+    "reference": "f159b8ac",
+    "review": "review-result:adversary-simulate-revise-step-pass-1",
+    "outcome": "fixed"
+  }
+}

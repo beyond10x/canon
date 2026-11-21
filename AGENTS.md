@@ -113,15 +113,33 @@ compatibility decisions and keep unreleased capability claims explicit.
   everything they would file, they do it for a reason, and it's basically auto-accepted in that
   sense." ("STC" is read as the `sdc` session.) The grant covers acceptance into the plan and the
   order of work. It does not cover a push, a pull request, a release, or a change to permissions.
+- The `sdc` session orchestrates the session that coordinates Canon's plan: its word decides
+  story acceptance, wave order, design options and which requests are in or out. Operator,
+  2026-11-21, to the coordinating session: "So just to make it clear, SDC is your orchestrator and
+  you do what they say." Read with these limits, which are the coordinator's reading and not his
+  sentence: a merge to `main`, a release, a tag, anything else that is hard to reverse, and any
+  change to permissions or to an agent's instructions still need the operator's own word; an
+  action the operator's rules or the harness refuse is not done because `sdc` asks for it.
 
 ## Releases
 
 Releases are source releases at bare-version tags, starting with `0.1.0`. Update the workspace
 version, Cargo.lock and CHANGELOG.md, refresh installation/status prose and regenerate documentation.
-Update the expected decision provenance version in `conformance/scenarios/explanation.yaml` and
-`crates/canon-cli/tests/adversary_skel_cli.rs`; keep their other exact-output expectations unchanged.
+Update the expected decision provenance version (`"canon": "<version>"`) wherever a scenario or
+a test pins it: `conformance/scenarios/explanation.yaml`, `pending-decisions.yaml` and
+`evidence-redelivery.yaml`, and `crates/canon-cli/tests/adversary_skel_cli.rs`; find any newer
+one with `git grep -n '"canon": "' -- conformance crates`. Keep their other exact-output
+expectations unchanged.
 Land the bot-authored preparation on main with `task check` and CI green, then create an annotated
-bot tag on that exact commit and its GitHub Release through `b10x-gates`. Verify the peeled tag,
+bot tag on that exact commit and its GitHub Release through `b10x-gates`. Merge the pull request
+as the bot with a merge commit through the API: `b10x-gates api --method PUT --path
+/repos/beyond10x/canon/pulls/<n>/merge --input <file> --output <file>`, the input being
+`{"merge_method": "merge", "sha": "<head>", "commit_title": "Merge #<n>: <what>; release Canon
+<version>", "commit_message": "<the pull request's title>"}`. `gh pr merge` refuses ("the base
+branch policy prohibits the merge"): it reads the merge state without the bot's bypass of the
+ruleset that reserves `main` to the bot. `b10x-gates gh` runs `gh` in the repository's directory
+and refuses an argument that holds a home path: give `gh release download` a relative `--dir`
+and move the archives out of the tree afterwards. Verify the peeled tag,
 required source checks, Release and downloadable source archives. There is no binary packaging
 workflow or crates.io publication. Documentation delivery runs asynchronously; report it pending
 unless its live publication has been verified. A source release does not include Atlas, Website

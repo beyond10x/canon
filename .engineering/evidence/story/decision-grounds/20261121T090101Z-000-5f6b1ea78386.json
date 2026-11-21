@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T09:01:01Z",
+  "actor": "human:timo",
+  "artifact": "story:decision-grounds",
+  "kind": "story",
+  "revision": 20,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "ignoring the outcome in Decisions::stale_grounds left the unit's gate green: held by a_decision_for_another_outcome_adds_no_ground_to_this_one",
+    "reference": "impl/decision-grounds a3e2497",
+    "review": "review-result:adversary-decision-grounds-pass-1",
+    "outcome": "fixed"
+  }
+}

@@ -237,6 +237,111 @@
       "detail": "Evaluating claims kept apart by invalidation rules is at most quadratic in the claim count, and validating them linear; a chain of 4000 claims evaluates within a time budget in the test suite, with every decision byte-identical to before.",
       "href": "/docs/reference/evaluation",
       "area": "Evaluation"
+    },
+    {
+      "label": "Authority bound to a case revision",
+      "status": "shipped",
+      "detail": "A canon-authority/1 entry may give the case revision it was taken at and the principal who took it; a bound entry, whatever its decision, applies only while the case is at that revision and takes no part in coverage or precedence otherwise, an unbound one applies at every revision, and the principal is recorded as given; scenario CANON-AUTHORITY-002.",
+      "href": "/docs/reference/documents#authoritydecision",
+      "area": "Evaluation"
+    },
+    {
+      "label": "Supplied evidence",
+      "status": "shipped",
+      "detail": "An evidence kind may name, as supplied_by, another protocol whose cases produce its records; canon check counts it as produced, without authority, and a record of it copied unchanged from the supplier's case may name upstream artifacts only the supplier declares, carried and not read; the protocol's own id is refused as self-supplied-evidence; scenario CANON-SUPPLY-001.",
+      "href": "/docs/reference/protocol",
+      "area": "Language"
+    },
+    {
+      "label": "Child outcomes bound to the current revision",
+      "status": "shipped",
+      "detail": "The children predicate takes revision: current, and then reads only the case_outcome records about the case's current revision of their subject. A record about an earlier revision neither establishes nor contradicts it, so a parent whose subject is revised after its children ended falls back to UNKNOWN until a child about the new revision ends. Without the key, or with revision: any, every record counts as before, and canon-ir/1 is unchanged; scenario CANON-COMPOSE-002.",
+      "href": "/docs/reference/protocol#childrevision",
+      "area": "Language"
+    },
+    {
+      "label": "Missing evidence",
+      "status": "shipped",
+      "detail": "canon-decision/1 may carry a missing_evidence section that maps each admissible action whose may_produce is not empty to the kinds of that list with no applicable record, in kind order; a record is applicable when the revision-binding and freshness stages leave it and no claim lists it in excluded_evidence, whatever its result and whether or not its kind declares supplied_by, and the section is absent when no action qualifies; scenario CANON-FRONTIER-001.",
+      "href": "/docs/reference/documents#decision",
+      "area": "Evaluation"
+    },
+    {
+      "label": "Judgement marks",
+      "status": "shipped",
+      "detail": "An action may declare author (program or judgement, absent program) and revises, the declared artifacts it may move to a new revision; each may_produce entry may declare decided_by, absent the action's author. canon validate refuses an undeclared artifact in revises as undeclared-artifact, canon-ir/1 writes each field only when it marks judgement or lists an artifact, so every existing IR is unchanged, and canon diff classifies author and decided_by turning to judgement as TIGHTENING and an artifact added to revises as RELAXATION. No evaluation meaning: canon evaluate, check and generate give the same bytes with or without them.",
+      "href": "/docs/reference/protocol#author",
+      "area": "Language"
+    },
+    {
+      "label": "Pending decisions",
+      "status": "shipped",
+      "detail": "canon-decision/1 may carry a pending_decisions section listing the decisions the evaluation waits on: under authority, one entry per requirement an approval-required action names as none or require_approval, with the case revision and the options granted and denied, by action, capability and scope; under decisions, one entry per outcome blocked for want of an explicit decision, with the option taken, or none for a snapshot without a revision. Computed from the actions and outcomes sections and the case revision; a blocked action has no entry, and the section is absent when nothing is pending; scenario CANON-PENDING-001.",
+      "href": "/docs/reference/documents#decision",
+      "area": "Evaluation"
+    },
+    {
+      "label": "canon simulate",
+      "status": "shipped",
+      "detail": "A breadth-first walk over every state a case can reach from the empty case, by steps that add one record an admissible action may produce or a supplied record, let a record of a kind with max_age expire (an expired child outcome still counts for a children form), grant or deny a capability, or take a decision; it reports each stuck state and cycle once at its smallest state with the shortest path, the decisions that would end it and how many such states contain it, plus dead actions and unreached outcomes, counts states waiting on supplied evidence or expiry, states on its own line that a child case's outcome is walked only as a step of its opening action, and refuses order forms and a walk above 65536 reachable states.",
+      "href": "/docs/reference/cli#canon-simulate",
+      "area": "Analysis"
+    },
+    {
+      "label": "Check a call's arguments",
+      "status": "shipped",
+      "detail": "The library function b10x_canon::validate::check_arguments checks one call's arguments against an action's argument schema with JSON Schema 2020-12 meaning, reports every refusal at its JSON Pointer in document order and compares minimum and maximum exactly; a schema outside the dialect is returned as canon validate reports it. Canon still evaluates no call.",
+      "href": "/docs/reference/validation#the-argument-schema-dialect",
+      "area": "Language"
+    },
+    {
+      "label": "Re-delivered evidence",
+      "status": "shipped",
+      "detail": "An evidence record given more than once in one evaluation counts once when every copy equals the first (kind, result, subject, subject revision, observed_at as written text, producer, child case and upstream revisions as the same pairs in any order), so a runner that delivers at least once can evaluate its stored inputs again and the decision, explanation included, is byte-identical to the one without the copy. A copy that differs is refused as duplicate-identifier, naming the record and, in canon evaluate, every file holding it. No field, command or flag changes, and the duplicate rules for decisions and authority entries stay; scenario CANON-EVIDENCE-004.",
+      "href": "/docs/concepts/evaluation",
+      "area": "Evaluation"
+    },
+    {
+      "label": "Decision grounds",
+      "status": "shipped",
+      "detail": "An entry of canon-authority/1 or canon-decisions/1 may name ground_revisions, the artifact revisions it rested on, and ground_evidence, the evidence records it rested on. canon evaluate applies the entry only while every ground holds: an artifact still at that revision, a record still applicable as missing_evidence defines it, so expiry and invalidation reach a decision through its records. A requirement or outcome left undecided by set-aside entries keeps its existing reason and lists the failed grounds under stale_grounds; a set-aside denial lapses too. computed_from records the grounds as given; an undeclared ground artifact is refused as undeclared-artifact; scenario CANON-GROUND-001.",
+      "href": "/docs/reference/documents#authoritydecision",
+      "area": "Evaluation"
+    },
+    {
+      "label": "canon simulate child outcomes",
+      "status": "shipped",
+      "detail": "canon simulate lets a child case's outcome arrive at any step after the action that opened the child was taken, as a step of its own that no action takes; a terminal outcome replaces the child's open record, a state names each opening action taken on its way, states waiting on a child outcome are counted with those waiting on supplied evidence or expiry, and the line naming the earlier limit on child outcomes is gone.",
+      "href": "/docs/reference/cli#canon-simulate",
+      "area": "Analysis"
+    },
+    {
+      "label": "Child outcomes about one artifact",
+      "status": "shipped",
+      "detail": "The children predicate takes subject: <artifact>, and then reads only the case_outcome records about that artifact, with revision: current only those at its current revision. A record about another artifact neither establishes nor contradicts it, so children opened about different artifacts no longer mix in one form. canon validate refuses an undeclared subject as undeclared-artifact; without the key every record counts as before and canon-ir/1 is unchanged; scenario CANON-COMPOSE-003.",
+      "href": "/docs/reference/protocol#childoutcomes",
+      "area": "Language"
+    },
+    {
+      "label": "Write a protocol/1 model",
+      "status": "shipped",
+      "detail": "The library function b10x_canon::model::write writes any protocol/1 model as canonical JSON text that model::parse reads back to an equal model, declaration order and repeated identifiers kept, a key left out only when the model holds none; it writes a model the validator refuses, and canon validate stays the only judge of validity. No builder, no canon fmt, no change to canon-ir/1.",
+      "href": "/docs/reference/protocol",
+      "area": "Language"
+    },
+    {
+      "label": "Kinds recorded together",
+      "status": "shipped",
+      "detail": "An action may declare records_together, groups of the kinds one run of it records all together or not at all. canon simulate then adds a group's records in one step, one record of each member kind in every combination of dimension, class and producer profile, printed as one line, and never offers a grouped kind alone. canon validate refuses a group with fewer than two distinct kinds, a kind outside may_produce, a kind in two groups of one action and case_outcome on an action that opens a child case, each as invalid-record-group naming the action. No evaluation reads it: canon evaluate, check and generate give the same bytes, canon diff reports a group as NO SEMANTIC CHANGE, and canon-ir/1 writes the key only when a group is declared.",
+      "href": "/docs/reference/protocol#action",
+      "area": "Analysis"
+    },
+    {
+      "label": "canon simulate revise step",
+      "status": "shipped",
+      "detail": "canon simulate lets an admissible action move the artifacts it declares in revises to a new revision, one step per non-empty subset, alone or with one record or one group it may produce, printed as action x revises a. A revision removes the current records about the artifact, keeps a child's outcome about it as an earlier record a children form still reads, and turns a record with that artifact upstream into one observed before it moved, which its invalidation rules set aside; the case revision never moves, so a denial lasts. A cycle now asks only that every record step return the state, and one a revision leads out of says so: every revision by action x leads to a state no outcome is reachable from. A protocol without revises walks as before.",
+      "href": "/docs/reference/cli#canon-simulate",
+      "area": "Analysis"
     }
   ]
 }

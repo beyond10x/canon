@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:argument-validator
 kind: story
-status: active
+status: implemented
 title: Check a call's arguments against an action's argument schema with a pure library function
 tags:
 - from-request
@@ -23,6 +23,8 @@ scope:
   path: crates/canon/src/validate/mod.rs
 - confidence: inferred
   path: crates/canon/tests/adversary_action_arguments.rs
+- confidence: cited
+  path: crates/canon/tests/adversary_argument_validation.rs
 - confidence: inferred
   path: crates/canon/tests/argument_validation.rs
 - confidence: inferred
@@ -31,10 +33,11 @@ scope:
   path: ess/domains/protocol.yaml
 - confidence: cited
   path: website/docs/concepts/protocols.md
-revision: 13
+revision: 18
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 12, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 13, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "active", to: "implemented", at: "2026-11-21T11:37:23Z", actor: "human:timo", revision: 18, decided_on: {"recorded":{"test_result":1,"review_outcome":12,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w6"}
 ---
 ## Outcome
 
@@ -185,3 +188,64 @@ The `b10x-canon` library exports a pure function that checks one call's argument
   - `docs/plan/wave-plan-2026-11-20.md:120-160`
   - stories action-arguments, protocol-floor, protocol-imports, revision-ordering, canon-mutate, capability-scope
 - Date: 2026-11-20.
+
+## Decided in review, 2026-11-21
+
+Adversary pass 1 (`review-result:adversary-argument-validator-pass-1`) was red: 9 red cases, 1 blocker, 3 warnings, 3 notes. The wave coordinator decides on 2026-11-21; the session working on the SDC prototype, which orchestrates this plan, may overrule.
+
+**D1. One exact comparison of numbers, everywhere in the argument-schema code.** The unit made the helper that decides whether two JSON numbers are the same value exact, where it compared through a double before. Two outputs changed for numbers above 2^53: `canon validate` and `canon compile` now accept an `enum` such as `[9007199254740993, 9007199254740992.0]`, which they refused as listing one value twice, and `canon diff` now reports a change of `enum` from `[9007199254740992.0]` to `[9007199254740993]` as `BREAKING`, where it printed `NO SEMANTIC CHANGE`. The new outputs are the ones JSON Schema 2020-12 gives; the old ones were a defect of the comparison through a double. The exact comparison stays. No fixture in the repository has such an enum, so no existing protocol's output changes. The adversary's two cases that pin the old outputs are re-pinned to the new ones in its second pass.
+
+**D2. The comparison is exact however `serde_json` is built.** `crates/canon-expr` turns on `serde_json`'s `arbitrary_precision`, and Cargo unifies features across a workspace build, so the `canon` binary and `cargo test --workspace` hold a number as its decimal text, while `cargo test -p b10x-canon` holds it as an integer or a double. The function must give the right answer in both builds: a number is compared by its exact decimal value when the text is held, a number with no finite double (`1e400`) is above every finite maximum and below none, and no comparison goes through a double that cannot hold the value. The module documentation states which value is compared in each build. The unit's tests run green in both builds, and the report quotes both runs.
+
+**D3. The sentence "no allocation beyond its result" of § Outcome is withdrawn.** The function allocates a pointer buffer, a sorted list of member names and the escaped tokens. That is not a defect; the sentence was the draft's.
+
+## Decided in review, after adversary pass 2
+
+The second adversary pass (`review-result:adversary-argument-validator-pass-2`) left one finding
+to change and four notes. Decided on 2026-11-21 by the wave coordinator; the session the operator
+named orchestrator of this plan may overrule each.
+
+- **D4, a protocol number that a double holds exactly is compared as that value.** Where
+  `serde_json` holds number text, a number read from the protocol's YAML arrives as the shortest
+  text of its double, and for an integral double above 2^53 that text is another value than the
+  double (`1152921504606846976.0` is 2^60 and its shortest text is `1152921504606847000`). D1 says
+  two numbers are the same when their values are equal exactly, so the unit fixes this: a number
+  read from the protocol whose double is integral and fits a 64-bit integer is held as that
+  integer wherever the shortest text of the double is not its exact value. The fix must not
+  change one byte of the IR of a protocol whose numbers are all at or below 2^53 in magnitude or
+  have a fraction; the unit shows that with the existing fixtures and scenarios and names every
+  IR byte that does change. Where the fix sits (`model/present.rs`, as the adversary proposes, or
+  the argument-schema reader) is the unit's choice by that rule.
+- **D5, a protocol literal the YAML reader rounds stays rounded.** `9007199254740993.0` written in
+  a protocol is not a double; the YAML reader gives `9007199254740992`. Canon compares the value
+  it read. The arguments `9007199254740993.0` are then another value where the text is held and
+  the same value where doubles are held. That difference between the two builds stays and is
+  stated in the `# Numbers` section and in the generated reference. Preserving the literal text of
+  a protocol number is not built here. The same holds for an integral double beyond 64 bits
+  (`1e30`): where the text is held it is compared as its shortest text.
+- **Correction to D2.** D2 said the `canon` binary holds number text. That is true of a binary
+  built with the workspace (`cargo build --workspace`, and every command-line test of the gate)
+  and false of the binary a user installs with `cargo install --locked --git … canon-cli`, whose
+  `serde_json` has no `arbitrary_precision` and holds doubles. D2's rule stands as "exact in both
+  builds"; the as-built section lists every case in which the two builds answer differently.
+- The three notes are corrected in the unit: the pinned wrong answer at
+  `argument_validation.rs:482`, the opening sentence of `# Numbers`, and the borrow of
+  `subtract_digits` that no test of the unit holds.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w6 from the reports of the two implementors, the two adversary reports (`review-result:adversary-argument-validator-pass-1`, `-pass-2`) and the merge of `impl/argument-validator` (`72d7480`). It corrects the body where the two differ. The unit was built in wave 5, failed its first adversary pass there, and merged in wave 6.
+
+- `check_arguments` in `crates/canon/src/validate/arguments.rs` is the one validator: `canon validate`, `canon compile`, `canon diff` (`crates/canon/src/diff/arguments.rs`) and a runner that calls the library use it.
+- Numbers are compared by exact value (D1) in both builds of `serde_json` (D2). Where the library holds number text (`arbitrary_precision`), two numbers are compared as decimals of any length; where it holds doubles and 64-bit integers, as those. The sentence of § Outcome about allocation is withdrawn (D3).
+- A schema number whose text is the shortest text of a double, that double an integer a 64-bit integer holds, and the text not that integer's own, is compared as the integer (D4, `schema_number`). It applies to the schema's side only and only where the text is held. Compiling 100 documents before and after gave identical IR bytes in both builds. One accepted consequence: an IR written by hand with the literal `1.152921504606847e+18` is read as 2^60 where the text is held.
+- **The installed binary and a workspace build are two builds.** `cargo install --locked --git … canon-cli` holds doubles; a workspace build, which every command-line test of the gate runs, holds number text. D2's sentence "the `canon` binary holds text" is true of the second only. Cases in which the two answer differently after this unit, each tested in both builds unless marked:
+  1. An arguments literal that is not exactly the 64-bit integer or double read without `arbitrary_precision`: `9007199254740992.5`, `9007199254740993.0`, `-9223372036854775809`, `18446744073709551615.0`, `1e400`, `-1e400`, `1e-400`.
+  2. The same kind of literal in a caller's JSON schema: `[9007199254740993, 9007199254740993.0]` is a duplicate with text and two values with doubles.
+  3. A protocol literal the YAML reader rounds (D5): `enum: [9007199254740993.0]` against the arguments `9007199254740993.0` is refused with text and accepted with doubles.
+  4. A protocol double that is an integer beyond 64 bits (D5): `1e30` is 10^30 with text and 1000000000000000019884624838656 with doubles.
+  5. `-0` as a bound or an `integer` enum value in a caller's schema: 0 with text, refused as -0.0 with doubles.
+  6. `canon evaluate` and `canon diff` reading a `canon-ir/1` written by hand (`enum: [1e400]`, `minimum: -0`, the pairs of 2 and 3): read from the code, not run.
+  7. A runner's `check_arguments` follows the features of the runner's own `serde_json`: read from the code.
+- Not in § Scope and edited: nothing outside the unit's files. Added by the adversary: `crates/canon/tests/adversary_argument_validation.rs` (20 cases after both passes; one of them states the answer of each build for case 3).
+- The reference page `website/docs/reference/validation.md` carries the `# Numbers` section, regenerated from the module documentation.

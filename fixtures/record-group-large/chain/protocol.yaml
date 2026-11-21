@@ -1,0 +1,247 @@
+format: protocol/1
+protocol:
+  id: grouped.chain
+  revision: 8
+  description: >-
+    A chain of four stages, each with a check: one action of the third stage records two kinds in
+    one run, and its guard admits it only while neither is recorded.
+artifacts:
+  input:
+    description: the input of the first stage
+  frame:
+    description: a document the writers read; no claim reads it
+  draft:
+    description: the draft made from the input
+  query:
+    description: the query made from the draft
+  roster:
+    description: the roster made from the query
+  extra:
+    description: a document no claim reads
+evidence_kinds:
+  input_form:
+    description: the form check of the input; good or another result
+  draft_form:
+    description: the form check of the draft; good or another result
+  query_form:
+    description: the form check of the query; good or another result
+  query_done:
+    description: whether the query is closed; closed or another result
+  roster_form:
+    description: the form check of the roster; good or another result
+claims:
+  input.formed:
+    description: the current input is good
+    true_when:
+      evidence:
+        kind: input_form
+        result: good
+        subject: input
+  draft.valid:
+    description: the current draft is good
+    true_when:
+      evidence:
+        kind: draft_form
+        result: good
+        subject: draft
+  query.formed:
+    description: the current query is good
+    true_when:
+      evidence:
+        kind: query_form
+        result: good
+        subject: query
+  query.done:
+    description: the current query is closed
+    true_when:
+      evidence:
+        kind: query_done
+        result: closed
+        subject: query
+  roster.valid:
+    description: the current roster is good
+    true_when:
+      evidence:
+        kind: roster_form
+        result: good
+        subject: roster
+  input.checked:
+    description: a form check is recorded about the current input, whatever its result
+    true_when:
+      evidence:
+        kind: input_form
+        subject: input
+  draft.checked:
+    description: a form check is recorded about the current draft, whatever its result
+    true_when:
+      evidence:
+        kind: draft_form
+        subject: draft
+  query.checked:
+    description: a form check is recorded about the current query, whatever its result
+    true_when:
+      evidence:
+        kind: query_form
+        subject: query
+  item.checked:
+    description: a closing check is recorded about the current query, whatever its result
+    true_when:
+      evidence:
+        kind: query_done
+        subject: query
+  roster.checked:
+    description: a form check is recorded about the current roster, whatever its result
+    true_when:
+      evidence:
+        kind: roster_form
+        subject: roster
+obligations:
+  input.required:
+    description: the input is good
+    discharged_when:
+      claim: input.formed
+  draft.required:
+    description: the draft is good
+    discharged_when:
+      claim: draft.valid
+  item.required:
+    description: the query is good and closed
+    discharged_when:
+      all:
+        - claim: query.formed
+        - claim: query.done
+  roster.required:
+    description: the roster is good
+    discharged_when:
+      claim: roster.valid
+actions:
+  input.check:
+    description: check the input, only while no check of it is recorded
+    effect: read
+    precondition:
+      claim: input.checked
+      is: unknown
+    may_produce:
+      - evidence: input_form
+  input.split:
+    description: make a new draft, not once the current draft is good
+    effect: write
+    precondition:
+      all:
+        - claim: input.formed
+        - any:
+            - claim: draft.valid
+              is: "false"
+            - claim: draft.valid
+              is: unknown
+  draft.check:
+    description: check the draft, only while no check of it is recorded
+    effect: read
+    precondition:
+      claim: draft.checked
+      is: unknown
+    may_produce:
+      - evidence: draft_form
+  query.write:
+    description: make a new query, not once the current query is good
+    effect: write
+    precondition:
+      all:
+        - claim: draft.valid
+        - any:
+            - claim: query.formed
+              is: "false"
+            - claim: query.formed
+              is: unknown
+  query.answer:
+    description: make a new query, not once the query is closed
+    effect: write
+    precondition:
+      all:
+        - claim: query.formed
+        - any:
+            - claim: query.done
+              is: "false"
+            - claim: query.done
+              is: unknown
+  sign.answer:
+    description: make a new query under a capability, not once the query is closed
+    effect: write
+    precondition:
+      all:
+        - claim: draft.valid
+        - any:
+            - claim: query.formed
+            - claim: query.formed
+              is: unknown
+        - any:
+            - claim: query.done
+              is: "false"
+            - claim: query.done
+              is: unknown
+    requires:
+      - capability: sign.answer
+  query.check:
+    description: check the query's form and whether it is closed, only while neither is recorded
+    effect: read
+    precondition:
+      all:
+        - claim: query.checked
+          is: unknown
+        - claim: item.checked
+          is: unknown
+    may_produce:
+      - evidence: query_form
+      - evidence: query_done
+    records_together:
+      - kinds: [query_done, query_form]
+  roster.merge:
+    description: make a new roster, not once the current roster is good
+    effect: write
+    precondition:
+      all:
+        - claim: query.done
+        - any:
+            - claim: roster.valid
+              is: "false"
+            - claim: roster.valid
+              is: unknown
+  roster.check:
+    description: check the roster, only while no check of it is recorded
+    effect: read
+    precondition:
+      claim: roster.checked
+      is: unknown
+    may_produce:
+      - evidence: roster_form
+  alter.back:
+    description: make a new query and a new roster while the roster is not good
+    effect: write
+    precondition:
+      all:
+        - claim: query.done
+        - claim: roster.valid
+          is: "false"
+outcomes:
+  complete:
+    description: every stage is good and the query is closed
+    requires:
+      all:
+        - claim: input.formed
+        - claim: draft.valid
+        - claim: query.formed
+        - claim: query.done
+        - claim: roster.valid
+invalidation:
+  draft.revised:
+    description: a closing check observed against an earlier draft no longer applies
+    upstream: draft
+    invalidates:
+      - query.done
+      - item.checked
+  query.revised:
+    description: a roster check observed against an earlier query no longer applies
+    upstream: query
+    invalidates:
+      - roster.valid
+      - roster.checked
