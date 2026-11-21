@@ -1,0 +1,1 @@
+simulated: protocol `simulate.revise.child.current` revision 1: 124 reachable states, 17 terminable (outcome `built` 17), 21 waiting on supplied evidence, a child outcome or expiry, 0 findings (0 stuck or cycle states)

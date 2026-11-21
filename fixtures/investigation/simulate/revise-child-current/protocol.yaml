@@ -1,0 +1,47 @@
+format: protocol/1
+
+protocol:
+  id: simulate.revise.child.current
+  revision: 1
+  description: Open a child case about b; a child that ended outside the set holds the claim false, and the one admissible action revises b, which sets the child's outcome aside.
+
+artifacts:
+  a:
+    description: An artifact no child case is opened about.
+  b:
+    description: The artifact each child case is opened about.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of a child case opened about b.
+
+claims:
+  done.current:
+    description: Every child case about the current revision of its subject ended done.
+    true_when:
+      children:
+        in: [done]
+        revision: current
+
+actions:
+  open:
+    description: Open a child case about b while the claim is unknown.
+    precondition:
+      claim: done.current
+      is: unknown
+    case_open:
+      protocol: simulate.child
+      subject: b
+
+  fix:
+    description: Revise b while the claim is false; it records nothing.
+    precondition:
+      claim: done.current
+      is: false
+    revises: [b]
+
+outcomes:
+  built:
+    description: Every child case about the current revision of b ended done.
+    requires:
+      claim: done.current

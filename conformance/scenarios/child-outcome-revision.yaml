@@ -53,6 +53,9 @@ steps:
             }
           },
           "artifacts": {
+            "epic": {
+              "description": "The epic itself; a child case that plans or releases it is opened about it."
+            },
             "spec": {
               "description": "The epic's spec; each child story case is opened about it."
             }
@@ -415,6 +418,119 @@ steps:
             },
             "delivered.current": {
               "value": "unknown"
+            }
+          }
+        }
+
+  # story:child-outcome-recovery. A child opened about the epic ended withheld at e1; the epic then
+  # moved to e2 and two new children, opened about it, ended delivered; the child opened about the
+  # spec, still at s1, ended delivered. The `revision: current` form does not read the withheld
+  # record, which is about e1: TRUE. The form without `revision` reads it: FALSE.
+  - id: recovery-after-a-child-ended-outside-the-set
+    evaluate:
+      case:
+        format: canon-case/1
+        id: EPIC-1
+        protocol: epic
+        artifacts:
+          spec: {revision: s1}
+          epic: {revision: e2}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: withheld
+          subject: epic
+          subject_revision: e1
+          child_case: RELEASE-1
+        - format: canon-evidence/1
+          id: o2
+          kind: case_outcome
+          result: delivered
+          subject: spec
+          subject_revision: s1
+          child_case: STORY-1
+        - format: canon-evidence/1
+          id: o3
+          kind: case_outcome
+          result: delivered
+          subject: epic
+          subject_revision: e2
+          child_case: PLAN-2
+        - format: canon-evidence/1
+          id: o4
+          kind: case_outcome
+          result: delivered
+          subject: epic
+          subject_revision: e2
+          child_case: RELEASE-2
+    expect:
+      decision: |
+        {
+          "claims": {
+            "delivered.any": {
+              "value": "false"
+            },
+            "delivered.current": {
+              "value": "true"
+            }
+          },
+          "outcomes": {
+            "built": {
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # The same case with the child about the spec dropped instead: its record is about s1, the
+  # current revision of the spec, so the `revision: current` form reads it: FALSE.
+  - id: a-child-about-another-artifact-that-ended-outside-the-set
+    evaluate:
+      case:
+        format: canon-case/1
+        id: EPIC-1
+        protocol: epic
+        artifacts:
+          spec: {revision: s1}
+          epic: {revision: e2}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: withheld
+          subject: epic
+          subject_revision: e1
+          child_case: RELEASE-1
+        - format: canon-evidence/1
+          id: o2
+          kind: case_outcome
+          result: dropped
+          subject: spec
+          subject_revision: s1
+          child_case: STORY-1
+        - format: canon-evidence/1
+          id: o3
+          kind: case_outcome
+          result: delivered
+          subject: epic
+          subject_revision: e2
+          child_case: PLAN-2
+        - format: canon-evidence/1
+          id: o4
+          kind: case_outcome
+          result: delivered
+          subject: epic
+          subject_revision: e2
+          child_case: RELEASE-2
+    expect:
+      decision: |
+        {
+          "claims": {
+            "delivered.any": {
+              "value": "false"
+            },
+            "delivered.current": {
+              "value": "false"
             }
           }
         }
