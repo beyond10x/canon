@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T14:11:32Z",
+  "actor": "human:timo",
+  "artifact": "story:simulate-record-groups",
+  "kind": "story",
+  "revision": 16,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "iterating an action's groups in reverse left the unit's tests green: held by groups_step_in_order_of_their_least_kind",
+    "reference": "impl/simulate-record-groups 7b42b328",
+    "review": "review-result:adversary-simulate-record-groups-pass-1",
+    "outcome": "fixed"
+  }
+}

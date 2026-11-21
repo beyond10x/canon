@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T14:11:33Z",
+  "actor": "human:timo",
+  "artifact": "story:simulate-record-groups",
+  "kind": "story",
+  "revision": 16,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "varying the first member of a group fastest left the unit's tests green: held by the_last_member_of_a_group_varies_fastest",
+    "reference": "impl/simulate-record-groups 7b42b328",
+    "review": "review-result:adversary-simulate-record-groups-pass-1",
+    "outcome": "fixed"
+  }
+}
