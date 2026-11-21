@@ -170,6 +170,5 @@ requirements:
       list an action that is blocked, one that is approval-required or one whose may_produce is
       empty. A record MUST be applicable when the revision-binding and freshness stages leave it and
       no claim lists it in excluded_evidence, and MUST NOT depend on its result or on whether its
-      kind declares supplied_by. The section MUST be absent when no action qualifies, and MUST NOT
-      change any other section.
+      kind declares supplied_by. The section MUST NOT change any other section.
     source: story:missing-evidence

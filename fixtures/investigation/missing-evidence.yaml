@@ -24,6 +24,12 @@ evidence_kinds:
   peer_review:
     description: A peer's review of the finding, recorded in an investigation.review case and copied here unchanged; its result is approved or rejected.
     supplied_by: investigation.review
+  zeta_note:
+    description: A note written while collecting notes on an escalated observation.
+  alpha_note:
+    description: Another note written while collecting notes on an escalated observation.
+  report:
+    description: A report on an escalated observation.
 
 claims:
   explanation.supported:
@@ -72,6 +78,27 @@ actions:
         result: needs_review
     may_produce:
       - evidence: peer_review
+
+  collect_notes:
+    description: Write down notes on an observation that was escalated.
+    precondition:
+      evidence:
+        kind: supporting_observation
+        result: escalated
+    may_produce:
+      - evidence: zeta_note
+      - evidence: alpha_note
+
+  file_report:
+    description: File a report on an observation that was escalated; filing needs approval.
+    precondition:
+      evidence:
+        kind: supporting_observation
+        result: escalated
+    requires:
+      - capability: report.file
+    may_produce:
+      - evidence: report
 
   publish_finding:
     description: Publish the finding that the explanation is supported.
