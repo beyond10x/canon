@@ -8,7 +8,7 @@ relations:
 - decomposes: epic:canon-kernel
 - serves: vision:governed-autonomy
 scope:
-- confidence: cited
+- confidence: inferred
   path: .config/nextest.toml
 - confidence: cited
   path: .github/workflows/check.yml
@@ -18,9 +18,29 @@ scope:
   path: Cargo.toml
 - confidence: cited
   path: Taskfile.yml
-- confidence: cited
-  path: crates/canon-cli/tests/adversary_scenario_generation.rs
-revision: 10
+- confidence: inferred
+  path: crates/canon-cli/tests/adversary2_review_hardening.rs
+- confidence: inferred
+  path: crates/canon/src/check/tests.rs
+- confidence: inferred
+  path: crates/canon/tests/adversary2_invalidation.rs
+- confidence: inferred
+  path: crates/canon/tests/adversary2_review_hardening.rs
+- confidence: inferred
+  path: crates/canon/tests/adversary_check_slices.rs
+- confidence: inferred
+  path: crates/canon/tests/adversary_check_space.rs
+- confidence: inferred
+  path: crates/canon/tests/adversary_evidence_order_since.rs
+- confidence: inferred
+  path: crates/canon/tests/adversary_scenario_generation.rs
+- confidence: inferred
+  path: crates/canon/tests/argument_validation.rs
+- confidence: inferred
+  path: crates/canon/tests/invalidation_evaluation_cost.rs
+- confidence: inferred
+  path: crates/canon/tests/missing_keys.rs
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 8}
 - {from: "proposed", to: "active", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 9}
@@ -93,28 +113,32 @@ enumerates, raising the timeout, or sharding. The number of tests in the gate la
 
 ## Scope
 
-Written by the wave coordinator on 2026-11-21 from the tree at `98169001`; every line is
-**cited** (read from the tree) or **inferred**.
+Derived 2026-11-21 by `story-scoper` from the tree at `efe0859e`. Every line is **cited** (read at the file:line given) or **inferred**. The coordinator's scope was written at `98169001` and is replaced.
 
-- **In:** the runner and its configuration; the test profile; the tests named by the
-  measurement; the `slow` lane; the gate's and CI's test step; the sentence in `AGENTS.md` that
-  names the lanes. — cited from the rule
-- **Out:** a change to what any test checks; the product's code under `crates/*/src` other than
-  test modules and `#[cfg(test)]` helpers (inferred: a slow enumeration in the product is a
-  finding for the backlog, not this story).
-- **Files:** `Taskfile.yml` (`check`, line 13; a `test` and a `test-slow` task) — cited
-- **Files:** `.config/nextest.toml` (new) — inferred
-- **Files:** `Cargo.toml` (profile section; none exists today) — cited
-- **Files:** `.github/workflows/check.yml` (runs `task check`, line 66; installs the runner; runs
-  the `slow` lane) — cited
-- **Files:** `AGENTS.md` (the gate's lanes) — cited
-- **Files:** the test files the measurement names, among them
-  `crates/canon-cli/tests/adversary_scenario_generation.rs`,
-  `crates/canon/tests/adversary_evidence_order_since.rs`,
-  `crates/canon/tests/adversary2_review_hardening.rs`, and the unit test modules of `b10x-canon`
-  — inferred from the binary times; the crate each file is in is not checked
-- **Would collide with:** every story that adds tests. It runs alone, before the next feature
-  wave.
+- **In:** the gate's test step and its runner config; the test profile; the tests the measurement names; the second lane; the sentence in `AGENTS.md` that names the lanes. — cited (story Outcome)
+- **Out:** what any test checks; `crates/*/src` outside `#[cfg(test)]` code. — inferred
+- **Primary surface:** the gate's configuration: `Taskfile.yml`, `.config/nextest.toml`, `.github/workflows/check.yml`. — cited
+- **Files:** `Taskfile.yml` — cited. `check` task line 13 is `cargo test --workspace --locked`. Five more `cargo test` lines also run tests: line 15 (`adversary_action_arguments`) and `ess-gate` lines 21-24. Those 4 `ess-gate` lines run 6 binaries a second time.
+- **Files:** `.config/nextest.toml` — inferred. Neither `.config/` nor `.cargo/` exists (`ls` failed on both). The typed scope marks this path cited, which is wrong: it is a new file.
+- **Files:** `Cargo.toml` — cited. 7 lines (`[workspace]`, `[workspace.package]`) and no `[profile.*]`. `crates/*/Cargo.toml` have none either.
+- **Files:** `.github/workflows/check.yml` — cited. Its only test step is `run: task check` at line 66 (job `check`, `timeout-minutes: 30`, line 23). It installs go-task (36-47) and ess (49-63) and has no nextest install.
+- **Files:** `AGENTS.md` — cited. No sentence names the test step or lanes today. Gate sentences: line 60 (`task ess-gate` "runs first in `task check`"), line 62 ("while the gate is red"), line 135 (the release step: "Land ... with `task check` and CI green"), line 161 (`task docs-check`, "part of `task check`"). Lines 50, 59 and 87 name `task ess-gate` only.
+- **Files:** `crates/canon/tests/adversary_scenario_generation.rs` — inferred. This replaces the typed `crates/canon-cli/tests/...` entry, which is the wrong crate. The measured 2-test binary is the `crates/canon` one (2 `#[test]`, 254 lines). The `canon-cli` file has 4 `#[test]` and spawns the `canon` binary (`CARGO_BIN_EXE_canon`, line 26). Cost: `every_generated_witness_passes_and_is_minimal_...` (line 134) generates every `fixtures/investigation` protocol and re-runs `conform::run` once per removal. The second test is cheap.
+- **Files:** `crates/canon/tests/adversary_evidence_order_since.rs` — inferred. 7 tests, each calling `check()` on a protocol and a seeded random-history helper (`combinations`, lines 78-110); the whole file is 601 lines. The product enumerated differs per test; there is no shared fixture.
+- **Files:** `crates/canon/tests/adversary2_review_hardening.rs` — inferred. 2 tests, in `crates/canon` and also in `crates/canon-cli`; the story's table does not say which was measured. The `canon` one builds a 3000-link chain twice and a 2000-claim diamond and evaluates them. The `canon-cli` one writes a 40 000-claim, 1.6 MB protocol and spawns `canon check` (lines 55-75). Both files are in play until a nextest run names one.
+- **Files:** `crates/canon/tests/adversary_check_slices.rs` — inferred. 14 tests; the eight `probe_*` ones each run `check` over slices and over the whole product (header lines 9-15). Each probe builds its own protocol.
+- **Files:** `crates/canon/tests/missing_keys.rs` — inferred. 2 tests. The second reads every fixture under `fixtures/` and every `conformance/scenarios` file (lines 212-258), then re-parses each with every key removed, at every depth. Parse-only; no compile product is shared.
+- **Files:** `crates/canon/tests/adversary2_invalidation.rs` — inferred. 9 tests; 2 of them loop 4000 and 2000 seeded evaluations over `FAMILY` (3 members, line 91; loops at 226, 272).
+- **Files:** `crates/canon/tests/adversary_check_space.rs` — inferred. 3 tests; one enumerates exactly 65 536 states and refuses a 17-kind space (lines 63-96). That one test is the cost.
+- **Files:** `crates/canon/tests/invalidation_evaluation_cost.rs` — inferred. 4 tests: 3 time-bounded chain and diamond evaluations (400-claim and 4000-claim chains, 500-claim diamond) and 1 pinned decision. Timing detail is in Safety fact.
+- **Files:** `crates/canon/tests/argument_validation.rs` — inferred. 22 tests over `fixtures/investigation/action-arguments.yaml`; the heavy ones run seeded schema rounds (300 documents per schema, `for round in 0..4000`, lines 745-770).
+- **Files:** `crates/canon/src/check/tests.rs` — inferred. This is the one `src` file that holds the `b10x-canon` unit time. It has 59 tests in 2600 lines. Heavy tests: three `for _ in 0..20_000` soundness loops (lines 625, 828, 1029; 953 has 5 000); `generated_protocols_check_alike_sliced_and_whole_0..3` (150 protocols each, line 2205); `every_probe_is_a_state_of_the_whole_product` (600 generated protocols plus all fixtures, 2296); `every_fixture_protocol_checks_alike_sliced_and_whole` (2236).
+- **Files:** other `b10x-canon` unit modules — inferred. `crates/canon/src/simulate/tests.rs` (20 tests), `crates/canon/src/eval/order.rs` (three `20_000` loops, lines 824, 1308, 1333) and `crates/canon/src/validate/mod.rs` (fixtures walk, line 2116) look expensive. `generate/tests.rs` and `mutate/tests.rs` did not. 366 `#[test]` sit in `crates/canon/src` against 354 measured at `1c402241`; I could not reconcile them.
+- **Not touched:** `.github/workflows/pages.yml` — inferred. Line 39 runs `cargo test --locked -p canon-docs`, a test run outside `task check` that is not the gate's step. It is also in `story:local-gate-equals-ci`. `README.md:39` and `website/docs/getting-started.md:80` name `task check` and need no change. The `docs/plan/wave-*.md` files record past gates. No script, hook or Makefile exists in the repository (`git ls-files`). The release text is only `AGENTS.md:135`.
+- **Safety fact:** 1. Doc-tests: none run. Every doc fence in `crates` opens as `yaml` (9) or `text` (3), checked by `awk` over lines matching `//[/!] ```` in `git grep` hits; the indented doc lines are list continuations (`simulate/mod.rs:86-101`, `validate/mod.rs:81-83`). So no `cargo test --doc` line is needed. Lib crates `b10x-canon`, `b10x-canon-expr`, `canon-cli` would only print 0 doc-tests. `canon-docs` is bin-only. Unproven, since `cargo test --doc` was not run. 2. Wall-clock tests, which behave differently under an optimized profile or one process per test: `invalidation_evaluation_cost.rs:206` and `:272` branch on `cfg!(debug_assertions)` (budgets 120 s and 30 s in debug, 10 s and 5 s release). Line 26 `TIMED` serializes only inside one process. Line 177 asserts a 400-claim time `<= short*64`. The 120 s budget exceeds the 60 s kill, but the whole binary measured 23.53 s. Other timed tests: `src/validate/mod.rs:2307` (10 s), `adversary2_admissibility_authority.rs:88` (<20 s), `adversary2_admissibility_reasons.rs:206-212` (<20 s), `adversary2_tvc_eval.rs:144` (20 s), `adversary_conform_steps.rs:115-119` (<10 s), `review_properties.rs:453` (20 s). `adversary2_review_hardening.rs:111-122` only prints a time. 3. Already ignored, 3 tests, all children of a parent test that re-runs the same binary via `current_exe` with `--ignored --exact`: `child_evaluates_a_chain_of_claims_each_within_the_bound` (`adversary_review_hardening.rs:102`), `child_checks_a_caller_built_ir_beyond_the_bound` (`:132`), `child_evaluates_a_caller_built_ir_nested_beyond_the_bound` (`review_depth_beyond_bound.rs:30`); each reason names its parent test. `adversary2_tvc_eval.rs:103`, `adversary_ess_commands.rs:72` and `adversary2_ess_commands.rs:78` also use `current_exe`. Under nextest these paths are unproven.
+- **Confidence:** medium. The gate files are cited from the tree; the per-test costs are a reading and have no measured times.
+- **Would collide with:** `Taskfile.yml`, `.github/workflows/check.yml` and `AGENTS.md` (also in `story:local-gate-equals-ci`, with `.cargo/config.toml` and `rust-toolchain.toml`); and `crates/canon/src/check/tests.rs` and `crates/canon/tests/*.rs` for any story that adds tests.
+- **Not established by the scoper:** which `adversary2_review_hardening.rs` was measured; the cost split between build and run; the 354/366 count gap; which unit modules take the 195 s; whether tests that share fixed scratch names or `CARGO_TARGET_TMPDIR` dirs collide when nextest runs binaries at once.
 
 ## Acceptance
 
@@ -159,3 +183,41 @@ They bind this story, in addition to § Acceptance:
   non-zero by the kill, and with the step's limit set to 1 s exits non-zero by the step bound;
   both shown in the report, neither committed as a sleeping test.
 - `AGENTS.md` states both bounds, so every brief written from it names them.
+
+## Added at stage 1 of wave 10, 2026-11-21: what the scope changes
+
+The scope (§ Scope, read from the tree at `efe0859e`; nothing was run for it) corrects this story
+and names what the measurement has to settle. Each binds the unit in addition to § Acceptance.
+
+- **The 92.50 s binary is `crates/canon/tests/adversary_scenario_generation.rs`** (2 tests), not
+  the file of that name under `crates/canon-cli/tests/`. The typed scope is corrected.
+- **Two files are named `adversary2_review_hardening.rs`**, one per crate; the measurement says
+  which one took 63.09 s.
+- **The 195 s of the `b10x-canon` unit tests** are not attributed. Candidates read from the code:
+  `crates/canon/src/check/tests.rs` (three loops of 20 000, 150 generated protocols in each of
+  four tests, 600 in another), `crates/canon/src/eval/order.rs` (three loops of 20 000),
+  `crates/canon/src/simulate/tests.rs`, `crates/canon/src/validate/mod.rs:2116`. The measurement
+  names the tests; the unit changes only those.
+- **`Taskfile.yml` runs tests on six lines**, not one: line 13, line 15 and the four lines of
+  `ess-gate` (21-24), which run 6 binaries a second time. The 120 s bound is on all test runs of
+  `task check` together, and the unit says how the second runs are counted or removed.
+- **Tests with a wall-clock budget**, which an optimized test profile or one process per test can
+  change: `crates/canon/tests/invalidation_evaluation_cost.rs:206,272` branch on
+  `cfg!(debug_assertions)` (120 s and 30 s in debug, 10 s and 5 s otherwise) and serialize by a
+  lock inside one process (line 26); also `src/validate/mod.rs:2307`,
+  `adversary2_admissibility_authority.rs:88`, `adversary2_admissibility_reasons.rs:206-212`,
+  `adversary2_tvc_eval.rs:144`, `adversary_conform_steps.rs:115-119`, `review_properties.rs:453`.
+  A budget over 60 s is brought under the kill bound. No budget is raised.
+- **Tests that re-run their own binary** (`current_exe` with `--ignored --exact`):
+  `adversary_review_hardening.rs:102,132`, `review_depth_beyond_bound.rs:30`,
+  `adversary2_tvc_eval.rs:103`, `adversary_ess_commands.rs:72`, `adversary2_ess_commands.rs:78`.
+  The unit shows each one passes under the new runner. The 3 ignored tests are children of those
+  parents and stay ignored.
+- **Scratch paths.** Tests that write to a fixed name or to `CARGO_TARGET_TMPDIR` can collide
+  when binaries run at once; the unit checks it and fixes a collision by a per-test directory.
+- **No doc-test runs today** (every doc fence is `yaml` or `text`); the unit confirms it once and
+  the new step does not need a `--doc` run if so.
+- **The count of tests is taken from the runner**, before and after. 366 `#[test]` were counted
+  in `crates/canon/src` against 354 run at `1c402241`; the unit states the reason for the 12.
+- `.github/workflows/pages.yml:39` runs `cargo test -p canon-docs` outside the gate. It is not in
+  the 120 s bound; the unit reports its time.

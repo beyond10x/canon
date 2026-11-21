@@ -10,11 +10,17 @@ relations:
 scope:
 - confidence: cited
   path: .github/workflows/check.yml
+- confidence: inferred
+  path: .github/workflows/pages.yml
 - confidence: cited
   path: AGENTS.md
-- confidence: cited
+- confidence: inferred
   path: Taskfile.yml
-revision: 6
+- confidence: inferred
+  path: crates/canon/tests/planning_only_classifier.rs
+- confidence: inferred
+  path: scripts/classify-changes.sh
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T21:46:06Z", actor: "human:timo", revision: 5}
 - {from: "proposed", to: "active", at: "2026-11-21T21:46:07Z", actor: "human:timo", revision: 6}
@@ -69,16 +75,30 @@ required check would wait forever).
 
 ## Scope
 
-Written by the wave coordinator on 2026-11-21 from the tree at `a93962cd`.
+Derived 2026-11-21 by `story-scoper`, from the tree at `efe0859e`. Every line is **cited** (read from the story or the tree) or **inferred** (a reading that could be wrong).
 
-- **Files:** `.github/workflows/check.yml` — cited
-- **Files:** the classifier and its test (new; place chosen by the unit) — inferred
-- **Files:** `Taskfile.yml` (a task that runs the classifier's test, called by `check`) — inferred
-- **Files:** `AGENTS.md` — cited
-- **Out:** `shared-gates.yml` (the shared source gates run on every pull request and are not this
-  repository's to change); `pages.yml`; rulesets.
-- **Would collide with:** story:fast-test-step and story:local-gate-equals-ci
-  (`.github/workflows/check.yml`, `Taskfile.yml`, `AGENTS.md`).
+- **In:** a changed-file classifier (`planning-only` / `docs-site-only` / `code`), a pre-toolchain step in the `canon / task check` job, its test, and one `AGENTS.md` paragraph — cited (story, What the unit does 1-5)
+- **Out:** `.github/workflows/shared-gates.yml` (a reusable `beyond10x/gates` workflow on `pull_request_target`, `.github/workflows/shared-gates.yml:4,16`), `.github/workflows/b10x-docs-site.yml` (`workflow_run` on main only, `:4-8`), rulesets — cited
+- **Primary surface:** `.github/workflows/check.yml` (one job `check`, name `canon / task check`, triggers `pull_request` and push to `main`, no path condition, `:3-6,20-21`) — cited
+- **Files:** `.github/workflows/check.yml` — cited. Checkout is `actions/checkout` with `persist-credentials: false` and no `fetch-depth` (`:27-29`), so depth 1. The base commit is not fetched; `fetch-depth: 0` at checkout works. A later fetch has no credentials. Use `git diff --no-renames --name-only`: with rename detection, a code file renamed into `docs/` lists only the planning path (inferred).
+- **Files:** `scripts/` does not exist; the tree has no tracked `.sh` or `.py`, and `crates/canon-cli/tests/simulate_child_outcome.rs:395-403` fails the gate if any `*.py` is tracked, so the classifier is shell or a workflow step. Proposed `scripts/classify-changes.sh` — inferred
+- **Files:** the test. `Taskfile.yml` runs only `cargo`, `ess` and `aep` (`Taskfile.yml:7-48`), no non-Rust test. `cargo test --workspace` (`:13`) runs any Rust test in `task check` with no Taskfile edit. Precedent: tests that read `.github/workflows/check.yml` (`crates/canon/tests/ess_gate.rs:432`) and `Taskfile.yml` (`crates/canon-cli/tests/conform_requirements.rs:164`). Proposed `crates/canon/tests/planning_only_classifier.rs` — inferred
+- **Files:** `Taskfile.yml` — inferred, needed only if the test is not a Rust test. Constraint: the `check` recipe must keep `conform run --requirements conformance/requirements.yaml` (`conform_requirements.rs:176-182`, cited).
+- **Files:** `AGENTS.md` — cited. The story calls it prose, but `crates/canon/tests/adversary2_ess_gate.rs:67-90` reads it. When § ESS contains "command surface" (`AGENTS.md:37` does), the test asserts the compiled ESS declares commands.
+- **Files:** `.github/workflows/pages.yml` — inferred, a decision for the coordinator. Job `Build documentation` (`:22`) runs on every `pull_request` with no path condition and runs `cargo test -p canon-docs`, `cargo build`, `generate --check` and `npm ci && npm run build` (`:37-43`). It is not `canon / task check`, but a planning-only PR still builds code unless this workflow changes too. Release plans name "`task check`, the documentation build, and security and privacy checks" as green on PR 14 (`.engineering/planning/release-plan/canon-0-3-0.md:37-38`).
+- **Classification:**
+  - Planning/prose: `docs/` (14 `.md`, read by no crate or script: grep for `docs/`, `docs/plan`, `include_str!` is empty), `README.md`, `CHANGELOG.md`, `CLAUDE.md`, `LICENSE` (no reader) — cited by grep of `crates/` and `Taskfile.yml`.
+  - Built site: `website/` (37 files), of which `website/docs/reference/`, `website/static/schemas/`, `website/data/` (owned whole) are generated and compared (`Taskfile.yml:32-36`; `crates/canon-docs/src/main.rs:115-148`). The story omits `website/data/` (3 files, including `status.json`).
+  - Code: `crates/`, `ess/` (gated, `ess_gate.rs`), `conformance/` (run by `Taskfile.yml:14`), `fixtures/` (232 files, no `.md`; read by tests and `canon-docs`, `crates/canon-docs/src/landing.rs:21`), `Cargo.*`, `Taskfile.yml`, `.github/`, `.gitignore` — cited.
+  - Test-read `.md`: `AGENTS.md` (above). The hand-written `website/docs/concepts/{evidence-and-revisions,evaluation,protocols}.md` and `website/docs/status/where-this-stands.md` are read by `crates/canon/tests/adversary_binding_docs.rs:58-71` and `adversary_obligations_docs.rs:90-103`, and all `website/docs/**.md` by `crates/canon-docs/src/main.rs:189`. A `docs-site-only` run of `task docs-check` skips those tests (`Taskfile.yml:13`) — cited.
+- **`.engineering/` is read:** `crates/canon-docs/src/status.rs:17,86` reads `.engineering/planning/story/<name>.md` front matter (`status`, `refs`) for each of the 47 stories named in `website/status.yaml`. It writes the result to `website/data/status.json`, and `task docs-check` fails on drift (`status.rs:35-45`; test `status.rs:211-219`). A story flipped to `implemented` without regenerating `status.json` is a planning-only change that `docs-check` rejects. Suggested: treat `.engineering/planning/story/**` as `docs-site-only`; the rest of `.engineering/` has no reader — cited, suggestion inferred. No `b10x-gates scan-text` or `.engineering` scan in the tree; the `ess/` scan is limited to `ess/`, and `ess/domains/cli.yaml` mentions `.engineering` only in comments.
+- **Constraint on `check.yml`:** `ess_gate.rs:432-444` asserts `ESS_VERSION:` appears exactly once, equal to the pin. The new step must not add another `ESS_VERSION:` line — cited
+- **Required checks:** the tree does not list them. `AGENTS.md:145` says "required source checks"; no ruleset note exists. `canon / task check` is the only job name the story states; it was not verified against GitHub.
+- **Workflows:** `check.yml` (`check`, `canon / task check`: builds and tests, no path condition); `pages.yml` ("Documentation validation", `build` / `Build documentation`, on `push` to main, `pull_request`, `workflow_dispatch`: builds and tests, no path condition); `shared-gates.yml` ("Shared source gates", job `common`, reusable, `pull_request_target`, push to main, tags: no build); `b10x-docs-site.yml` ("Documentation site", job `publish`, `workflow_run`, `workflow_dispatch`, bot and main only; `if:` condition) — cited
+- **Not touched:** `crates/canon-docs`, `website/status.yaml`, the `Taskfile.yml` `check` recipe order, the workflow triggers — cited
+- **Confidence:** medium — the check.yml, AGENTS.md and test surfaces are read in the tree, but whether `pages.yml` and `common` are required checks is not in the tree.
+- **Would collide with:** `.github/workflows/check.yml`, `Taskfile.yml`, `AGENTS.md` (`story:fast-test-step`, `story:local-gate-equals-ci`); `.github/workflows/pages.yml` (`story:local-gate-equals-ci`); the new `scripts/` directory (`story:local-gate-equals-ci` plans `scripts/` for `ci-watch`, line 64).
+- **Not established by the scoper:** required check names on GitHub; the job name `common` produces under `shared-gates.yml`; whether the repository is public (decides whether a late `git fetch` can work); that PR 28 ran the full job.
 
 ## Acceptance
 
@@ -93,3 +113,43 @@ Written by the wave coordinator on 2026-11-21 from the tree at `a93962cd`.
 
 `~/beyond10x/AGENTS.md` § Planning-only pull requests skip the tests. The `host-operator`
 session sent the order to this session on 2026-11-21: "file the path-filter story".
+
+## Added at stage 1 of wave 10, 2026-11-21: what the scope changes
+
+The scope (§ Scope, read from the tree at `efe0859e`) found readers this story did not know. The
+coordinator decided the following; each binds the unit in addition to § Acceptance.
+
+- **`AGENTS.md` is `code`.** `crates/canon/tests/adversary2_ess_gate.rs:67-90` reads it. A pull
+  request that changes it runs the full job.
+- **`.engineering/planning/story/**` is `docs-site-only`.** `crates/canon-docs/src/status.rs:17,86`
+  reads each story's front matter and writes `website/data/status.json`; `task docs-check` fails
+  on drift. A story moved without a regenerated `status.json` must go red in its own pull request,
+  not in the next one that touches code. The rest of `.engineering/` and `docs/` have no reader
+  and are `planning-only`. The unit states the grep that shows it for every path it classes
+  `planning-only`: no test, no gate step and no generator reads a file of that class.
+- **`website/data/` belongs to the built site**, with `website/docs/reference/` and
+  `website/static/schemas/`.
+- **A `docs-site-only` run** runs `task docs-check` and the tests that read hand-written pages of
+  the site: today `crates/canon/tests/adversary_binding_docs.rs`,
+  `crates/canon/tests/adversary_obligations_docs.rs` and the tests of `canon-docs`. The unit
+  lists them by reading the tree and puts them in one task the job calls. It does not run the
+  rest of the test step.
+- **`.github/workflows/pages.yml` uses the same path list.** Its job `Build documentation` builds
+  and tests on every pull request today. On `planning-only` it exits 0 before the toolchain; on
+  `docs-site-only` and `code` it runs as now. The job's name and triggers do not change.
+- **The classifier is a shell script or Rust, never Python**
+  (`crates/canon-cli/tests/simulate_child_outcome.rs:395-403` fails the gate on a tracked `*.py`).
+  Its test is a Rust test, so `task check` runs it with no Taskfile change. One path list, read
+  by both workflows.
+- **The changed files are read with full history:** the checkout fetches the base
+  (`fetch-depth: 0`), and the list comes from `git diff --no-renames --name-only`, so a code file
+  renamed into `docs/` still lists its old path. On a push to `main` and on any failure to
+  compute the list the answer is `code`.
+- **`ESS_VERSION:` stays exactly once in `check.yml`** (`crates/canon/tests/ess_gate.rs:432-444`).
+- The names of the required checks are not in the tree. The unit keeps every job `name:` as it
+  is and changes no trigger; it does not read or change a ruleset.
+
+Test cases added to § Acceptance's five lists: a pull request of only `AGENTS.md` is `code`; one
+of only `.engineering/planning/story/x.md` is `docs-site-only`; one of only
+`.engineering/planning/epic/x.md` and `docs/plan/y.md` is `planning-only`; a rename of
+`crates/a.rs` to `docs/a.md` is `code`.
