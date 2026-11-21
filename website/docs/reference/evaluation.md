@@ -269,6 +269,14 @@ declares no obligation has no `obligations` key, and likewise for actions and ou
   § 37), and why each claim that is not `true`, each open obligation, each action that is not
   admissible and each blocked outcome has its status, down to the evidence records that applied
   or were excluded. Its shape is given by `crate::explain` (CANON-EXPLAIN-001).
+- `missing_evidence` maps each `admissible` action whose `may_produce` is not empty to the kinds
+  of that list that have no applicable record, in kind-identifier order; an empty list means
+  every kind it may produce has one. A record is applicable when the revision-binding and
+  freshness stages leave it and no claim lists it in `excluded_evidence` (`missing.rs`,
+  `applicable`). It is written only when some action is listed: an action that is `blocked` or
+  `approval-required`, and one with an empty `may_produce`, is not. It reads `may_produce` and
+  the records, so a kind that declares `supplied_by` is listed like any other, and it claims
+  nothing about running the action (CANON-FRONTIER-001).
 
 ## Authority decisions
 
