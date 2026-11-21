@@ -324,14 +324,14 @@
     },
     {
       "label": "Write a protocol/1 model",
-      "status": "planned",
+      "status": "shipped",
       "detail": "The library function b10x_canon::model::write writes any protocol/1 model as canonical JSON text that model::parse reads back to an equal model, declaration order and repeated identifiers kept, a key left out only when the model holds none; it writes a model the validator refuses, and canon validate stays the only judge of validity. No builder, no canon fmt, no change to canon-ir/1.",
       "href": "/docs/reference/protocol",
       "area": "Language"
     },
     {
       "label": "Kinds recorded together",
-      "status": "planned",
+      "status": "shipped",
       "detail": "An action may declare records_together, groups of the kinds one run of it records all together or not at all. canon simulate then adds a group's records in one step, one record of each member kind in every combination of dimension, class and producer profile, printed as one line, and never offers a grouped kind alone. canon validate refuses a group with fewer than two distinct kinds, a kind outside may_produce, a kind in two groups of one action and case_outcome on an action that opens a child case, each as invalid-record-group naming the action. No evaluation reads it: canon evaluate, check and generate give the same bytes, canon diff reports a group as NO SEMANTIC CHANGE, and canon-ir/1 writes the key only when a group is declared.",
       "href": "/docs/reference/protocol#action",
       "area": "Analysis"

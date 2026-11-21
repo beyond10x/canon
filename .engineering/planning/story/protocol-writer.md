@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:protocol-writer
 kind: story
-status: active
+status: implemented
 title: Write a protocol/1 model out as canonical JSON text with a pure library function
 tags:
 - from-request
@@ -18,14 +18,17 @@ scope:
   path: crates/canon/src/model/mod.rs
 - confidence: inferred
   path: crates/canon/src/model/write.rs
+- confidence: cited
+  path: crates/canon/tests/adversary_protocol_write.rs
 - confidence: inferred
   path: crates/canon/tests/protocol_write.rs
 - confidence: cited
   path: ess/domains/protocol.yaml
-revision: 11
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T23:28:16Z", actor: "human:timo", revision: 7, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T23:28:16Z", actor: "human:timo", revision: 8, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "active", to: "implemented", at: "2026-11-21T16:01:29Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"test_result":1,"review_outcome":6}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w7"}
 ---
 ## Outcome
 
@@ -218,3 +221,18 @@ the wave coordinator; the session the operator named orchestrator of this plan m
   correction after the last pass; the coordinator reads its diff.
 - **D6, the note.** The two mutants the unit's cases let through (a backspace written in six
   bytes, more stack in the list of predicates) are killed by the pass's cases, which stay.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w7 from the implementor's reports, the two adversary reports (`review-result:adversary-protocol-writer-pass-1`, red; `review-result:adversary-protocol-writer-pass-2`, green) and the merge of `impl/protocol-writer` (`aa53d6ae`). It corrects the body where the two differ.
+
+- `b10x_canon::model::write(&Protocol) -> String` is in the new `crates/canon/src/model/write.rs`; `crates/canon/src/model/mod.rs` gains `mod write;`, `pub use write::write;` and one doc sentence. No `Serialize` derive, no change under `ir/`, no change to the command line.
+- The round trip `parse(&write(&p)) == Ok(p)` holds for every `p` that `parse` gives in which every key is at most 1022 bytes as written with its escapes (Decided in review, D1). § Outcome said it for every `p` that `parse` gives. For a longer key `write` returns JSON that `serde_json` reads with the key intact, and `parse` refuses that text. Pass 2 measured 1022 and 1023 in 135 combinations of 15 places and 9 key forms; indentation does not count toward the limit.
+- `write` is infallible and recursive: one call per level of nesting and two per level of `all` or `any`. It returns for every model whose nesting the calling thread's stack holds (D2); the docs and two cases name 400 levels on a 2 MiB stack in a debug build (D5), where `all` and `any` hold 808 levels and `not` holds 1152. `parse` gives at most 123 levels of `not`, 61 of `all` and 125 of `arguments`.
+- An integer beyond 64 bits is written as a double in the build that holds doubles; a number beyond the range of a double (`1e400`) is written as its text and reads back as a string, in any document. `arguments: Some(null)` has no `protocol/1` spelling. The module docs state the three.
+- Over the corpus, 128 of 128 files read back equal and are fixpoints of `write` after `parse`, in both builds of `serde_json`.
+- Every model struct is destructured with no `..`; `writer_covers_every_specified_field` reads `ess/domains/protocol.yaml` and fails naming a field of the specification no corpus protocol writes.
+- The escape set equals that of `generate::quote`; the rule is copied, not shared.
+- `ess/domains/protocol.yaml`: the header comment only, which names the writer and the key limit.
+- Added by the unit: `crates/canon/src/model/write.rs`, `crates/canon/tests/protocol_write.rs` (34 cases). Added by the adversary: `crates/canon/tests/adversary_protocol_write.rs` (13 cases: five pin D1 on inputs `parse` gives, two pin the depth figure, six hold what a mutant passed the unit's suite on). 19 of 19 mutants of pass 1 and 3 of 3 of pass 2 are killed at the merge.
+- No scenario and no requirement: the writer is a library function with no evaluation meaning.
