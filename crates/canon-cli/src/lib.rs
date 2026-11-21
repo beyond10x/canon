@@ -157,13 +157,15 @@ pub enum Command {
     /// Walk every state a case of a `protocol/1` document can reach from the empty case, one step
     /// at a time, and report the states no sequence of steps gets out of, each action admissible
     /// in no reachable state, and each outcome legitimate in no reachable state. A step adds one
-    /// current record an admissible action may produce (`may_produce`), adds one record of a kind
-    /// that declares `supplied_by` (at any step), adds one child case's `case_outcome` record,
-    /// lets one record class of a kind that declares `max_age` expire, grants or denies one
-    /// capability some action requires, or takes one decision some outcome requires; no action
-    /// runs. Since a step adds one record, where an action's guard closes on its first record the
-    /// walk never holds two records of one taking together, and an outcome that needs both is
-    /// reported as legitimate in no reachable state. Per action that opens a child case
+    /// current record an admissible action may produce (`may_produce`), or one of each kind of a
+    /// group the action records together (`records_together`), never one of those kinds alone,
+    /// adds one record of a kind that declares `supplied_by` (at any step), adds one child case's
+    /// `case_outcome` record, lets one record class of a kind that declares `max_age` expire,
+    /// grants or denies one capability some action requires, or takes one decision some outcome
+    /// requires; no action runs. Since a step adds one record outside a group, where an action's
+    /// guard closes on its first record the walk never holds two records of one taking together
+    /// unless the action declares them a group, and an outcome that needs both is reported as
+    /// legitimate in no reachable state. Per action that opens a child case
     /// (`case_open`) the walk counts the children that have not ended: none, one, or two or more.
     /// A step of the action raises the count, a child's outcome arrives while it is above none,
     /// and an outcome other than `open` lowers it, or from two or more may also leave it at two
