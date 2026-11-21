@@ -1337,6 +1337,39 @@ fn a_changed_map_key_is_named() {
     assert_named(&spec, &rust, &["Protocol.claims", "ClaimId", "OutcomeId"]);
 }
 
+/// `Decision.missing_evidence` is an `Optional<Map<K, V>>`: its key comes from the authored
+/// `ess/` text through the `Optional<`, so a key that differs is named like any map key's.
+#[test]
+fn a_changed_key_of_an_optional_map_is_named() {
+    let spec = specification();
+    let rust = edited(
+        "decision.rs",
+        "Option<Declarations<ActionId, Vec<EvidenceKindId>>>",
+        "Option<Declarations<ClaimId, Vec<EvidenceKindId>>>",
+    );
+    assert_named(
+        &spec,
+        &rust,
+        &["Decision.missing_evidence", "ActionId", "ClaimId"],
+    );
+}
+
+/// An optional map the model makes required, or the other way round, is named.
+#[test]
+fn an_optional_map_against_a_required_one_is_named() {
+    let spec = specification();
+    let rust = edited(
+        "decision.rs",
+        "Option<Declarations<ActionId, Vec<EvidenceKindId>>>",
+        "Declarations<ActionId, Vec<EvidenceKindId>>",
+    );
+    assert_named(
+        &spec,
+        &rust,
+        &["Decision.missing_evidence", "Optional<Map<"],
+    );
+}
+
 #[test]
 fn a_union_variant_added_only_to_the_model_is_named() {
     let spec = specification();
