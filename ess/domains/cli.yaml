@@ -13,9 +13,9 @@
 domain: canon.cli
 
 summary: >-
-  The canon command line: validate, compile, evaluate, check, generate, diff and conform run, each
-  reading files named by its flags and printing its result, or refusing with exit status 1 when a
-  document is rejected and 2 when an input cannot be read.
+  The canon command line: validate, compile, evaluate, check, generate, diff, floor and conform
+  run, each reading files named by its flags and printing its result, or refusing with exit status
+  1 when a document is rejected and 2 when an input cannot be read.
 
 naming:
   wire: cli
@@ -305,6 +305,44 @@ commands:
         error: canon.cli.Rejected
       # read from: crates/canon-cli/src/diff.rs:37-40
       - name: compared
+        returns: true
+
+  # read from: .engineering/planning/story/protocol-floor.md:44-70
+  - name: canon.cli.Floor
+    naming:
+      wire: floor
+      display: Floor
+      summary: >-
+        Check that a compiled protocol stays above a compiled floor: every change from the floor to
+        the protocol is a tightening, an expansion or no semantic change.
+    input:
+      # The organization's floor, a protocol/1 document compiled as `canon compile` prints it.
+      # read from: .engineering/planning/story/protocol-floor.md:44-47
+      - name: floor
+        type: String
+      # The protocol checked, as `canon compile` prints it; a composed protocol is compiled with
+      # its imports first.
+      # read from: .engineering/planning/story/protocol-floor.md:44-49
+      - name: ir
+        type: String
+    response:
+      # `floor: holds` and the counts of tightening, expansion and no semantic change.
+      # read from: .engineering/planning/story/protocol-floor.md:61-64
+      - name: output
+        type: String
+    outcomes:
+      # read from: .engineering/planning/story/protocol-floor.md:44-47
+      - name: unreadable
+        external: the floor or the protocol cannot be read
+        error: canon.cli.Unreadable
+      # read from: .engineering/planning/story/protocol-floor.md:51-53
+      - name: rejected
+        external: >-
+          the floor or the protocol is not canon-ir/1, or the protocol is below the floor: a change
+          from the floor to it is a relaxation or breaking
+        error: canon.cli.Rejected
+      # read from: .engineering/planning/story/protocol-floor.md:61-64
+      - name: holds
         returns: true
 
   # The clap path `conform run`.
