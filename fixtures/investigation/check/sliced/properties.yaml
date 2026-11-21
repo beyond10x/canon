@@ -1,0 +1,17 @@
+format: canon-properties/1
+protocol: remedy
+
+properties:
+  release.ignores.survey:
+    description: Releasing rests on the trial and the approval, never on the survey.
+    subject:
+      outcome: released
+    independent_of:
+      claim: site.surveyed
+
+  trial.ignores.survey:
+    description: Seeded defect, trialling is declared independent of the survey, but a routine case reads it.
+    subject:
+      action: run_trial
+    independent_of:
+      claim: site.surveyed

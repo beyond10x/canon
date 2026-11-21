@@ -127,7 +127,12 @@ pub enum Command {
     /// child case of its own, and with no place in the order, which the form does not read; an
     /// action that opens a child case (`case_open`) counts as producing `case_outcome`; and a
     /// protocol that reads `case_outcome` with both a `children` form and an order form is refused
-    /// (`ordered-child-outcomes`). A state space of more than 65536 states is refused.
+    /// (`ordered-child-outcomes`). Each outcome, action and property is decided over the
+    /// evidence, authority, decisions and case inputs it reads (its slice), with the findings and
+    /// witness states the whole state space gives, and the summary counts the whole state space; a
+    /// check in which one slice holds more than 65536 states is refused, naming that outcome,
+    /// action or property and the slice's dimensions, and a whole state space too large to count
+    /// is refused naming the whole state space and its dimensions.
     Check {
         /// The protocol document to check.
         #[arg(long)]
@@ -142,14 +147,16 @@ pub enum Command {
         import: Vec<PathBuf>,
     },
     /// Generate `canon-conformance/1` scenarios into an empty directory: one minimal witness per
-    /// declared outcome and per action blocked in some state, over the state space `canon check`
-    /// enumerates. Each names the protocol path, as given, as its fixture, so `canon conform run`
-    /// runs them from the working directory `canon generate` ran in. Refused, writing nothing: a
-    /// protocol path that resolves outside the working directory, an outcome no state reaches, a
-    /// protocol that yields no scenario, an outcome or action identifier holding a character a file
-    /// name cannot hold (`/ \ : * ? " < > |` or a control character), two scenario file names
-    /// equal up to letter case or Unicode normalisation, a protocol with imports (a scenario names
-    /// one fixture), and a non-empty `--out`. On failure, nothing this run created is left.
+    /// declared outcome and per action blocked in some state, over the whole state space that
+    /// `canon check` covers. Each names the protocol path, as given, as its fixture, so
+    /// `canon conform run` runs them from the working directory `canon generate` ran in. Refused,
+    /// writing nothing: a protocol path that resolves outside the working directory, an outcome no
+    /// state reaches, a protocol that yields no scenario, an outcome or action identifier holding
+    /// a character a file name cannot hold (`/ \ : * ? " < > |` or a control character), two
+    /// scenario file names equal up to letter case or Unicode normalisation, a protocol with
+    /// imports (a scenario names one fixture), a non-empty `--out`, and a whole state space of
+    /// more than 65536 states, which `canon check` may still decide slice by slice. On failure,
+    /// nothing this run created is left.
     Generate {
         /// The protocol document, as a relative path without `..` components.
         #[arg(long)]

@@ -65,7 +65,8 @@ fn the_unbound_dimension_is_about_an_artifact_no_match_names_even_when_the_first
 /// The bound refusal names each dimension of a kind: the bound ones in subject order, then the
 /// unbound one, without a subject. `k` about `a` and about `b` are read by their own match and by
 /// the unbound one (2 + 2 results and no result: 32 values each); the unbound dimension only by the
-/// unbound match (2 + 1: 8 values). 32 * 32 * 8 * 3 * 3 = 73728.
+/// unbound match (2 + 1: 8 values). 32 * 32 * 8 * 3 * 3 = 73728, all in the slice of `one`, whose
+/// precondition reads `x` and which requires both capabilities (story:check-subject-slices).
 #[test]
 fn the_bound_refusal_names_bound_dimensions_then_the_unbound_one() {
     let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
@@ -77,13 +78,14 @@ fn the_bound_refusal_names_bound_dimensions_then_the_unbound_one() {
         {evidence: {kind: k, result: u0}}, {evidence: {kind: k, result: u1}}, \
         {evidence: {kind: k, subject: a, result: r0}}, {evidence: {kind: k, subject: a, result: r1}}]}}\n\
         actions:\n\
-        \x20\x20one: {requires: [{capability: c2}], may_produce: [{evidence: k}]}\n\
+        \x20\x20one: {precondition: {claim: x}, requires: [{capability: c1}, {capability: c2}], \
+        may_produce: [{evidence: k}]}\n\
         \x20\x20two: {requires: [{capability: c1}]}\n";
     assert_eq!(
         report(source, None),
-        "refused state-space-bound: protocol `p` revision 1 has 73728 states, more than the bound \
-         of 65536: evidence kind `k` about `a` 32, evidence kind `k` about `b` 32, evidence kind \
-         `k` 8, capability `c1` 3, capability `c2` 3"
+        "refused state-space-bound: protocol `p` revision 1: action `one` reads 73728 states, \
+         more than the bound of 65536: evidence kind `k` about `a` 32, evidence kind `k` about \
+         `b` 32, evidence kind `k` 8, capability `c1` 3, capability `c2` 3"
     );
 }
 
