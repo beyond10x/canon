@@ -19,9 +19,21 @@ scope:
 - confidence: cited
   path: Taskfile.yml
 - confidence: inferred
+  path: crates/canon-cli/Cargo.toml
+- confidence: inferred
+  path: crates/canon-cli/tests
+- confidence: inferred
   path: crates/canon-cli/tests/adversary2_review_hardening.rs
 - confidence: inferred
+  path: crates/canon-expr/Cargo.toml
+- confidence: inferred
+  path: crates/canon-expr/tests
+- confidence: inferred
+  path: crates/canon/Cargo.toml
+- confidence: inferred
   path: crates/canon/src/check/tests.rs
+- confidence: inferred
+  path: crates/canon/tests
 - confidence: inferred
   path: crates/canon/tests/adversary2_invalidation.rs
 - confidence: inferred
@@ -40,7 +52,7 @@ scope:
   path: crates/canon/tests/invalidation_evaluation_cost.rs
 - confidence: inferred
   path: crates/canon/tests/missing_keys.rs
-revision: 14
+revision: 16
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 8}
 - {from: "proposed", to: "active", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 9}
@@ -221,3 +233,32 @@ and names what the measurement has to settle. Each binds the unit in addition to
   in `crates/canon/src` against 354 run at `1c402241`; the unit states the reason for the 12.
 - `.github/workflows/pages.yml:39` runs `cargo test -p canon-docs` outside the gate. It is not in
   the 120 s bound; the unit reports its time.
+
+## Added 2026-11-21 at 23:22 CET: few test binaries, no full debug info
+
+`~/beyond10x/AGENTS.md` § Tests stay fast gained a line (lines 44-47): "Test binaries are few:
+one integration-test binary per crate (`tests/main.rs` with modules), and `[profile.dev] debug =
+false` or a test profile without full debug info." Its cause, in the same line: another
+repository's first whole-workspace nextest run "linked 516 test executables of up to 269 MB
+each, 33 GB in `target/debug/deps` within 15 minutes; canon's step runs 162 binaries one after
+another." The `host-operator` session sent it for this story and asks for the binary count
+before and after.
+
+Counted at `67e5dee8`: 100 files in `crates/canon/tests`, 55 in `crates/canon-cli/tests`, 3 in
+`crates/canon-expr/tests`; each is one test executable today.
+
+It binds this story, in addition to § Acceptance:
+
+- One integration-test binary per crate, and a test profile without full debug info. The unit
+  measures link time and the size of `target/` before and after, and reports the number of test
+  executables before and after, per crate.
+- A test file that is in no module tree never runs and nothing fails. A test reads each crate's
+  `tests/` directory and fails when a `.rs` file there is not a declared module of the one
+  binary. The count of tests from the runner is equal before and after.
+- The form that keeps every test file at its path is preferred (`autotests = false` and one
+  `[[test]]`): other stories and the store's typed scopes name files under `crates/*/tests/`.
+- Everything that names a test binary changes with it: the `--test` lines of `Taskfile.yml`,
+  `AGENTS.md`, the tests that re-run their own binary with `--exact`. `pages.yml` is not this
+  unit's; what must change there is handed over as a patch.
+- Tests that relied on one process per file are named, with the runner each remaining test line
+  uses.
