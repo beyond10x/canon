@@ -259,7 +259,10 @@ fn an_expired_child_outcome_still_counts_for_the_children_form() {
     // story:simulate-child-outcome-step, under which a child's outcome arrives after its opening
     // whether `open_change` is admissible or not: the smallest such states are now the `cycle`
     // with the unlisted outcome alone, where `open_change` only opens another child, and the
-    // `stuck-state` after `lock`, where nothing is admissible.
+    // `stuck-state` after `lock`, where nothing is admissible. Re-pinned under the count of
+    // children (D1): the stuck state is reached by two children, one accepted and one unlisted,
+    // with none left; the cycle holds two or more children not ended, where a step of
+    // `open_change` no longer changes the count.
     let report = simulate::simulate(&ir).expect("walked");
     let dead: Vec<(&simulate::Dead, bool)> = report
         .findings
@@ -282,9 +285,9 @@ fn an_expired_child_outcome_still_counts_for_the_children_form() {
         dead.as_slice(),
         [(stuck, false), (cycle, true)] if stuck.state
             == "{evidence `case_outcome` result `accepted`, evidence `case_outcome`, evidence \
-                `lock`, action `open_change` opened a child}"
+                `lock`}"
             && cycle.state
-                == "{evidence `case_outcome`, action `open_change` opened a child}"
+                == "{evidence `case_outcome`, action `open_change` opened 2 or more children}"
     );
     assert!(
         !expired_child && !lock_reported && only_the_unlisted,

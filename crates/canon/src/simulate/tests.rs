@@ -507,12 +507,15 @@ fn a_child_that_ends_replaces_its_open_record_held_as_expired() {
 }
 
 /// A mark is a part of the state (R1 counts it): three opening actions admissible everywhere,
-/// which record nothing, reach the eight sets of their marks, and each of the seven that is not
-/// empty again with the one class of `case_outcome` a child may record, 15 states; without
-/// `case_open` the one empty state, each action's step returning it. The child-outcome step is
-/// no action step: the state with every mark and a child's outcome is still a `cycle`.
+/// which record nothing, reach the 27 combinations of their marks (none, one, two or more each),
+/// and each again with the one class of `case_outcome` a child may record, which a child's
+/// outcome adds while lowering a mark or leaving one at two or more, 54 states, within the bound
+/// of 3^k times the states without marks; without `case_open` the one empty state, each action's
+/// step returning it. A step of an action at two or more children returns the state, so the
+/// `cycle` is the state with every mark at two or more; the child-outcome step is no action step,
+/// so that state with a child's outcome is a `cycle` too.
 #[test]
-fn every_set_of_marks_is_a_state_of_its_own() {
+fn every_combination_of_marks_is_a_state_of_its_own() {
     let source = format!(
         "{HEAD}\
          evidence_kinds: {{case_outcome: {{description: The outcome of a child case.}}}}\n\
@@ -522,15 +525,16 @@ fn every_set_of_marks_is_a_state_of_its_own() {
          \x20 c: {{description: Open one., case_open: {{protocol: q, subject: doc}}}}\n"
     );
     let walked = simulate(&compiled(&source)).expect("walked");
-    assert_eq!(walked.states, 15, "{walked}");
+    assert_eq!(walked.states, 54, "{walked}");
     assert_eq!(
         walked.to_string(),
-        "cycle: state {action `a` opened a child, action `b` opened a child, action `c` opened a \
-         child}: no outcome is legitimate, no action is approval-required, and every step of \
-         action `a`, action `b`, action `c` returns this state; path: action `a` produces \
-         nothing, then action `b` produces nothing, then action `c` produces nothing; 1 other \
-         cycle state contains it\n\
-         simulated: protocol `p` revision 1: 15 reachable states, 0 terminable, 0 waiting on \
+        "cycle: state {action `a` opened 2 or more children, action `b` opened 2 or more \
+         children, action `c` opened 2 or more children}: no outcome is legitimate, no action is \
+         approval-required, and every step of action `a`, action `b`, action `c` returns this \
+         state; path: action `a` produces nothing, then action `a` produces nothing, then action \
+         `b` produces nothing, then action `b` produces nothing, then action `c` produces \
+         nothing, then action `c` produces nothing; 1 other cycle state contains it\n\
+         simulated: protocol `p` revision 1: 54 reachable states, 0 terminable, 0 waiting on \
          supplied evidence, a child outcome or expiry, 1 finding (2 stuck or cycle states)\n"
     );
     let without = simulate(&compiled(
@@ -538,6 +542,127 @@ fn every_set_of_marks_is_a_state_of_its_own() {
     ))
     .expect("walked");
     assert_eq!(without.states, 1, "{without}");
+}
+
+/// R5 with the count of children (D1): a mark is in a state's containment and size, none below
+/// one below two or more, one thing per child it counts. A mark left out of `records_within`
+/// would let a state with a child not ended be contained in one without it; left out of `size`,
+/// it would make a state with a child as small as the state without.
+#[test]
+fn a_mark_counts_in_containment_and_size_by_its_children() {
+    let ir = compiled(&format!(
+        "{HEAD}\
+         evidence_kinds: {{case_outcome: {{description: The outcome of a child case.}}}}\n\
+         actions: {{a: {{description: Open one., case_open: {{protocol: q, subject: doc}}}}}}\n"
+    ));
+    let space = Space::new(&ir);
+    let dimensions = space.walked();
+    let base = space.initial_states().remove(0);
+    let layout = Layout::new(&dimensions, base.len()).marking(vec![0]);
+    let mut none = base.clone();
+    none.resize(layout.length(), 0);
+    let one = layout.raise(&none, 0);
+    let two = layout.raise(&one, 0);
+    assert_eq!(
+        [&none, &one, &two].map(|state| layout.mark(state, 0)),
+        [0, 1, 2]
+    );
+    assert_eq!(layout.raise(&two, 0), two);
+    assert_eq!(layout.marked(&two, 0, 1), one);
+    assert_eq!(layout.marked(&one, 0, 0), none);
+    assert!(layout.records_within(&none, &one) && layout.records_within(&one, &two));
+    assert!(
+        !layout.records_within(&one, &none),
+        "a child is not within no child"
+    );
+    assert!(
+        !layout.records_within(&two, &one),
+        "two children are not within one"
+    );
+    assert_eq!(
+        [&none, &one, &two].map(|state| layout.size(state) - layout.size(&none)),
+        [0, 1, 2]
+    );
+}
+
+/// D2: a child that ends lowers its action's mark by one child, so a second child's outcome still
+/// arrives after the first child ended. The opening action is taken twice before `close`; one
+/// child ends accepted, the other declined, and with both results neither outcome is legitimate:
+/// a stuck state a real case with two children reaches, which a mark cleared by the first
+/// child's end would never print. With one child, its one outcome makes an outcome legitimate.
+#[test]
+fn a_second_child_ends_after_the_first_one_ended() {
+    let source = format!(
+        "{HEAD}\
+         evidence_kinds:\n\
+         \x20 case_outcome: {{description: The outcome of a child case.}}\n\
+         \x20 closure: {{description: No more children.}}\n\
+         \x20 opened: {{description: A child was opened.}}\n\
+         claims:\n\
+         \x20 closed: {{description: Closed., true_when: {{evidence: {{kind: closure}}}}}}\n\
+         \x20 started: {{description: Started., true_when: {{evidence: {{kind: opened}}}}}}\n\
+         \x20 passed: {{description: A child passed., true_when: {{evidence: {{kind: \
+         case_outcome, result: accepted}}}}}}\n\
+         \x20 failed: {{description: A child failed., true_when: {{evidence: {{kind: \
+         case_outcome, result: declined}}}}}}\n\
+         actions:\n\
+         \x20 open: {{description: Open one., precondition: {{claim: closed, is: unknown}}, \
+         case_open: {{protocol: q, subject: doc}}, may_produce: [{{evidence: opened}}]}}\n\
+         \x20 close: {{description: Close., precondition: {{all: [{{claim: started}}, {{claim: \
+         closed, is: unknown}}]}}, may_produce: [{{evidence: closure}}]}}\n\
+         outcomes:\n\
+         \x20 passed: {{description: Closed and a child passed., requires: {{all: [{{claim: \
+         closed}}, {{claim: passed}}, {{claim: failed, is: false}}]}}}}\n\
+         \x20 failed: {{description: Closed and a child failed., requires: {{all: [{{claim: \
+         closed}}, {{claim: failed}}, {{claim: passed, is: false}}]}}}}\n"
+    );
+    assert_eq!(
+        report(&source),
+        "stuck-state: state {evidence `case_outcome`, evidence `closure`, evidence `opened`}: no \
+         outcome is legitimate and no action is admissible or approval-required; path: action \
+         `open` produces evidence `opened`, then action `close` produces evidence `closure`, then \
+         a child of action `open` records evidence `case_outcome`; 11 other stuck states contain \
+         it\n\
+         stuck-state: state {evidence `case_outcome` result `accepted`, evidence `case_outcome` \
+         result `declined`, evidence `closure`, evidence `opened`}: no outcome is legitimate and \
+         no action is admissible or approval-required; path: action `open` produces evidence \
+         `opened`, then action `open` produces evidence `opened`, then action `close` produces \
+         evidence `closure`, then a child of action `open` records evidence `case_outcome` result \
+         `accepted`, then a child of action `open` records evidence `case_outcome` result \
+         `declined`; 5 other stuck states contain it\n\
+         simulated: protocol `p` revision 1: 47 reachable states, 6 terminable (outcome `failed` \
+         3, outcome `passed` 3), 2 waiting on supplied evidence, a child outcome or expiry, 2 \
+         findings (15 stuck or cycle states)\n"
+    );
+}
+
+/// D5: a state that holds an `open` record, current or held as expired (R2a), holds a mark above
+/// none, since an `open` record is a child that has not ended. In `HELD` a second child may
+/// record `open`, the record expire, and that child end accepted: the successor that keeps the
+/// expired `open` record beside the new outcome with every mark at none would stand for a third
+/// child, and is not one. No printed state holds `open` without a mark.
+#[test]
+fn an_open_record_keeps_a_mark_above_none() {
+    let text = report(HELD);
+    for line in text
+        .lines()
+        .filter(|line| line.starts_with("stuck-state: ") || line.starts_with("cycle: "))
+    {
+        let state = line.split("}: ").next().expect("a state");
+        assert!(
+            !state.contains("result `open`") || state.contains(" opened "),
+            "{line}"
+        );
+    }
+    assert_eq!(
+        text.lines().last(),
+        Some(
+            "simulated: protocol `p` revision 1: 252 reachable states, 9 terminable (outcome \
+             `done` 9), 41 waiting on supplied evidence, a child outcome or expiry, 5 findings \
+             (183 stuck or cycle states)"
+        ),
+        "{text}"
+    );
 }
 
 /// The walk is a pure function: the same IR gives the same report, and a protocol with its
