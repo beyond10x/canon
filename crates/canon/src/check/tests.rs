@@ -2131,33 +2131,8 @@ const FIXTURE_STATES: u128 = 8192;
 /// `properties.yaml` when it has one.
 #[test]
 fn every_fixture_protocol_checks_alike_sliced_and_whole() {
-    let manifest = std::env::var_os("CARGO_MANIFEST_DIR").expect("run through cargo");
-    let root = std::path::PathBuf::from(manifest).join("../../fixtures");
-    let mut pending = vec![root];
-    let mut files = Vec::new();
-    while let Some(dir) = pending.pop() {
-        for entry in std::fs::read_dir(&dir).expect("readable") {
-            let path = entry.expect("readable").path();
-            if path.is_dir() {
-                pending.push(path);
-            } else if path.extension().is_some_and(|e| e == "yaml") {
-                files.push(path);
-            }
-        }
-    }
-    files.sort();
     let (mut compared, mut sliced) = (0, 0);
-    for path in files {
-        let source = std::fs::read_to_string(&path).expect("readable");
-        if !source.starts_with("format: protocol/1") || path.ends_with("properties.yaml") {
-            continue;
-        }
-        let Ok(ir) = parse(&source)
-            .map_err(|_| ())
-            .and_then(|m| crate::ir::compile(&m).map_err(|_| ()))
-        else {
-            continue;
-        };
+    for (path, ir) in fixture_protocols() {
         if Space::new(&ir)
             .size()
             .is_none_or(|size| size > FIXTURE_STATES)
@@ -2180,6 +2155,78 @@ fn every_fixture_protocol_checks_alike_sliced_and_whole() {
         compared >= 20 && sliced >= 10,
         "{sliced} of {compared} fixtures sliced"
     );
+}
+
+/// Every `protocol/1` document under `fixtures/` that compiles, in path order, with its path.
+fn fixture_protocols() -> Vec<(std::path::PathBuf, Ir)> {
+    let manifest = std::env::var_os("CARGO_MANIFEST_DIR").expect("run through cargo");
+    let root = std::path::PathBuf::from(manifest).join("../../fixtures");
+    let mut pending = vec![root];
+    let mut files = Vec::new();
+    while let Some(dir) = pending.pop() {
+        for entry in std::fs::read_dir(&dir).expect("readable") {
+            let path = entry.expect("readable").path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().is_some_and(|e| e == "yaml") {
+                files.push(path);
+            }
+        }
+    }
+    files.sort();
+    files
+        .into_iter()
+        .filter_map(|path| {
+            let source = std::fs::read_to_string(&path).expect("readable");
+            if !source.starts_with("format: protocol/1") || path.ends_with("properties.yaml") {
+                return None;
+            }
+            let ir = crate::ir::compile(&parse(&source).ok()?).ok()?;
+            Some((path, ir))
+        })
+        .collect()
+}
+
+/// Every probe of a whole product is one of its states: each value below the number of values its
+/// dimension has. Over every fixture protocol whose whole product can be counted, 600 generated
+/// protocols, and protocols that declare no artifact, whose evidence dimensions have one value but
+/// two producer sets.
+#[test]
+fn every_probe_is_a_state_of_the_whole_product() {
+    let mut spaces: Vec<(String, Ir)> = fixture_protocols()
+        .into_iter()
+        .map(|(path, ir)| (path.display().to_string(), ir))
+        .collect();
+    let mut rng = Rng(7);
+    let mut generated_count = 0;
+    while generated_count < 600 {
+        let (source, _) = generated(&mut rng);
+        if let Some(ir) = parse(&source)
+            .ok()
+            .and_then(|m| crate::ir::compile(&m).ok())
+        {
+            spaces.push((source, ir));
+            generated_count += 1;
+        }
+    }
+    for source in [
+        PROTOCOL.replace("artifacts: {a: {}}\n", ""),
+        UNREAD.replace("artifacts: {a: {}}\n", ""),
+    ] {
+        spaces.push((source.clone(), compiled(&source)));
+    }
+    let mut probed = 0;
+    for (name, ir) in &spaces {
+        let space = Space::new(ir);
+        if space.size().is_none() {
+            continue;
+        }
+        for probe in space.probes() {
+            assert!(space.is_state(&probe), "{name}: {probe:?}");
+        }
+        probed += 1;
+    }
+    assert!(probed > 600, "{probed} spaces probed");
 }
 
 /// A slice keeps the classes and producer profiles its evidence dimensions have in the whole

@@ -1213,7 +1213,8 @@ impl<'a> Space<'a> {
     /// one dimension alone is not at its least value, holding
     ///
     /// - for an evidence dimension, each set of producers of its first class and upstream vector,
-    ///   its values below the number of sets: the records of a dimension differ, as the evaluator
+    ///   its values below the number of sets and below its number of values (a dimension without
+    ///   classes has one value, and no record): the records of a dimension differ, as the evaluator
     ///   checks them, only in their producers, since each names the dimension's kind, artifact and
     ///   upstream artifacts, and its result and upstream revisions are never refused;
     /// - for a capability, a decision, a case input or a later-record dimension, each value;
@@ -1235,8 +1236,11 @@ impl<'a> Space<'a> {
             probes.push(state);
         };
         for (at, kind) in self.kinds.iter().enumerate() {
+            // A dimension without classes, of a protocol that declares no artifact, has one value
+            // whatever its producer sets.
+            let radix = radices[at].expect("the size fits, so every radix does");
             let sets = kind.values.as_ref().map_or(1, Vec::len);
-            for value in 1..sets {
+            for value in 1..u128::try_from(sets).expect("few producer sets").min(radix) {
                 probe(at, u32::try_from(value).expect("few producer sets"));
             }
         }
@@ -1261,6 +1265,18 @@ impl<'a> Space<'a> {
         }
         probes.sort_by_key(|state| self.index(state));
         probes
+    }
+
+    /// Whether `state` is a state of this space: a value for each dimension, each below the number
+    /// of values the dimension has.
+    #[cfg(test)]
+    pub(super) fn is_state(&self, state: &State) -> bool {
+        let radices = self.radices();
+        state.len() == radices.len()
+            && state
+                .iter()
+                .zip(&radices)
+                .all(|(value, radix)| radix.is_some_and(|radix| u128::from(*value) < radix))
     }
 
     /// The index of `state`: the inverse of [`Space::state`].
