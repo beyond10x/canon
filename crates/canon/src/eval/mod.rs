@@ -286,6 +286,19 @@
 //!   `approval-required`, and one with an empty `may_produce`, is not. It reads `may_produce` and
 //!   the records, so a kind that declares `supplied_by` is listed like any other, and it claims
 //!   nothing about running the action (CANON-FRONTIER-001).
+//! - `pending_decisions` lists the decisions the evaluation waits on (`pending.rs`). Under
+//!   `authority`, one entry per reason `{"capability", "decision": "none" | "require_approval",
+//!   "scope"?}` of an `approval-required` action, `{"action", "capability", "scope"?, "current",
+//!   "case_revision"?, "options": ["granted", "denied"]}`, by action, then capability, then scope
+//!   (no scope first, then by key-value pairs in key order, key before value, a prefix first);
+//!   a `blocked` action has none. Under `decisions`, one entry per outcome reason `{"decision":
+//!   <name>, "present": false}`, `{"outcome", "decision", "case_revision"?, "options"}`, by
+//!   outcome, the options `["taken"]`, or `[]` for a snapshot without a revision. `case_revision`
+//!   is the snapshot's `revision`, written when it has one. Each list, and the section, is written
+//!   only when it has an entry. It reads the reasons of those two sections and the case revision,
+//!   and nothing else, so it decides no coverage or lapse of its own; precedence does not change, so
+//!   a `granted` entry decides a `require_approval` requirement only when no `require_approval`
+//!   entry still covers it (CANON-PENDING-001).
 //!
 //! # Authority decisions
 //!
@@ -340,6 +353,7 @@ mod missing;
 mod obligations;
 mod order;
 mod outcomes;
+mod pending;
 mod read;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -505,6 +519,9 @@ pub fn evaluate_with(
             &applicable,
             claims.iter().map(|(_, entry)| entry),
         );
+        // Read from the reasons the two stages gave, so coverage and lapse are decided once.
+        let pending_decisions =
+            pending::section(actions.as_ref(), outcomes.as_ref(), case.revision.as_ref());
         let mut decision = Decision {
             format: DECISION_FORMAT.to_owned(),
             case: case.id.clone(),
@@ -516,6 +533,7 @@ pub fn evaluate_with(
             outcomes,
             explanation: None,
             missing_evidence,
+            pending_decisions,
         };
         let inputs = crate::explain::Inputs {
             authority: authority.as_ref(),

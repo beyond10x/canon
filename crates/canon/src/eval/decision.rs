@@ -2,9 +2,11 @@
 //! [`crate::model::Decision`]; this file is its one serialization, canonical JSON (`json.rs`).
 //!
 //! The document's top-level keys are its sections: `format`, `case`, `protocol`,
-//! `protocol_revision`, `claims`, the slots `obligations`, `actions`, `outcomes` and
-//! `explanation`, and the typed section `missing_evidence` (an action's id to a list of evidence
-//! kinds). A slot that is absent is not written, and neither is a claim's
+//! `protocol_revision`, `claims`, the slots `obligations`, `actions`, `outcomes`, `explanation`
+//! and `pending_decisions`, and the typed section `missing_evidence` (an action's id to a list of
+//! evidence kinds). They are written in code-point order, as every object of the document is, so a
+//! section's place is fixed by its name: `pending_decisions` comes after `outcomes` and before
+//! `protocol`. A slot that is absent is not written, and neither is a claim's
 //! `excluded_evidence` list when it is empty, so a decision that fills no slot is written exactly
 //! as `canon-decision/1` was before the slots existed.
 
@@ -30,11 +32,14 @@ fn sections(decision: &Decision) -> BTreeMap<&'static str, Value> {
         ),
         ("claims", Value::Object(claims)),
     ]);
+    // One line per untyped slot; the position of a key in the document is its code-point order,
+    // not its place here.
     for (name, slot) in [
         ("obligations", &decision.obligations),
         ("actions", &decision.actions),
         ("outcomes", &decision.outcomes),
         ("explanation", &decision.explanation),
+        ("pending_decisions", &decision.pending_decisions),
     ] {
         if let Some(value) = slot {
             sections.insert(name, Value::json(value));
@@ -125,6 +130,7 @@ mod tests {
             outcomes: None,
             explanation: None,
             missing_evidence: None,
+            pending_decisions: None,
         }
     }
 
@@ -175,6 +181,31 @@ mod tests {
             render_sections(&decision, &listed(&["missing_evidence"])),
             "{\n  \"missing_evidence\": {\n    \"inspect\": [],\n    \"probe\": [\n      \"a\",\n      \"b\"\n    ]\n  }\n}\n"
         );
+    }
+
+    /// `pending_decisions` is written after `outcomes` and before `protocol`, its code-point place,
+    /// only when present, and leaves every other section's bytes as they were.
+    #[test]
+    fn the_pending_decisions_slot_is_written_in_its_code_point_place_and_only_when_present() {
+        let mut decision = decision();
+        decision.outcomes = Some(serde_json::json!({"o": "blocked"}));
+        let before = render(&decision);
+        decision.pending_decisions = Some(serde_json::json!({"decisions": []}));
+        assert_eq!(
+            render(&decision),
+            "{\n  \"case\": \"C\",\n  \"claims\": {\n    \"c\": {\n      \"value\": \"unknown\"\n    }\n  },\n  \"format\": \"canon-decision/1\",\n  \"outcomes\": {\n    \"o\": \"blocked\"\n  },\n  \"pending_decisions\": {\n    \"decisions\": []\n  },\n  \"protocol\": \"p\",\n  \"protocol_revision\": 2\n}\n"
+        );
+        let others: BTreeSet<String> = [
+            "case",
+            "claims",
+            "format",
+            "outcomes",
+            "protocol",
+            "protocol_revision",
+        ]
+        .map(str::to_owned)
+        .into();
+        assert_eq!(render_sections(&decision, &others), before);
     }
 
     #[test]

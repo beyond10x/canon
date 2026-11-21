@@ -1,7 +1,7 @@
 //! The `canon-decision/1` document: which protocol revision applied to which case, the
 //! three-valued value of every claim the protocol declares (design § 8, § 14), and one optional
-//! slot per further section: obligations, actions, outcomes and the explanation, and the typed
-//! section `missing_evidence`.
+//! slot per further section: obligations, actions, outcomes, the explanation and the pending
+//! decisions, and the typed section `missing_evidence`.
 
 use super::Declarations;
 use super::ids::{ActionId, CaseId, ClaimId, EvidenceId, EvidenceKindId, ProtocolId};
@@ -51,6 +51,23 @@ pub struct Decision {
     /// is applicable when the revision-binding and freshness stages leave it and no claim lists it
     /// in its `excluded_evidence`. Its shape is fixed by CANON-FRONTIER-001.
     pub missing_evidence: Option<Declarations<ActionId, Vec<EvidenceKindId>>>,
+    /// The decisions the evaluation waits on, each a `canon-authority/1` or `canon-decisions/1`
+    /// entry that would change a status in this decision; written only when there is one. Under
+    /// `authority`, one entry per requirement an `approval-required` action names with the decision
+    /// `none` or `require_approval`: `{"action", "capability", "scope", "current", "case_revision",
+    /// "options": ["granted", "denied"]}`, `current` being that decision, `scope` written when the
+    /// requirement has one and `case_revision`, the case snapshot's revision, when it has one. A
+    /// blocked action has none. Ordered by action, then capability, then scope: no scope first,
+    /// then two scopes by their key-value pairs in key order, compared pair by pair, key before
+    /// value, a scope that is a prefix of the other first. Under `decisions`, one entry per outcome
+    /// blocked for want of an explicit decision, `{"outcome", "decision", "case_revision",
+    /// "options": ["taken"]}`, in outcome order; for a snapshot without a revision it has no
+    /// `case_revision` and the options `[]`, as no explicit decision can apply. Each list is left
+    /// out when empty. An option is the value of the entry a caller would add, with its own
+    /// principal; precedence does not change, so a `granted` entry decides a requirement whose
+    /// `current` is `require_approval` only when no `require_approval` entry still covers it. Its
+    /// shape is fixed by CANON-PENDING-001.
+    pub pending_decisions: Option<Json>,
 }
 
 /// One claim's entry in a decision.
