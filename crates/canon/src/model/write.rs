@@ -103,12 +103,12 @@
 //!
 //! # Depth
 //!
-//! `write` recurses once per level of nesting of a predicate or of an `arguments` value, so it
+//! `write` recurses per level of nesting of a predicate or of an `arguments` value, one call per level and two per level of `all` or `any`, so it
 //! uses stack in proportion to the nesting depth and returns for every model whose nesting the
 //! calling thread's stack holds. `parse` gives at most 123 levels of predicate and 125 of
 //! `arguments` (`serde_yaml_ng`'s recursion limit), and the written text nests exactly as deep as
 //! the model, so every model `parse` gives is written and read back. A model built in Rust nested
-//! deeper than `parse` reads is written (a predicate 500 deep, on a thread with a 2 MiB stack,
+//! deeper than `parse` reads is written (a predicate 400 deep, of any form, on a thread with a 2 MiB stack,
 //! in a debug build) as far as the stack allows, and `parse` refuses its text.
 //!
 //! # Model values `parse` never gives

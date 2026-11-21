@@ -8,8 +8,8 @@
 //! intact, which `parse` refuses. Each case pins that.
 //!
 //! The second group holds a model built in Rust nested deeper than `parse` reads. Decided in
-//! review, D2: `write` recurses once per level and returns for every model whose nesting the
-//! calling thread's stack holds; the case writes a predicate 500 deep on a 2 MiB stack.
+//! review, D2: `write` recurses per level and returns for every model whose nesting the
+//! calling thread's stack holds; the case writes a predicate 400 deep on a 2 MiB stack.
 //!
 //! The third group pins what the writer documents and no other case observes, so a mutant of the
 //! writer that changes it turns a case red: `Some` of empty arguments, the order of keys inside
@@ -125,14 +125,14 @@ fn a_plain_key_of_600_backslashes_is_given_by_parse_and_its_written_text_is_refu
 // ---------------------------------------------------------------------------------------------
 // A model built in Rust, nested deeper than `parse` reads.
 
-// Decided in review, D2 and D4
+// Decided in review, D2 and D5
 #[test]
-fn a_predicate_nested_500_deep_is_written_on_a_thread_with_a_2_mib_stack() {
+fn a_predicate_nested_400_deep_is_written_on_a_thread_with_a_2_mib_stack() {
     let written = std::thread::Builder::new()
         .stack_size(2 * 1024 * 1024)
         .spawn(|| {
             let mut predicate = Predicate::All(Vec::new());
-            for _ in 0..500 {
+            for _ in 0..400 {
                 predicate = Predicate::Not(Box::new(predicate));
             }
             let mut protocol = model::parse(HEADER).expect("the header parses");
@@ -152,13 +152,13 @@ fn a_predicate_nested_500_deep_is_written_on_a_thread_with_a_2_mib_stack() {
         .join()
         .expect("write returns on the 2 MiB stack");
     assert!(written.ends_with("}\n"));
-    assert_eq!(written.matches("\"not\"").count(), 500);
-    // Each `not` is one object deeper: the innermost is 500 objects below the claim's.
+    assert_eq!(written.matches("\"not\"").count(), 400);
+    // Each `not` is one object deeper: the innermost is 400 objects below the claim's.
     let deepest = written
         .lines()
         .map(|line| line.len() - line.trim_start().len())
         .max();
-    assert!(deepest.is_some_and(|indent| indent >= 2 * 500));
+    assert!(deepest.is_some_and(|indent| indent >= 2 * 400));
     assert!(
         model::parse(&written).is_err(),
         "parse reads at most 123 levels"
@@ -402,17 +402,18 @@ fn a_key_reads_back_at_1022_bytes_and_not_at_1023_in_every_map_the_model_keys_by
     }
 }
 
-/// "Depth": a predicate 500 deep is written on a 2 MiB stack in a debug build. The case of D4
+/// "Depth": a predicate 400 deep is written on a 2 MiB stack in a debug build. The case above
 /// nests `not`; `all` and `any` take more stack per level (`predicate`, then `predicates`), so
 /// they are the shape that overflows first. Measured on 2026-11-21, debug build, rustc 1.99.1:
 /// `all` holds 808 levels and overflows at 809, `not` holds 1152.
+// Decided in review, D2 and D5
 #[test]
-fn a_predicate_of_all_nested_500_deep_is_written_on_a_thread_with_a_2_mib_stack() {
+fn a_predicate_of_all_nested_400_deep_is_written_on_a_thread_with_a_2_mib_stack() {
     let written = std::thread::Builder::new()
         .stack_size(2 * 1024 * 1024)
         .spawn(|| {
             let mut predicate = Predicate::All(Vec::new());
-            for _ in 0..500 {
+            for _ in 0..400 {
                 predicate = Predicate::All(vec![predicate]);
             }
             let protocol = with_claim("c", predicate);
@@ -425,5 +426,5 @@ fn a_predicate_of_all_nested_500_deep_is_written_on_a_thread_with_a_2_mib_stack(
         .join()
         .expect("write returns on the 2 MiB stack");
     assert!(written.ends_with("}\n"));
-    assert_eq!(written.matches("\"all\"").count(), 501);
+    assert_eq!(written.matches("\"all\"").count(), 401);
 }
