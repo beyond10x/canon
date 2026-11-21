@@ -2,10 +2,11 @@
 format: aep.planning-md/3
 id: story:fast-test-step
 kind: story
-status: draft
+status: active
 title: The gate's test step ends within two minutes
 relations:
 - decomposes: epic:canon-kernel
+- serves: vision:governed-autonomy
 scope:
 - confidence: cited
   path: .config/nextest.toml
@@ -19,7 +20,10 @@ scope:
   path: Taskfile.yml
 - confidence: cited
   path: crates/canon-cli/tests/adversary_scenario_generation.rs
-revision: 7
+revision: 9
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 8}
+- {from: "proposed", to: "active", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 9}
 ---
 ## Outcome
 
