@@ -530,8 +530,7 @@ impl<'d, 'a> Layout<'d, 'a> {
                 continue;
             }
             let profiles = walked.profiles.len();
-            for class in 0..walked.classes.len() {
-                let start = self.slots[dimension][class];
+            for (class, &start) in self.slots[dimension].iter().enumerate() {
                 if state[start + profiles / 32] & (1 << (profiles % 32)) != 0 {
                     expired.push((dimension, class));
                 }
