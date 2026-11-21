@@ -1337,9 +1337,9 @@ impl<'a> Space<'a> {
     /// each kind its `may_produce` lists and, when it opens a child case, the `case_outcome`
     /// dimension about its `case_open` subject when something reads that artifact by name,
     /// otherwise the one standing for the artifacts nothing names (story:child-outcome-subject,
-    /// D1): a child's record is about the artifact the child was opened about. A protocol whose
-    /// `children` forms and evidence matches name no subject has one `case_outcome` dimension,
-    /// which every opening action produces, as before the key existed.
+    /// D1): a child's record is about the artifact the child was opened about. A protocol that
+    /// reads `case_outcome` about no artifact by name has one `case_outcome` dimension, which
+    /// every opening action produces, as before the key existed.
     pub(crate) fn produced_by(&self, ir: &Ir, action: &crate::ir::Action) -> BTreeSet<usize> {
         let opened = action.case_open.as_ref().zip(case_outcome(ir));
         let named = |kind: &EvidenceKindId, artifact: &ArtifactId| {
