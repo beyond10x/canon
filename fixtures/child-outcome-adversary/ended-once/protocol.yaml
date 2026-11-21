@@ -1,0 +1,74 @@
+format: protocol/1
+
+protocol:
+  id: adversary.ended_once
+  revision: 1
+  description: Open one child case once; publish under a capability once it ended accepted, or decline when it ended otherwise.
+
+artifacts:
+  thing:
+    description: The thing the child case settles.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child case.
+  opened:
+    description: The child case was opened.
+  publication:
+    description: The thing was published.
+
+claims:
+  resolved:
+    description: Every child case ended accepted.
+    true_when:
+      children:
+        in: [accepted]
+
+  started:
+    description: The child case was opened.
+    true_when:
+      evidence:
+        kind: opened
+
+  published:
+    description: The thing was published.
+    true_when:
+      evidence:
+        kind: publication
+
+actions:
+  open:
+    description: Open the child case once.
+    precondition:
+      claim: started
+      is: unknown
+    case_open:
+      protocol: adversary.task
+      subject: thing
+    may_produce:
+      - evidence: opened
+
+  publish:
+    description: Publish once every child ended accepted.
+    precondition:
+      claim: resolved
+    requires:
+      - capability: licence
+    may_produce:
+      - evidence: publication
+
+outcomes:
+  done:
+    description: Published.
+    requires:
+      all:
+        - claim: started
+        - claim: published
+
+  declined:
+    description: The child case ended otherwise.
+    requires:
+      all:
+        - claim: started
+        - claim: resolved
+          is: false
