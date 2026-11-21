@@ -52,7 +52,7 @@ scope:
   path: crates/canon/tests/invalidation_evaluation_cost.rs
 - confidence: inferred
   path: crates/canon/tests/missing_keys.rs
-revision: 16
+revision: 17
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 8}
 - {from: "proposed", to: "active", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 9}
@@ -234,7 +234,7 @@ and names what the measurement has to settle. Each binds the unit in addition to
 - `.github/workflows/pages.yml:39` runs `cargo test -p canon-docs` outside the gate. It is not in
   the 120 s bound; the unit reports its time.
 
-## Added 2026-11-21 at 23:22 CET: few test binaries, no full debug info
+## Added 2026-11-21 at 23:16 CET: few test binaries, no full debug info
 
 `~/beyond10x/AGENTS.md` § Tests stay fast gained a line (lines 44-47): "Test binaries are few:
 one integration-test binary per crate (`tests/main.rs` with modules), and `[profile.dev] debug =
