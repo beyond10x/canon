@@ -43,6 +43,7 @@
 //! | evidence kind an action may produce removed | `BREAKING` |
 //! | evidence kind an action may produce in both revisions becoming judgement-decided (its resolved `decided_by`) | `TIGHTENING` |
 //! | evidence kind an action may produce in both revisions becoming program-decided | `RELAXATION` |
+//! | group of kinds an action records together (`records_together`) added or removed, a changed group being one removed and one added (no evaluation, check or generation reads it; story:simulate-record-groups) | `NO SEMANTIC CHANGE` |
 //! | artifact added to what an action `revises` (more may move) | `RELAXATION` |
 //! | artifact removed from what an action `revises` | `TIGHTENING` |
 //! | action argument schema introduced or removed (absent, the action takes only `{}`) | `BREAKING` |
@@ -1014,6 +1015,7 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         author: from_author,
         may_produce: from_may_produce,
         judgement_decided: from_judged,
+        records_together: from_groups,
         revises: from_revises,
         arguments: from_arguments,
         case_open: from_case_open,
@@ -1027,6 +1029,7 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         author: to_author,
         may_produce: to_may_produce,
         judgement_decided: to_judged,
+        records_together: to_groups,
         revises: to_revises,
         arguments: to_arguments,
         case_open: to_case_open,
@@ -1111,6 +1114,31 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
                     one_line(kind.as_str()),
                     by.as_str()
                 ),
+            );
+        }
+    }
+    // No evaluation, check or generation reads `records_together` (story:simulate-record-groups,
+    // Correction): a group removed, then a group added, each `NO SEMANTIC CHANGE`.
+    let together = |group: &Vec<EvidenceKindId>| {
+        let kinds: Vec<String> = group
+            .iter()
+            .map(|kind| format!("`{}`", one_line(kind.as_str())))
+            .collect();
+        match kinds.split_last() {
+            Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
+            _ => kinds.join(""),
+        }
+    };
+    for (groups, others, how) in [
+        (from_groups, to_groups, "no longer records together"),
+        (to_groups, from_groups, "now records together"),
+    ] {
+        for group in groups.iter().filter(|group| !others.contains(group)) {
+            changes.push(
+                Category::NoSemanticChange,
+                SECTION,
+                id,
+                format!("{how} evidence {}", together(group)),
             );
         }
     }
@@ -1518,6 +1546,54 @@ mod tests {
             "{kinds}actions: {{act: {{author: program, revises: []}}}}\n"
         ));
         assert_eq!(lines(&unwritten, &written), Vec::<String>::new());
+    }
+
+    /// story:simulate-record-groups: no evaluation, check or generation reads `records_together`,
+    /// so a group removed and a group added are each `NO SEMANTIC CHANGE`, a changed group one of
+    /// each, after the kinds the action may produce and before what it revises; the same groups
+    /// written in another order are no change.
+    #[test]
+    fn a_record_group_added_removed_or_changed_is_no_semantic_change() {
+        let kinds = "artifacts: {a: {}}\nevidence_kinds: {k: {}, l: {}, m: {}, n: {}}\n";
+        let action = |rest: &str| {
+            ir(&format!(
+                "{kinds}actions: {{act: {{may_produce: [{{evidence: k}}, {{evidence: l}}, \
+                 {{evidence: m}}, {{evidence: n}}]{rest}}}}}\n"
+            ))
+        };
+        let none = action("");
+        let one = action(", records_together: [{kinds: [l, k]}]");
+        let two = action(", records_together: [{kinds: [n, m]}, {kinds: [k, l]}], revises: [a]");
+        let changed = action(", records_together: [{kinds: [k, l, m]}]");
+        assert_eq!(
+            lines(&none, &one),
+            ["NO SEMANTIC CHANGE: action `act` now records together evidence `k` and `l`"]
+        );
+        assert_eq!(
+            lines(&one, &none),
+            ["NO SEMANTIC CHANGE: action `act` no longer records together evidence `k` and `l`"]
+        );
+        assert_eq!(
+            lines(&one, &two),
+            [
+                "NO SEMANTIC CHANGE: action `act` now records together evidence `m` and `n`",
+                "RELAXATION: action `act` now revises artifact `a`",
+            ]
+        );
+        assert_eq!(
+            lines(&one, &changed),
+            [
+                "NO SEMANTIC CHANGE: action `act` no longer records together evidence `k` and `l`",
+                "NO SEMANTIC CHANGE: action `act` now records together evidence `k`, `l` and `m`",
+            ]
+        );
+        assert_eq!(
+            lines(
+                &two,
+                &action(", revises: [a], records_together: [{kinds: [l, k]}, {kinds: [m, n, m]}]")
+            ),
+            Vec::<String>::new()
+        );
     }
 
     /// An input `s` and a claim `c` for the protocols of the tests below.
