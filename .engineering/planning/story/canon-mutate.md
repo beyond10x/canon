@@ -30,7 +30,7 @@ scope:
   path: ess/domains/cli.yaml
 - confidence: cited
   path: fixtures/investigation/mutate/
-revision: 18
+revision: 19
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 - {from: "proposed", to: "active", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
@@ -146,3 +146,38 @@ give identical bytes. `every_canon_subcommand_is_declared_in_ess` passes.
 
 epic:protocol-analysis part 3; the `ess:hardening` skill's mutation technique; Atlas ADR 0080;
 rescope of 2026-11-20 (`approval-record:accept-drafts-2026-11-20`).
+
+## Decided in review, after adversary pass 1
+
+`review-result:adversary-canon-mutate-pass-1` was red by one case. The coordinator decided the
+points below on 2026-11-21; the correction is `4a545374` and `d3e3e09f`.
+
+- **D1. The mutant is handed in only where the protocol is a scenario's fixture.** The unit had
+  also handed it in where a scenario names the protocol under `imports`. An import is pinned by
+  the digest of its compiled IR, so every importing scenario failed on `import-digest-mismatch`
+  for every mutant that changes the IR; the mutant counted as killed and the run exited 0. § Outcome
+  already says it: the mutant goes in for "the fixture whose path is the `--path` file, and every
+  other fixture unchanged". Now only the scenarios whose fixture is the protocol run, in the
+  baseline and against the mutants; a scenario that names the protocol only as an import is not
+  run; a set in which the protocol is only ever an import is refused `no-scenario`.
+- **D2. No digest pin is rewritten.** Running a mutant of an imported protocol through its
+  importers' scenarios needs the importer's pin rewritten per mutant. That is not this story; it
+  is on the plan's backlog page, cost not assessed.
+- **D3. The read-back guard needed no code.** Removing it left the unit's tests green. The
+  adversary's case `mutate_reports_a_mutant_that_does_not_read_back_as_unwritable` fails on that
+  mutant. A protocol reaches the guard only with an identifier of 1023 bytes or more.
+- **D4. No second adversary pass.** The correction changes 59 lines of
+  `crates/canon/src/mutate/mod.rs`, in the one function that chooses the scenarios, plus comments
+  and help text. The coordinator read it. The adversary's red case passes unchanged, and two unit
+  tests pin the rules of D1 (`a_protocol_named_only_as_an_import_is_refused`,
+  `a_scenario_importing_the_protocol_does_not_run`).
+- **D5. § Acceptance holds as written.** The classifier gives `BREAKING` for any change to an
+  outcome's own requirement, so such a mutant is never a weak point. The weak point of the
+  `lacking` set is a mutant of the claim the outcome reads. The adversary checked 15 mutants by
+  hand against `canon conform run` and `canon diff`; all 15 were equal to what `canon mutate`
+  printed.
+- **D6. The measurement the brief asked for could not be made.** The coordinator's brief named
+  `fixtures/investigation/protocol.yaml` with `conformance/scenarios/`; no scenario of the suite
+  names that file, and `canon mutate` refuses it (`no-scenario`) in 0.10 s. The unit measured the
+  27 fixtures the suite does name: 0.11 to 0.50 s each on a debug binary, 0 invalid mutants. The
+  same 27 gave the same counts after the correction.
