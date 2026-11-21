@@ -34,6 +34,10 @@
 //! outcomes, was removed by story:simulate-child-outcome-step, whose child-outcome step those two
 //! fixtures also take.
 //!
+//! The revise step of story:simulate-revise-step, which moves an artifact an admissible action
+//! declares in `revises` to a new revision, is held by `simulate_revises_declared_artifacts` over
+//! the six `revise*` fixtures.
+//!
 //! Each fixture directory carries `protocol.yaml` and the exact output: `report.txt` on standard
 //! output with nothing on standard error, or `refusal.txt` on standard error with nothing on
 //! standard output. Both were written by hand from the story before `canon simulate` existed.
@@ -55,7 +59,7 @@ enum Expected {
 
 /// Every fixture directory, the exit status and where the expected text goes. A walk that finds
 /// nothing exits 0; findings and a refusal exit 1 (`REJECTED`).
-const CASES: [(&str, i32, Expected); 17] = [
+const CASES: [(&str, i32, Expected); 23] = [
     ("clean", 0, Expected::Report),
     ("mutual", 1, Expected::Report),
     ("denied", 1, Expected::Report),
@@ -73,6 +77,22 @@ const CASES: [(&str, i32, Expected); 17] = [
     ("clean-result", 0, Expected::Report),
     ("child-expiry", 1, Expected::Report),
     ("child-expiry-held", 1, Expected::Report),
+    ("revise", 0, Expected::Report),
+    ("revise-undeclared", 1, Expected::Report),
+    ("revise-upstream", 0, Expected::Report),
+    ("revise-denied", 1, Expected::Report),
+    ("revise-mixed", 0, Expected::Report),
+    ("revise-child", 0, Expected::Report),
+];
+
+/// The cases of story:simulate-revise-step, expectations 1 to 6.
+const REVISE: [&str; 6] = [
+    "revise",
+    "revise-undeclared",
+    "revise-upstream",
+    "revise-denied",
+    "revise-mixed",
+    "revise-child",
 ];
 
 /// The cases of the rules refined after adversary pass 2 (R2a and R7).
@@ -256,6 +276,33 @@ fn simulate_follows_the_refined_rules() {
 #[test]
 fn simulate_follows_the_rules_refined_after_pass_2() {
     let failures = failures(&CHILDREN);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// story:simulate-revise-step: an admissible action may move each artifact it declares in
+/// `revises` to a new revision, alone or with one record or one group it may produce, in one step.
+///
+/// 1. `revise`: a test of `doc` that did not pass is set aside by `fix`, which revises `doc` and
+///    records nothing, and `doc` is tested again: exit 0, the summary line only.
+/// 2. `revise-undeclared`, the same protocol without `revises`: the `cycle` naming `fix`, the
+///    bytes the walk gave before the revise step.
+/// 3. `revise-upstream`: a test of `b` under an invalidation rule with upstream `a`; `fix` revises
+///    `a`, which keeps the failed test from the claim, so `b` is tested again: exit 0. Without the
+///    change to "observed before upstream `a` moved" the revise step would change nothing and the
+///    state would be a `cycle`.
+/// 4. `revise-denied`: approving needs a denied capability; the case revision does not move, so
+///    the denial lasts, and exactly one `cycle` is printed, ending with the revision suffix.
+/// 5. `revise-mixed`: two different results of one approval leave it unknown; revising the
+///    document sets both aside: no finding.
+/// 6. `revise-child`: a child's `accepted` outcome stays read by the `children` form after its
+///    subject is revised, as an earlier record: exit 0, where a revise step that dropped the
+///    record would leave a `cycle`.
+///
+/// Two runs of each give identical bytes (`failures`); the fixtures without `revises` are held
+/// unchanged by the other tests of this file (expectation 7).
+#[test]
+fn simulate_revises_declared_artifacts() {
+    let failures = failures(&REVISE);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
