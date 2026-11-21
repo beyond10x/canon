@@ -1336,6 +1336,21 @@ fn words(predicate: &Predicate) -> String {
                 code(form.last.as_str())
             )
         }
+        Predicate::Descended(form) => {
+            let about = form
+                .subject
+                .as_ref()
+                .map(|subject| format!(" about {}", code(subject.as_str())))
+                .unwrap_or_default();
+            format!(
+                "evidence of kind {}{about} with result {} on the current revision names an item \
+                 that evidence of kind {} with result {} names on a revision it descends from",
+                code(form.then.kind.as_str()),
+                code(&form.then.result),
+                code(form.first.kind.as_str()),
+                code(&form.first.result)
+            )
+        }
         Predicate::Input(test) => format!(
             "input {} is one of {}",
             code(test.input.as_str()),

@@ -9,9 +9,9 @@ use std::cmp::Ordering;
 
 use b10x_canon::ir;
 use b10x_canon::model::{
-    Artifact, Claim, ClaimId, ClaimTest, Declarations, EvidenceAfter, EvidenceKind, EvidenceKindId,
-    EvidenceMatch, EvidenceOrder, EvidenceSince, FirstResult, LaterRecord, Outcome, OutcomeId,
-    Predicate, Protocol, ProtocolHeader, ProtocolId, Truth,
+    Artifact, Claim, ClaimId, ClaimTest, Declarations, EvidenceAfter, EvidenceDescended,
+    EvidenceKind, EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceSince, FirstResult,
+    LaterRecord, Outcome, OutcomeId, Predicate, Protocol, ProtocolHeader, ProtocolId, Truth,
 };
 
 /// Identifiers chosen where code-point order is easy to get wrong: case, a Latin-1 letter, a BMP
@@ -233,11 +233,12 @@ fn documented_order(left: &Predicate, right: &Predicate) -> Ordering {
             Predicate::Before(_) => 3,
             Predicate::Children(_) => 4,
             Predicate::Claim(_) => 5,
-            Predicate::Evidence(_) => 6,
-            Predicate::First(_) => 7,
-            Predicate::Input(_) => 8,
-            Predicate::Not(_) => 9,
-            Predicate::Since(_) => 10,
+            Predicate::Descended(_) => 6,
+            Predicate::Evidence(_) => 7,
+            Predicate::First(_) => 8,
+            Predicate::Input(_) => 9,
+            Predicate::Not(_) => 10,
+            Predicate::Since(_) => 11,
         }
     }
     fn tested(is: Truth) -> u8 {
@@ -307,6 +308,17 @@ fn documented_order(left: &Predicate, right: &Predicate) -> Ordering {
             }),
         (Predicate::Since(l), Predicate::Since(r)) => code_points(l.last.as_str())
             .cmp(&code_points(r.last.as_str()))
+            .then_with(|| code_points(l.then.kind.as_str()).cmp(&code_points(r.then.kind.as_str())))
+            .then_with(|| code_points(&l.then.result).cmp(&code_points(&r.then.result)))
+            .then_with(|| {
+                let subject = |s: &Option<b10x_canon::model::ArtifactId>| {
+                    s.as_ref().map(|s| code_points(s.as_str()))
+                };
+                subject(&l.subject).cmp(&subject(&r.subject))
+            }),
+        (Predicate::Descended(l), Predicate::Descended(r)) => code_points(l.first.kind.as_str())
+            .cmp(&code_points(r.first.kind.as_str()))
+            .then_with(|| code_points(&l.first.result).cmp(&code_points(&r.first.result)))
             .then_with(|| code_points(l.then.kind.as_str()).cmp(&code_points(r.then.kind.as_str())))
             .then_with(|| code_points(&l.then.result).cmp(&code_points(&r.then.result)))
             .then_with(|| {
@@ -473,6 +485,70 @@ fn predicates_with_after_are_the_documented_normal_form() {
         );
     }
     assert!(afters > 1000, "{afters}");
+}
+
+/// As [`generate_since`], with the `descended` form of story:revision-ordering among the leaves:
+/// any earlier and later kind (one kind included) and any results.
+fn generate_descended(rng: &mut Rng, depth: u32) -> Predicate {
+    let record = |rng: &mut Rng| LaterRecord {
+        kind: EvidenceKindId::new(IDS[rng.below(IDS.len())]),
+        result: RESULTS[rng.below(RESULTS.len())].unwrap_or("z").to_owned(),
+    };
+    match rng.below(if depth == 0 { 3 } else { 6 }) {
+        0 => generate_since(rng, 0),
+        1 => Predicate::Descended(Box::new(EvidenceDescended {
+            first: record(rng),
+            then: record(rng),
+            subject: None,
+        })),
+        2 => not(generate_descended(rng, depth.saturating_sub(1))),
+        3 => evidence(IDS[rng.below(IDS.len())], RESULTS[rng.below(RESULTS.len())]),
+        form => {
+            let mut members: Vec<Predicate> = (0..rng.below(5))
+                .map(|_| generate_descended(rng, depth - 1))
+                .collect();
+            if !members.is_empty() && rng.below(3) == 0 {
+                let copy = members[rng.below(members.len())].clone();
+                members.push(copy);
+            }
+            if form == 4 {
+                Predicate::All(members)
+            } else {
+                Predicate::Any(members)
+            }
+        }
+    }
+}
+
+/// Property: with `descended` among the leaves (story:revision-ordering), the compiled predicate
+/// is still the documented normal form, `descended` between `claim` and `evidence`, and a
+/// scrambled copy compiles to the same bytes, which read back as the same IR.
+#[test]
+fn predicates_with_descended_are_the_documented_normal_form() {
+    let mut rng = Rng(0x4C95_7F2D_8A1E_36B1);
+    let mut forms = 0;
+    for case in 0..4000 {
+        let predicate = generate_descended(&mut rng, 3);
+        forms += format!("{predicate:?}").matches("Descended(").count();
+        let ir = compiled(predicate.clone());
+        assert_eq!(
+            required(&ir),
+            &documented_normal_form(&predicate),
+            "case {case}: {predicate:?}"
+        );
+        let scrambled = scramble(&mut rng, &predicate);
+        assert_eq!(
+            compiled(scrambled.clone()).canonical_json(),
+            ir.canonical_json(),
+            "case {case}: {predicate:?}\nscrambled: {scrambled:?}"
+        );
+        assert_eq!(
+            b10x_canon::eval::read_ir(&ir.canonical_json()).as_ref(),
+            Ok(&ir),
+            "case {case}"
+        );
+    }
+    assert!(forms > 1000, "{forms}");
 }
 
 /// Property: with `since` among the leaves (story:evidence-order-since), the compiled predicate is
