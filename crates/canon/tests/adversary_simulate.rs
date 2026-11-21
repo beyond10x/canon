@@ -216,8 +216,8 @@ const CHILD_EXPIRY: &str = "format: protocol/1\n\
 /// R2: the state after an expiry step evaluates as a case in which that record is past its
 /// `max_age`. The `children` form reads every record the evidence check accepted, expired ones
 /// included (`eval/composition.rs`: "an expiry ... does not undo" a child's outcome). The real
-/// case: the child ended accepted, the case locked, two hours pass; `done` stays legitimate. The
-/// walk instead drops the `case_outcome` record and reports `{evidence lock}` stuck.
+/// case: the child ended accepted, the case locked, two hours pass; `done` stays legitimate. At
+/// 4b36d52 the walk dropped the `case_outcome` record and reported `{evidence lock}` stuck.
 #[test]
 fn an_expired_child_outcome_still_counts_for_the_children_form() {
     let ir = compiled(CHILD_EXPIRY);
@@ -253,17 +253,38 @@ fn an_expired_child_outcome_still_counts_for_the_children_form() {
         "the real case keeps `done` once the child outcome has expired"
     );
 
+    // Re-pinned after the R2a correction: what this case means is that no finding rests on an
+    // expired child outcome. The one finding left is a true cycle: a child that ended outside the
+    // listed outcomes keeps the `children` form false for good, past every `max_age`, and
+    // `open_change` only adds another child.
     let report = simulate::simulate(&ir).expect("walked");
-    let stuck: Vec<String> = report
+    let dead: Vec<(&simulate::Dead, bool)> = report
         .findings
         .iter()
-        .filter(|finding| matches!(finding, Finding::StuckState(_) | Finding::Cycle { .. }))
-        .map(ToString::to_string)
+        .filter_map(|finding| match finding {
+            Finding::StuckState(dead) => Some((dead, false)),
+            Finding::Cycle { dead, .. } => Some((dead, true)),
+            _ => None,
+        })
         .collect();
+    let expired_child = dead.iter().any(|(dead, _)| {
+        dead.path
+            .iter()
+            .any(|step| step.contains("evidence `case_outcome`") && step.ends_with(" expires"))
+    });
+    let lock_reported = dead
+        .iter()
+        .any(|(dead, _)| dead.state == "{evidence `lock`}");
+    let only_the_cycle = matches!(
+        dead.as_slice(),
+        [(only, true)] if only.state
+            == "{evidence `case_outcome` result `accepted`, evidence `case_outcome` result \
+                `open`, evidence `case_outcome`}"
+    );
     assert!(
-        stuck.is_empty(),
-        "findings a real case refutes (an expired child outcome still resolves the children \
-         form):\n{}\nwhole report:\n{report}",
-        stuck.join("\n")
+        !expired_child && !lock_reported && only_the_cycle,
+        "expected no finding whose path has an expiry of `case_outcome`, no finding at \
+         `{{evidence lock}}`, and one finding, the cycle at the state holding an accepted, an \
+         open and an unlisted child outcome; whole report:\n{report}"
     );
 }
