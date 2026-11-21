@@ -103,7 +103,9 @@ upstream artifact and revision in `upstream_revisions`, then its `producer` and 
 `child_case` when given), its
 `observed_at` when given (an instant, a fraction of one to nine digits allowed, else
 `invalid-instant`), its id
-(used once in the set), its kind (declared by the protocol) and each upstream artifact
+(used once in the set: a copy equal to the first counts once, and a copy that differs is
+refused as `duplicate-identifier`, `` evidence `e1` is given more than once with different content ``, story:evidence-redelivery), its kind (declared by the protocol) and each upstream
+artifact
 (declared by the protocol, else `undeclared-artifact`, naming the record and the artifact, unless
 the record's kind declares `supplied_by`: such a record, copied unchanged from a case under its
 supplier, may name artifacts only the supplier declares, carried and neither checked nor read,
@@ -112,7 +114,8 @@ record, its child case (named,
 else `missing-child-case`) and its outcome (a `result`, else `missing-child-outcome`), and for a
 record of any other kind no child case (else `misplaced-child-case`); then, over the whole set,
 one `case_outcome` record per child case, whatever its revision (else `duplicate-child-case`,
-naming the least such child and its records in evidence-id order, citing each). A record's
+naming the least such child and its records in evidence-id order, citing each; an equal copy of
+a record is not another record, and counts once). A record's
 subject and subject revision are checked here as identifiers only; the revision-binding stage
 reads them. Every refusal of a record names it (`` evidence `e2` format is `canon-evidence/2`, expected `canon-evidence/1` ``, `` evidence `e2` kind identifier `k k` is empty or … ``), and
 cites it (`Refusal::evidence`), here and in the revision-binding stage below, so a caller
@@ -183,7 +186,8 @@ caller's IR is the caller's own recursion.
 concept; this module holds only the order:
 
 1. check the compiled protocol's depth (`depth.rs`), the case snapshot (`case.rs`) and the
-   evidence set (`evidence.rs`);
+   evidence set (`evidence.rs`), which keeps the first of any records equal under one id, so
+   every later step reads each id once;
 2. read the supplied inputs: authority decisions (`authority.rs`), the evaluation instant
    (`freshness.rs`) and explicit decisions (`decisions.rs`);
 3. run the exclusion stages in order: revision binding (`binding.rs`), freshness

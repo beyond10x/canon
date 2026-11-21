@@ -26,9 +26,9 @@ fn is_record_name(name: &std::ffi::OsStr) -> bool {
 /// exits 2; a refusal exits 1 naming its code. Every evidence refusal names the file of each record
 /// it cites: an evidence file the library refuses to read as a record (`` error[malformed-input]:
 /// <file>: evidence `e1` is not a canon-evidence/1 document: missing field `subject` ``), and a
-/// record refused after reading, by every file holding a record of its id, so a repeated id names
-/// both files (`` error[duplicate-identifier]: <file>, <file>: evidence `e1` is given more than
-/// once ``).
+/// record refused after reading, by every file holding a record of its id, so an id repeated with
+/// different content names both files (`` error[duplicate-identifier]: <file>, <file>: evidence
+/// `e1` is given more than once with different content ``); equal records of one id count once.
 pub(crate) fn run(
     ir_path: &Path,
     case_path: &Path,
