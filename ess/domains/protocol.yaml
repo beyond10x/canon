@@ -1020,6 +1020,13 @@ types:
     kind: newtype
     of: String
 
+  # What an evidence record is about within its kind (EvidenceRecord.item, story:revision-ordering):
+  # opaque text, compared for equality only, with no meaning to Canon.
+  # read from: .engineering/planning/story/revision-ordering.md:100-103
+  - name: canon.protocol.ItemId
+    kind: newtype
+    of: String
+
   # An instant written YYYY-MM-DDTHH:MM:SSZ in UTC, or with a fraction of one to nine digits after
   # the seconds, YYYY-MM-DDTHH:MM:SS.fffZ; uppercase T and Z, no leap second (2026-10-04T12:00:00Z,
   # 2026-10-04T12:00:00.400Z). An empty fraction, more than nine digits and a comma are not instants.
@@ -1155,7 +1162,7 @@ types:
       # the record, and a copy of a record counts once only when its item is equal too.
       # read from: .engineering/planning/story/revision-ordering.md:100-103
       - name: item
-        type: Optional<String>
+        type: Optional<canon.protocol.ItemId>
 
   # One explicit decision of a canon-decisions/1 document. `canon evaluate --decisions` names that
   # document: a YAML (or JSON) list of these entries, the way canon-authority/1 is a list of
