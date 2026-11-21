@@ -34,7 +34,7 @@ scope:
   path: ess/domains/cli.yaml
 - confidence: inferred
   path: fixtures/investigation/simulate/
-revision: 15
+revision: 16
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 13, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 14, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
@@ -217,3 +217,11 @@ Adversary pass 1 (`review-result:adversary-canon-simulate-pass-1`) found that §
 **R6. The word `cycle` stays.** With R2 a set of states the steps never leave can be a loop of steps; the rule of R3 reports the state of it in which every action step returns the same state.
 
 **Known limit, unchanged:** no artifact is revised. A kind read with `result:` that an action may produce twice with different results gives one `cycle` finding per such kind (after R5), because the walk cannot set the mixed records aside by a revision. A revise step waits for the `revises` field of story:judgement-marking and is a later story.
+
+## Known limit on child outcomes, stated by the tool, 2026-11-21
+
+Found on 2026-11-21 while classifying the walk's findings on the SDC protocols (the section "Classification of the 87 findings" of story:simulate-revise-step, class e): the walk adds a child's `case_outcome` record only as a step of the opening action while that action is admissible. When the opening action's guard closes once its opening record exists, the child's outcome can never arrive in the walk, and the walk reports a stuck state a real case does not have: a runner records the outcome when the child ends. Four findings on two SDC protocols are of this kind.
+
+The session working on the SDC prototype, which orchestrates this plan, decided on 2026-11-21 that the fix is a separate story (its request 16, a `case_outcome` step that may arrive after the opening action was taken) and that this story merges with the limit stated, in its words: "story:canon-simulate merges in wave 5 with the limit stated in its reference text AND in the tool's output: until request 16 lands, `canon simulate` prints a line naming the limit whenever a protocol has an opening action, so nobody reads those four as defects."
+
+**R7.** When the compiled protocol has at least one action that declares `case_open`, `canon simulate` prints one line naming the limit, before the summary line and after the findings: a child case's outcome is walked only as a step of its opening action, so a `stuck-state` or `cycle` in a state that waits for a child's outcome may not be one in a real case. The line does not change the exit status or the count of findings. The reference text of the command and `ess/domains/cli.yaml` state the same limit. A protocol with no such action gets no such line and the same bytes as before.
