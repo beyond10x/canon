@@ -121,6 +121,16 @@
           "additionalProperties": {
             "$ref": "#/$defs/IndependenceDimension"
           }
+        },
+        "imports": {
+          "description": "The protocols this protocol imports, keyed by protocol id (story:protocol-imports), each pinned to a revision and a digest. A protocol without the section imports nothing; one with it compiles only composed with the documents it imports (`b10x_canon::ir::compose`).",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Import"
+          }
         }
       },
       "required": [
@@ -170,6 +180,10 @@
         "max_age": {
           "description": "How old a record of this kind may be and still apply: at an evaluation instant later than its `observed_at` by more than this, it is excluded as expired (design § 8).",
           "$ref": "#/$defs/Age"
+        },
+        "supplied_by": {
+          "description": "The protocol whose cases produce records of this kind (story:supplied-evidence): any protocol but this one, named and never resolved. A runner copies such a record unchanged from a case under that protocol; `canon check` counts the kind as produced. It counts as produced without authority and stays governed when an action that requires a capability may also produce it, so `canon check` reports `authority-bypass` on an outcome a supplied record alone makes legitimate. Absent: the protocol's own actions produce the kind, or nothing does.",
+          "$ref": "#/$defs/Identifier"
         }
       }
     },
@@ -236,11 +250,22 @@
           }
         },
         "arguments": {
-          "description": "The JSON Schema, in Canon's argument-schema dialect, that the action's arguments satisfy. Absent: the action takes no arguments; a runner accepts only `{}`. Canon never validates arguments at run time: the runner that calls the action validates them against the schema, and `canon validate` holds the schema to the dialect (`action-arguments`)."
+          "description": "The JSON Schema, in Canon's argument-schema dialect, that the action's arguments satisfy. Absent: the action takes no arguments; a runner accepts only `{}`. Canon evaluates no call: `canon validate` holds the schema to the dialect (`action-arguments`), and a runner checks a call's arguments with `validate::check_arguments` or any 2020-12 validator."
         },
         "case_open": {
           "description": "The child case the action opens (story:case-composition): a case governed by another protocol, about a declared artifact. Absent: the action opens no case. Canon opens nothing itself; whoever takes the action opens the child case. A case has one commission, and a second party works through a child case: this is the one primitive by which a case hands work to another party (D207).",
           "$ref": "#/$defs/CaseOpening"
+        },
+        "author": {
+          "description": "Who writes the action's arguments and the content of the artifacts it revises (story:judgement-marking): `program`, a reproducible function of the action's inputs, or `judgement`, a person or a model. Absent: `program`. It has no evaluation meaning, names no executor, model or tool, and Canon cannot prove that a runner honours it.",
+          "$ref": "#/$defs/Author"
+        },
+        "revises": {
+          "description": "The declared artifacts the action may move to a new revision (story:judgement-marking). Absent: none. It has no evaluation meaning; Canon never refuses a runner that moves an artifact outside it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
         }
       }
     },
@@ -311,6 +336,33 @@
           "type": "string"
         }
       }
+    },
+    "Import": {
+      "description": "One protocol a protocol imports: exactly the revision it reads and the digest of that revision's compiled `canon-ir/1`, and the imported declarations the importing protocol may redeclare.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "description": "The revision of the imported protocol the import reads.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "digest": {
+          "description": "`sha256:` and the 64 lowercase hexadecimal digits of the SHA-256 of the imported protocol's `canon-ir/1` bytes, compiled with its own imports (`b10x_canon::ir::digest`).",
+          "type": "string"
+        },
+        "refines": {
+          "description": "The identifiers, of any declaration section, of the imported declarations the importing protocol may redeclare; a redeclaration replaces the imported declaration.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "revision",
+        "digest"
+      ]
     },
     "Predicate": {
       "description": "A predicate over evidence and claim values.",
@@ -474,12 +526,22 @@
       ]
     },
     "CapabilityRequirement": {
-      "description": "One capability an action requires authority for.",
+      "description": "One capability an action requires authority for, at a scope (Atlas ADR 0083 § Decision 1).",
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "capability": {
           "$ref": "#/$defs/Identifier"
+        },
+        "scope": {
+          "description": "The scope the capability is required at: one value for each key it names (`{cluster: prod-eu, namespace: foo}`), each key once. Absent or empty, the requirement is unscoped, and only an authority decision without a scope covers it.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Identifier"
+          }
         }
       },
       "required": [
@@ -493,6 +555,10 @@
       "properties": {
         "evidence": {
           "$ref": "#/$defs/Identifier"
+        },
+        "decided_by": {
+          "description": "Who decides the result of a record of this kind the action produces (story:judgement-marking). Absent: the action's `author`. `program` on a judgement action covers a record the runner writes from the effect it applied, such as provenance. It has no evaluation meaning.",
+          "$ref": "#/$defs/Author"
         }
       },
       "required": [
@@ -516,6 +582,13 @@
       "required": [
         "protocol",
         "subject"
+      ]
+    },
+    "Author": {
+      "description": "Who decides (story:judgement-marking): a reproducible procedure, or a judgement by a person or a model. On an action (`author`) it says who writes the action's arguments and the artifacts it revises; on a production (`decided_by`) who decides the record's result.",
+      "enum": [
+        "program",
+        "judgement"
       ]
     },
     "OutcomeRequirement": {
@@ -679,7 +752,7 @@
       ]
     },
     "ChildOutcomes": {
-      "description": "The form over the case's child cases, written `{children: {in: [<outcome>, ...]}}`: whether every child case ended with one of the outcomes listed. It reads every `case_outcome` record the evidence check accepted, as the order forms read the history: `unknown` with no record, `false` when a record's outcome is neither listed nor `open` (a child that ended outside the set), otherwise `unknown` when a child is still `open` and `true` when every child ended with a listed outcome.",
+      "description": "The form over the case's child cases, written `{children: {in: [<outcome>, ...]}}`: whether every child case ended with one of the outcomes listed. It reads every `case_outcome` record the evidence check accepted, as the order forms read the history, or with `revision: current` only those about the current revision of their subject, and with `subject` only those about that artifact: `unknown` with no record read, `false` when a record's outcome is neither listed nor `open` (a child that ended outside the set), otherwise `unknown` when a child is still `open` and `true` when every child ended with a listed outcome. It counts only the records it is given. Canon does not write them; the runner that opens a child case does, with two duties: a record's `subject` is the `case_open` subject of the action that opened the child, and the runner writes a record with the outcome `open` when it opens the child.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -689,6 +762,14 @@
           "items": {
             "type": "string"
           }
+        },
+        "revision": {
+          "description": "Which records the form reads (story:child-outcome-revision): absent or `any`, every `case_outcome` record; `current`, only those whose `subject_revision` is the case snapshot's current revision of their `subject`.",
+          "$ref": "#/$defs/ChildRevision"
+        },
+        "subject": {
+          "description": "The declared artifact the records are about (story:child-outcome-subject): absent, records about every artifact; named, only the `case_outcome` records whose `subject` it is. A record about another artifact is not read: it neither establishes nor contradicts the form.",
+          "$ref": "#/$defs/Identifier"
         }
       },
       "required": [
@@ -727,6 +808,13 @@
       "required": [
         "kind",
         "result"
+      ]
+    },
+    "ChildRevision": {
+      "description": "Which `case_outcome` records a `children` form reads (story:child-outcome-revision). A terminal record's `subject_revision` is the revision the child's outcome was computed against: when the child protocol declares the subject artifact, the child's own revision of it at its terminating evaluation; when it does not, the parent's revision of the subject when the child was opened. Canon does not write the record: it compares that revision with the case snapshot's.",
+      "enum": [
+        "any",
+        "current"
       ]
     }
   }

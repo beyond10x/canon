@@ -1,0 +1,14 @@
+format: protocol/1
+
+# Imports investigation.cycle-a, which imports investigation.cycle-b, which imports
+# investigation.cycle-a again. No pin of the cycle can be right, since each digest is of a
+# document compiled with the other; the cycle is refused as import-cycle before any pin is read.
+
+protocol:
+  id: investigation
+  revision: 1
+
+imports:
+  investigation.cycle-a:
+    revision: 1
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000

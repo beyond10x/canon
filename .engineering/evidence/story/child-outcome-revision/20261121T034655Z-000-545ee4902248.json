@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T03:46:55Z",
+  "actor": "human:timo",
+  "artifact": "story:child-outcome-revision",
+  "kind": "story",
+  "revision": 23,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "no test gave two artifacts different revisions: pinned by the adversary's own case in 174183d",
+    "reference": "impl/child-outcome-revision 174183d",
+    "review": "review-result:adversary-child-outcome-revision-pass-1",
+    "outcome": "fixed"
+  }
+}

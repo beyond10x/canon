@@ -3,8 +3,7 @@
 //! `depth.rs` computes each claim's effective depth once, after the claims it tests, and reuses
 //! it when a claim is reached again (a diamond). These cases hold that reuse to the bound the
 //! module docs state ("a claim test at level `n` reaches `n` plus the effective depth of the claim
-//! it tests"), whichever way a claim is reached first, and check that evaluation of a diamond and
-//! of claims kept apart by invalidation rules ends.
+//! it tests"), whichever way a claim is reached first, and check that evaluation of a diamond ends.
 
 use std::time::Instant;
 
@@ -122,5 +121,3 @@ fn a_diamond_within_the_bound_is_evaluated() {
     );
     eprintln!("diamond of {claims}: {:?}", started.elapsed());
 }
-
-// claims_kept_apart_by_invalidation_rules_are_evaluated_in_time_linear_in_the_chain and its helper invalidated_chain moved to story:invalidation-evaluation-cost.

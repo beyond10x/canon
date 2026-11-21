@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T02:24:51Z",
+  "actor": "human:timo",
+  "artifact": "story:supplied-evidence",
+  "kind": "story",
+  "revision": 31,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "canon check help left out supplied_by: help text applied by the coordinator at the merge from the unit's patch, command reference regenerated",
+    "reference": "the merge of impl/supplied-evidence",
+    "review": "review-result:adversary-supplied-evidence-pass-1",
+    "outcome": "fixed"
+  }
+}

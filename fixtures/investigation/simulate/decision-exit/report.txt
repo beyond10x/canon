@@ -1,0 +1,5 @@
+stuck-state: state {}: no outcome is legitimate and no action is admissible or approval-required; path: empty; decision `abandon` taken makes outcome `abandoned` legitimate
+dead-action: action `review_draft` is admissible in no reachable state
+dead-action: action `write_draft` is admissible in no reachable state
+unreached-outcome: outcome `done` is legitimate in no reachable state
+simulated: protocol `simulate.decision` revision 1: 2 reachable states, 1 terminable (outcome `abandoned` 1, outcome `done` 0), 4 findings (1 stuck or cycle state)

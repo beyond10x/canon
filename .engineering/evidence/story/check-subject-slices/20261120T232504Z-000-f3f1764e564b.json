@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-20T23:25:04Z",
+  "actor": "human:timo",
+  "artifact": "story:check-subject-slices",
+  "kind": "story",
+  "revision": 22,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "canon_check on 6799edd (test only): FAILED, 3 passed, 3 failed; on 8d8dc31: 6 passed; workspace 925 passed, 0 failed; VERIFIED by the coordinator from the unit's logs",
+    "reference": "w2/check-subject-slices/red.log vs gate-test.log (session scratch)"
+  }
+}

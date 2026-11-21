@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T05:27:57Z",
+  "actor": "human:timo",
+  "artifact": "story:pending-decisions",
+  "kind": "story",
+  "revision": 14,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "on 74d5ef3 (specification only): specification_and_model_are_equal names Decision.pending_decisions (25 passed, 5 failed) and conform run fails CANON-PENDING-001 step nothing-given (24 passed, 1 failed; 26 implemented, 25 covered); on d8b5457: workspace 1023 passed, 0 failed, conform 25 passed, 26 covered; VERIFIED by the coordinator from the unit's logs",
+    "reference": "w5/pending-decisions/red.log vs gate.log (session scratch)"
+  }
+}

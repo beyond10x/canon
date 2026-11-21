@@ -1,0 +1,29 @@
+format: protocol/1
+
+protocol:
+  id: investigation.publication
+  revision: 1
+  description: Publish a finding a peer approved; the review is said to be supplied by this protocol itself.
+
+artifacts:
+  explanation:
+    description: The explanation under investigation.
+
+evidence_kinds:
+  peer_review:
+    description: A peer's review of the finding, said to be supplied by this protocol's own cases.
+    supplied_by: investigation.publication
+
+claims:
+  peer.approved:
+    description: A peer approved the finding.
+    true_when:
+      evidence:
+        kind: peer_review
+        result: approved
+
+outcomes:
+  published:
+    description: The finding is published once a peer approved it.
+    requires:
+      claim: peer.approved

@@ -1,0 +1,15 @@
+format: protocol/1
+
+protocol:
+  id: metrics
+  revision: 1
+  description: Inspect the metrics of one namespace in one cluster, under authority scoped to it.
+
+actions:
+  inspect:
+    description: Read the metrics of namespace foo in cluster prod-eu.
+    requires:
+      - capability: metrics.read
+        scope:
+          cluster: prod-eu
+          namespace: foo

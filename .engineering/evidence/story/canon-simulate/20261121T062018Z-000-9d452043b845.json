@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T06:20:18Z",
+  "actor": "human:timo",
+  "artifact": "story:canon-simulate",
+  "kind": "story",
+  "revision": 21,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "decision steps ignored without saying so: by decision of the coordinator, kept by the sdc session, a decision step is not a way out and the finding names the decision and its outcome (R4, 8fb960c)",
+    "reference": "impl/canon-simulate 8fb960c",
+    "review": "review-result:adversary-canon-simulate-pass-1",
+    "outcome": "fixed"
+  }
+}

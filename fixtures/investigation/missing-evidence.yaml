@@ -1,0 +1,113 @@
+format: protocol/1
+
+protocol:
+  id: investigation
+  revision: 1
+  description: Decide whether an explanation is supported by observation and by an independent attempt to falsify it, and publish the finding.
+
+artifacts:
+  explanation:
+    description: The explanation under investigation.
+  dataset:
+    description: The observations the explanation is tested against.
+
+independence_dimensions:
+  different_principal:
+    description: The producer is another principal than the one who made the observation.
+
+evidence_kinds:
+  supporting_observation:
+    description: An observation of the dataset consistent with the explanation; a result of needs_review asks for a peer's review.
+    max_age: 1h
+  falsification_attempt:
+    description: An attempt to refute the explanation, made by another principal; its result is survived or refuted.
+  peer_review:
+    description: A peer's review of the finding, recorded in an investigation.review case and copied here unchanged; its result is approved or rejected.
+    supplied_by: investigation.review
+  zeta_note:
+    description: A note written while collecting notes on an escalated observation.
+  alpha_note:
+    description: Another note written while collecting notes on an escalated observation.
+
+claims:
+  explanation.supported:
+    description: The explanation is supported by observation and has survived an independent attempt to falsify it.
+    true_when:
+      all:
+        - evidence:
+            kind: supporting_observation
+        - evidence:
+            kind: falsification_attempt
+            result: survived
+            independent_on: [different_principal]
+
+  peer.approved:
+    description: A peer approved the finding.
+    true_when:
+      evidence:
+        kind: peer_review
+        result: approved
+
+invalidation:
+  dataset.revised:
+    description: An observation made against an earlier dataset revision no longer supports the explanation.
+    upstream: dataset
+    invalidates: [explanation.supported]
+
+actions:
+  inspect:
+    description: Look for observations bearing on the explanation.
+    may_produce:
+      - evidence: supporting_observation
+
+  attempt_falsification:
+    description: Try to refute the explanation.
+    may_produce:
+      - evidence: falsification_attempt
+
+  summarize:
+    description: Write down where the investigation stands; it records no evidence.
+
+  request_peer_review:
+    description: Ask a peer to review a finding an observation flagged for review.
+    precondition:
+      evidence:
+        kind: supporting_observation
+        result: needs_review
+    may_produce:
+      - evidence: peer_review
+
+  collect_notes:
+    description: Write down notes on an observation that was escalated.
+    precondition:
+      evidence:
+        kind: supporting_observation
+        result: escalated
+    may_produce:
+      - evidence: zeta_note
+      - evidence: alpha_note
+
+  file_report:
+    description: Ask a peer to review the escalated finding at once; it needs the approval publishing does.
+    precondition:
+      evidence:
+        kind: supporting_observation
+        result: escalated
+    requires:
+      - capability: finding.publish
+    may_produce:
+      - evidence: peer_review
+
+  publish_finding:
+    description: Publish the finding that the explanation is supported.
+    precondition:
+      claim: explanation.supported
+      is: true
+    requires:
+      - capability: finding.publish
+
+outcomes:
+  supported:
+    description: The explanation is supported.
+    requires:
+      claim: explanation.supported

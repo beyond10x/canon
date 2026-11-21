@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T08:15:25Z",
+  "actor": "human:timo",
+  "artifact": "story:argument-validator",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "canon diff printed BREAKING for a rewrite the base called no semantic change: decided D1, the new line is the sound one; the adversary re-pinned its case in pass 2",
+    "reference": "impl/argument-validator e33bfcd, 2b76d32",
+    "review": "review-result:adversary-argument-validator-pass-1",
+    "outcome": "fixed"
+  }
+}

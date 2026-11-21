@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T06:20:18Z",
+  "actor": "human:timo",
+  "artifact": "story:judgement-marking",
+  "kind": "story",
+  "revision": 18,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "full gate on the wave branch at 2ae2ae7, ess 0.77.0, one exit status per step: ess-gate 0 (91 passed), fmt 0, clippy 0, cargo test --workspace 0 (147 summaries, 1058 passed, 0 failed, 3 ignored), conform run 0 (25 passed, 26 implemented, 26 covered), adversary_action_arguments 0 (12 passed), docs-check 0",
+    "reference": "2ae2ae7"
+  }
+}

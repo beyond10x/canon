@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-20T21:57:12Z",
+  "actor": "human:timo",
+  "artifact": "story:capability-scope",
+  "kind": "story",
+  "revision": 35,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "history of the unit branch; the final tree passes docs-check; no rebase",
+    "reference": "website/docs/reference/documents.md:112",
+    "review": "review-result:adversary-capability-scope-pass-1",
+    "outcome": "no-op"
+  }
+}

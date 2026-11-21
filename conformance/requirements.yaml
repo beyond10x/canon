@@ -121,3 +121,132 @@ requirements:
       and MUST be TRUE only when every child case ended with an outcome it lists. Two outcome
       records for one child case MUST be refused.
     source: story:case-composition
+  CANON-IMPORT-001:
+    status: implemented
+    statement: >-
+      A protocol MAY import other protocols, each pinned to its revision and to the digest of its
+      compiled IR. Compiling it with exactly the documents it imports, directly or through another
+      import, MUST give one closed IR that names the importing protocol only, holds every imported
+      declaration once and no import, and does not depend on the order the documents are given in.
+      An import without a document, a document no import names, a revision or digest other than the
+      pin, an import cycle, a redeclaration not listed under refines and two imports that declare
+      one identifier differently MUST be refused.
+    source: story:protocol-imports
+  CANON-SCOPE-001:
+    status: implemented
+    statement: >-
+      A capability requirement no authority decision covers MUST NOT be treated as granted. A
+      decision MUST cover a requirement of its capability only when the requirement gives every
+      scope key the decision gives a value for that same value, and MUST cover every value of a key
+      it gives no value for. Among the decisions covering a requirement, a denial MUST win over
+      require_approval and require_approval over a grant; a denied requirement MUST block the
+      action, naming the denied capability, and one requiring approval MUST make it
+      approval-required.
+    source: story:capability-scope
+  CANON-AUTHORITY-002:
+    status: implemented
+    statement: >-
+      An authority decision bound to a case revision MUST apply, whatever its decision, only while
+      the case snapshot's revision equals it, and MUST NOT apply when the snapshot has no revision;
+      one bound to no case revision MUST apply at every case revision. A decision that does not
+      apply MUST take no part in coverage or precedence. The principal a decision names MUST NOT
+      change admissibility. Two decisions equal in capability, scope, case revision and principal
+      MUST be refused.
+    source: story:authority-revision-binding
+  CANON-SUPPLY-001:
+    status: implemented
+    statement: >-
+      An evidence kind MAY name, as supplied_by, another protocol whose cases produce its records,
+      and its compiled canon-ir/1 entry MUST carry that name. A record of such a kind MAY name
+      upstream artifacts the protocol does not declare, and MUST then be evaluated to the decision
+      the same record without those entries gives. The same record under a kind without
+      supplied_by MUST be refused as undeclared-artifact.
+    source: story:supplied-evidence
+  CANON-COMPOSE-002:
+    status: implemented
+    statement: >-
+      A predicate over the outcomes of the child cases MAY be bound to the current revision. Bound,
+      it MUST read only the outcome records whose subject revision is the case snapshot's current
+      revision of their subject, MUST NOT treat a record about another revision as contradicting
+      it, and MUST be UNKNOWN when it reads no record; over the records it reads it MUST follow
+      CANON-COMPOSE-001. Unbound, it MUST read every outcome record, and its compiled form MUST
+      be the form it had before the binding existed.
+    source: story:child-outcome-revision
+  CANON-FRONTIER-001:
+    status: implemented
+    statement: >-
+      The decision MUST map each admissible action whose may_produce is not empty to the evidence
+      kinds of that list that have no applicable record, in kind-identifier order, and MUST NOT
+      list an action that is blocked, one that is approval-required or one whose may_produce is
+      empty. A record MUST be applicable when the revision-binding and freshness stages leave it and
+      no claim lists it in excluded_evidence, and MUST NOT depend on its result or on whether its
+      kind declares supplied_by. The section MUST NOT change any other section.
+    source: story:missing-evidence
+  CANON-PENDING-001:
+    status: implemented
+    statement: >-
+      The decision MUST list under pending_decisions.authority one entry per requirement an
+      approval-required action names as not decided or as require_approval, giving the action, the
+      capability, the scope when the requirement has one, that decision as current, the case
+      snapshot's revision as case_revision when the snapshot has one, and the options granted and
+      denied. It MUST NOT list a requirement that is granted, nor any requirement of a blocked
+      action, whether its precondition is not true or a requirement of it is denied. A requirement
+      covered only by authority decisions bound to another case revision MUST be listed as not
+      decided. The entries MUST be ordered by action, then capability, then scope: no scope first,
+      and two scopes by their key-value pairs in key order, compared pair by pair, key before
+      value, a scope that is a prefix of the other first. The decision MUST list under
+      pending_decisions.decisions, in outcome order, one entry per outcome blocked because no
+      explicit decision applies, giving the outcome, the decision, the case revision and the option
+      taken; for a snapshot without a revision it MUST give neither a case revision nor an option.
+      An explicit decision taken at the snapshot's revision MUST remove its outcome's entry, and
+      one taken at another revision MUST NOT. A list with no entry MUST be left out. The section
+      MUST NOT change any other section.
+    source: story:pending-decisions
+  CANON-EVIDENCE-004:
+    status: implemented
+    statement: >-
+      An evidence record given more than once in one evaluation MUST count once when every copy
+      equals the first in its kind, result, subject, subject revision, observed_at as written,
+      producer, child case and upstream revisions, the upstream revisions in any order. The
+      decision MUST then be byte-identical to the one without the copy, explanation included,
+      wherever the copy stands in the list, and an equal copy of a case_outcome record MUST NOT be
+      refused. A copy that differs in any of them MUST be refused as duplicate-identifier;
+      observed_at MUST be compared as written text, so that 12:00:00Z and 12:00:00.000Z differ.
+    source: story:evidence-redelivery
+  CANON-GROUND-001:
+    status: implemented
+    statement: >-
+      An entry of canon-authority/1 or canon-decisions/1 MAY name grounds: ground_revisions,
+      artifact revisions keyed by artifact, and ground_evidence, evidence record ids. An artifact
+      ground MUST hold exactly when its revision equals the case snapshot's current revision of the
+      artifact, and an evidence ground exactly when a record with its id is applicable in the sense
+      of CANON-FRONTIER-001; an id no given record has MUST NOT be refused. An entry MUST take part
+      in coverage, precedence and decided_by only when every ground holds and its case revision,
+      when it has one, is current, whatever it decided. A requirement covered only by entries that
+      do not apply MUST be approval-required with the reason decision none, and an outcome whose
+      only explicit decision does not apply MUST be blocked with the reason present false; either
+      reason MUST then list under stale_grounds each failed ground of the entries that every other
+      rule would let apply, set aside by their grounds alone, once, artifact grounds by artifact
+      and then revision, as revision_mismatch with the ground's revision, then evidence grounds by
+      id, with the reason the record was excluded with, or present false when no record has the
+      id. An entry set aside by its case revision MUST NOT add a ground, whether its grounds hold
+      or not, since it would not apply whatever they do. pending_decisions MUST list such a
+      requirement and such an outcome as it lists one with no decision. The order of the entries in
+      a document MUST NOT change the result. A ground artifact the protocol does not declare MUST
+      be refused as undeclared-artifact, and a ground artifact, revision or evidence id that is not
+      an identifier as invalid-identifier. Two entries that differ only in their grounds MUST be
+      refused as duplicate-identifier.
+    source: story:decision-grounds
+  CANON-COMPOSE-003:
+    status: implemented
+    statement: >-
+      A predicate over the outcomes of the child cases MAY name an artifact as its subject. Naming
+      one, it MUST read only the outcome records whose subject is that artifact, and, bound to the
+      current revision too, only those among them whose subject revision is the case snapshot's
+      current revision of it; a record about another artifact MUST NOT establish or contradict it.
+      Over the records it reads it MUST follow CANON-COMPOSE-001, counting only the records it is
+      given. Without a subject it MUST read the records about every artifact, and its compiled
+      form MUST be the form it had before the subject existed. A blocked action MUST name the
+      predicate in its reasons with its subject, and two predicates that differ only in their
+      subject MUST be two reasons, the one without a subject first.
+    source: story:child-outcome-subject

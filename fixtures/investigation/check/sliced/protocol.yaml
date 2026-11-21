@@ -1,0 +1,157 @@
+format: protocol/1
+
+protocol:
+  id: remedy
+  revision: 1
+  description: Survey a site, trial a remedy and release it once approved; seeded with one defect of each kind canon check reports.
+
+case:
+  inputs:
+    track:
+      description: How the case is handled; an urgent case may trial the remedy before the site is surveyed.
+      values: [routine, urgent]
+
+artifacts:
+  site:
+    description: The site the remedy is for.
+
+evidence_kinds:
+  survey_reading:
+    description: A survey reading of the site; seven grades are told apart.
+  trial_run:
+    description: A trial of the remedy; its result is pass, fail or flaky.
+  approval:
+    description: An approval of the release.
+  audit_report:
+    description: An external audit report of the site.
+
+claims:
+  site.surveyed:
+    description: The site has been surveyed and graded.
+    true_when:
+      any:
+        - evidence:
+            kind: survey_reading
+            result: grade_a
+        - evidence:
+            kind: survey_reading
+            result: grade_b
+        - evidence:
+            kind: survey_reading
+            result: grade_c
+        - evidence:
+            kind: survey_reading
+            result: grade_d
+        - evidence:
+            kind: survey_reading
+            result: grade_e
+        - evidence:
+            kind: survey_reading
+            result: grade_f
+        - evidence:
+            kind: survey_reading
+            result: grade_g
+
+  trial.passed:
+    description: A trial of the remedy passed.
+    true_when:
+      evidence:
+        kind: trial_run
+        result: pass
+
+  trial.unsettled:
+    description: A trial of the remedy failed or was flaky.
+    true_when:
+      any:
+        - evidence:
+            kind: trial_run
+            result: fail
+        - evidence:
+            kind: trial_run
+            result: flaky
+
+  release.approved:
+    description: The release is approved.
+    true_when:
+      evidence:
+        kind: approval
+
+  site.audited:
+    description: Seeded defect, an audit report no action produces.
+    true_when:
+      evidence:
+        kind: audit_report
+
+obligations:
+  establish.trial:
+    description: Settle whether the remedy works.
+    discharged_when:
+      any:
+        - claim: trial.passed
+        - claim: trial.unsettled
+
+actions:
+  survey:
+    description: Survey the site.
+    may_produce:
+      - evidence: survey_reading
+
+  run_trial:
+    description: Trial the remedy, once the site is surveyed, or at once in an urgent case.
+    precondition:
+      any:
+        - input: track
+          in: [urgent]
+        - claim: site.surveyed
+    may_produce:
+      - evidence: trial_run
+
+  approve:
+    description: Approve the release.
+    requires:
+      - capability: release.approve
+    may_produce:
+      - evidence: approval
+
+  self_approve:
+    description: Seeded defect, an approval recorded without authority.
+    may_produce:
+      - evidence: approval
+
+  retract_trial:
+    description: Seeded defect, retract a trial that both passed and did not.
+    precondition:
+      all:
+        - claim: trial.passed
+        - not:
+            claim: trial.passed
+
+outcomes:
+  released:
+    description: The remedy is released after a passing trial and an approval.
+    requires:
+      all:
+        - claim: trial.passed
+        - claim: release.approved
+
+  surveyed_only:
+    description: The case ends with the site surveyed and no remedy released.
+    requires:
+      claim: site.surveyed
+
+  contested:
+    description: Seeded defect, a trial that passed and did not pass.
+    requires:
+      all:
+        - evidence:
+            kind: trial_run
+            result: pass
+        - not:
+            evidence:
+              kind: trial_run
+              result: pass
+
+  abandoned:
+    description: The case is abandoned by an explicit decision.
+    requires:
+      decision: explicitly_abandoned

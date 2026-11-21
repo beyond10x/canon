@@ -1,0 +1,36 @@
+format: protocol/1
+
+protocol:
+  id: investigation.evidence
+  revision: 1
+  description: The explanation under investigation and the observations bearing on it, which every part of an investigation reads.
+
+artifacts:
+  explanation:
+    description: The explanation under investigation.
+
+evidence_kinds:
+  observation:
+    description: An observation bearing on the explanation; its result is consistent or inconsistent.
+
+claims:
+  explanation.supported:
+    description: Observation is consistent with the explanation.
+    true_when:
+      evidence:
+        kind: observation
+        result: consistent
+
+actions:
+  inspect:
+    description: Look for observations bearing on the explanation.
+    may_produce:
+      - evidence: observation
+
+outcomes:
+  explanation.refuted:
+    description: Observation is inconsistent with the explanation.
+    requires:
+      evidence:
+        kind: observation
+        result: inconsistent

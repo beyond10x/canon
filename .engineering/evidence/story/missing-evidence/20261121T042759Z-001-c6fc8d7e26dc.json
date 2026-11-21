@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T04:27:59Z",
+  "actor": "human:timo",
+  "artifact": "story:missing-evidence",
+  "kind": "story",
+  "revision": 27,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "no committed mutation control for an Optional<Map> field in the parity harness: two controls added (9065cde)",
+    "reference": "impl/missing-evidence 9065cde",
+    "review": "review-result:adversary-missing-evidence-pass-1",
+    "outcome": "fixed"
+  }
+}

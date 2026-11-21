@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T00:41:30Z",
+  "actor": "human:timo",
+  "artifact": "story:check-subject-slices",
+  "kind": "story",
+  "revision": 22,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "a protocol with no subject evaluated no state; fixed in 903d41d with probe states of the whole product, 12 evaluation refusals covered by 9 tests",
+    "reference": "impl/check-subject-slices 903d41d",
+    "review": "review-result:adversary-check-subject-slices-pass-1",
+    "outcome": "fixed"
+  }
+}

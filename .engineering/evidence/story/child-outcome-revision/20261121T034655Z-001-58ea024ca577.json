@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T03:46:55Z",
+  "actor": "human:timo",
+  "artifact": "story:child-outcome-revision",
+  "kind": "story",
+  "revision": 23,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "check module doc said a children form reads records at any revision: corrected by the unit in 03d0692",
+    "reference": "impl/child-outcome-revision 03d0692",
+    "review": "review-result:adversary-child-outcome-revision-pass-1",
+    "outcome": "fixed"
+  }
+}

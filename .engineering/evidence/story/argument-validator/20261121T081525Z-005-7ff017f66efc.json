@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T08:15:25Z",
+  "actor": "human:timo",
+  "artifact": "story:argument-validator",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "a test compared a struct with its clone: it now calls the function and checks its output",
+    "reference": "impl/argument-validator 24d9941",
+    "review": "review-result:adversary-argument-validator-pass-1",
+    "outcome": "fixed"
+  }
+}

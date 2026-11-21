@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T00:58:57Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-imports",
+  "kind": "story",
+  "revision": 56,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check steps at ac46b8c (wave/2026-11-20-w2 after merges 6f44325, d0ad5fc and ecc64cf) with ess 0.77.0 first on PATH, one exit status per step: ess-gate 0 (89 passed), fmt 0, clippy 0, cargo test --workspace --no-fail-fast 0 (136 summaries, 968 passed, 0 failed, 3 ignored), conform run --requirements 0 (20 passed, 21 implemented, 21 covered), adversary_action_arguments 0 (12 passed), docs-check 0 (18 generated files current); no step skipped",
+    "reference": "ac46b8c175833fa02f414ced02c238f3f6c1f917"
+  }
+}

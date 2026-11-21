@@ -1,0 +1,1 @@
+simulated: protocol `simulate.expiry` revision 1: 6 reachable states, 2 terminable (outcome `renewed` 2), 1 waiting on supplied evidence or expiry, 0 findings (0 stuck or cycle states)

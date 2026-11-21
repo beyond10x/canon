@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-20T22:14:42Z",
+  "actor": "human:timo",
+  "artifact": "story:capability-scope",
+  "kind": "story",
+  "revision": 50,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check steps at 206a36c (wave/2026-11-20-w1 after merges c3ad46f and 3795f29) with ess 0.77.0 first on PATH, one exit status per step: ess-gate 0 (89 passed), fmt 0, clippy 0, cargo test --workspace --no-fail-fast 0 (131 summaries, 912 passed, 0 failed, 3 ignored), conform run --requirements 0 (19 passed, 20 implemented, 20 covered), adversary_action_arguments 0, docs-check 0 (18 generated files current); no step skipped",
+    "reference": "206a36ce9985cea44f6590ba2675fec2bee3cadf"
+  }
+}

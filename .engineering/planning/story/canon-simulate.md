@@ -1,0 +1,261 @@
+---
+format: aep.planning-md/3
+id: story:canon-simulate
+kind: story
+status: implemented
+title: Find stuck states, cycles and dead actions by walking reachable states with canon simulate
+tags:
+- from-request
+refs:
+- provider: sdc
+  reference: docs/canon-requests.md
+relations:
+- decomposes: epic:protocol-analysis
+- serves: vision:O2
+- serves: vision:governed-autonomy
+- depends_on: story:canon-check
+- depends_on: story:ess-command-surface
+scope:
+- confidence: cited
+  path: crates/canon-cli/src/lib.rs
+- confidence: cited
+  path: crates/canon-cli/src/main.rs
+- confidence: cited
+  path: crates/canon-cli/src/simulate.rs
+- confidence: cited
+  path: crates/canon-cli/tests/canon_simulate.rs
+- confidence: cited
+  path: crates/canon/src/check/mod.rs
+- confidence: inferred
+  path: crates/canon/src/check/space.rs
+- confidence: cited
+  path: crates/canon/src/lib.rs
+- confidence: inferred
+  path: crates/canon/src/simulate/mod.rs
+- confidence: cited
+  path: crates/canon/src/simulate/tests.rs
+- confidence: cited
+  path: crates/canon/tests/adversary_simulate.rs
+- confidence: cited
+  path: ess/domains/cli.yaml
+- confidence: inferred
+  path: fixtures/investigation/simulate/
+revision: 22
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 13, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 14, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "active", to: "implemented", at: "2026-11-21T06:20:18Z", actor: "human:timo", revision: 22, decided_on: {"recorded":{"test_result":1,"review_outcome":8,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
+---
+## Outcome
+
+`canon simulate --path <protocol>` (clap derive, like `canon check --path`) walks every state a case can reach from the empty case, one step at a time. It reports where the protocol leaves a case stuck. `simulate::simulate(ir) -> Result<Report, Refusal>` in the library is a pure function of the compiled protocol: no clock, network, filesystem or runner, and identical input gives identical bytes.
+
+**What a step is.** A step is a function from a state to the next state, computed from the IR. A state is a state of the space `canon check` enumerates (a `State`, `crates/canon/src/check/space.rs`), and Canon evaluates it with `check::evaluate` (`check/mod.rs:635`). There are three kinds of step:
+- **Action step.** It is taken only from a state in which the action is `admissible`. It adds one record of one kind the action may produce (`may_produce`, plus `case_outcome` for a `case_open`, as `produces` does, `check/mod.rs:700-708`). The record goes into one dimension of that kind, with one class of that dimension and one producer profile of it. It is at the current revision, observed after every move of an upstream artifact. Each combination of dimension, class and profile is a separate successor. An action that may produce nothing has one step, which leaves the state unchanged.
+- **Authority step.** A capability some action requires goes from undecided to `granted` or to `denied`.
+- **Decision step.** A decision name some outcome requires goes from not taken to taken.
+
+**What a step is not.** No action runs. No arguments are validated. No artifact is revised, because `protocol/1` has no declaration of an action that revises one. No record is removed and no case is terminated. A step never produces a record at a superseded revision.
+
+Every step only adds, so the step graph has no cycle except a step that returns its own state.
+
+**Initial states and order.** There is one initial state per assignment of case-input values, in input order. Breadth-first search from those states reaches each state first along a shortest path. Steps are tried in this order:
+1. actions in identifier order, then kinds, dimensions, classes and profiles in the check's own orders;
+2. capabilities in identifier order, `granted` before `denied`;
+3. decisions in name order.
+
+**Findings.** They come in this order:
+- `stuck-state`: no outcome is legitimate, and no action is `admissible` or `approval-required`. Each one names its state and its shortest path.
+- `cycle`: no outcome is legitimate, no action is `approval-required`, at least one action is `admissible`, and every step of every admissible action returns the same state. It names the state, the path and those actions.
+- `dead-action`: an action that is admissible in no reachable state.
+- `unreached-outcome`: an outcome that is legitimate in no reachable state. `no-outcome-reachable` is printed once when every declared outcome is unreached.
+- Stuck states and cycles are ordered by path length, then by rendering.
+
+**Output.** The findings are followed by one line: `` simulated: protocol `p` revision 1: N reachable states, T terminable (outcome `a` x, outcome `b` y), F findings ``. A terminable state is one in which some outcome is legitimate. The walk continues through terminable states, because Canon terminates no case. A path is written as its steps, for example `` action `a` produces evidence `k` result `r` ``, `` capability `c` denied ``, `` decision `d` taken ``.
+
+**Exit status.** 0 when there is no finding, 1 when there is a finding or a refusal.
+
+**Bound and refusals.**
+- The walk is refused with `reachable-state-bound` when it would visit more than `check::STATE_BOUND` (65,536) states.
+- The bound counts reachable states. The check counts the product of every dimension (`check/mod.rs:249-252`).
+- Reachable states are a subset of the check's space. So every protocol `canon check` accepts can be simulated, and so can a protocol the check refuses whose reachable part fits.
+- A bounded partial walk is not offered: a walk that stops early and finds nothing cannot report "nothing found" (`UNKNOWN` is not `FALSE`).
+- A protocol with an order form (`first`, `before`, `after`, `since`) is refused as `ordered-evidence`, as are the evaluator's `predicate-too-deep` and `claim-cycle`. Order forms are refused because the check's space puts a dimension's current records at one instant (`check/mod.rs:124-133`, `:164-166`), so a walk's same-dimension sequence has no state there.
+
+## Why
+
+**The request.** `$HOME/beyond10x/sdc/docs/canon-requests.md:29-31` (item 4), with the detail in `docs/canon-simulation-request.md:30-35`. That file asks for:
+- a breadth-first walk from the empty case;
+- stuck states with the shortest sequence that reaches each;
+- cycles, dead actions and the reachable state count;
+- the determinism of `evaluate`;
+- refusal or a stated bound above 65,536.
+
+Its definition of a stuck state is at `:21`. `boundary.md:74` says finding stuck states before a run is Canon's work, and that a runner's verdicts are terminable, awaiting authority and stuck. So `approval-required` is kept apart from stuck here. `boundary.md:164-166` gives the walk the highest value of the checker work.
+
+**How it differs from `canon check`.**
+- The check's `unreachable-outcome` and `unsatisfiable-precondition` are judged over every combination of records (`check/mod.rs:258-260`, `:583-598`). `canon generate` walks that same space (`generate/mod.rs:3-4`).
+- `canon simulate` judges over the states reachable through steps. Its `dead-action` and `unreached-outcome` include every finding the check makes, plus actions and outcomes that every possible record set reaches but that no order of steps from the empty case reaches. Example: two actions, each needing evidence only the other produces.
+- `stuck-state` and `cycle` have no counterpart in the check.
+
+**Verified in the canon tree (at `15cfece`).**
+- `EvidenceProduction` holds only `evidence`, a kind, with no result and no subject (`crates/canon/src/model/mod.rs:253-256`). The IR holds a sorted list of kinds (`crates/canon/src/ir/mod.rs:168`, `:263`). So "each result variant" (request `:30`) has to come from the check's classes: each result some match reads, plus a record with no result (`check/mod.rs:24-29`).
+- Action statuses are `admissible`, `approval-required` and `blocked` (`crates/canon/src/eval/actions.rs:105-143`). Outcome statuses are `legitimate` and `blocked` (`crates/canon/src/eval/outcomes.rs:7-14`).
+- `check::evaluate` builds a case with no `termination` and no instant (`check/mod.rs:654`, `:662`).
+- Order rankings are built only within the bound (`space.rs:571-573`).
+- The sdc limitation protocols list no order dimension (`docs/limitations/output.txt:2,6,10,26`), so the `ordered-evidence` refusal leaves them in scope.
+
+**Boundary.**
+- Running actions, the driver's `revises` binding (`docs/driver.md:50`) and the run-time "useful" rule (`driver.md:56-57`) belong to a runner, and to request item 2.
+- An invalidation loop (request `:24`) needs an action that revises an artifact. `protocol/1` cannot declare one.
+- Search beyond 65,536 states is request item 3.
+
+**Could not verify.**
+- Whether the reachable part of `output.txt:10` (intake) fits the bound. I ran nothing.
+- `boundary.md:74`, `:109` and `:161` cite `canon-simulation-request.md:66-81`. That file has 35 lines, so those citations do not resolve.
+
+## Decision needed
+
+How authority and explicit decisions enter the walk. None of the options changes `ess/` beyond `cli.yaml`, or the model.
+
+| Option | What it changes | Cost |
+|---|---|---|
+| A. Authority and decision steps (as in Outcome) | Paths name grants, denials and decisions | Walk states include capabilities and decisions. A denial that strands a case is found. |
+| B. Fixed per walk: each assignment of capabilities and decisions is an initial state | Action steps only | 3^c·2^d initial states. A decision outcome holds from step 0. Paths never show a denial. |
+| C. `approval-required` counts as `admissible` | No authority dimension | Finds no stuck state caused by a denial. It hides `approval-required` too. |
+
+Recommendation: A, because every reachable state is then a state of the check's space and denials are findings.
+
+## ESS first
+
+- **First commit.**
+  - Adds `canon.cli.Simulate` (wire `simulate`, input `path: String`, outcomes `unreadable`, `rejected` and `nothing-found`) to `ess/domains/cli.yaml`, modelled on `canon.cli.Check` (`cli.yaml:164-198`).
+  - Adds the fixture set `fixtures/investigation/simulate/`.
+  - Adds the named test.
+  - The model does not change.
+- **Red on that commit.**
+  - `simulate_reports_reachability_findings` fails, because clap refuses `simulate` with exit 64.
+  - `every_canon_subcommand_is_declared_in_ess` (`crates/canon-cli/tests/ess_commands_match.rs:458`) fails, naming `simulate` as declared in `ess/` and absent from clap.
+
+## Scope
+
+- **In:** the step relation, the breadth-first walk, the five findings, the two new refusals, the `simulate` subcommand, and the wording for 0 and 1 in `EXIT_STATUSES`. (cited)
+- **Out:**
+  - order forms (a later story);
+  - invalidation loops (they need a language form);
+  - an admissible action that changes no claim (request item 2);
+  - search beyond the bound (request item 3);
+  - authority bypass and properties (`canon check`);
+  - running anything. (cited)
+- **Surfaces:**
+  - `crates/canon/src/simulate/mod.rs` (new) — inferred
+  - `crates/canon/src/check/space.rs` (a `pub(crate)` successor that adds one current record of a class and profile to a dimension's value) — inferred
+  - `crates/canon/src/lib.rs` (the module line) — cited
+  - `crates/canon-cli/src/simulate.rs` (new, laid out like `check.rs:14-48`) — cited
+  - `crates/canon-cli/src/lib.rs` (the `Simulate` variant and `EXIT_STATUSES` at `lib.rs:21-43`) — cited
+  - `crates/canon-cli/src/main.rs` (the `mod` line and the dispatch arm beside `main.rs:61`) — cited
+  - `crates/canon-cli/tests/canon_simulate.rs` (new) — cited
+  - `ess/domains/cli.yaml` — cited
+  - `fixtures/investigation/simulate/` (new, owned whole) — inferred
+- **The coordinator's at integration:** `website/status.yaml`, and the regenerated `website/docs/reference/cli.md` and `website/data/status.json`.
+- **Not touched:** `conformance/requirements.yaml`, `ess/domains/protocol.yaml`, `crates/canon/src/model/`.
+- **Confidence:** medium. The step relation is read from the check's space. Whether `space.rs` needs more than the successor function is not established.
+
+## Order
+
+- Depends on story:canon-check and story:ess-command-surface. Both are implemented.
+- Shares `crates/canon-cli/src/lib.rs`, `main.rs` and `ess/domains/cli.yaml` with story:protocol-imports, story:protocol-floor and story:canon-mutate.
+- Shares `crates/canon/src/lib.rs` with story:protocol-floor and story:canon-mutate.
+- Shares `crates/canon/src/check/space.rs` with story:revision-ordering (that story's scope line is inferred).
+- So it runs in a wave that holds none of those four stories.
+
+## Acceptance
+
+The named test `simulate_reports_reachability_findings` (in `crates/canon-cli/tests/canon_simulate.rs`) passes over `fixtures/investigation/simulate/`:
+
+1. A clean protocol exits 0 and prints only the summary line, with its reachable state count and terminable count per outcome.
+2. A protocol with two actions, each needing evidence only the other produces, and an outcome needing both:
+   - `canon check` exits 0;
+   - `canon simulate` exits 1, printing `stuck-state` for `{}` with an empty path, `dead-action` for both actions, `unreached-outcome` for the outcome and `no-outcome-reachable`.
+3. A protocol whose one action requires capability `c` prints `stuck-state` for `` {capability `c` denied} `` after `` capability `c` denied ``. It prints no stuck state for `{}`, where the action is `approval-required`.
+4. A protocol in which, after a denial, the one admissible action may produce nothing prints `cycle`, naming that state, its shortest path and the action.
+5. A protocol with an order form is refused as `ordered-evidence`, exit 1.
+6. Bound behaviour:
+   - a protocol with more than 65,536 reachable states is refused as `reachable-state-bound`, exit 1;
+   - a protocol whose upstream variants put its space above the bound (`canon check` refuses it as `state-space-bound`) is simulated and exits 0.
+7. Two runs give identical bytes, and `every_canon_subcommand_is_declared_in_ess` passes.
+
+## Source
+
+- Request item 4 of `$HOME/beyond10x/sdc/docs/canon-requests.md`. Also read: `docs/canon-simulation-request.md`, `docs/boundary.md`, `docs/driver.md`, `docs/limitations/output.txt`.
+- canon tree `15cfece`: `AGENTS.md`, `crates/canon/src/check/{mod,space}.rs`, `generate/mod.rs`, `eval/{actions,outcomes}.rs`, `model/mod.rs`, `ir/mod.rs`, `crates/canon-cli/src/{lib,main,check}.rs`, `ess/domains/cli.yaml`, story:protocol-floor, story:canon-mutate, story:revision-ordering, story:protocol-imports, epic:protocol-analysis.
+- 2026-11-20.
+
+## What invalidation loops wait for
+
+§ Scope leaves invalidation loops out because `protocol/1` cannot declare that an action revises
+an artifact. Request 10 of the SDC prototype (`docs/plan/wave-plan-2026-11-20.md`, "Requests
+received") proposes a `revises: [artifact]` field on an action. That field is the dependency: with
+it, a revising step can be added to the walk and a loop of revise, invalidate and re-produce
+becomes a finding. Request 10 is a request and no story on 2026-11-20.
+
+## Decided
+
+Option A of § Decision needed: authority steps and decision steps are steps of the walk. Decided on 2026-11-20 by the wave coordinator on the drafter's recommendation, after the operator accepted the story without choosing (`approval-record:accept-sdc-requests-2026-11-20`). The unit builds this option and does not reopen the choice.
+
+## Refined after adversary pass 1, 2026-11-21
+
+Adversary pass 1 (`review-result:adversary-canon-simulate-pass-1`) found that § Outcome, built as written, reports findings that are false in a real case, reports one cause hundreds of times, and refuses a protocol whose reachable part fits. The wave coordinator decides the following on 2026-11-21; the session working on the SDC prototype, which orchestrates this plan, may overrule any of it. Where this section and § Outcome differ, this section holds.
+
+**R1. The bound counts reachable states only.** The walk is refused with `reachable-state-bound` only when it would visit more than `check::STATE_BOUND` states. The number of values of a dimension is never a reason to refuse: a dimension whose values the check cannot enumerate is walked by the values the walk reaches.
+
+**R2. A record of a kind that declares `max_age` may expire.** This is a fourth kind of step, the expiry step: one current record class of such a kind leaves the state, as the evaluator's freshness stage sets an expired record aside. It is written `` evidence `k` expires ``. It is tried after the action steps and the steps of supplied kinds, kinds in identifier order, and before the capabilities. With it the step graph is no longer free of loops; § Outcome's sentence "Every step only adds" holds for action, authority and decision steps only.
+
+**R3. A finding is about a state no step sequence gets out of.** A state is *open* when some sequence of action, authority, supplied and expiry steps leads from it to a state in which an outcome is legitimate. Decision steps are not part of that sequence.
+- `stuck-state`: the state is not open, and no action is `admissible` or `approval-required` in it.
+- `cycle`: the state is not open, no action is `approval-required`, at least one action is `admissible`, and every step of every admissible action returns the same state.
+- A state that meets the second half of either rule and is open is counted as waiting in the summary line and is not a finding. This replaces the rule that any supplied step that changes a state makes it waiting.
+- Every reachable state that is not open leads, by action and authority steps, to a state reported under one of the two rules, so nothing is left out by reporting only these.
+
+**R4. A decision step is not a way out, and the finding says when one exists.** A protocol with an outcome that requires only a decision can leave every state by that decision; counting it would report nothing for such a protocol. A `stuck-state` or `cycle` whose state has a decision step leading to a state with a legitimate outcome names each such decision and its outcome at the end of the finding, decisions in name order.
+
+**R5. One finding per smallest state.** Among the findings of one kind (`stuck-state`, or `cycle`), a finding is printed only when no other finding of that kind has a state contained in its state. State A is contained in state B when both have the same case-input values and every record class, every capability decision and every taken decision of A is in B. A printed finding ends with the number of other reachable states of that kind that contain its state, when that number is not 0. The summary line counts printed findings as findings and gives the number of states they stand for.
+
+**R6. The word `cycle` stays.** With R2 a set of states the steps never leave can be a loop of steps; the rule of R3 reports the state of it in which every action step returns the same state.
+
+**Known limit, unchanged:** no artifact is revised. A kind read with `result:` that an action may produce twice with different results gives one `cycle` finding per such kind (after R5), because the walk cannot set the mixed records aside by a revision. A revise step waits for the `revises` field of story:judgement-marking and is a later story.
+
+## Known limit on child outcomes, stated by the tool, 2026-11-21
+
+Found on 2026-11-21 while classifying the walk's findings on the SDC protocols (the section "Classification of the 87 findings" of story:simulate-revise-step, class e): the walk adds a child's `case_outcome` record only as a step of the opening action while that action is admissible. When the opening action's guard closes once its opening record exists, the child's outcome can never arrive in the walk, and the walk reports a stuck state a real case does not have: a runner records the outcome when the child ends. Four findings on two SDC protocols are of this kind.
+
+The session working on the SDC prototype, which orchestrates this plan, decided on 2026-11-21 that the fix is a separate story (its request 16, a `case_outcome` step that may arrive after the opening action was taken) and that this story merges with the limit stated, in its words: "story:canon-simulate merges in wave 5 with the limit stated in its reference text AND in the tool's output: until request 16 lands, `canon simulate` prints a line naming the limit whenever a protocol has an opening action, so nobody reads those four as defects."
+
+**R7.** When the compiled protocol has at least one action that declares `case_open`, `canon simulate` prints one line naming the limit, before the summary line and after the findings: a child case's outcome is walked only as a step of its opening action, so a `stuck-state` or `cycle` in a state that waits for a child's outcome may not be one in a real case. The line does not change the exit status or the count of findings. The reference text of the command and `ess/domains/cli.yaml` state the same limit. A protocol with no such action gets no such line and the same bytes as before.
+
+## Refined after adversary pass 2, 2026-11-21
+
+Adversary pass 2 (`review-result:adversary-canon-simulate-pass-2`) found one case where rule R2 as built prints a false finding: the evaluator's `children` form reads every accepted `case_outcome` record, expired ones too (an expiry does not undo a child's outcome), and the expiry step removed the record from the state. The wave coordinator decides on 2026-11-21:
+
+**R2a. An expired `case_outcome` record still counts for a `children` form.** The state after an expiry step must evaluate as the real case does past the record's `max_age`: every evidence match loses the record, every `children` form keeps reading it. So:
+- when no evidence match reads `case_outcome`, there is no expiry step for it: the step would change nothing the evaluator reads;
+- when an evidence match reads it too, the walk holds the record as expired for the matches and present for the `children` forms; if the walk's state cannot hold that, the walk refuses the protocol with a refusal of its own name and prints no finding, because a finding it cannot stand behind is worse than none (`UNKNOWN` is not `FALSE`).
+
+The same pass measured the cost of rule R5: the search for the smallest states compares stuck states pairwise, 157.7 s for 65,536 stuck states of which none contains another, against 12.4 s for 65,536 states without a finding. No SDC protocol is near it (the slowest takes 2.6 s). The unit reduces it where a change contained in that search does so, and the module documentation states the cost that remains.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w5 from the implementor's three reports, the two adversary reports (`review-result:adversary-canon-simulate-pass-1`, `-pass-2`) and the merge of `impl/canon-simulate` (`04184e2`). The three sections above ("Refined after adversary pass 1", "Known limit on child outcomes", "Refined after adversary pass 2") hold the rules as decided; this section says how they are built and where the body is no longer true.
+
+- § Outcome's sentences "A state is a state of the space `canon check` enumerates" and "Every step only adds" no longer hold. A walk state is the space's state for case inputs, capabilities and decisions, followed by the walk's own records: one set of producer profiles per evidence dimension and class, as bits (`Layout` in `crates/canon/src/simulate/mod.rs`). The walk never reads a dimension's value table, which is what R1 needed. Each state is evaluated by Canon's evaluator through `check::evaluate_records`.
+- Step order as built: action records, records of supplied kinds, expiry, capabilities, decisions.
+- Expiry (R2): the check's space has no notion of time, so an expired record is an absent one; the expiry step removes the record class. For `case_outcome` (R2a): no expiry step when no evidence match reads the kind; when a match and a `children` form both read it, the record is held as expired by one more bit per class and handed to the evaluator at a superseded revision of its artifact, which every match ignores and every `children` form reads. No protocol is refused for it.
+- Open states (R3) are found backwards from the states with a legitimate outcome over action, supplied, expiry and authority steps. The summary prints `N waiting on supplied evidence or expiry` only when the protocol has a supplied kind or a kind with `max_age`.
+- Output wording: a finding ends `` ; decision `d` taken makes outcome `o` legitimate `` (R4) and `` ; N other stuck states contain it `` or `cycle states` (R5); the summary ends `F findings (S stuck or cycle states)`. With an action that declares `case_open`, one line starting `limit:` comes after the findings and before the summary (R7, the constant `CHILD_OUTCOME_LIMIT`).
+- Cost of R5 after the second correction, release build, measured on a loaded workstation: 65,536 stuck states with case inputs of their own 9.0 s (157.7 s before); 65,536 states and no finding 12.4 to 14.5 s. Within one group of equal case inputs the search is still quadratic. The slowest SDC protocol walks in under 4 s.
+- Refused: order forms (`ordered-evidence`), `predicate-too-deep`, `claim-cycle`, more than 65,536 reachable states or initial states (`reachable-state-bound`).
+- A cycle the walk prints for a child that ended with an outcome a `children` form does not list is true of a real case: nothing undoes that record. The adversary confirmed it with the evaluator.
+- Known limits, stated in the module documentation and the reference: no artifact is revised (story:simulate-revise-step); a child's outcome is walked only as a step of its opening action (story:simulate-child-outcome-step); one step adds one record (story:simulate-record-groups).
+- On the SDC protocols as they were on 2026-11-21 before their own fix, every protocol gives one finding (sdc.plan 1 cycle standing for 514 states). After that fix (`f364b6b` of beyond10x/sdc) the eight protocols give 87 findings, classified in story:simulate-revise-step.
+- Not in § Scope and edited: `crates/canon/src/check/mod.rs` (visibility of `produces`, `supplied` and `witness`, and a split of `evaluate`), `crates/canon/src/simulate/tests.rs`. `crates/canon/src/check/space.rs` gained items at its end only. `canon check` prints what it printed.
+- Added by the adversary: `crates/canon/tests/adversary_simulate.rs` (4 cases).

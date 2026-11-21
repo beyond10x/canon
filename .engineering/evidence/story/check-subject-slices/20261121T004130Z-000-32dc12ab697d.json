@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T00:41:30Z",
+  "actor": "human:timo",
+  "artifact": "story:check-subject-slices",
+  "kind": "story",
+  "revision": 22,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "the CLI help text and the check.rs module doc stated the old bound; docs fixed in 903d41d, help text applied by the coordinator at the merge; the adversary's help test passes on the wave branch",
+    "reference": "impl/check-subject-slices 903d41d",
+    "review": "review-result:adversary-check-subject-slices-pass-1",
+    "outcome": "fixed"
+  }
+}

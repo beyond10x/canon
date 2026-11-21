@@ -1,0 +1,7 @@
+format: canon-case/1
+id: INV-32
+protocol: investigation
+artifacts:
+  explanation: {revision: r1}
+inputs:
+  severity: low

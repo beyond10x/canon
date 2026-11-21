@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T00:41:30Z",
+  "actor": "human:timo",
+  "artifact": "story:check-subject-slices",
+  "kind": "story",
+  "revision": 22,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "a probe state outside the whole product in a protocol without artifacts; fixed in 4ede7ec, test every_probe_is_a_state_of_the_whole_product red before, green after; diff read by the coordinator",
+    "reference": "impl/check-subject-slices 4ede7ec",
+    "review": "review-result:adversary-check-subject-slices-pass-2",
+    "outcome": "fixed"
+  }
+}

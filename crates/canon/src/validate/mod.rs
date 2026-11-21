@@ -4,23 +4,39 @@
 //! does not depend on the order the sections are written in:
 //!
 //! 1. the format;
-//! 2. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
+//! 2. the imports section (story:protocol-imports): each import id that is not an identifier,
+//!    followed by each of its `refines` entries that is not one (`invalid-identifier`), then each
+//!    import id listed again (`duplicate-identifier`), then each digest not written `sha256:` and
+//!    64 lowercase hexadecimal digits (`invalid-import-digest`), each naming the import, then each
+//!    import, once, as `missing-import`: a document with imports is valid only composed with the
+//!    documents it imports (`b10x_canon::ir::compose`), which leaves it without imports. Every
+//!    other problem is the composed document's, whose declarations may come from any document of
+//!    the composition;
+//! 3. malformed identifiers: the protocol id, then the ids declared in artifacts, evidence kinds,
 //!    claims, obligations, actions, outcomes, invalidation rules, case inputs and independence
-//!    dimensions, in that section order, then the capabilities and effect classes actions name and
-//!    the protocol each action's `case_open` names, in action order, then the decisions outcomes
-//!    require, in outcome order, then the values case inputs declare, in input order;
-//! 3. duplicate identifiers, in the same section order;
-//! 4. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
-//!    or `d`, or that are but are too long to count in seconds (each with its own message), in the
-//!    order the evidence kinds are written;
-//! 5. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
+//!    dimensions, in that section order, then the capabilities actions name, each followed by the
+//!    keys and values of its scope in the order written, the effect classes actions name and the
+//!    protocol each action's `case_open` names, in action order, then the protocol each evidence
+//!    kind's `supplied_by` names, in evidence kind order, then the decisions outcomes require, in
+//!    outcome order, then the values case inputs declare, in input order;
+//! 4. duplicate identifiers, in the same section order;
+//! 5. capability requirements whose scope names a key more than once (`duplicate-scope-key`,
+//!    naming the action, the capability and the key, once for every naming after its first), in
+//!    the order the actions and their requirements are written;
+//! 6. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
+//!    or `d`, or that are but are too long to count in seconds (each with its own message), and
+//!    evidence kinds whose `supplied_by` names the protocol's own id (`self-supplied-evidence`,
+//!    naming the kind; story:supplied-evidence), each kind's in that order, in the order the
+//!    evidence kinds are written. Any other protocol may supply a kind, and nothing resolves the
+//!    name;
+//! 7. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
 //!    more than once (`duplicate-input-value`, naming the input and the value, once for every
 //!    listing after its first), in the order the inputs are written;
-//! 6. action argument schemas outside the argument-schema dialect (`action-arguments`; the dialect,
+//! 8. action argument schemas outside the argument-schema dialect (`action-arguments`; the dialect,
 //!    and the order within one schema, are stated with it), each naming the action, the JSON
 //!    Pointer of the keyword inside the schema and why it is refused, one per offending keyword,
 //!    in the order the actions are written;
-//! 7. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
+//! 9. unresolved references and malformed input tests and order forms (a claim, an evidence kind,
 //!    the artifact an evidence match names as its subject, which is reported after the kind it is
 //!    written beside, then the evidence match's `independent_on`: an empty list,
 //!    `empty-independent-on`, or a dimension it lists more than once, `duplicate-independent-on`,
@@ -38,37 +54,43 @@
 //!    an empty `in` list, `empty-child-outcomes`, or an outcome it lists more than once,
 //!    `duplicate-child-outcome`, once for every listing after its first, then `open` listed,
 //!    `open-child-outcome`, once, then the evidence kind `case_outcome` when it is not declared,
-//!    `undeclared-evidence-kind`, every one naming the declaration the form is written in): those
+//!    `undeclared-evidence-kind`, then the artifact it names as its `subject` when that is not
+//!    declared, `undeclared-artifact` (story:child-outcome-subject), every one naming the
+//!    declaration the form is written in): those
 //!    in claims first, then those in obligations (each obligation's discharge predicate, followed
 //!    by every evidence match, order form and `children` form it holds, which a discharge
 //!    predicate may not: it tests only claim values, each kind an order form names once, the kind
 //!    `case_outcome` for a `children` form; then its applicability predicate, followed likewise by
 //!    every evidence match, order form and `children` form it holds, `evidence-in-applicability`:
 //!    it tests only claim values and case inputs), then those in actions (each action's
-//!    precondition, then each evidence kind it may produce, then the subject of the case it opens,
-//!    `undeclared-artifact`, then an opening under the protocol's own id, `self-opened-case`, both
-//!    naming the action), then those in outcomes, then those in invalidation rules (the upstream
+//!    precondition, then each evidence kind it may produce, then each artifact it `revises`
+//!    (story:judgement-marking), `undeclared-artifact`, once for every listing, in the order
+//!    listed, then the subject of the case it opens, `undeclared-artifact`, then an opening under
+//!    the protocol's own id, `self-opened-case`, every one naming the action), then those in
+//!    outcomes, then those in invalidation rules (the upstream
 //!    artifact, then each claim the rule invalidates); within a section, in the order its
 //!    declarations are written, and within a declaration, in the order its references are
 //!    written;
-//! 8. invalidation rules that name a claim reaching no evidence match, in its own predicate or in a
-//!    claim it tests through any number of claim references (`inert-invalidation`), in the order
-//!    the rules and their claims are written. An order form or a `children` form is not an
-//!    evidence match here: it reads the history, which an invalidation rule does not change;
-//! 9. cycles between claims.
+//! 10. invalidation rules that name a claim reaching no evidence match, in its own predicate or
+//!     in a claim it tests through any number of claim references (`inert-invalidation`), in the
+//!     order the rules and their claims are written. An order form or a `children` form is not an
+//!     evidence match here: it reads the history, which an invalidation rule does not change;
+//! 11. cycles between claims.
 //!
 //! Within a section, entries come in the order they are written. Every message renders document
 //! text on one line. The same document always yields the same problems in the same order.
 
 pub(crate) mod arguments;
+pub use arguments::{ArgumentRefusal, ArgumentsRefused, check_arguments};
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use crate::ir::DIGEST_PREFIX;
 use crate::model::{
-    ActionId, ArtifactId, CASE_OUTCOME, ClaimId, EvidenceKindId, FORMAT, IndependenceDimensionId,
-    InputId, InputValue, InvalidationRuleId, OPEN_OUTCOME, ObligationId, OutcomeId, Predicate,
-    Protocol, ProtocolId, is_identifier, one_line,
+    ActionId, ArtifactId, CASE_OUTCOME, CapabilityId, ClaimId, EvidenceKindId, FORMAT,
+    IndependenceDimensionId, InputId, InputValue, InvalidationRuleId, OPEN_OUTCOME, ObligationId,
+    OutcomeId, Predicate, Protocol, ProtocolId, ScopeKey, is_identifier, one_line,
 };
 
 /// What an identifier names: the protocol itself, a declaration section (named by the singular noun
@@ -90,6 +112,12 @@ pub enum Section {
     Input,
     InputValue,
     IndependenceDimension,
+    ScopeKey,
+    ScopeValue,
+    /// An imported protocol, by the id the `imports` section keys it by.
+    Import,
+    /// An identifier an import lists under `refines`.
+    Refinement,
 }
 
 impl fmt::Display for Section {
@@ -109,6 +137,10 @@ impl fmt::Display for Section {
             Section::Input => "input",
             Section::InputValue => "input value",
             Section::IndependenceDimension => "independence dimension",
+            Section::ScopeKey => "scope key",
+            Section::ScopeValue => "scope value",
+            Section::Import => "import",
+            Section::Refinement => "refinement",
         })
     }
 }
@@ -190,6 +222,12 @@ pub enum Problem {
         kind: EvidenceKindId,
         path: String,
     },
+    /// A capability requirement's scope names a key more than once.
+    DuplicateScopeKey {
+        action: ActionId,
+        capability: CapabilityId,
+        key: ScopeKey,
+    },
     /// A case input declares no value, so no case could give it one.
     EmptyInputValues { input: InputId },
     /// A case input lists a value more than once.
@@ -245,6 +283,13 @@ pub enum Problem {
         action: ActionId,
         protocol: ProtocolId,
     },
+    /// An evidence kind names the protocol's own id as the protocol that supplies its records
+    /// (story:supplied-evidence): records of it come from outside the protocol, or from its own
+    /// actions, never from a case of the same protocol through `supplied_by`.
+    SelfSuppliedEvidence {
+        kind: EvidenceKindId,
+        protocol: ProtocolId,
+    },
     /// Claims whose predicates test each other in a cycle; the first claim is repeated at the end.
     ClaimCycle { claims: Vec<ClaimId> },
     /// An action's argument schema is outside the argument-schema dialect: `pointer` is the JSON
@@ -254,6 +299,66 @@ pub enum Problem {
         action: ActionId,
         pointer: String,
         reason: String,
+    },
+    /// An import pins a digest not written `sha256:` followed by 64 lowercase hexadecimal digits.
+    InvalidImportDigest { import: ProtocolId, digest: String },
+    /// A protocol imports one that no supplied document is: a protocol with imports compiles only
+    /// with every document it imports, directly or through another import.
+    MissingImport {
+        importer: ProtocolId,
+        import: ProtocolId,
+    },
+    /// A document supplied to a composition that neither the root nor any document it imports
+    /// imports.
+    UnusedImport { protocol: ProtocolId },
+    /// Two documents supplied to one composition, the root included, are of one protocol.
+    DuplicateImportDocument { protocol: ProtocolId },
+    /// Protocols that import each other in a cycle, from the first a walk from the root meets; the
+    /// first protocol is repeated at the end.
+    ImportCycle { protocols: Vec<ProtocolId> },
+    /// The supplied document of an import is another revision than the import pins.
+    ImportRevisionMismatch {
+        importer: ProtocolId,
+        import: ProtocolId,
+        pinned: u64,
+        supplied: u64,
+    },
+    /// The supplied document of an import, compiled with its own imports, has another digest than
+    /// the import pins.
+    ImportDigestMismatch {
+        importer: ProtocolId,
+        import: ProtocolId,
+        pinned: String,
+        actual: String,
+    },
+    /// An import lists under `refines` an identifier it does not declare, itself or through its
+    /// own imports.
+    UndeclaredRefinement {
+        importer: ProtocolId,
+        import: ProtocolId,
+        id: String,
+    },
+    /// Two imports declare one identifier in one section differently, and the importing document
+    /// does not redeclare it. Two declarations with the same `canon-ir/1` entry are one.
+    ConflictingImports {
+        importer: ProtocolId,
+        section: Section,
+        id: String,
+        first: ProtocolId,
+        second: ProtocolId,
+    },
+    /// A document redeclares an identifier an import declares in the same section, and that
+    /// import does not list it under `refines`.
+    UnrefinedRedeclaration {
+        importer: ProtocolId,
+        section: Section,
+        id: String,
+        import: ProtocolId,
+    },
+    /// An imported document is not valid itself: `problem` says why.
+    InvalidImport {
+        import: ProtocolId,
+        problem: Box<Problem>,
     },
 }
 
@@ -271,6 +376,7 @@ impl Problem {
             Problem::InvalidMaxAge { .. } => "invalid-max-age",
             Problem::EvidenceInDischarge { .. } => "evidence-in-discharge",
             Problem::EvidenceInApplicability { .. } => "evidence-in-applicability",
+            Problem::DuplicateScopeKey { .. } => "duplicate-scope-key",
             Problem::EmptyInputValues { .. } => "empty-input-values",
             Problem::DuplicateInputValue { .. } => "duplicate-input-value",
             Problem::EmptyInputTest { .. } => "empty-input-test",
@@ -285,8 +391,20 @@ impl Problem {
             Problem::DuplicateChildOutcome { .. } => "duplicate-child-outcome",
             Problem::OpenChildOutcome { .. } => "open-child-outcome",
             Problem::SelfOpenedCase { .. } => "self-opened-case",
+            Problem::SelfSuppliedEvidence { .. } => "self-supplied-evidence",
             Problem::ClaimCycle { .. } => "claim-cycle",
             Problem::ActionArguments { .. } => "action-arguments",
+            Problem::InvalidImportDigest { .. } => "invalid-import-digest",
+            Problem::MissingImport { .. } => "missing-import",
+            Problem::UnusedImport { .. } => "unused-import",
+            Problem::DuplicateImportDocument { .. } => "duplicate-import-document",
+            Problem::ImportCycle { .. } => "import-cycle",
+            Problem::ImportRevisionMismatch { .. } => "import-revision-mismatch",
+            Problem::ImportDigestMismatch { .. } => "import-digest-mismatch",
+            Problem::UndeclaredRefinement { .. } => "undeclared-refinement",
+            Problem::ConflictingImports { .. } => "conflicting-imports",
+            Problem::UnrefinedRedeclaration { .. } => "unrefined-redeclaration",
+            Problem::InvalidImport { .. } => "invalid-import",
         }
     }
 }
@@ -359,6 +477,17 @@ impl fmt::Display for Problem {
                 "obligation `{}` tests evidence kind `{}` at `{path}`; an applicability predicate tests only claim values and case inputs",
                 one_line(obligation.as_str()),
                 one_line(kind.as_str())
+            ),
+            Problem::DuplicateScopeKey {
+                action,
+                capability,
+                key,
+            } => write!(
+                f,
+                "action `{}` requires capability `{}` with scope key `{}` more than once",
+                one_line(action.as_str()),
+                one_line(capability.as_str()),
+                one_line(key.as_str())
             ),
             Problem::EmptyInputValues { input } => {
                 write!(f, "input `{}` declares no value", one_line(input.as_str()))
@@ -446,6 +575,12 @@ impl fmt::Display for Problem {
                 one_line(action.as_str()),
                 one_line(protocol.as_str())
             ),
+            Problem::SelfSuppliedEvidence { kind, protocol } => write!(
+                f,
+                "evidence kind `{}` is supplied by protocol `{}`, the protocol's own id",
+                one_line(kind.as_str()),
+                one_line(protocol.as_str())
+            ),
             Problem::ClaimCycle { claims } => {
                 let path: Vec<String> = claims.iter().map(|id| one_line(id.as_str())).collect();
                 write!(
@@ -465,8 +600,148 @@ impl fmt::Display for Problem {
                 }
                 write!(f, ": {}", one_line(reason))
             }
+            Problem::InvalidImportDigest { import, digest } => write!(
+                f,
+                "import `{}` pins digest `{}`, which is not `{DIGEST_PREFIX}` followed by 64 lowercase hexadecimal digits",
+                one_line(import.as_str()),
+                one_line(digest)
+            ),
+            Problem::MissingImport { importer, import } => write!(
+                f,
+                "protocol `{}` imports `{}`, and no supplied document is that protocol",
+                one_line(importer.as_str()),
+                one_line(import.as_str())
+            ),
+            Problem::UnusedImport { protocol } => write!(
+                f,
+                "the supplied protocol `{}` is imported neither by the root nor by any document it imports",
+                one_line(protocol.as_str())
+            ),
+            Problem::DuplicateImportDocument { protocol } => write!(
+                f,
+                "protocol `{}` is supplied more than once",
+                one_line(protocol.as_str())
+            ),
+            Problem::ImportCycle { protocols } => {
+                let path: Vec<String> = protocols.iter().map(|id| one_line(id.as_str())).collect();
+                write!(
+                    f,
+                    "protocols import each other in a cycle: {}",
+                    path.join(" -> ")
+                )
+            }
+            Problem::ImportRevisionMismatch {
+                importer,
+                import,
+                pinned,
+                supplied,
+            } => write!(
+                f,
+                "protocol `{}` imports `{}` pinned to revision {pinned}, and the supplied document is revision {supplied}",
+                one_line(importer.as_str()),
+                one_line(import.as_str())
+            ),
+            Problem::ImportDigestMismatch {
+                importer,
+                import,
+                pinned,
+                actual,
+            } => write!(
+                f,
+                "protocol `{}` imports `{}` pinned to digest {}, and the supplied document compiles to {actual}",
+                one_line(importer.as_str()),
+                one_line(import.as_str()),
+                one_line(pinned)
+            ),
+            Problem::UndeclaredRefinement {
+                importer,
+                import,
+                id,
+            } => write!(
+                f,
+                "protocol `{}` refines `{}` of its import `{}`, which declares no such identifier",
+                one_line(importer.as_str()),
+                one_line(id),
+                one_line(import.as_str())
+            ),
+            Problem::ConflictingImports {
+                importer,
+                section,
+                id,
+                first,
+                second,
+            } => write!(
+                f,
+                "protocol `{}` imports {section} `{}` from `{}` and from `{}`, declared differently",
+                one_line(importer.as_str()),
+                one_line(id),
+                one_line(first.as_str()),
+                one_line(second.as_str())
+            ),
+            Problem::UnrefinedRedeclaration {
+                importer,
+                section,
+                id,
+                import,
+            } => write!(
+                f,
+                "protocol `{}` declares {section} `{}`, which its import `{}` declares and does not list under `refines`",
+                one_line(importer.as_str()),
+                one_line(id),
+                one_line(import.as_str())
+            ),
+            Problem::InvalidImport { import, problem } => write!(
+                f,
+                "imported protocol `{}`: {}: {problem}",
+                one_line(import.as_str()),
+                problem.code()
+            ),
         }
     }
+}
+
+/// The problems of a document's own `imports` section, in the order written: each import id that
+/// is not an identifier, followed by each of its `refines` entries that is not one, then each
+/// import id listed again, then each digest not written [`DIGEST_PREFIX`] and 64 lowercase
+/// hexadecimal digits.
+pub(crate) fn import_section(protocol: &Protocol) -> Vec<Problem> {
+    let mut problems = Vec::new();
+    for (id, import) in protocol.imports.iter() {
+        if !is_identifier(id.as_str()) {
+            problems.push(Problem::InvalidIdentifier {
+                section: Section::Import,
+                id: id.as_str().to_owned(),
+            });
+        }
+        for refined in &import.refines {
+            if !is_identifier(refined) {
+                problems.push(Problem::InvalidIdentifier {
+                    section: Section::Refinement,
+                    id: refined.clone(),
+                });
+            }
+        }
+    }
+    duplicates(
+        Section::Import,
+        &strs(protocol.imports.ids()),
+        &mut problems,
+    );
+    for (id, import) in protocol.imports.iter() {
+        let well_formed = import
+            .digest
+            .strip_prefix(DIGEST_PREFIX)
+            .is_some_and(|hex| {
+                hex.len() == 64 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+            });
+        if !well_formed {
+            problems.push(Problem::InvalidImportDigest {
+                import: id.clone(),
+                digest: import.digest.clone(),
+            });
+        }
+    }
+    problems
 }
 
 /// Validates a parsed protocol. `Ok` when it is valid; otherwise every problem, in a stable order.
@@ -477,6 +752,17 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         problems.push(Problem::UnsupportedFormat {
             found: protocol.format.clone(),
         });
+    }
+
+    problems.extend(import_section(protocol));
+    let mut uncomposed = BTreeSet::new();
+    for import in protocol.imports.ids() {
+        if uncomposed.insert(import) {
+            problems.push(Problem::MissingImport {
+                importer: protocol.protocol.id.clone(),
+                import: import.clone(),
+            });
+        }
     }
 
     let declared: [(Section, Vec<&str>); 10] = [
@@ -501,12 +787,21 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
     for (_, action) in protocol.actions.iter() {
         for requirement in &action.requires {
             named.push((Section::Capability, requirement.capability.as_str()));
+            for (key, value) in requirement.scope.iter() {
+                named.push((Section::ScopeKey, key.as_str()));
+                named.push((Section::ScopeValue, value.as_str()));
+            }
         }
         if let Some(effect) = &action.effect {
             named.push((Section::EffectClass, effect.as_str()));
         }
         if let Some(opening) = &action.case_open {
             named.push((Section::Protocol, opening.protocol.as_str()));
+        }
+    }
+    for (_, kind) in protocol.evidence_kinds.iter() {
+        if let Some(supplier) = &kind.supplied_by {
+            named.push((Section::Protocol, supplier.as_str()));
         }
     }
     for (_, outcome) in protocol.outcomes.iter() {
@@ -536,6 +831,21 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         duplicates(*section, ids, &mut problems);
     }
 
+    for (id, action) in protocol.actions.iter() {
+        for requirement in &action.requires {
+            let mut seen = BTreeSet::new();
+            for key in requirement.scope.ids() {
+                if !seen.insert(key) {
+                    problems.push(Problem::DuplicateScopeKey {
+                        action: id.clone(),
+                        capability: requirement.capability.clone(),
+                        key: key.clone(),
+                    });
+                }
+            }
+        }
+    }
+
     for (id, kind) in protocol.evidence_kinds.iter() {
         if let Some(max_age) = &kind.max_age
             && max_age.seconds().is_none()
@@ -544,6 +854,12 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
                 kind: id.clone(),
                 max_age: max_age.as_str().to_owned(),
                 too_long: max_age.is_well_formed(),
+            });
+        }
+        if kind.supplied_by.as_ref() == Some(&protocol.protocol.id) {
+            problems.push(Problem::SelfSuppliedEvidence {
+                kind: id.clone(),
+                protocol: protocol.protocol.id.clone(),
             });
         }
     }
@@ -626,6 +942,14 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
                 });
             }
         }
+        for artifact in &action.revises {
+            if !protocol.artifacts.contains(artifact) {
+                problems.push(Problem::UndeclaredArtifact {
+                    referrer: referrer.clone(),
+                    artifact: artifact.clone(),
+                });
+            }
+        }
         if let Some(opening) = &action.case_open {
             if !protocol.artifacts.contains(&opening.subject) {
                 problems.push(Problem::UndeclaredArtifact {
@@ -669,9 +993,10 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         }
     }
 
+    let reaching = reaching_evidence(protocol);
     for (id, rule) in protocol.invalidation.iter() {
         for claim in &rule.invalidates {
-            if protocol.claims.contains(claim) && !reaches_evidence(protocol, claim) {
+            if protocol.claims.contains(claim) && !reaching.contains(claim) {
                 problems.push(Problem::InertInvalidation {
                     rule: id.clone(),
                     claim: claim.clone(),
@@ -689,29 +1014,38 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
     }
 }
 
-/// Whether `claim` reaches an evidence match: in its own predicate, or in a claim it tests through
-/// any number of claim references. Each claim is visited once, so a cycle ends.
-fn reaches_evidence(protocol: &Protocol, claim: &ClaimId) -> bool {
-    let mut visited = BTreeSet::new();
-    let mut pending = vec![claim];
-    while let Some(next) = pending.pop() {
-        if !visited.insert(next) {
-            continue;
-        }
-        let Some(declared) = protocol.claims.get(next) else {
-            continue;
-        };
+/// The declared claims that reach an evidence match: in their own predicate, or in a claim they test
+/// through any number of claim references. A claim declared twice is read in its first
+/// declaration, as `Declarations::get` reads it. The claims whose predicate holds a match are found
+/// first, then every claim testing one found, each once, so a cycle ends and the work grows with
+/// the size of the predicates, not with the number of rules times the length of a chain.
+fn reaching_evidence(protocol: &Protocol) -> BTreeSet<&ClaimId> {
+    let mut declared: BTreeMap<&ClaimId, &Predicate> = BTreeMap::new();
+    for (id, claim) in protocol.claims.iter() {
+        declared.entry(id).or_insert(&claim.true_when);
+    }
+    let mut testers: BTreeMap<&ClaimId, Vec<&ClaimId>> = BTreeMap::new();
+    let mut reaching = BTreeSet::new();
+    let mut pending = Vec::new();
+    for (&id, &predicate) in &declared {
         let mut found = false;
-        declared.true_when.visit(&mut |node| match node {
+        predicate.visit(&mut |node| match node {
             Predicate::Evidence(_) => found = true,
-            Predicate::Claim(test) => pending.push(&test.claim),
+            Predicate::Claim(test) => testers.entry(&test.claim).or_default().push(id),
             _ => {}
         });
-        if found {
-            return true;
+        if found && reaching.insert(id) {
+            pending.push(id);
         }
     }
-    false
+    while let Some(next) = pending.pop() {
+        for &tester in testers.get(next).into_iter().flatten() {
+            if reaching.insert(tester) {
+                pending.push(tester);
+            }
+        }
+    }
+    reaching
 }
 
 /// Every evidence match, order form and `children` form in an obligation's discharge or
@@ -790,8 +1124,9 @@ fn duplicates(section: Section, ids: &[&str], problems: &mut Vec<Problem>) {
 /// Reports every claim, evidence kind and evidence subject the predicate references that is not
 /// declared, every input test that lists no value, a value twice, an undeclared input or a
 /// value its input does not declare, every `before` that orders a kind before itself, and every
-/// `children` form that lists no outcome, an outcome twice or `open`, or is written in a protocol
-/// that does not declare `case_outcome`, in the order the predicate is written.
+/// `children` form that lists no outcome, an outcome twice or `open`, is written in a protocol
+/// that does not declare `case_outcome`, or names a subject that is not declared, in the order the
+/// predicate is written.
 fn references(
     protocol: &Protocol,
     referrer: &Referrer,
@@ -957,6 +1292,14 @@ fn references(
                     kind,
                 });
             }
+            if let Some(subject) = &form.subject
+                && !protocol.artifacts.contains(subject)
+            {
+                unresolved.push(Problem::UndeclaredArtifact {
+                    referrer: referrer.clone(),
+                    artifact: subject.clone(),
+                });
+            }
         }
         _ => {}
     });
@@ -1067,6 +1410,40 @@ mod tests {
                     .replace("{evidence: {kind: z}}", "{claim: c}")
                     .replace("{claim: x}", "{claim: c}")
                     .replace("{claim: y}", "{claim: c}")
+            ),
+            Vec::<String>::new()
+        );
+    }
+
+    /// A capability requirement's scope keys and values are identifiers, checked right after its
+    /// capability; a key is named once per requirement, reported after the duplicate identifiers
+    /// and before the maximum ages. One capability at several scopes, or with and without one, is
+    /// valid.
+    #[test]
+    fn a_requirement_scope_names_each_key_once_with_identifiers() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            evidence_kinds: {k: {max_age: 5x}}\n\
+            actions:\n  b: {}\n  b: {}\n  a:\n    effect: 'bad effect'\n    requires:\n      \
+            - {capability: m, scope: {'clu ster': prod-eu, namespace: ''}}\n      \
+            - {capability: m, scope: {cluster: a, namespace: foo, cluster: b, cluster: c}}\n      \
+            - {capability: n, scope: {cluster: a}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "invalid-identifier: scope key identifier `clu ster` is empty or contains whitespace or a control character",
+                "invalid-identifier: scope value identifier `` is empty or contains whitespace or a control character",
+                "invalid-identifier: effect class identifier `bad effect` is empty or contains whitespace or a control character",
+                "duplicate-identifier: action `b` is declared more than once",
+                "duplicate-scope-key: action `a` requires capability `m` with scope key `cluster` more than once",
+                "duplicate-scope-key: action `a` requires capability `m` with scope key `cluster` more than once",
+                "invalid-max-age: evidence kind `k` has max_age `5x`, which is not a whole number without leading zeros, followed by s, m, h or d",
+            ]
+        );
+        assert_eq!(
+            problems(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 actions: {a: {requires: [{capability: m}, {capability: m, scope: {cluster: a}}, \
+                 {capability: m, scope: {cluster: b, namespace: foo}}, {capability: m, scope: {}}]}}\n"
             ),
             Vec::<String>::new()
         );
@@ -1265,6 +1642,40 @@ mod tests {
             [
                 "invalid-max-age: evidence kind `k` has max_age `106751991167301d`, which is too long to count in seconds"
             ]
+        );
+    }
+
+    /// A supplier is a protocol identifier, checked after every name actions give and before the
+    /// decisions outcomes require; the protocol's own id is refused as `self-supplied-evidence`,
+    /// naming the kind, after its maximum age and before the unresolved references. Any other id
+    /// is valid, resolved by nothing: the parent's, a child's, one no document declares.
+    #[test]
+    fn a_supplier_is_another_protocol_named_by_an_identifier() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            evidence_kinds: {z: {supplied_by: p, max_age: 5x}, a: {supplied_by: 'q q'}, \
+            k: {supplied_by: p}}\n\
+            actions: {act: {effect: 'bad effect'}}\n\
+            outcomes: {o: {requires: {decision: 'bad decision'}}}\n\
+            claims: {c: {true_when: {evidence: {kind: x}}}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "invalid-identifier: effect class identifier `bad effect` is empty or contains whitespace or a control character",
+                "invalid-identifier: protocol identifier `q q` is empty or contains whitespace or a control character",
+                "invalid-identifier: decision identifier `bad decision` is empty or contains whitespace or a control character",
+                "invalid-max-age: evidence kind `z` has max_age `5x`, which is not a whole number without leading zeros, followed by s, m, h or d",
+                "self-supplied-evidence: evidence kind `z` is supplied by protocol `p`, the protocol's own id",
+                "self-supplied-evidence: evidence kind `k` is supplied by protocol `p`, the protocol's own id",
+                "undeclared-evidence-kind: claim `c` references evidence kind `x`, which is not declared",
+            ]
+        );
+        assert_eq!(
+            problems(
+                "format: protocol/1\nprotocol: {id: p.child, revision: 1}\n\
+                 evidence_kinds: {up: {supplied_by: p}, down: {supplied_by: p.child.grandchild}, \
+                 side: {supplied_by: p.sibling}, nowhere: {supplied_by: never.declared}}\n"
+            ),
+            Vec::<String>::new()
         );
     }
 
@@ -1548,5 +1959,268 @@ mod tests {
                 subject: None,
             })
         );
+    }
+
+    /// The oracle: whether `claim` reaches an evidence match, found by walking from it alone, as
+    /// the inert-invalidation check did for each claim a rule names before it found the claims
+    /// that reach evidence once for every rule. Each claim is visited once, so a cycle ends.
+    fn reaches_evidence_by_walking(protocol: &Protocol, claim: &ClaimId) -> bool {
+        let mut visited = BTreeSet::new();
+        let mut pending = vec![claim];
+        while let Some(next) = pending.pop() {
+            if !visited.insert(next) {
+                continue;
+            }
+            let Some(declared) = protocol.claims.get(next) else {
+                continue;
+            };
+            let mut found = false;
+            declared.true_when.visit(&mut |node| match node {
+                Predicate::Evidence(_) => found = true,
+                Predicate::Claim(test) => pending.push(&test.claim),
+                _ => {}
+            });
+            if found {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Each rule and claim the oracle finds inert, in rule order and then the order the rule names
+    /// its claims.
+    fn inert_by_walking(protocol: &Protocol) -> Vec<(InvalidationRuleId, ClaimId)> {
+        let mut inert = Vec::new();
+        for (id, rule) in protocol.invalidation.iter() {
+            for claim in &rule.invalidates {
+                if protocol.claims.contains(claim) && !reaches_evidence_by_walking(protocol, claim)
+                {
+                    inert.push((id.clone(), claim.clone()));
+                }
+            }
+        }
+        inert
+    }
+
+    /// Each `inert-invalidation` problem `validate` reports, in its order.
+    fn inert_reported(protocol: &Protocol) -> Vec<(InvalidationRuleId, ClaimId)> {
+        validate(protocol)
+            .err()
+            .into_iter()
+            .flatten()
+            .filter_map(|problem| match problem {
+                Problem::InertInvalidation { rule, claim } => Some((rule, claim)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Every protocol under `fixtures/` that parses, with its path.
+    fn fixture_protocols() -> Vec<(std::path::PathBuf, Protocol)> {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures");
+        let mut pending = vec![root];
+        let mut found = Vec::new();
+        while let Some(directory) = pending.pop() {
+            let mut entries: Vec<std::path::PathBuf> = std::fs::read_dir(&directory)
+                .expect("fixtures directory reads")
+                .map(|entry| entry.expect("fixture entry reads").path())
+                .collect();
+            entries.sort();
+            for path in entries {
+                if path.is_dir() {
+                    pending.push(path);
+                } else if path
+                    .extension()
+                    .is_some_and(|ext| ext == "yaml" || ext == "yml")
+                {
+                    let text = std::fs::read_to_string(&path).expect("fixture reads");
+                    if let Ok(protocol) = crate::model::parse(&text) {
+                        found.push((path, protocol));
+                    }
+                }
+            }
+        }
+        found
+    }
+
+    /// A fixed-seed xorshift generator: the same protocols on every run.
+    struct Rng(u64);
+
+    impl Rng {
+        fn below(&mut self, n: usize) -> usize {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            (self.0 % n as u64) as usize
+        }
+    }
+
+    /// A protocol of `claims` claims, each testing up to two others (itself and later claims
+    /// included, so cycles occur) through `all`, `any` or `not`, some reading evidence, with rules
+    /// naming declared claims and a claim no section declares.
+    fn generated(rng: &mut Rng, claims: usize) -> String {
+        let mut source = String::from(
+            "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {up: {}}\n\
+             evidence_kinds: {k: {}}\nclaims:\n",
+        );
+        for at in 0..claims {
+            let mut members: Vec<String> = (0..rng.below(3))
+                .map(|_| format!("{{claim: c{}}}", rng.below(claims)))
+                .collect();
+            if rng.below(4) == 0 {
+                members.push("{evidence: {kind: k}}".to_owned());
+            }
+            let predicate = match (rng.below(3), members.len()) {
+                (_, 0) => "{all: []}".to_owned(),
+                (0, 1) => format!("{{not: {}}}", members[0]),
+                (1, _) => format!("{{any: [{}]}}", members.join(", ")),
+                _ => format!("{{all: [{}]}}", members.join(", ")),
+            };
+            source.push_str(&format!("  c{at}: {{true_when: {predicate}}}\n"));
+        }
+        source.push_str("invalidation:\n");
+        for rule in 0..claims / 2 {
+            let named: Vec<String> = (0..1 + rng.below(3))
+                .map(|_| match rng.below(8) {
+                    0 => "undeclared".to_owned(),
+                    _ => format!("c{}", rng.below(claims)),
+                })
+                .collect();
+            source.push_str(&format!(
+                "  r{rule}: {{upstream: up, invalidates: [{}]}}\n",
+                named.join(", ")
+            ));
+        }
+        source
+    }
+
+    /// The claims that reach evidence, found once for every rule, give every `inert-invalidation`
+    /// problem the walk from each named claim gave, in the same order: over every protocol fixture,
+    /// cycles, a claim declared twice (its first declaration counts), a rule naming an undeclared
+    /// claim, evidence reached only through `not` or `any`, and generated protocols.
+    #[test]
+    fn inert_invalidation_is_reported_as_the_walk_from_each_named_claim_reports_it() {
+        let mut protocols: Vec<(String, Protocol)> = fixture_protocols()
+            .into_iter()
+            .map(|(path, protocol)| (path.display().to_string(), protocol))
+            .collect();
+        assert!(protocols.len() >= 20, "fixtures found: {}", protocols.len());
+        let written = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            artifacts: {up: {}}\nevidence_kinds: {k: {}}\n\
+            claims:\n\
+            \x20 e: {true_when: {evidence: {kind: k}}}\n\
+            \x20 through_not: {true_when: {not: {claim: e}}}\n\
+            \x20 through_any: {true_when: {any: [{all: []}, {not: {claim: through_not}}]}}\n\
+            \x20 bare: {true_when: {all: []}}\n\
+            \x20 loop_a: {true_when: {claim: loop_b}}\n\
+            \x20 loop_b: {true_when: {not: {claim: loop_a}}}\n\
+            \x20 ring_a: {true_when: {claim: ring_b}}\n\
+            \x20 ring_b: {true_when: {any: [{claim: ring_a}, {evidence: {kind: k}}]}}\n\
+            \x20 self: {true_when: {all: [{claim: self}]}}\n\
+            \x20 twice: {true_when: {all: []}}\n\
+            invalidation:\n\
+            \x20 r1: {upstream: up, invalidates: [through_not, bare, nowhere, through_any]}\n\
+            \x20 r2: {upstream: up, invalidates: [loop_a, ring_a, self, loop_b, ring_b]}\n\
+            \x20 r3: {upstream: up, invalidates: [twice, e, bare]}\n";
+        let protocol = crate::model::parse(written).expect("parses");
+        // `twice` declared again, reaching evidence: the first declaration, which does not, counts.
+        let mut declared_twice = protocol.clone();
+        declared_twice.claims = crate::model::Declarations::new(
+            protocol
+                .claims
+                .iter()
+                .map(|(id, claim)| (id.clone(), claim.clone()))
+                .chain([(
+                    ClaimId::new("twice"),
+                    crate::model::Claim {
+                        description: None,
+                        true_when: Predicate::Claim(crate::model::ClaimTest {
+                            claim: ClaimId::new("e"),
+                            is: crate::model::Truth::True,
+                        }),
+                    },
+                )])
+                .collect(),
+        );
+        // And the other way round: the first declaration reaches evidence.
+        let mut reversed = declared_twice.clone();
+        let mut entries: Vec<(ClaimId, crate::model::Claim)> = declared_twice
+            .claims
+            .iter()
+            .map(|(id, claim)| (id.clone(), claim.clone()))
+            .collect();
+        entries.reverse();
+        reversed.claims = crate::model::Declarations::new(entries);
+        protocols.push(("written".to_owned(), protocol));
+        protocols.push(("declared twice".to_owned(), declared_twice));
+        protocols.push(("declared twice, reversed".to_owned(), reversed));
+        let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
+        for at in 0..200 {
+            let source = generated(&mut rng, 2 + at % 30);
+            let protocol = crate::model::parse(&source).expect("generated protocol parses");
+            protocols.push((source, protocol));
+        }
+        let mut inert = 0;
+        for (name, protocol) in &protocols {
+            let expected = inert_by_walking(protocol);
+            inert += expected.len();
+            assert_eq!(inert_reported(protocol), expected, "{name}");
+        }
+        assert_eq!(
+            inert_reported(&protocols[protocols.len() - 203].1),
+            [
+                ("r1", "bare"),
+                ("r2", "loop_a"),
+                ("r2", "self"),
+                ("r2", "loop_b"),
+                ("r3", "twice"),
+                ("r3", "bare"),
+            ]
+            .map(|(rule, claim)| (InvalidationRuleId::new(rule), ClaimId::new(claim)))
+        );
+        assert!(inert > 200, "inert problems compared: {inert}");
+    }
+
+    /// A chain of 4000 claims, each testing the next and named by a rule of its own, validates in
+    /// under 10 s: the claims that reach evidence are found once, not once for each rule.
+    #[test]
+    fn a_chain_of_4000_claims_with_a_rule_each_validates_within_budget() {
+        let claims = 4000;
+        let mut source = String::from(
+            "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {up: {}}\n\
+             evidence_kinds: {k: {}}\nclaims:\n",
+        );
+        for at in 0..claims - 1 {
+            source.push_str(&format!(
+                "  c{at:05}: {{true_when: {{claim: c{:05}}}}}\n",
+                at + 1
+            ));
+        }
+        source.push_str(&format!(
+            "  c{:05}: {{true_when: {{evidence: {{kind: k}}}}}}\ninvalidation:\n",
+            claims - 1
+        ));
+        for at in 0..claims {
+            source.push_str(&format!(
+                "  r{at:05}: {{upstream: up, invalidates: [c{at:05}]}}\n"
+            ));
+        }
+        let protocol = crate::model::parse(&source).expect("parses");
+        let budget = std::time::Duration::from_secs(10);
+        let (sent, received) = std::sync::mpsc::channel();
+        std::thread::Builder::new()
+            .name("validate-chain".to_owned())
+            .stack_size(64 << 20)
+            .spawn(move || {
+                let started = std::time::Instant::now();
+                let valid = validate(&protocol).is_ok();
+                let _ = sent.send((started.elapsed(), valid));
+            })
+            .expect("a worker thread starts");
+        let (took, valid) = received.recv_timeout(budget).unwrap_or_else(|_| {
+            panic!("validating a chain of {claims} claims took more than {budget:?}")
+        });
+        eprintln!("validated a chain of {claims} claims in {took:?}");
+        assert!(valid, "the chain is valid");
     }
 }

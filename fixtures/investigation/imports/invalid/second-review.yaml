@@ -1,0 +1,12 @@
+format: protocol/1
+
+# Declares the evidence kind peer_review, which investigation.review declares too, with another
+# description.
+
+protocol:
+  id: investigation.second-review
+  revision: 1
+
+evidence_kinds:
+  peer_review:
+    description: A second peer's review of the finding.

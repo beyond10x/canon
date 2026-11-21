@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T08:15:25Z",
+  "actor": "human:timo",
+  "artifact": "story:argument-validator",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "with arbitrary_precision the exact text was compared through as_f64: fixed for numbers read from JSON by the decimal comparison (D2) and for protocol numbers by D4",
+    "reference": "impl/argument-validator e33bfcd, 37f889c",
+    "review": "review-result:adversary-argument-validator-pass-1",
+    "outcome": "fixed"
+  }
+}

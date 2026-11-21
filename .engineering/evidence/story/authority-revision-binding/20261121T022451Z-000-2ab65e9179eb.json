@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T02:24:51Z",
+  "actor": "human:timo",
+  "artifact": "story:authority-revision-binding",
+  "kind": "story",
+  "revision": 21,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check steps at 22537bf (wave/2026-11-20-w3 after merges b4f93c7 and 9fad782 and the status commit) with ess 0.77.0 first on PATH, one exit status per step: ess-gate 0 (89 passed), fmt 0, clippy 0, cargo test --workspace --no-fail-fast 0 (139 summaries, 992 passed, 0 failed, 3 ignored), conform run --requirements 0 (22 passed, 23 implemented, 23 covered), adversary_action_arguments 0 (12 passed), docs-check 0 (18 generated files current); no step skipped",
+    "reference": "22537bf4b42edbf269b198521530b3f5479bab06"
+  }
+}

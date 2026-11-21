@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T09:42:17Z",
+  "actor": "human:timo",
+  "artifact": "story:simulate-child-outcome-step",
+  "kind": "story",
+  "revision": 14,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "a state held two outcomes of the one child of an opening taken once and the reference stated no limit: under the count rule either-once prints only true findings; the limit sentence added as D3 was withdrawn as D6 after pass 2 showed the case does not arise",
+    "reference": "impl/simulate-child-outcome-step 0e78756, 146fac6",
+    "review": "review-result:adversary-simulate-child-outcome-step-pass-1",
+    "outcome": "fixed"
+  }
+}

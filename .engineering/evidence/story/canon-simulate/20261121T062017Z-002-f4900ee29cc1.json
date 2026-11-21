@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T06:20:17Z",
+  "actor": "human:timo",
+  "artifact": "story:canon-simulate",
+  "kind": "story",
+  "revision": 21,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "a state counted as waiting when any supplied step changed it: stuck states and cycles are judged against open states (R3, 8fb960c)",
+    "reference": "impl/canon-simulate 8fb960c",
+    "review": "review-result:adversary-canon-simulate-pass-1",
+    "outcome": "fixed"
+  }
+}

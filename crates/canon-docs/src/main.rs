@@ -487,19 +487,24 @@ mod tests {
     }
 
     /// `canon-authority/1` has a section and a schema, and both say what Canon refuses as given
-    /// twice: a capability decided twice, whatever the decision, which `uniqueItems` cannot say.
+    /// twice: two entries equal in capability, scope, case revision and principal, whatever the
+    /// decision, which `uniqueItems` cannot say.
     #[test]
     fn the_authority_document_says_a_capability_decided_twice_is_refused() {
         let files = generated();
         let documents = &files["website/docs/reference/documents.md"];
-        let rule = "A capability decided twice is refused, whatever the decision; the JSON Schema \
-                    cannot express that, and refuses only an entry repeated exactly.";
+        let rule = "Two entries equal in capability, scope (the same keys with the same values, in \
+                    any order), case revision and principal are refused, whatever the decision; \
+                    the JSON Schema cannot express that, and refuses only an entry repeated \
+                    exactly.";
         assert!(documents.contains("\n## `canon-authority/1`\n"));
         assert!(documents.contains(rule));
         assert!(!documents.contains("an entry given twice is refused"));
         let schema = &files["website/static/schemas/authority-1.schema.json"];
         assert!(schema.contains(rule));
-        assert!(schema.contains("\"enum\": [\n        \"granted\",\n        \"denied\"\n      ]"));
+        assert!(schema.contains(
+            "\"enum\": [\n        \"granted\",\n        \"require_approval\",\n        \"denied\"\n      ]"
+        ));
     }
 
     #[test]

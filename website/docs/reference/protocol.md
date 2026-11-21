@@ -28,6 +28,7 @@ A `protocol/1` source document as written.
 | `invalidation` | map from [identifier](#identifiers) (`InvalidationRuleId`) to [`InvalidationRule`](#invalidationrule) | optional | The invalidation rules, keyed by rule id; a protocol without the section declares none. |
 | `case` | [`CaseSection`](#casesection) | optional | What a case governed by the protocol gives when it opens: its case inputs. A protocol without the section declares no input. |
 | `independence_dimensions` | map from [identifier](#identifiers) (`IndependenceDimensionId`) to [`IndependenceDimension`](#independencedimension) | optional | The independence dimensions the protocol's evidence matches may demand, keyed by dimension id; a protocol without the section declares none. |
+| `imports` | map from [identifier](#identifiers) (`ProtocolId`) to [`Import`](#import) | optional | The protocols this protocol imports, keyed by protocol id (story:protocol-imports), each pinned to a revision and a digest. A protocol without the section imports nothing; one with it compiles only composed with the documents it imports (`b10x_canon::ir::compose`). |
 
 ## `ProtocolHeader`
 
@@ -55,6 +56,7 @@ A kind of evidence the protocol admits.
 |---|---|---|---|
 | `description` | text | optional | — |
 | `max_age` | [text](#text-formats) (`Age`) | optional | How old a record of this kind may be and still apply: at an evaluation instant later than its `observed_at` by more than this, it is excluded as expired (design § 8). |
+| `supplied_by` | [identifier](#identifiers) (`ProtocolId`) | optional | The protocol whose cases produce records of this kind (story:supplied-evidence): any protocol but this one, named and never resolved. A runner copies such a record unchanged from a case under that protocol; `canon check` counts the kind as produced. It counts as produced without authority and stays governed when an action that requires a capability may also produce it, so `canon check` reports `authority-bypass` on an outcome a supplied record alone makes legitimate. Absent: the protocol's own actions produce the kind, or nothing does. |
 
 ## `Claim`
 
@@ -89,8 +91,10 @@ has and what evidence it may produce (design § 10).
 | `requires` | list of [`CapabilityRequirement`](#capabilityrequirement) | optional | — |
 | `effect` | [identifier](#identifiers) (`EffectClass`) | optional | — |
 | `may_produce` | list of [`EvidenceProduction`](#evidenceproduction) | optional | — |
-| `arguments` | any JSON value | optional | The JSON Schema, in Canon's argument-schema dialect, that the action's arguments satisfy. Absent: the action takes no arguments; a runner accepts only `{}`. Canon never validates arguments at run time: the runner that calls the action validates them against the schema, and `canon validate` holds the schema to the dialect (`action-arguments`). |
+| `arguments` | any JSON value | optional | The JSON Schema, in Canon's argument-schema dialect, that the action's arguments satisfy. Absent: the action takes no arguments; a runner accepts only `{}`. Canon evaluates no call: `canon validate` holds the schema to the dialect (`action-arguments`), and a runner checks a call's arguments with `validate::check_arguments` or any 2020-12 validator. |
 | `case_open` | [`CaseOpening`](#caseopening) | optional | The child case the action opens (story:case-composition): a case governed by another protocol, about a declared artifact. Absent: the action opens no case. Canon opens nothing itself; whoever takes the action opens the child case. A case has one commission, and a second party works through a child case: this is the one primitive by which a case hands work to another party (D207). |
+| `author` | [`Author`](#author) | optional | Who writes the action's arguments and the content of the artifacts it revises (story:judgement-marking): `program`, a reproducible function of the action's inputs, or `judgement`, a person or a model. Absent: `program`. It has no evaluation meaning, names no executor, model or tool, and Canon cannot prove that a runner honours it. |
+| `revises` | list of [identifier](#identifiers) (`ArtifactId`) | optional | The declared artifacts the action may move to a new revision (story:judgement-marking). Absent: none. It has no evaluation meaning; Canon never refuses a runner that moves an artifact outside it. |
 
 ## `Outcome`
 
@@ -130,6 +134,18 @@ which the trusted context resolves for each producer and Canon reads from the ca
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `description` | text | optional | — |
+
+## `Import`
+
+One protocol a protocol imports: exactly the revision it reads and the digest of that
+revision's compiled `canon-ir/1`, and the imported declarations the importing protocol may
+redeclare.
+
+| Key | Value | Required | Meaning |
+|---|---|---|---|
+| `revision` | integer, 0 or more | required | The revision of the imported protocol the import reads. |
+| `digest` | text | required | `sha256:` and the 64 lowercase hexadecimal digits of the SHA-256 of the imported protocol's `canon-ir/1` bytes, compiled with its own imports (`b10x_canon::ir::digest`). |
+| `refines` | list of text | optional | The identifiers, of any declaration section, of the imported declarations the importing protocol may redeclare; a redeclaration replaces the imported declaration. |
 
 ## `Predicate`
 
@@ -194,6 +210,23 @@ the set; otherwise `unknown` while a child is `open`, and `true` when every chil
 listed outcome. A child's outcome is a fact about the child case, so a record about an earlier
 revision of its subject, an expired one and an invalidated one still count.
 
+`{children: {in: [O, ...], revision: current}}` (story:child-outcome-revision) binds the form
+to the current revision: it reads only the `case_outcome` records whose `subject_revision` is
+the case snapshot's current revision of their `subject`, by the rules above. A record about an
+earlier revision is not read: it neither establishes nor contradicts the form, and is not
+listed in `excluded_evidence`; with no record read the form is `unknown`. So a parent whose
+subject is revised after its children ended falls back to `unknown` until a child about the new
+revision ends, and since one child has one record whatever its revision
+(`duplicate-child-case`), that child is a new one, with a new id. `revision: any`, like no key,
+reads every record. A terminal `case_outcome` record's `subject_revision` is the revision the
+child's outcome was computed against: when the child protocol declares the subject artifact,
+the child's own revision of it at its terminating evaluation; when it does not, the parent's
+revision of the subject when the child was opened. Canon does not write the record and does not
+check who did; it compares the record's `subject_revision` with the snapshot's current revision
+of the record's `subject`, as it binds every evidence record to the revision it was observed on.
+A runner that stamps a record with the revision at which the child was opened, whatever the
+child did, never satisfies the form for a child that writes its own subject.
+
 | Key | Value | Meaning |
 |---|---|---|
 | `all` | list of [`Predicate`](#predicate) | True when every member is true; true when empty. |
@@ -212,11 +245,12 @@ revision of its subject, an expired one and an invalidated one still count.
 
 ## `CapabilityRequirement`
 
-One capability an action requires authority for.
+One capability an action requires authority for, at a scope (Atlas ADR 0083 § Decision 1).
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `capability` | [identifier](#identifiers) (`CapabilityId`) | required | — |
+| `scope` | map from [identifier](#identifiers) (`ScopeKey`) to [identifier](#identifiers) (`ScopeValue`) | optional | The scope the capability is required at: one value for each key it names (`{cluster: prod-eu, namespace: foo}`), each key once. Absent or empty, the requirement is unscoped, and only an authority decision without a scope covers it. |
 
 ## `EvidenceProduction`
 
@@ -225,6 +259,7 @@ One evidence kind an action may produce.
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `evidence` | [identifier](#identifiers) (`EvidenceKindId`) | required | — |
+| `decided_by` | [`Author`](#author) | optional | Who decides the result of a record of this kind the action produces (story:judgement-marking). Absent: the action's `author`. `program` on a judgement action covers a record the runner writes from the effect it applied, such as provenance. It has no evaluation meaning. |
 
 ## `CaseOpening`
 
@@ -238,6 +273,17 @@ openings form a cycle, naming it in the order its openings go, from its least pr
 |---|---|---|---|
 | `protocol` | [identifier](#identifiers) (`ProtocolId`) | required | The protocol the child case is governed by. |
 | `subject` | [identifier](#identifiers) (`ArtifactId`) | required | The declared artifact the child case is about. |
+
+## `Author`
+
+Who decides (story:judgement-marking): a reproducible procedure, or a judgement by a person or
+a model. On an action (`author`) it says who writes the action's arguments and the artifacts it
+revises; on a production (`decided_by`) who decides the record's result.
+
+| Value | Meaning |
+|---|---|
+| `program` | A reproducible function of the action's inputs: the value when nothing is written. |
+| `judgement` | A person or a model, whose result is not a function of the action's inputs. |
 
 ## `OutcomeRequirement`
 
@@ -329,14 +375,20 @@ itself.
 
 The form over the case's child cases, written `{children: {in: [<outcome>, ...]}}`: whether
 every child case ended with one of the outcomes listed. It reads every `case_outcome` record
-the evidence check accepted, as the order forms read the history: `unknown` with no record,
-`false` when a record's outcome is neither listed nor `open` (a child that ended outside the
-set), otherwise `unknown` when a child is still `open` and `true` when every child ended with
-a listed outcome.
+the evidence check accepted, as the order forms read the history, or with `revision: current`
+only those about the current revision of their subject, and with `subject` only those about
+that artifact: `unknown` with no record read, `false` when a record's outcome is neither listed
+nor `open` (a child that ended outside the set), otherwise `unknown` when a child is still
+`open` and `true` when every child ended with a listed outcome. It counts only the records it
+is given. Canon does not write them; the runner that opens a child case does, with two duties:
+a record's `subject` is the `case_open` subject of the action that opened the child, and the
+runner writes a record with the outcome `open` when it opens the child.
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `in` | list of text | required | The outcomes a child case may have ended with, written `in`: not empty, each once, never `open`. |
+| `revision` | [`ChildRevision`](#childrevision) | optional | Which records the form reads (story:child-outcome-revision): absent or `any`, every `case_outcome` record; `current`, only those whose `subject_revision` is the case snapshot's current revision of their `subject`. |
+| `subject` | [identifier](#identifiers) (`ArtifactId`) | optional | The declared artifact the records are about (story:child-outcome-subject): absent, records about every artifact; named, only the `case_outcome` records whose `subject` it is. A record about another artifact is not read: it neither establishes nor contradicts the form. |
 
 ## `Truth`
 
@@ -360,12 +412,27 @@ later than the latest record of its `last` kind: a record of `kind` with `result
 | `kind` | [identifier](#identifiers) (`EvidenceKindId`) | required | The evidence kind of the later record. |
 | `result` | text | required | The result the later record is to have. |
 
+## `ChildRevision`
+
+Which `case_outcome` records a `children` form reads (story:child-outcome-revision). A terminal
+record's `subject_revision` is the revision the child's outcome was computed against: when the
+child protocol declares the subject artifact, the child's own revision of it at its terminating
+evaluation; when it does not, the parent's revision of the subject when the child was opened.
+Canon does not write the record: it compares that revision with the case snapshot's.
+
+| Value | Meaning |
+|---|---|
+| `any` | Every record the evidence check accepted, about whatever revision of its subject: the form without the key. |
+| `current` | Only the records whose `subject_revision` is the case snapshot's current revision of their `subject`. A record about another revision is not read: it neither establishes nor contradicts the form. |
+
 ## Identifiers
 
 An identifier is text. A well-formed identifier is not empty, and without whitespace, control characters or Unicode format characters (general category Cf). Each kind of identifier is its own type, so one cannot stand in for another. These are the kinds a `protocol/1` document use:
 
 | Type | Identifies |
 |---|---|
+| `ScopeKey` | A key of a capability scope (`cluster`, `namespace`): what the scope narrows the capability to. An identifier. |
+| `ScopeValue` | The value a capability scope gives one key (`prod-eu`). An identifier. |
 | `ProtocolId` | Identifies a protocol, independently of its revision. |
 | `ArtifactId` | Identifies an artifact a protocol declares. |
 | `ClaimId` | Identifies a claim a protocol declares. |

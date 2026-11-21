@@ -18,8 +18,9 @@ use crate::{REJECTED, read_text, report, unreadable};
 /// symbolic link to one) is written into as it is, keeping its mode, owner and inode. On failure,
 /// nothing this run created is left: each file and directory it created is removed, last first,
 /// and nothing else.
-/// A protocol path that resolves outside the working directory, a protocol that does not parse or
-/// compile, a refused generation and an output directory that is not empty exit 1, naming the
+/// A protocol path that resolves outside the working directory, a protocol that does not parse, has
+/// imports (naming its first) or does not compile, a refused generation and an output directory
+/// that is not empty exit 1, naming the
 /// problem on standard error. A protocol that cannot be read, or an output directory or file that
 /// cannot be read, created or written, exits 2.
 pub(crate) fn run(path: &Path, out: &Path) -> ExitCode {
@@ -62,6 +63,14 @@ pub(crate) fn run(path: &Path, out: &Path) -> ExitCode {
             return ExitCode::from(REJECTED);
         }
     };
+    if let Some(first) = protocol.imports.ids().next() {
+        eprintln!(
+            "error[protocol-imports]: the protocol imports `{}`: a generated scenario names one \
+             fixture, and a protocol with imports compiles only with its imported documents",
+            model::one_line(first.as_str())
+        );
+        return ExitCode::from(REJECTED);
+    }
     let compiled = match ir::compile(&protocol) {
         Ok(compiled) => compiled,
         Err(problems) => return report(&problems),

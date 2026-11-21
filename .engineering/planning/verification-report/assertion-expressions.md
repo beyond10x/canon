@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: verification-report:assertion-expressions
 kind: verification-report
-status: draft
+status: approved
 title: Expression language implementation and gate evidence
 relations:
 - verifies: story:assertion-expressions
-revision: 1
+revision: 2
+transitions:
+- {from: "draft", to: "approved", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 2, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 ---
 Source commits: `876e01e` (specification and red conformance), `cf2ae40c2284c86d05b33c3003c45c7351f1150b` (implementation and review fixes).
 Both author and committer are b10x-bot[bot].

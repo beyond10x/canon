@@ -3,7 +3,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://beyond10x.github.io/canon/schemas/authority-1.schema.json",
   "title": "canon-authority/1",
-  "description": "A list of `AuthorityDecision` entries. One entry of a `canon-authority/1` document: a capability and whether it is granted. A capability decided twice is refused, whatever the decision; the JSON Schema cannot express that, and refuses only an entry repeated exactly.",
+  "description": "A list of `AuthorityDecision` entries. One entry of a `canon-authority/1` document: a capability, the scope the decision covers, the decision and, optionally, who took it, the case revision it was taken at and the grounds it rested on. Two entries equal in capability, scope (the same keys with the same values, in any order), case revision and principal are refused, whatever the decision; the JSON Schema cannot express that, and refuses only an entry repeated exactly.",
   "type": "array",
   "items": {
     "$ref": "#/$defs/AuthorityDecision"
@@ -17,7 +17,7 @@
       "pattern": "^\\S+$"
     },
     "AuthorityDecision": {
-      "description": "One entry of a `canon-authority/1` document: a capability and whether it is granted.",
+      "description": "One entry of a `canon-authority/1` document: a capability, the scope the decision covers, the decision and, optionally, who took it, the case revision it was taken at and the grounds it rested on.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -25,9 +25,44 @@
           "description": "The capability decided, an identifier an action's `requires` may name.",
           "$ref": "#/$defs/Identifier"
         },
+        "scope": {
+          "description": "The scope the decision covers: one value for each key it names, each key once. It covers a requirement of its capability when the requirement gives each of those keys the same value; a key it leaves out covers every value of it. Absent or empty, it covers every scope.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Identifier"
+          }
+        },
         "decision": {
           "description": "Whether it is granted.",
           "$ref": "#/$defs/Grant"
+        },
+        "principal": {
+          "description": "Who took it, an identifier, recorded as given: Canon resolves no identity, so it is matched against nothing and does not change admissibility.",
+          "$ref": "#/$defs/Identifier"
+        },
+        "case_revision": {
+          "description": "The case revision it was taken at, an identifier: the decision applies only while the case snapshot's `revision` equals it, and to nothing when the snapshot has none. Absent, it applies at every case revision.",
+          "$ref": "#/$defs/Identifier"
+        },
+        "ground_revisions": {
+          "description": "The artifact revisions the decision rested on, keyed by artifact, each key once (story:decision-grounds): a ground holds while its revision is the case snapshot's current revision of the artifact, compared for equality. The decision applies only while every ground holds, whatever it decided. Absent or empty, it rests on no artifact.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/Identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Identifier"
+          }
+        },
+        "ground_evidence": {
+          "description": "The evidence records the decision rested on, by id: a ground holds while a record with that id is applicable, the rule of `missing_evidence` (given, left by the revision-binding and freshness stages, and listed in no claim's `excluded_evidence`), so expiry and invalidation reach the decision through it. An id no record has does not hold and is not refused. Absent or empty, it rests on no record.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
         }
       },
       "required": [
@@ -36,9 +71,10 @@
       ]
     },
     "Grant": {
-      "description": "An authority decision on one capability. With its precondition `true`, an action is `admissible` when every capability it requires is granted, `blocked` when one is denied, and `approval-required` when none is denied and one is not decided.",
+      "description": "An authority decision on one capability at one scope. Among the decisions covering a requirement, `denied` wins over `require_approval`, which wins over `granted`; none covering it is not granted. With its precondition `true`, an action is `admissible` when every requirement is granted, `blocked` when one is denied, and `approval-required` when none is denied and one requires approval or is not decided.",
       "enum": [
         "granted",
+        "require_approval",
         "denied"
       ]
     }

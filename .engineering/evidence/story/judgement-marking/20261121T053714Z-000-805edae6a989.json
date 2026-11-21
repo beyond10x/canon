@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T05:37:14Z",
+  "actor": "human:timo",
+  "artifact": "story:judgement-marking",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "the concept page did not name the extra diff lines an author change prints: sentence added by the unit in 1219fae; docs-check exit 0",
+    "reference": "impl/judgement-marking 1219fae",
+    "review": "review-result:adversary-judgement-marking-pass-1",
+    "outcome": "fixed"
+  }
+}

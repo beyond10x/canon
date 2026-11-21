@@ -1,5 +1,215 @@
 # Changelog
 
+## [0.10.0] - 2026-11-21
+
+Protocols import pinned protocols, capabilities carry a scope, authority decisions can be bound to
+a case revision and to the grounds they rested on, a decision lists what it waits on, a
+re-delivered evidence record counts once, a runner can check a call's arguments with Canon's own
+validator, and `canon simulate` walks every state a case can reach. Install the CLI or depend on
+the libraries from Git tag `0.10.0`.
+
+What breaks, and for whom:
+
+- Rust consumers that build these types with struct literals or match them exhaustively.
+  `Protocol` gains `imports`, `EvidenceKind` gains `supplied_by`, `Action` gains `author` and
+  `revises`, `CapabilityRequirement` gains `scope`, `EvidenceProduction` gains `decided_by`, the
+  `children` form's `ChildOutcomes` gains `revision` and `subject`, `AuthorityDecision` gains
+  `scope`, `principal`, `case_revision`, `ground_revisions` and `ground_evidence`,
+  `ExplicitDecision` gains `ground_revisions` and `ground_evidence`, `Grant` gains
+  `RequireApproval`, and `Decision` gains `missing_evidence` and `pending_decisions`. In `ir`,
+  `Action` gains `scopes`, `author`, `judgement_decided` and `revises`, and `EvidenceKind` gains
+  `supplied_by`. `conform::Scenario` gains `imports`, and `validate::Problem` gains a variant for
+  each new refusal of a protocol document: `DuplicateScopeKey`, `SelfSuppliedEvidence`,
+  `MissingImport`, `UnusedImport`, `DuplicateImportDocument`, `ImportCycle`,
+  `ImportRevisionMismatch`, `ImportDigestMismatch`, `UndeclaredRefinement`, `ConflictingImports`,
+  `UnrefinedRedeclaration`, `InvalidImport` and `InvalidImportDigest`.
+- Tooling that compares `canon-decision/1` bytes. A decision may carry two new top-level
+  sections, `missing_evidence` and `pending_decisions`, each written only when it has an entry,
+  and `computed_from.semantics.canon` reads `0.10.0`. A reason names a scoped requirement with
+  its `scope` and a bound `children` form with `"revision": "current"`, a `children` form that
+  names a subject with `"subject"`, and a capability reason with `"decision": "none"` or an
+  outcome reason `{"decision": …, "present": false}` adds `"stale_grounds"` when an entry set
+  aside by its grounds would have covered it. In `computed_from`, an authority or explicit
+  decision that names grounds adds `"ground_revisions"` and `"ground_evidence"`, each only when
+  not empty. A protocol that uses none of the new fields compiles to the same `canon-ir/1` bytes
+  as before.
+- Tooling that relies on a repeated evidence id being refused. An evidence record given more
+  than once now counts once when every copy equals the first, and the decision is the one
+  without the copy. Only a copy that differs is refused, as `duplicate-identifier`, and the
+  message changed from `` evidence `<id>` is given more than once `` to `` evidence `<id>` is
+  given more than once with different content ``.
+- Protocols whose argument schemas list numbers a double cannot tell apart. `canon validate` and
+  `canon diff` compare argument-schema numbers by exact value: `9007199254740993` and
+  `9007199254740992.0` were one `enum` value in 0.9.0, a duplicate `canon validate` refused, and
+  are two now; `1` and `1.0` are still one.
+- `canon diff` classes. A changed scope on a capability requirement is one requirement removed
+  and one added. `supplied_by` introduced is `EXPANSION`; removed, or changed to another protocol,
+  `BREAKING`. An action's `author`, or a production's resolved `decided_by`, turned to judgement
+  is `TIGHTENING` and turned to program `RELAXATION`; an artifact added to `revises` is
+  `RELAXATION` and one removed `TIGHTENING`. A `children` form whose `revision` or `subject`
+  changes is a changed `children` form, `BREAKING`. An `enum` value of an argument schema is
+  added or removed by exact value.
+
+Writing protocols.
+
+- Imports: a `protocol/1` document may list `imports`, each pinning a protocol's `revision` and the
+  `sha256:` digest of its compiled `canon-ir/1`. `canon validate`, `canon compile` and
+  `canon check` take the imported documents with a repeatable `--import <path>` and compose them
+  into one closed `canon-ir/1` that names only the root protocol and holds no import reference;
+  imports are transitive, a part reached twice is inlined once, and the order of the `--import`
+  flags changes no byte. A root may redeclare an imported declaration only when the import lists
+  its identifier under `refines`. Refused: `missing-import`, `unused-import`,
+  `duplicate-import-document`, `import-cycle`, `import-revision-mismatch`,
+  `import-digest-mismatch` (printing both digests), `undeclared-refinement`,
+  `conflicting-imports` (two imports whose `canon-ir/1` entries for one identifier differ),
+  `unrefined-redeclaration`, `invalid-import` and `invalid-import-digest`. `canon generate`
+  refuses a root with imports, naming its first import. A conformance scenario names its own
+  `imports`. Scenario `CANON-IMPORT-001`, `conformance/scenarios/imports.yaml`.
+- Scoped capabilities: a capability requirement may carry a `scope`
+  (`{capability: metrics.read, scope: {cluster: prod-eu, namespace: foo}}`); `canon validate`
+  refuses a key named twice (`duplicate-scope-key`). `canon-ir/1` writes `"scope"` only on a
+  requirement that has one (Atlas ADR 0083).
+- `supplied_by` on an evidence kind names the protocol whose cases produce its records.
+  `canon validate` refuses the protocol's own id (`self-supplied-evidence`, fixture
+  `fixtures/investigation/invalid/supplied-by-self.yaml`). Adding it changes the protocol's IR
+  digest, so a protocol that imports it pins a new one.
+- Judgement marks, with no evaluation meaning: `author: program | judgement` and `revises: [...]`
+  on an action, `decided_by: program | judgement` on a `may_produce` entry (absent, the action's
+  `author`). `canon evaluate`, `canon check` and `canon generate` give the same bytes with or
+  without them. `canon validate` refuses an artifact in `revises` that is not declared
+  (`undeclared-artifact`, naming the action). `canon-ir/1` writes `"author"` and `"decided_by"`
+  only for judgement and `"revises"` only when non-empty; the IR read-back refuses any other
+  spelling as `malformed-input`.
+- `{children: {in: [O, ...], revision: current}}` reads only the `case_outcome` records whose
+  `subject_revision` is the snapshot's current revision of their `subject`; a record about
+  another revision neither establishes nor contradicts the form, and with none read it is
+  `unknown`. `revision: any`, or no key, reads every accepted record as before. Scenario
+  `CANON-COMPOSE-002`, `conformance/scenarios/child-outcome-revision.yaml`.
+- `{children: {in: [O, ...], subject: A}}` reads only the `case_outcome` records about the
+  artifact `A`; a record about another artifact neither establishes nor contradicts the form. With
+  `revision: current` as well, it reads only those among them at the current revision of `A`.
+  Without `subject` it reads the records about every artifact, and compiles to the bytes it had
+  before. `canon validate` refuses a subject that is not declared (`undeclared-artifact`).
+  `canon-ir/1` writes `"subject"` only when the form names one, and two forms that differ only in
+  `subject` are two members. Canon does not write these records: the runner that opens a child
+  case writes one about the opening action's `case_open` subject, with the outcome `open` when it
+  opens the child. Scenario `CANON-COMPOSE-003`, `conformance/scenarios/child-outcome-subject.yaml`.
+
+Evaluating cases.
+
+- A `canon-authority/1` entry may carry a `scope`, the decision `require_approval` beside
+  `granted` and `denied`, a `principal` and a `case_revision`. Default deny: a requirement no
+  applying entry covers is not granted. A grant without a value for a scope key covers every
+  value of it. Among the covering entries `denied` wins over `require_approval`, which wins over
+  `granted`. An entry with `case_revision` applies only while the snapshot's `revision` equals it,
+  and to nothing when the snapshot has none; an entry without one applies at every revision. The
+  principal is recorded as given and matched against nothing. Two entries equal in capability,
+  scope, case revision and principal are refused (`duplicate-identifier`). Scenarios
+  `CANON-SCOPE-001` and `CANON-AUTHORITY-002`.
+- Decision grounds: an entry of `canon-authority/1` or `canon-decisions/1` may name the grounds
+  it rested on, `ground_revisions` (artifact revisions keyed by artifact) and `ground_evidence`
+  (evidence record ids). An artifact ground holds while its revision is the snapshot's current
+  revision of the artifact; an evidence ground holds while a record with that id is applicable,
+  the rule `missing_evidence` reads, so expiry and invalidation reach the decision. An id no
+  record has does not hold and is not refused. An entry applies only while every ground holds,
+  whatever it decided, so a denial whose ground moved lapses too. A requirement or an outcome
+  left undecided by an entry set aside by its grounds alone lists the failed grounds under
+  `stale_grounds`, each once: artifact grounds by artifact then revision,
+  `{"artifact", "reason": "revision_mismatch", "revision"}`, then evidence grounds by id,
+  `{"evidence", "reason"}` with the reason the record was excluded for, or
+  `{"evidence", "present": false}`. An entry set aside by its case revision adds none. Grounds
+  are not part of either document's duplicate key. Refused: a ground artifact, revision or
+  evidence id that is not an identifier (`invalid-identifier`) and a ground artifact the protocol
+  does not declare (`undeclared-artifact`). An entry without grounds evaluates as before. Scenario
+  `CANON-GROUND-001`, `conformance/scenarios/decision-grounds.yaml`.
+- An evidence record given more than once counts once when every copy equals the first: every
+  field as written, `observed_at` compared as text (`12:00:00Z` and `12:00:00.000Z` differ), and
+  `upstream_revisions` in any order. Every later stage reads each id once, so an equal copy of a
+  `case_outcome` record is not refused as `duplicate-child-case`. A copy that differs is refused
+  as `duplicate-identifier`. `canon evaluate` with several evidence files still names, in that
+  refusal, every file that holds a record of the id. Scenario `CANON-EVIDENCE-004`,
+  `conformance/scenarios/evidence-redelivery.yaml`.
+- `missing_evidence` maps each admissible action whose `may_produce` is not empty to the kinds of
+  that list with no applicable record, in identifier order: a record is applicable when the
+  revision-binding and freshness stages leave it and no claim lists it in `excluded_evidence`.
+  It claims nothing about running the action. Scenario `CANON-FRONTIER-001`.
+- `pending_decisions` lists, under `authority`, one entry per requirement with decision `none` or
+  `require_approval` that makes an action `approval-required`, with `options: ["granted",
+  "denied"]`, and under `decisions`, one entry per outcome blocked on a decision not taken, or
+  taken and set aside by its grounds, with `options: ["taken"]`, or `[]` when the snapshot has no
+  `revision`. An entry does not copy `stale_grounds`. It is computed from the decision's own
+  `actions` and `outcomes` sections and the case revision. Scenario `CANON-PENDING-001`.
+- A record of a kind that declares `supplied_by` may name, in `upstream_revisions`, artifacts the
+  protocol does not declare; they are carried and not read. Any other record naming one is still
+  refused as `undeclared-artifact`. Scenario `CANON-SUPPLY-001`.
+- Evaluation under invalidation rules is at most quadratic in the claim count, with every output
+  byte-identical: a 400-claim chain with one rule per claim took 54.2 s before and 59 ms after in
+  a debug build. `canon validate` finds the claims that reach evidence once, not once per rule.
+
+Checking a call's arguments.
+
+- `b10x_canon::validate::check_arguments(schema, arguments)` checks one call's arguments against
+  an action's argument schema, `None` for an action that declares none, which takes only `{}`.
+  It is pure and returns every refusal, `ArgumentsRefused::Arguments` with one `ArgumentRefusal`
+  each (`pointer`, `keyword`, `reason`) in document order, or `ArgumentsRefused::Schema` for a
+  schema outside the dialect, with the pairs `canon validate` reports. Canon itself still
+  evaluates no call. The reference page on validation states each keyword's meaning.
+- Numbers are compared by exact value, and the value Canon reads depends on how `serde_json` is
+  built. A build of the workspace holds number text, because `b10x-canon-expr` turns on
+  `arbitrary_precision`; every command-line test runs such a build. The `canon` you install with
+  `cargo install --locked --git … canon-cli` or `--path crates/canon-cli`, and a runner whose own
+  build does not turn on `arbitrary_precision`, hold doubles and 64-bit integers. The two
+  answer differently, and only, here: a literal that is not exactly the integer or double read
+  without `arbitrary_precision` (`9007199254740992.5`, `9007199254740993.0`,
+  `-9223372036854775809`, `1e400`, `1e-400`), in arguments or in a schema a caller builds; a
+  protocol literal the YAML reader rounds (`enum: [9007199254740993.0]` refuses the arguments
+  `9007199254740993.0` where the text is held and accepts them where a double is); a schema
+  double that is an integer beyond 64 bits (a protocol's `1e30` is 10^30 with text,
+  1000000000000000019884624838656 with doubles); and a bound or an `integer` `enum` value written
+  `-0`, 0 with text and refused by `canon validate` as not an integer with doubles.
+
+Checking protocols.
+
+- `canon check` decides each outcome, action and property over the dimensions it reads, so the
+  bound of 65,536 states applies to each slice, not to the whole product. The summary still gives
+  the whole product's state count, and every report of a protocol within the bound is
+  byte-identical. A slice above the bound refuses the whole check as `state-space-bound`, naming
+  the subject, the slice's count and its dimensions. `canon generate` keeps the whole-product
+  bound.
+- `canon check` counts a kind that declares `supplied_by` as produced, so it reports no
+  `unproduced-evidence` for it; the kind stays governed when an action that requires a
+  capability may also produce it.
+- An action that declares `case_open` produces the `case_outcome` record about its `case_open`
+  subject when the protocol reads `case_outcome` about that artifact by name, in a `children`
+  form or an evidence match, and otherwise the record without a subject; never one about another
+  artifact. `canon check` and `canon simulate` both follow this rule, and a `children` form that
+  names a subject reads only the records about it.
+
+The command line.
+
+- `canon simulate --path <protocol>` walks every state a case can reach from the empty case. A
+  step adds one record an admissible action may produce, adds one record of a supplied kind, adds
+  one child case's `case_outcome` record, lets a record of a kind with `max_age` expire, grants or
+  denies a capability, or takes a decision; no action runs. Per action that declares `case_open`
+  the walk counts the children that have not ended, none, one, or two or more: a step of the
+  action raises the count, a child's outcome arrives while it is above none, and an outcome other
+  than `open` lowers it (from two or more it may also stay there) and replaces an `open` record
+  the state holds, since one record is one child. A state names each action with a count
+  above none (`` action `a` opened a child ``, `` action `a` opened 2 or more children ``), and a
+  path writes the child's step as `` a child of action `a` records evidence `case_outcome` result
+  `r` ``. It reports `stuck-state` and `cycle` (each once, at its smallest state, with its
+  shortest path), `dead-action`, `unreached-outcome` and `no-outcome-reachable`, then a summary
+  line, which counts states waiting `on supplied evidence, a child outcome or expiry` when an
+  action opens a child case, and exits 1 on a finding. Refused: a protocol with an order form
+  (`ordered-evidence`), `predicate-too-deep`, `claim-cycle`, and a walk of more than 65,536
+  reachable states (`reachable-state-bound`), which reports nothing.
+  `b10x_canon::simulate::simulate` is the library function. Known limits: no artifact is
+  revised, and a step adds one record, so where an action's guard closes on its first record an
+  outcome that needs two records of one taking is reported as legitimate in no reachable state.
+- The `canon` command surface is declared in `ess/domains/cli.yaml` (domain `canon.cli`).
+  `crates/canon-cli/tests/ess_commands_match.rs`, run by `task ess-gate`, fails when a subcommand
+  or flag exists only in clap or only in `ess/`, or when requiredness or repeatability differ.
+
 ## [0.9.0] - 2026-10-30
 
 Cases compose at run time: an action may open a child case, and a parent claim reads its

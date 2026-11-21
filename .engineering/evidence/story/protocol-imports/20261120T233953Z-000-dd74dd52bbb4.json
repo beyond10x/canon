@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-20T23:39:53Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-imports",
+  "kind": "story",
+  "revision": 47,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "ir/imports.rs: compose compared source declarations; fixed in c6ba21b (declarations conflict only when their canon-ir/1 entries differ); the adversary's 4 cases pass unedited; workspace 922 passed, 0 failed on 17f52ff",
+    "reference": "impl/protocol-imports c6ba21b, 17f52ff",
+    "review": "review-result:adversary-protocol-imports-pass-1",
+    "outcome": "fixed"
+  }
+}

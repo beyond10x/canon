@@ -1,0 +1,49 @@
+format: protocol/1
+
+protocol:
+  id: child.ends_open
+  revision: 1
+  description: Open one child case, whose guard closes once it was opened, and end only when the child ended accepted.
+
+artifacts:
+  thing:
+    description: The thing the child case settles.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child case.
+  opened:
+    description: The child case was opened.
+
+claims:
+  resolved:
+    description: Every child case ended accepted.
+    true_when:
+      children:
+        in: [accepted]
+
+  started:
+    description: The child case was opened.
+    true_when:
+      evidence:
+        kind: opened
+
+actions:
+  open:
+    description: Open the child case once.
+    precondition:
+      claim: started
+      is: unknown
+    case_open:
+      protocol: child.task
+      subject: thing
+    may_produce:
+      - evidence: opened
+
+outcomes:
+  done:
+    description: The child case ended accepted.
+    requires:
+      all:
+        - claim: started
+        - claim: resolved

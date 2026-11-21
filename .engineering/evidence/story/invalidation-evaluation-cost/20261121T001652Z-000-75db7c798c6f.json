@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T00:16:52Z",
+  "actor": "human:timo",
+  "artifact": "story:invalidation-evaluation-cost",
+  "kind": "story",
+  "revision": 10,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "invalidation_evaluation_cost on 465846b (test only): FAILED, 1 passed, 2 failed (400 claims over 6.58 s against 71.6 ms for 50; 4000 claims over 120 s); on 2742538: 3 passed in 10.55 s debug; workspace 919 passed, 0 failed; VERIFIED by the coordinator from the unit's logs",
+    "reference": "w2/invalidation-evaluation-cost/red.log vs the unit's gate logs (session scratch)"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T06:20:17Z",
+  "actor": "human:timo",
+  "artifact": "story:canon-simulate",
+  "kind": "story",
+  "revision": 21,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "a dimension wider than a u32 was refused although the walk reaches three states: the walk keeps its own records and never reads a dimension's value table (R1, 8fb960c); the adversary's case is green",
+    "reference": "impl/canon-simulate 8fb960c",
+    "review": "review-result:adversary-canon-simulate-pass-1",
+    "outcome": "fixed"
+  }
+}

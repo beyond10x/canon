@@ -1,0 +1,57 @@
+format: protocol/1
+
+protocol:
+  id: simulate.cycle
+  revision: 1
+  description: Prepare a release and approve it under authority; after a denial only waiting, which changes nothing, is left.
+
+artifacts:
+  release:
+    description: The release being prepared and approved.
+
+evidence_kinds:
+  approval:
+    description: An approval of the release.
+  draft:
+    description: A prepared draft of the release.
+
+claims:
+  release.approved:
+    description: The release has been approved.
+    true_when:
+      evidence:
+        kind: approval
+
+  release.prepared:
+    description: The release has a prepared draft.
+    true_when:
+      evidence:
+        kind: draft
+
+actions:
+  prepare:
+    description: Prepare a draft of the release, once.
+    precondition:
+      claim: release.prepared
+      is: unknown
+    may_produce:
+      - evidence: draft
+
+  approve:
+    description: Approve the prepared release, under authority.
+    precondition:
+      claim: release.prepared
+      is: true
+    requires:
+      - capability: sign
+    may_produce:
+      - evidence: approval
+
+  wait:
+    description: Wait, which produces nothing.
+
+outcomes:
+  approved:
+    description: The release is approved.
+    requires:
+      claim: release.approved

@@ -1,0 +1,422 @@
+# The `canon` command surface (story:ess-command-surface, Atlas ADR 0076): one command per leaf
+# subcommand of `canon_cli::Cli` (crates/canon-cli/src/lib.rs), each long flag an input of the same
+# name with every `-` written `_`, a flag clap does not require an Optional input, a flag clap takes
+# more than once a List input (AGENTS.md § ESS). Every flag takes a path or a text value, so
+# every input is a String; the document a path names is declared in the domains canon.protocol,
+# canon.check and canon.conform, and what a command does with it is Canon's own conformance suite
+# and tests, not this file. crates/canon-cli/tests/ess_commands_match.rs keeps this file and the clap
+# definition equal. `canon-docs` is documentation tooling and is not declared here.
+#
+# Every command answers in one of three ways, the exit statuses of crates/canon-cli/src/lib.rs:20-43:
+# success (0) with what it prints, rejected (1) or unreadable (2). Usage errors (64) are clap's,
+# decided before any command runs, so no command declares them.
+domain: canon.cli
+
+summary: >-
+  The canon command line: validate, compile, evaluate, check, simulate, generate, diff and conform
+  run, each reading files named by its flags and printing its result, or refusing with exit status
+  1 when a document is rejected and 2 when an input cannot be read.
+
+naming:
+  wire: cli
+  display: CLI
+
+errors:
+  # Exit status 1: a document was read and rejected, an evaluation or a check was refused, a
+  # conformance scenario failed, a check found something, or generation was refused.
+  # read from: crates/canon-cli/src/lib.rs:12-13
+  # read from: crates/canon-cli/src/lib.rs:27-32
+  - name: canon.cli.Rejected
+    summary: A document was read and rejected, or the command refused or found something.
+    fields:
+      # What canon printed about it: `error[<code>]: …` lines, or a check's or a run's report.
+      # read from: crates/canon-cli/src/main.rs:136-141
+      - name: diagnostics
+        type: String
+
+  # Exit status 2: an input file or directory could not be read, or an output could not be written.
+  # read from: crates/canon-cli/src/lib.rs:14-15
+  # read from: crates/canon-cli/src/lib.rs:33-37
+  - name: canon.cli.Unreadable
+    summary: An input file or directory could not be read, or an output could not be written.
+    fields:
+      # The `error[unreadable]: <path>: <why>` line canon printed.
+      # read from: crates/canon-cli/src/main.rs:71-78
+      - name: diagnostics
+        type: String
+
+commands:
+  # read from: crates/canon-cli/src/lib.rs:58-68
+  # read from: crates/canon-cli/src/main.rs:157-173
+  - name: canon.cli.Validate
+    naming:
+      wire: validate
+      display: Validate
+      summary: Parse and validate a protocol/1 document, composed with the documents it imports.
+    input:
+      # The protocol/1 document to validate.
+      # read from: crates/canon-cli/src/lib.rs:60-62
+      - name: path
+        type: String
+      # A protocol/1 document the protocol imports, directly or through another import, each
+      # given with its own `--import` (story:protocol-imports). A repeatable flag, so a List, and
+      # Optional, since a protocol without imports takes none. The order changes nothing.
+      # read from: crates/canon-cli/src/lib.rs:63-67
+      # read from: .engineering/planning/story/protocol-imports.md:70-72
+      - name: import
+        type: Optional<List<String>>
+    response:
+      # `valid: protocol `<id>` revision <n>`.
+      # read from: crates/canon-cli/src/main.rs:164-168
+      - name: output
+        type: String
+    outcomes:
+      # read from: crates/canon-cli/src/main.rs:92-99
+      # read from: crates/canon-cli/src/main.rs:110-116
+      - name: unreadable
+        external: the file at path or an imported document cannot be read
+        error: canon.cli.Unreadable
+      # read from: crates/canon-cli/src/main.rs:100-104
+      # read from: crates/canon-cli/src/main.rs:117-123
+      # read from: crates/canon-cli/src/main.rs:133
+      # read from: crates/canon-cli/src/main.rs:171
+      - name: rejected
+        external: >-
+          a document does not parse, the imports do not compose, or the composition is not a valid
+          protocol/1 document
+        error: canon.cli.Rejected
+      # read from: crates/canon-cli/src/main.rs:162-170
+      - name: valid
+        returns: true
+
+  # read from: crates/canon-cli/src/lib.rs:69-79
+  # read from: crates/canon-cli/src/main.rs:143-155
+  - name: canon.cli.Compile
+    naming:
+      wire: compile
+      display: Compile
+      summary: >-
+        Compile a valid protocol/1 document, composed with the documents it imports, into one
+        closed canon-ir/1 and print it.
+    input:
+      # The protocol/1 document to compile.
+      # read from: crates/canon-cli/src/lib.rs:72-74
+      - name: path
+        type: String
+      # A protocol/1 document the protocol imports, directly or through another import, each
+      # given with its own `--import` (story:protocol-imports). A repeatable flag, so a List, and
+      # Optional, since a protocol without imports takes none. The order changes no byte of the IR.
+      # read from: crates/canon-cli/src/lib.rs:75-78
+      # read from: .engineering/planning/story/protocol-imports.md:70-76
+      - name: import
+        type: Optional<List<String>>
+    response:
+      # The canonical JSON of the canon-ir/1 document.
+      # read from: crates/canon-cli/src/main.rs:150
+      - name: output
+        type: String
+    outcomes:
+      # read from: crates/canon-cli/src/main.rs:92-99
+      # read from: crates/canon-cli/src/main.rs:110-116
+      - name: unreadable
+        external: the file at path or an imported document cannot be read
+        error: canon.cli.Unreadable
+      # read from: crates/canon-cli/src/main.rs:100-104
+      # read from: crates/canon-cli/src/main.rs:117-123
+      # read from: crates/canon-cli/src/main.rs:133
+      # read from: crates/canon-cli/src/main.rs:153
+      - name: rejected
+        external: a document does not parse, the imports do not compose, or it does not compile
+        error: canon.cli.Rejected
+      # read from: crates/canon-cli/src/main.rs:149-152
+      - name: compiled
+        returns: true
+
+  # read from: crates/canon-cli/src/lib.rs:80-107
+  # read from: crates/canon-cli/src/evaluate.rs:32-120
+  - name: canon.cli.Evaluate
+    naming:
+      wire: evaluate
+      display: Evaluate
+      summary: >-
+        Evaluate a case under a compiled protocol from an evidence set and print the
+        canon-decision/1 document.
+    input:
+      # The compiled protocol, canon-ir/1 as `canon compile` prints it.
+      # read from: crates/canon-cli/src/lib.rs:83-85
+      - name: ir
+        type: String
+      # The canon-case/1 case snapshot.
+      # read from: crates/canon-cli/src/lib.rs:86-88
+      - name: case
+        type: String
+      # A directory holding only canon-evidence/1 records, one per *.yaml or *.json file.
+      # read from: crates/canon-cli/src/lib.rs:89-91
+      - name: evidence
+        type: String
+      # A canon-authority/1 document; without it no capability is granted.
+      # read from: crates/canon-cli/src/lib.rs:92-96
+      - name: authority
+        type: Optional<String>
+      # A canon-decisions/1 document: the explicit decisions taken.
+      # read from: crates/canon-cli/src/lib.rs:97-101
+      - name: decisions
+        type: Optional<String>
+      # The evaluation instant in UTC; without it no evidence expires.
+      # read from: crates/canon-cli/src/lib.rs:102-106
+      - name: at
+        type: Optional<String>
+    response:
+      # The canon-decision/1 document.
+      # read from: crates/canon-cli/src/evaluate.rs:104
+      - name: output
+        type: String
+    outcomes:
+      # read from: crates/canon-cli/src/evaluate.rs:40-66
+      - name: unreadable
+        external: an input file or the evidence directory cannot be read
+        error: canon.cli.Unreadable
+      # read from: crates/canon-cli/src/evaluate.rs:74-101
+      # read from: crates/canon-cli/src/evaluate.rs:107-118
+      - name: rejected
+        external: an input document is rejected or the evaluation is refused
+        error: canon.cli.Rejected
+      # read from: crates/canon-cli/src/evaluate.rs:102-106
+      - name: evaluated
+        returns: true
+
+  # read from: crates/canon-cli/src/lib.rs:108-143
+  # read from: crates/canon-cli/src/check.rs:15-54
+  - name: canon.cli.Check
+    naming:
+      wire: check
+      display: Check
+      summary: >-
+        Check a protocol/1 document, composed with the documents it imports, over its whole finite
+        state space and report what it finds.
+    input:
+      # The protocol/1 document to check.
+      # read from: crates/canon-cli/src/lib.rs:132-134
+      - name: path
+        type: String
+      # A canon-properties/1 document of properties checked in every state.
+      # read from: crates/canon-cli/src/lib.rs:135-138
+      - name: properties
+        type: Optional<String>
+      # A protocol/1 document the protocol imports, directly or through another import, each
+      # given with its own `--import` (story:protocol-imports). A repeatable flag, so a List, and
+      # Optional, since a protocol without imports takes none. The order changes nothing.
+      # read from: crates/canon-cli/src/lib.rs:139-142
+      # read from: .engineering/planning/story/protocol-imports.md:70-72
+      - name: import
+        type: Optional<List<String>>
+    response:
+      # The check's report, which found nothing.
+      # read from: crates/canon-cli/src/check.rs:42-44
+      - name: output
+        type: String
+    outcomes:
+      # read from: crates/canon-cli/src/check.rs:16-29
+      - name: unreadable
+        external: the protocol, an imported document or the properties document cannot be read
+        error: canon.cli.Unreadable
+      # read from: crates/canon-cli/src/check.rs:30-34
+      # read from: crates/canon-cli/src/check.rs:40-52
+      - name: rejected
+        external: >-
+          a document is rejected, the imports do not compose, the check is refused, or the check
+          finds something
+        error: canon.cli.Rejected
+      # read from: crates/canon-cli/src/check.rs:42-44
+      - name: nothing-found
+        returns: true
+
+  # Walks every state a case can reach from the empty case, one step at a time
+  # (story:canon-simulate), modelled on canon.cli.Check; a child case's outcome arrives at any step
+  # after the action that opened the child was taken (story:simulate-child-outcome-step).
+  # read from: .engineering/planning/story/canon-simulate.md:44-80
+  # read from: .engineering/planning/story/canon-simulate.md:125
+  # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Outcome", 1 to 5
+  - name: canon.cli.Simulate
+    naming:
+      wire: simulate
+      display: Simulate
+      summary: >-
+        Walk every state a case of a protocol/1 document can reach from the empty case, a child
+        case's outcome arriving at any step after the action that opened the child, and report the
+        states no sequence of steps gets out of (stuck states and cycles, one per smallest state),
+        dead actions and unreached outcomes.
+    input:
+      # The protocol/1 document to simulate.
+      # read from: .engineering/planning/story/canon-simulate.md:44
+      - name: path
+        type: String
+    response:
+      # The walk's summary line, which found nothing: the reachable states, the terminable ones
+      # per outcome, the open states with no action to take, and 0 findings. The open states with
+      # no action to take are counted as waiting on supplied evidence or expiry when the protocol
+      # declares a supplied or an expiring kind and no action that opens a child case, and as
+      # waiting on supplied evidence, a child outcome or expiry when an action opens a child case
+      # (case_open). A state names each opening action whose children have not all ended: `action
+      # a opened a child` for one, `action a opened 2 or more children` for more.
+      # read from: .engineering/planning/story/canon-simulate.md:67
+      # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R3 and R5
+      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 1", D1
+      - name: output
+        type: String
+    outcomes:
+      # read from: .engineering/planning/story/canon-simulate.md:125
+      - name: unreadable
+        external: the protocol cannot be read
+        error: canon.cli.Unreadable
+      # A stuck state or a cycle is a state that is not open: no sequence of action, supplied,
+      # child-outcome, expiry and authority steps leads from it to a legitimate outcome. The walk
+      # counts, per action that opens a child case, its children that have not ended: none, one,
+      # or two or more. A step of the action raises the count; a child's outcome arrives while the
+      # count is above none, an outcome other than open lowers it, or from two or more may also
+      # leave it at two or more, and replaces an open record, and a child-outcome step is no
+      # action step, so it never makes a state a cycle. A state holding an open record, current or
+      # held as expired, keeps some count above none, because an open record is a child that has
+      # not ended. A stuck state or cycle is printed once per smallest state, with the decisions
+      # that would make an outcome legitimate and the number of other such states that contain
+      # it. A case_outcome record that expires stays read by every children form: with no
+      # evidence match reading case_outcome it has no expiry step, otherwise it is held as
+      # expired, absent to every evidence match. Limit: a step adds one record, so where an
+      # action's guard closes on its first record the walk never holds two records of one taking
+      # together, and an outcome that needs both is reported as unreached. A child's outcome
+      # arrives only in the case_outcome dimension its opening action produces, as canon check
+      # counts it: about the action's case_open subject when the protocol reads case_outcome about
+      # that artifact by name, in a children form or an evidence match, otherwise without a
+      # subject; an open record keeps a count above none on an action that produces its
+      # dimension. A protocol that reads case_outcome about no artifact by name walks as before.
+      # read from: .engineering/planning/story/canon-simulate.md:69-80
+      # read from: .engineering/planning/story/canon-simulate.md:235
+      # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R1 to R5
+      # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 2", R2a
+      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 1", D1
+      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, D5: an `open` record is a child that has not ended"
+      # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 2: D3 is withdrawn"
+      # read from: .engineering/planning/story/child-outcome-subject.md, section "Decided in review, after adversary pass 1", D1 and D2
+      - name: rejected
+        external: >-
+          the document is rejected, the walk is refused (an order form, or more than 65536
+          reachable states), or the walk finds a state no step sequence gets out of, a dead action
+          or an unreached outcome
+        error: canon.cli.Rejected
+      # read from: .engineering/planning/story/canon-simulate.md:69
+      - name: nothing-found
+        returns: true
+
+  # read from: crates/canon-cli/src/lib.rs:143-162
+  # read from: crates/canon-cli/src/generate.rs:26-120
+  - name: canon.cli.Generate
+    naming:
+      wire: generate
+      display: Generate
+      summary: Generate canon-conformance/1 scenarios into an empty directory.
+    input:
+      # The protocol document, as a relative path without `..` components.
+      # read from: crates/canon-cli/src/lib.rs:154-156
+      - name: path
+        type: String
+      # The directory to write the scenarios to: absent or empty.
+      # read from: crates/canon-cli/src/lib.rs:157-161
+      - name: out
+        type: String
+    response:
+      # One `wrote: <file>` line per scenario and a summary line.
+      # read from: crates/canon-cli/src/generate.rs:105-119
+      - name: output
+        type: String
+    outcomes:
+      # read from: crates/canon-cli/src/generate.rs:38-45
+      # read from: crates/canon-cli/src/generate.rs:55-58
+      # read from: crates/canon-cli/src/generate.rs:98-104
+      - name: unreadable
+        external: the protocol cannot be read, or the output directory cannot be written
+        error: canon.cli.Unreadable
+      # read from: crates/canon-cli/src/generate.rs:27-34
+      # read from: crates/canon-cli/src/generate.rs:46-53
+      # read from: crates/canon-cli/src/generate.rs:59-93
+      # read from: .engineering/planning/story/protocol-imports.md:94-95
+      - name: rejected
+        external: >-
+          the protocol path or the document is refused, the protocol has imports (named by its
+          first import), or generation is refused
+        error: canon.cli.Rejected
+      # read from: crates/canon-cli/src/generate.rs:105-120
+      - name: generated
+        returns: true
+
+  # read from: crates/canon-cli/src/lib.rs:162-173
+  # read from: crates/canon-cli/src/diff.rs:16-46
+  - name: canon.cli.Diff
+    naming:
+      wire: diff
+      display: Diff
+      summary: The semantic difference between two compiled revisions of one protocol.
+    input:
+      # The earlier revision, as `canon compile` prints it.
+      # read from: crates/canon-cli/src/lib.rs:167-169
+      - name: from
+        type: String
+      # The later revision, as `canon compile` prints it.
+      # read from: crates/canon-cli/src/lib.rs:170-172
+      - name: to
+        type: String
+    response:
+      # Every change, each classified and naming the identifiers it touches.
+      # read from: crates/canon-cli/src/diff.rs:38
+      - name: output
+        type: String
+    outcomes:
+      # read from: crates/canon-cli/src/diff.rs:18
+      - name: unreadable
+        external: a revision cannot be read
+        error: canon.cli.Unreadable
+      # read from: crates/canon-cli/src/diff.rs:19-26
+      # read from: crates/canon-cli/src/diff.rs:41-44
+      - name: rejected
+        external: a revision is not canon-ir/1, or the two revisions are of different protocols
+        error: canon.cli.Rejected
+      # read from: crates/canon-cli/src/diff.rs:37-40
+      - name: compared
+        returns: true
+
+  # The clap path `conform run`.
+  # read from: crates/canon-cli/src/lib.rs:173-196
+  # read from: crates/canon-cli/src/conform.rs:15-105
+  - name: canon.cli.ConformRun
+    naming:
+      wire: conform-run
+      display: Conform run
+      summary: Run every canon-conformance/1 scenario of a registry directory and report each.
+    input:
+      # The registry directory; every *.yaml file in it is one scenario. Defaults to
+      # conformance/scenarios, so clap does not require it.
+      # read from: crates/canon-cli/src/lib.rs:184-186
+      - name: scenarios
+        type: Optional<String>
+      # A canon-requirements/1 catalogue the registry answers for.
+      # read from: crates/canon-cli/src/lib.rs:187-194
+      - name: requirements
+        type: Optional<String>
+    response:
+      # One line per scenario and the summary, every scenario passing.
+      # read from: crates/canon-cli/src/conform.rs:64-66
+      - name: output
+        type: String
+    outcomes:
+      # read from: crates/canon-cli/src/conform.rs:22-37
+      # read from: crates/canon-cli/src/conform.rs:96-100
+      - name: unreadable
+        external: the registry directory or the catalogue cannot be read
+        error: canon.cli.Unreadable
+      # read from: crates/canon-cli/src/conform.rs:64-69
+      # read from: crates/canon-cli/src/conform.rs:101-104
+      - name: rejected
+        external: a scenario fails or is unreadable, none runs, or a requirement check fails
+        error: canon.cli.Rejected
+      # read from: crates/canon-cli/src/conform.rs:64-66
+      - name: passed
+        returns: true

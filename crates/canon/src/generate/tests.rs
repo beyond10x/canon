@@ -225,6 +225,45 @@ fn a_state_space_above_the_bound_is_refused_as_check_refuses_it() {
     );
 }
 
+/// `canon check` decides `k`, `m` and `n` each over its own slice (1024, 256 and 256 states), but
+/// generating enumerates their whole product, 67108864 states, which keeps the whole product's
+/// bound and is refused naming it (story:check-subject-slices).
+#[test]
+fn a_whole_product_above_the_bound_is_refused_though_every_slice_fits() {
+    let results = |kind: &str, n: usize| {
+        (0..n)
+            .map(|i| format!("{{evidence: {{kind: {kind}, result: r{i}}}}}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let source = format!(
+        "format: protocol/1\n\
+         protocol: {{id: p, revision: 1}}\n\
+         artifacts: {{a: {{}}}}\n\
+         evidence_kinds: {{k: {{}}, m: {{}}, n: {{}}}}\n\
+         actions: {{act: {{may_produce: [{{evidence: k}}, {{evidence: m}}, {{evidence: n}}]}}}}\n\
+         outcomes:\n\
+         \x20\x20done_k: {{requires: {{any: [{}]}}}}\n\
+         \x20\x20done_m: {{requires: {{any: [{}]}}}}\n\
+         \x20\x20done_n: {{requires: {{any: [{}]}}}}\n",
+        results("k", 9),
+        results("m", 7),
+        results("n", 7)
+    );
+    let ir = compiled(&source);
+    let report = check::check(&ir, None).expect("every slice fits");
+    assert_eq!(report.states, 67_108_864);
+    assert_eq!(
+        refused(&source),
+        (
+            "state-space-bound",
+            "protocol `p` revision 1 has 67108864 states, more than the bound of 65536: evidence \
+             kind `k` 1024, evidence kind `m` 256, evidence kind `n` 256"
+                .to_owned()
+        )
+    );
+}
+
 #[test]
 fn quoting_reads_back_as_the_text() {
     let texts = [

@@ -1,0 +1,45 @@
+format: protocol/1
+
+protocol:
+  id: simulate.contained
+  revision: 1
+  description: Approve a release under authority beside archived memos nothing waits on; one denial strands the case whatever memos arrive.
+
+artifacts:
+  release:
+    description: The release being approved.
+
+evidence_kinds:
+  approval:
+    description: An approval of the release.
+  memo:
+    description: A memo about the release, from a simulate.archive case; its result is filed or another.
+    supplied_by: simulate.archive
+
+claims:
+  memo.filed:
+    description: A memo about the release was filed.
+    true_when:
+      evidence:
+        kind: memo
+        result: filed
+
+  release.approved:
+    description: The release has been approved.
+    true_when:
+      evidence:
+        kind: approval
+
+actions:
+  approve:
+    description: Approve the release, under authority.
+    requires:
+      - capability: sign
+    may_produce:
+      - evidence: approval
+
+outcomes:
+  approved:
+    description: The release is approved.
+    requires:
+      claim: release.approved

@@ -1,0 +1,6 @@
+format: canon-case/1
+id: INV-41
+protocol: investigation.publication
+artifacts:
+  explanation: {revision: r1}
+  dataset: {revision: d2}

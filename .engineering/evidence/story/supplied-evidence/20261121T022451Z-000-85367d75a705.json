@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T02:24:51Z",
+  "actor": "human:timo",
+  "artifact": "story:supplied-evidence",
+  "kind": "story",
+  "revision": 31,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "a kind both supplied and produced by a capability-requiring action: the coordinator decided the built rule stands and the story's sentence changes; the rule is stated in check/mod.rs, protocol.yaml and the reference and pinned by a test (40841db); the adversary rewrote its case to it (201ced1)",
+    "reference": "impl/supplied-evidence 40841db",
+    "review": "review-result:adversary-supplied-evidence-pass-1",
+    "outcome": "fixed"
+  }
+}

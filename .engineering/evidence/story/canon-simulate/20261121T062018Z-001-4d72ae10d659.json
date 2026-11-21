@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T06:20:18Z",
+  "actor": "human:timo",
+  "artifact": "story:canon-simulate",
+  "kind": "story",
+  "revision": 21,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "one cause printed once per record combination: one finding per smallest state with the count of states that contain it (R5, 8fb960c); sdc.plan 514 findings became 1",
+    "reference": "impl/canon-simulate 8fb960c",
+    "review": "review-result:adversary-canon-simulate-pass-1",
+    "outcome": "fixed"
+  }
+}

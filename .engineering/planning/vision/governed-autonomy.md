@@ -2,9 +2,12 @@
 format: aep.planning-md/3
 id: vision:governed-autonomy
 kind: vision
-status: draft
+status: approved
 title: Governed Autonomy — from intent to verified outcome
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "in_review", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 2, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
+- {from: "in_review", to: "approved", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 ---
 ## Objective
 

@@ -8,10 +8,10 @@
 //! A protocol document declares a protocol id and revision, the case inputs a case gives values for
 //! (`case: inputs:`), artifacts, evidence kinds, claims with their predicates, obligations with
 //! when they apply, actions, outcomes, invalidation rules and the independence dimensions its
-//! evidence matches may demand. Every declaration
-//! section is a map keyed by identifier; [`Declarations`] keeps the entries in source order and
-//! keeps repeated keys, so the validator can report a duplicate identifier instead of the parser
-//! silently dropping one.
+//! evidence matches may demand, and the protocols it imports, each pinned to a revision and a
+//! digest. Every declaration section is a map keyed by identifier; [`Declarations`] keeps the
+//! entries in source order and keeps repeated keys, so the validator can report a duplicate
+//! identifier instead of the parser silently dropping one.
 
 // `ids` declares the `identifier!` macro, which a module can use only when declared after it.
 #[macro_use]
@@ -37,7 +37,7 @@ use serde::Deserialize;
 use serde::de::{MapAccess, Visitor};
 use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 
-pub use authority::{AUTHORITY_FORMAT, AuthorityDecision, Grant};
+pub use authority::{AUTHORITY_FORMAT, AuthorityDecision, Grant, ScopeKey, ScopeValue};
 pub use case::{CASE_FORMAT, Case, CaseArtifact};
 pub use catalogue::{
     NormativeRequirement, REQUIREMENTS_FORMAT, RequirementCatalogue, RequirementId,
@@ -56,8 +56,9 @@ pub use ids::{
 };
 pub use parse::{FORMAT, ParseError, parse};
 pub use predicate::{
-    CASE_OUTCOME, ChildOutcomes, ClaimTest, EvidenceAfter, EvidenceMatch, EvidenceOrder,
-    EvidenceSince, FirstResult, InputTest, LaterRecord, OPEN_OUTCOME, Predicate, Truth,
+    CASE_OUTCOME, ChildOutcomes, ChildRevision, ClaimTest, EvidenceAfter, EvidenceMatch,
+    EvidenceOrder, EvidenceSince, FirstResult, InputTest, LaterRecord, OPEN_OUTCOME, Predicate,
+    Truth,
 };
 pub use properties::{
     PROPERTIES_FORMAT, Properties, Property, PropertyDependency, PropertyId, PropertySubject,
@@ -95,6 +96,11 @@ pub struct Protocol {
     /// id; a protocol without the section declares none.
     #[serde(default, deserialize_with = "present::defaulted")]
     pub independence_dimensions: Declarations<IndependenceDimensionId, IndependenceDimension>,
+    /// The protocols this protocol imports, keyed by protocol id (story:protocol-imports), each
+    /// pinned to a revision and a digest. A protocol without the section imports nothing; one with
+    /// it compiles only composed with the documents it imports (`b10x_canon::ir::compose`).
+    #[serde(default, deserialize_with = "present::defaulted")]
+    pub imports: Declarations<ProtocolId, Import>,
 }
 
 /// One independence dimension: a relation between who produced a record and the case's work,
@@ -145,6 +151,24 @@ pub struct ProtocolHeader {
     pub description: Option<String>,
 }
 
+/// One protocol a protocol imports: exactly the revision it reads and the digest of that
+/// revision's compiled `canon-ir/1`, and the imported declarations the importing protocol may
+/// redeclare.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Import {
+    /// The revision of the imported protocol the import reads.
+    pub revision: u64,
+    /// `sha256:` and the 64 lowercase hexadecimal digits of the SHA-256 of the imported protocol's
+    /// `canon-ir/1` bytes, compiled with its own imports (`b10x_canon::ir::digest`).
+    #[serde(deserialize_with = "present::required")]
+    pub digest: String,
+    /// The identifiers, of any declaration section, of the imported declarations the importing
+    /// protocol may redeclare; a redeclaration replaces the imported declaration.
+    #[serde(default, deserialize_with = "present::defaulted")]
+    pub refines: Vec<String>,
+}
+
 /// A thing whose revisions evidence is bound to.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -163,6 +187,15 @@ pub struct EvidenceKind {
     /// its `observed_at` by more than this, it is excluded as expired (design § 8).
     #[serde(default, deserialize_with = "present::optional")]
     pub max_age: Option<Age>,
+    /// The protocol whose cases produce records of this kind (story:supplied-evidence): any
+    /// protocol but this one, named and never resolved. A runner copies such a record unchanged
+    /// from a case under that protocol; `canon check` counts the kind as produced. It counts as
+    /// produced without authority and stays governed when an action that requires a capability
+    /// may also produce it, so `canon check` reports `authority-bypass` on an outcome a supplied
+    /// record alone makes legitimate. Absent: the protocol's own actions produce the kind, or
+    /// nothing does.
+    #[serde(default, deserialize_with = "present::optional")]
+    pub supplied_by: Option<ProtocolId>,
 }
 
 /// A proposition whose value is established from evidence by its predicate.
@@ -204,9 +237,9 @@ pub struct Action {
     #[serde(default, deserialize_with = "present::defaulted")]
     pub may_produce: Vec<EvidenceProduction>,
     /// The JSON Schema, in Canon's argument-schema dialect, that the action's arguments satisfy.
-    /// Absent: the action takes no arguments; a runner accepts only `{}`. Canon never validates
-    /// arguments at run time: the runner that calls the action validates them against the
-    /// schema, and `canon validate` holds the schema to the dialect (`action-arguments`).
+    /// Absent: the action takes no arguments; a runner accepts only `{}`. Canon evaluates no call:
+    /// `canon validate` holds the schema to the dialect (`action-arguments`), and a runner checks
+    /// a call's arguments with `validate::check_arguments` or any 2020-12 validator.
     #[serde(default, deserialize_with = "present::optional_json")]
     pub arguments: Option<Json>,
     /// The child case the action opens (story:case-composition): a case governed by another
@@ -216,6 +249,39 @@ pub struct Action {
     /// work to another party (D207).
     #[serde(default, deserialize_with = "present::optional")]
     pub case_open: Option<CaseOpening>,
+    /// Who writes the action's arguments and the content of the artifacts it revises
+    /// (story:judgement-marking): `program`, a reproducible function of the action's inputs, or
+    /// `judgement`, a person or a model. Absent: `program`. It has no evaluation meaning, names no
+    /// executor, model or tool, and Canon cannot prove that a runner honours it.
+    #[serde(default, deserialize_with = "present::optional")]
+    pub author: Option<Author>,
+    /// The declared artifacts the action may move to a new revision (story:judgement-marking).
+    /// Absent: none. It has no evaluation meaning; Canon never refuses a runner that moves an
+    /// artifact outside it.
+    #[serde(default, deserialize_with = "present::defaulted")]
+    pub revises: Vec<ArtifactId>,
+}
+
+/// Who decides (story:judgement-marking): a reproducible procedure, or a judgement by a person or
+/// a model. On an action (`author`) it says who writes the action's arguments and the artifacts it
+/// revises; on a production (`decided_by`) who decides the record's result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Author {
+    /// A reproducible function of the action's inputs: the value when nothing is written.
+    Program,
+    /// A person or a model, whose result is not a function of the action's inputs.
+    Judgement,
+}
+
+impl Author {
+    /// The value as `protocol/1` and `canon-ir/1` write it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Author::Program => "program",
+            Author::Judgement => "judgement",
+        }
+    }
 }
 
 /// What an action's `case_open` names: the protocol the child case is governed by and the
@@ -234,12 +300,17 @@ pub struct CaseOpening {
     pub subject: ArtifactId,
 }
 
-/// One capability an action requires authority for.
+/// One capability an action requires authority for, at a scope (Atlas ADR 0083 § Decision 1).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CapabilityRequirement {
     #[serde(deserialize_with = "present::required")]
     pub capability: CapabilityId,
+    /// The scope the capability is required at: one value for each key it names
+    /// (`{cluster: prod-eu, namespace: foo}`), each key once. Absent or empty, the requirement is
+    /// unscoped, and only an authority decision without a scope covers it.
+    #[serde(default, deserialize_with = "present::defaulted")]
+    pub scope: Declarations<ScopeKey, ScopeValue>,
 }
 
 /// One evidence kind an action may produce.
@@ -248,6 +319,12 @@ pub struct CapabilityRequirement {
 pub struct EvidenceProduction {
     #[serde(deserialize_with = "present::required")]
     pub evidence: EvidenceKindId,
+    /// Who decides the result of a record of this kind the action produces
+    /// (story:judgement-marking). Absent: the action's `author`. `program` on a judgement action
+    /// covers a record the runner writes from the effect it applied, such as provenance. It has no
+    /// evaluation meaning.
+    #[serde(default, deserialize_with = "present::optional")]
+    pub decided_by: Option<Author>,
 }
 
 /// A legitimate terminal interpretation of a case and what it requires: a predicate, or an explicit

@@ -348,6 +348,7 @@ fn protocol(requires: Predicate) -> Protocol {
     Protocol {
         format: "protocol/1".to_owned(),
         independence_dimensions: Default::default(),
+        imports: Default::default(),
         protocol: ProtocolHeader {
             id: ProtocolId::new("p"),
             revision: 1,

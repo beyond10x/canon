@@ -95,7 +95,7 @@ const DOCUMENTS: &[&str] = &[
 /// 0.52.0 refuses an invariant on a struct type no view publishes (ESS-SYNTH-013), and this
 /// specification has no views. Each is read as if its owner stated `<field> >= 0`, so its Rust
 /// type must be `u64`. Remove an entry once `ess/` can state the bound itself.
-const NON_NEGATIVE: &[(&str, &str)] = &[("Decision", "protocol_revision")];
+const NON_NEGATIVE: &[(&str, &str)] = &[("Decision", "protocol_revision"), ("Import", "revision")];
 
 /// The tree under test, read at run time: a test binary reused from a shared target directory
 /// would otherwise check the tree it was built from.
@@ -189,7 +189,8 @@ fn compiled_ir(root: &Path) -> Value {
     serde_yaml_ng::from_slice(&output.stdout).expect("compiled IR is JSON")
 }
 
-/// Map key types as authored: `(owner, field) -> key`, for every `Map<K, V>` field.
+/// Map key types as authored: `(owner, field) -> key`, for every `Map<K, V>` and
+/// `Optional<Map<K, V>>` field.
 fn authored_map_keys(root: &Path) -> BTreeMap<(String, String), String> {
     let mut keys = BTreeMap::new();
     let spec = root.join("ess");
@@ -213,6 +214,11 @@ fn authored_map_keys(root: &Path) -> BTreeMap<(String, String), String> {
                 let owner = local(declaration["name"].as_str().unwrap_or_default());
                 for field in declaration["fields"].as_sequence().into_iter().flatten() {
                     let ty = field["type"].as_str().unwrap_or_default().trim();
+                    // `Optional<Map<K, V>>` has the key of the map it wraps.
+                    let ty = ty
+                        .strip_prefix("Optional<")
+                        .and_then(|t| t.strip_suffix('>'))
+                        .unwrap_or(ty);
                     if let Some(args) = ty.strip_prefix("Map<").and_then(|t| t.strip_suffix('>')) {
                         let key = split_top(args)[0].trim().to_owned();
                         let name = field["name"].as_str().unwrap_or_default().to_owned();
@@ -242,7 +248,7 @@ fn ir_ty(value: &Value, map_key: Option<&String>) -> Ty {
     match value["kind"].as_str().expect("type ref has a kind") {
         "primitive" => Ty::Primitive(name()),
         "declared" => Ty::Declared(name()),
-        "optional" => Ty::Optional(Box::new(ir_ty(&value["of"], None))),
+        "optional" => Ty::Optional(Box::new(ir_ty(&value["of"], map_key))),
         "list" => Ty::List(Box::new(ir_ty(&value["of"], None))),
         "map" => {
             let compiled = value["key"].as_str().expect("map key").to_owned();
@@ -1331,6 +1337,39 @@ fn a_changed_map_key_is_named() {
     assert_named(&spec, &rust, &["Protocol.claims", "ClaimId", "OutcomeId"]);
 }
 
+/// `Decision.missing_evidence` is an `Optional<Map<K, V>>`: its key comes from the authored
+/// `ess/` text through the `Optional<`, so a key that differs is named like any map key's.
+#[test]
+fn a_changed_key_of_an_optional_map_is_named() {
+    let spec = specification();
+    let rust = edited(
+        "decision.rs",
+        "Option<Declarations<ActionId, Vec<EvidenceKindId>>>",
+        "Option<Declarations<ClaimId, Vec<EvidenceKindId>>>",
+    );
+    assert_named(
+        &spec,
+        &rust,
+        &["Decision.missing_evidence", "ActionId", "ClaimId"],
+    );
+}
+
+/// An optional map the model makes required, or the other way round, is named.
+#[test]
+fn an_optional_map_against_a_required_one_is_named() {
+    let spec = specification();
+    let rust = edited(
+        "decision.rs",
+        "Option<Declarations<ActionId, Vec<EvidenceKindId>>>",
+        "Declarations<ActionId, Vec<EvidenceKindId>>",
+    );
+    assert_named(
+        &spec,
+        &rust,
+        &["Decision.missing_evidence", "Optional<Map<"],
+    );
+}
+
 #[test]
 fn a_union_variant_added_only_to_the_model_is_named() {
     let spec = specification();
@@ -1358,8 +1397,8 @@ fn a_type_reached_only_in_the_model_is_named() {
     let spec = specification();
     let rust = edited(
         "mod.rs",
-        "pub capability: CapabilityId,\n}",
-        "pub capability: CapabilityId,\n    pub grant: ProbeGrant,\n}\n\npub struct ProbeGrant {\n    pub scope: String,\n}",
+        "pub scope: Declarations<ScopeKey, ScopeValue>,\n}",
+        "pub scope: Declarations<ScopeKey, ScopeValue>,\n    pub grant: ProbeGrant,\n}\n\npub struct ProbeGrant {\n    pub scope: String,\n}",
     );
     let found = differences(&spec, &rust);
     assert!(

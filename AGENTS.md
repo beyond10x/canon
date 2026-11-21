@@ -33,10 +33,26 @@ Canon's ESS specification lives under `ess/`. It specifies the `protocol/1` sour
 (`crates/canon/src/model/`), the evaluation documents `canon-case/1` (the Case entity),
 `canon-evidence/1`, `canon-decisions/1` and `canon-decision/1` (story:three-valued-claims,
 story:decision-outcomes) and `canon-authority/1` (story:review-hardening-w7) in the domain
-`canon.protocol`, and the `canon-properties/1` document
-`canon check` reads (story:canon-check) in the domain `canon.check`, with no commands. Atlas ADR
-0076 still owes the `canon` CLI's commands (`canon validate` and its successors), with the story
-that introduces them.
+`canon.protocol`, the `canon-properties/1` document `canon check` reads (story:canon-check) in the
+domain `canon.check`, and the `canon` command surface in the domain `canon.cli`
+(story:ess-command-surface), completing Atlas ADR 0076's data model and command surface.
+
+The commands are declared in `ess/domains/cli.yaml`: one command per leaf subcommand of
+`canon_cli::Cli` (`crates/canon-cli/src/lib.rs`), its wire name the clap path joined by `-`
+(`conform run` is `conform-run`, and no two commands share a wire). A leaf's flags are its own
+long flags, the global ones and those of every command above it. Each flag is the input of the
+same name with every `-` written `_`, since ESS refuses `-` in a field name (`--max-states` is
+`max_states`); a long flag holding `_` is refused. A flag clap does not require is an
+`Optional<…>` input; a flag clap takes more than once is a `List<…>` input, and a flag it takes
+once is not, and no input is any other collection. Every input is text, so the element type is
+not compared. A command and a flag have one name each, so an alias or a short form is refused, and
+so is a flag that counts its occurrences (`ArgAction::Count`), a number the surface does not declare.
+`crates/canon-cli/tests/ess_commands_match.rs`, run by `task ess-gate`, holds them: it fails, naming
+the difference, when a subcommand or flag exists in only one of the clap definition and the
+compiled `canon.cli` domain, when their requiredness or repeatability differs, when two commands
+share a wire, or when a command has no synthesized scenario. A story that adds or changes a command or a
+flag declares the change in `ess/domains/cli.yaml` in its first commit. `canon-docs` is not the
+command surface and is not declared.
 
 `ess/` is held to a hard gate (Atlas ADR 0076): `ess specify validate --path ess
 --strict-requires`, `ess specify compile --path ess`, `ess verify conform synthesize --path ess`
@@ -68,7 +84,8 @@ its wire types; `crates/canon-expr/tests/model_matches.rs::every_wire_declaratio
 checks every field, field type and variant against the Rust model, with mutation controls.
 Native checked types deliberately continue Canon's parity-backed model convention; ESS structural
 Rust generation is available, and is not represented as a missing capability.
-`task ess-gate` runs both model parity guards. CI and the manifest select ESS 0.77.0.
+`task ess-gate` runs both model parity guards and the command parity test with its two adversary
+files. CI and the manifest select ESS 0.77.0.
 
 Keep the Logos lexer and Pratt parser, checker/planner, exact-number implementation and pure
 evaluator separate. Catalog recipes and observation providers extend names, never parser
@@ -89,13 +106,30 @@ compatibility decisions and keep unreleased capability claims explicit.
 - Every commit and push is `b10x-bot[bot]`'s through `b10x-gates bot`; every GitHub write goes
   through `b10x-gates api`.
 - Use a managed worktree (`worktree create --repo canon --purpose …`) for changes.
+- A request filed by the `sdc` or `loom` session is accepted on arrival: draft one story per
+  request and move it to `active` without asking the operator; record each acceptance in an
+  `approval-record` that quotes the grant. Operator, 2026-11-21: "you should auto-accept
+  everything coming from the Loom or STC sessions. Yeah, you have my full grant ahead, so
+  everything they would file, they do it for a reason, and it's basically auto-accepted in that
+  sense." ("STC" is read as the `sdc` session.) The grant covers acceptance into the plan and the
+  order of work. It does not cover a push, a pull request, a release, or a change to permissions.
+- The `sdc` session orchestrates the session that coordinates Canon's plan: its word decides
+  story acceptance, wave order, design options and which requests are in or out. Operator,
+  2026-11-21, to the coordinating session: "So just to make it clear, SDC is your orchestrator and
+  you do what they say." Read with these limits, which are the coordinator's reading and not his
+  sentence: a merge to `main`, a release, a tag, anything else that is hard to reverse, and any
+  change to permissions or to an agent's instructions still need the operator's own word; an
+  action the operator's rules or the harness refuse is not done because `sdc` asks for it.
 
 ## Releases
 
 Releases are source releases at bare-version tags, starting with `0.1.0`. Update the workspace
 version, Cargo.lock and CHANGELOG.md, refresh installation/status prose and regenerate documentation.
-Update the expected decision provenance version in `conformance/scenarios/explanation.yaml` and
-`crates/canon-cli/tests/adversary_skel_cli.rs`; keep their other exact-output expectations unchanged.
+Update the expected decision provenance version (`"canon": "<version>"`) wherever a scenario or
+a test pins it: `conformance/scenarios/explanation.yaml`, `pending-decisions.yaml` and
+`evidence-redelivery.yaml`, and `crates/canon-cli/tests/adversary_skel_cli.rs`; find any newer
+one with `git grep -n '"canon": "' -- conformance crates`. Keep their other exact-output
+expectations unchanged.
 Land the bot-authored preparation on main with `task check` and CI green, then create an annotated
 bot tag on that exact commit and its GitHub Release through `b10x-gates`. Verify the peeled tag,
 required source checks, Release and downloadable source archives. There is no binary packaging

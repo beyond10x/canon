@@ -55,7 +55,8 @@ pub struct Variant {
     /// The single payload of a tuple variant, if any.
     pub payload: Option<Ty>,
     /// The value a document writes for a unit variant of a derived enum: its name, lowercased
-    /// when the enum says `#[serde(rename_all = "lowercase")]`.
+    /// when the enum says `#[serde(rename_all = "lowercase")]`, in snake case when it says
+    /// `#[serde(rename_all = "snake_case")]`.
     pub written: String,
 }
 
@@ -220,8 +221,41 @@ fn derives_deserialize(attrs: &[Attribute]) -> Result<bool, String> {
 struct Serde {
     default: bool,
     try_from: Option<String>,
-    /// `rename_all = "lowercase"`, the one renaming this reader understands, on an enum.
-    lowercase: bool,
+    /// `rename_all = "lowercase"` or `rename_all = "snake_case"`, the renamings this reader
+    /// understands, on an enum.
+    rename_all: Option<RenameAll>,
+}
+
+/// A `rename_all` rule this reader understands.
+#[derive(Clone, Copy)]
+enum RenameAll {
+    /// `Granted` is written `granted`, `RequireApproval` `requireapproval`.
+    Lowercase,
+    /// `Granted` is written `granted`, `RequireApproval` `require_approval`.
+    SnakeCase,
+}
+
+impl RenameAll {
+    /// The value a document writes for the unit variant `name`.
+    fn written(self, name: &str) -> String {
+        match self {
+            RenameAll::Lowercase => name.to_lowercase(),
+            RenameAll::SnakeCase => {
+                let mut out = String::with_capacity(name.len() + 4);
+                for (index, ch) in name.chars().enumerate() {
+                    if ch.is_uppercase() {
+                        if index > 0 {
+                            out.push('_');
+                        }
+                        out.extend(ch.to_lowercase());
+                    } else {
+                        out.push(ch);
+                    }
+                }
+                out
+            }
+        }
+    }
 }
 
 fn serde(attrs: &[Attribute], owner: &str) -> Result<Serde, String> {
@@ -238,12 +272,16 @@ fn serde(attrs: &[Attribute], owner: &str) -> Result<Serde, String> {
                 found.try_from = Some(written.value());
             } else if meta.path.is_ident("rename_all") {
                 let rule: syn::LitStr = meta.value()?.parse()?;
-                if rule.value() != "lowercase" {
-                    return Err(
-                        meta.error("canon-docs understands only rename_all = \"lowercase\"")
-                    );
-                }
-                found.lowercase = true;
+                found.rename_all = Some(match rule.value().as_str() {
+                    "lowercase" => RenameAll::Lowercase,
+                    "snake_case" => RenameAll::SnakeCase,
+                    _ => {
+                        return Err(meta.error(
+                            "canon-docs understands only rename_all = \"lowercase\" or \
+                             \"snake_case\"",
+                        ));
+                    }
+                });
             } else {
                 return Err(meta.error("canon-docs does not understand this serde attribute"));
             }
@@ -406,7 +444,7 @@ pub fn model(root: &Path) -> Result<Model, String> {
                 Item::Struct(item) => {
                     let name = item.ident.to_string();
                     let attrs = serde(&item.attrs, &name)?;
-                    if attrs.lowercase {
+                    if attrs.rename_all.is_some() {
                         return Err(format!(
                             "{name}: canon-docs reads rename_all only on an enum"
                         ));
@@ -467,10 +505,9 @@ pub fn model(root: &Path) -> Result<Model, String> {
                             };
                             let name = variant.ident.to_string();
                             Ok(Variant {
-                                written: if attrs.lowercase {
-                                    name.to_lowercase()
-                                } else {
-                                    name.clone()
+                                written: match attrs.rename_all {
+                                    Some(rule) => rule.written(&name),
+                                    None => name.clone(),
                                 },
                                 name,
                                 doc: docs(&variant.attrs),

@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T08:15:27Z",
+  "actor": "human:timo",
+  "artifact": "story:argument-validator",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "no test of the unit held the borrow of subtract_digits: a_scale_borrows_across_every_digit added, red with the borrow dropped",
+    "reference": "impl/argument-validator 78c3086",
+    "review": "review-result:adversary-argument-validator-pass-2",
+    "outcome": "fixed"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T09:42:17Z",
+  "actor": "human:timo",
+  "artifact": "story:simulate-child-outcome-step",
+  "kind": "story",
+  "revision": 14,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "blocker: the mark was never cleared, so a real dead end counted as waiting and the walk exited 0: decided D1 with D5, the mark counts the children not ended (none, one, two or more) and a state holding an open record holds a mark above none; the adversary's fixture ended-once reports its stuck state; pass 2 green against the adversary's own enumerator on 15 protocols",
+    "reference": "impl/simulate-child-outcome-step 0e78756",
+    "review": "review-result:adversary-simulate-child-outcome-step-pass-1",
+    "outcome": "fixed"
+  }
+}

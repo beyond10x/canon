@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T10:51:07Z",
+  "actor": "human:timo",
+  "artifact": "story:child-outcome-subject",
+  "kind": "story",
+  "revision": 20,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "three mutants survived the unit's tests and conform: 5 cases in crates/canon/tests/child_outcome_subject.rs and the claim wave.troubled of CANON-COMPOSE-003 hold them (06e6fd9d, e958f757); each mutant fails 2 to 5 cases",
+    "reference": "impl/child-outcome-subject 06e6fd9d, e958f757",
+    "review": "review-result:adversary-child-outcome-subject-pass-1",
+    "outcome": "fixed"
+  }
+}

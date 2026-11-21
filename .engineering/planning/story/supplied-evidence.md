@@ -1,0 +1,328 @@
+---
+format: aep.planning-md/3
+id: story:supplied-evidence
+kind: story
+status: implemented
+title: 'Declare evidence kinds supplied by another protocol: supplied_by, and canon check counts them as produced'
+tags:
+- from-request
+refs:
+- provider: sdc
+  reference: docs/canon-requests.md
+relations:
+- decomposes: epic:canon-kernel
+- serves: vision:O2
+- serves: vision:governed-autonomy
+- depends_on: story:protocol-imports
+scope:
+- confidence: cited
+  path: conformance/requirements.yaml
+- confidence: inferred
+  path: conformance/scenarios/supplied-evidence.yaml
+- confidence: cited
+  path: crates/canon-cli/src/lib.rs
+- confidence: cited
+  path: crates/canon-cli/tests/adversary_conformance_suite_cli.rs
+- confidence: cited
+  path: crates/canon-cli/tests/conform_requirements.rs
+- confidence: inferred
+  path: crates/canon-cli/tests/supplied_evidence.rs
+- confidence: cited
+  path: crates/canon/src/check/mod.rs
+- confidence: cited
+  path: crates/canon/src/check/tests.rs
+- confidence: cited
+  path: crates/canon/src/diff/mod.rs
+- confidence: cited
+  path: crates/canon/src/eval/evidence.rs
+- confidence: cited
+  path: crates/canon/src/eval/mod.rs
+- confidence: inferred
+  path: crates/canon/src/eval/read.rs
+- confidence: cited
+  path: crates/canon/src/ir/mod.rs
+- confidence: cited
+  path: crates/canon/src/model/mod.rs
+- confidence: cited
+  path: crates/canon/src/validate/mod.rs
+- confidence: cited
+  path: crates/canon/tests/adversary_supplied_evidence.rs
+- confidence: cited
+  path: ess/domains/protocol.yaml
+- confidence: inferred
+  path: fixtures/investigation/invalid/supplied-by-self.yaml
+- confidence: inferred
+  path: fixtures/investigation/supplied-evidence/
+revision: 32
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 18, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "proposed", to: "active", at: "2026-11-20T22:35:01Z", actor: "human:timo", revision: 19, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
+- {from: "active", to: "implemented", at: "2026-11-21T02:24:51Z", actor: "human:timo", revision: 32, decided_on: {"recorded":{"test_result":1,"review_outcome":5,"verification":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w3"}
+---
+## Outcome
+
+An evidence kind can declare that records of it come from outside the protocol. It names the protocol whose cases produce them. `canon check` then counts the kind as produced, and stops reporting `unproduced-evidence` for it.
+
+1. **`supplied_by` on an evidence kind in `protocol/1`.** This is an optional field on `evidence_kinds.<id>` that holds one protocol id. An example is `roadmap_approval: {supplied_by: sdc.direction}`. `canon validate` refuses a protocol that names its own id as the supplier, as `self-supplied-evidence`, naming the kind. This mirrors `self-opened-case`.
+2. **`canon-ir/1`.** The compiled evidence kind carries `supplied_by` when it is set. When it is absent there is no key, so the IR of every existing protocol stays byte-identical. The IR reads it back.
+3. **`canon check`.** A kind is produced when an action lists it in `may_produce`, when it is `case_outcome` and some action has `case_open`, or when it declares `supplied_by`. The state space does not change.
+   - For `authority-bypass`, a supplied kind is not governed in this protocol.
+   - A state where a supplied kind is present can still be a witness. The supplier's authority is checked in the supplier's protocol.
+   - Today a state with an unproduced kind present is never a witness (`check/mod.rs:745`). So without this rule, an outcome that needs a supplied kind would hide a bypass through any other kind.
+4. **`canon evaluate`.** Nothing changes. Records of a supplied kind are read as given, like any other record. With no record the claim is `UNKNOWN`.
+5. **`canon diff`.** Adding, removing or changing `supplied_by` is `NO SEMANTIC CHANGE`, because no evaluation reads it.
+
+## Why
+
+- **The request.** Item 6 of `$HOME/beyond10x/sdc/docs/canon-requests.md`.
+  - `canon check` on `$HOME/beyond10x/sdc/docs/limitations/epic-imported-evidence.protocol.yaml` reports 8 `unproduced-evidence` findings for `roadmap_approval`, at 36864 states (`output.txt:14-22`).
+  - The SDC works around it with a `roadmap.read` action that "copies" the record. That action is in `sdc.protocol.yaml:72`, `sdc-epic.protocol.yaml:91-96`, `sdc-spec.protocol.yaml:133-138` and `sdc-plan.protocol.yaml:94-99`.
+  - Canon cannot tell that copy from a forgery (`docs/protocol-notes.md:168-173`).
+- **The supplier is not always the parent.**
+  - Every copy is taken from `sdc.direction` (`protocol-notes.md:59`; `sdc-epic.protocol.yaml:93`).
+  - For the root `sdc`, `sdc.direction` is a child (`sdc.protocol.yaml:6`). For `sdc.epic`, it is the parent's child.
+  - So "parent-to-child" is really "from another case's protocol".
+- **The boundary.**
+  - `boundary.md:108` classes this as a small Canon language change plus runtime work: "the copy itself is the runtime's".
+  - Canon opens nothing (`crates/canon/src/model/mod.rs:213`). Canon evaluates one case from the evidence it is given.
+  - Finding the record in another case and putting it unchanged into the child's evidence set stays the runner's job (Loom, `boundary.md:87`).
+- **Verified in the canon tree.**
+  - `unproduced-evidence` is computed from `produces` (`crates/canon/src/check/mod.rs:599-614`, `:702-708`): `may_produce`, plus `case_outcome` when an action has `case_open`. No other source exists.
+  - Bypass uses `governed` and `free` from the same function (`:712-723`, `:745`).
+  - `CaseOpening` names a protocol and a subject only (`model/mod.rs:228`; `ess/domains/protocol.yaml:199-219`).
+  - `children` reads `case_outcome` only (`model/predicate.rs:52-59`, `:251`).
+- **Case inputs cannot carry the approval.**
+  - An input is fixed when the case opens and is never unknown (`model/mod.rs:126`, `predicate.rs:279`).
+  - story:case-inputs § Scope Out excludes "inputs whose value changes during a case".
+  - An input is one of a closed list of identifiers (`protocol.yaml:385-398`). It has no `subject_revision`, `producer` or `observed_at` (`protocol.yaml:795`, `:821`).
+  - So an approval of roadmap r1 would still hold at r2, and a missing approval would be `FALSE` or a fake value, not `UNKNOWN`.
+- **Not verified.**
+  - I did not run `canon check`, because I am read-only.
+  - The claim that the state count does not change rests on two readings, not a run: `output.txt:22` gives 36864 states with the kind unproduced, and `protocol-notes.md:148` gives 36864 with `roadmap.read`.
+
+## Decision needed
+
+| Option | `ess/` and model | Runner's job | Closed-IR rule (design `:1683`, D206) | Cost |
+|---|---|---|---|---|
+| A. `supplied_by` on the child's evidence kind | `EvidenceKind.supplied_by: Optional<ProtocolId>`; IR field; check's `produces` | Copy the record unchanged from the supplier's case | Kept. The id is a name, like `case_open.protocol`. Compile, evaluate and check each read one document; nothing resolves the name | One field, one validation code, two check rules |
+| B. Mapping on the parent's `case_open` (own kinds or claims to child kinds or inputs) | `CaseOpening` gains a map of ids declared in another protocol | Same copy, now described by Canon but done by the runner | Broken, or unchecked. Compile must read the child document, pinned as in story:protocol-imports, or leave the ids unvalidated | Larger. The child's own `canon check` still reports, since check reads one IR. Does not cover the root, whose supplier is its child `sdc.direction` |
+| C. Case inputs only | None | Turn a record into an input value at open | Unaffected | Loses revision binding, producer, expiry and `UNKNOWN` (see Why); each value multiplies check states |
+| D. Keep the copy action (status quo) | None | Honour "copy" in an action description | Unaffected | A fake action that is admissible and listed for a runner to take; Canon cannot tell copy from forgery |
+
+Recommendation: option A, because it removes the false findings, names the supplier and keeps every IR closed. The resolved-supplier check is left to a later set check, modelled on `ir::check_openings`. The acceptance below is for option A.
+
+## ESS first
+
+- **First commit.**
+  - In `ess/domains/protocol.yaml`, the optional field `supplied_by` of type `canon.protocol.ProtocolId` on `canon.protocol.EvidenceKind` (`:90`).
+  - The fixtures `fixtures/investigation/supplied-evidence/`.
+  - The scenario file `conformance/scenarios/supplied-evidence.yaml`, with `CANON-SUPPLY-001` added to `conformance/requirements.yaml`.
+- **Red on that commit.**
+  - `crates/canon/tests/ess_model_matches.rs::specification_and_model_are_equal` fails naming `supplied_by`, because the Rust `EvidenceKind` (`model/mod.rs:159`) has no such field.
+  - `canon conform run --requirements conformance/requirements.yaml` fails `CANON-SUPPLY-001` at compile, because `deny_unknown_fields` refuses `supplied_by`.
+- The named test `supplied_evidence_is_produced_outside` is code and arrives with the implementation.
+
+## Scope
+
+- **In:** Outcome 1 to 5. — cited
+- **Out:** — cited
+  - Moving or copying records between cases (runner, Loom).
+  - A set check that the named supplier declares and produces the kind.
+  - Usefulness of a supplied kind (request item 2).
+  - Child outcome bound to the parent's revision (item 5).
+  - The SDC edit that drops `roadmap.read`.
+- **Surfaces:**
+  - `ess/domains/protocol.yaml` — cited
+  - `crates/canon/src/model/mod.rs` — cited
+  - `crates/canon/src/validate/mod.rs` — cited
+  - `crates/canon/src/ir/mod.rs` — cited
+  - `crates/canon/src/eval/read.rs` — inferred, it rebuilds `EvidenceKind` at `:226`
+  - `crates/canon/src/check/mod.rs` — cited
+  - `crates/canon/src/diff/mod.rs` — cited, exhaustive destructure at `:854`
+  - `crates/canon-cli/tests/supplied_evidence.rs` (new) — inferred
+  - `fixtures/investigation/supplied-evidence/` (new) — inferred
+  - `fixtures/investigation/invalid/supplied-by-self.yaml` — inferred
+  - `conformance/scenarios/supplied-evidence.yaml` — inferred
+  - `conformance/requirements.yaml` — cited
+  - Regenerated `website/docs/reference/protocol.md` and `canon-ir.md`, and `website/static/schemas/protocol-1.schema.json` — inferred
+  - `website/status.yaml` — inferred
+- **Fixture placement:** the fixtures stay outside `fixtures/investigation/check/`, so the `CASES` table in `crates/canon-cli/tests/canon_check.rs` does not change. — inferred
+- **Confidence:** high for model, ESS and check (read); medium for diff and read.
+
+## Order
+
+- **Depends on:** story:protocol-imports.
+  - It shares `ess/domains/protocol.yaml`, `model/mod.rs`, `validate/mod.rs` and `ir/mod.rs`.
+  - Its rule refuses an id two imports declare differently, so two parts with different `supplied_by` are refused. This story must not change that.
+- **Shares files without an edge:**
+  - story:revision-ordering (active): `protocol.yaml`, `validate/mod.rs`, `ir/mod.rs`, `eval/read.rs`, `diff/mod.rs`.
+  - story:capability-scope (implemented, same files).
+  - story:check-subject-slices (draft): `check/mod.rs`.
+  - story:authority-revision-binding (draft): `protocol.yaml`.
+- **Waves:** `aep plan artifact waves` keeps each of these in a separate wave.
+
+## Acceptance
+
+The named test `supplied_evidence_is_produced_outside` in `crates/canon-cli/tests/supplied_evidence.rs` passes, with these expectations:
+
+1. `canon conform run` reports `CANON-SUPPLY-001` passed. With a supplied kind and no record, its claim is `UNKNOWN`; with a record given, it is `TRUE`.
+2. `canon compile` of the supplied fixture writes `"supplied_by": "investigation.review"` on that kind.
+3. `canon compile` of a protocol without `supplied_by` gives the same bytes as before the story.
+4. `canon check` on the variant with the kind unsupplied reports `unproduced-evidence` for every reader, exit 1.
+5. `canon check` on the supplied variant reports 0 findings, exit 0, with the same state count as (4).
+6. A variant whose outcome reads the supplied kind and a governed kind that a capability-free action may also produce reports `authority-bypass`.
+7. The same variant, with the kind neither supplied nor produced, reports no `authority-bypass`.
+8. `canon validate` on `fixtures/investigation/invalid/supplied-by-self.yaml` exits 1 with `self-supplied-evidence`, naming the kind.
+9. `canon diff` between the unsupplied and supplied variants reports `NO SEMANTIC CHANGE` for the kind.
+10. `crates/canon/tests/ess_model_matches.rs` passes.
+
+## Source
+
+- Request item 6, "Parent-to-child evidence", in `$HOME/beyond10x/sdc/docs/canon-requests.md`.
+- Read in `$HOME/beyond10x/sdc/`:
+  - `docs/limitations/output.txt`
+  - `docs/limitations/epic-imported-evidence.protocol.yaml`
+  - `docs/boundary.md`
+  - `docs/protocol-notes.md`
+  - `protocol/sdc.protocol.yaml`, `sdc-epic.protocol.yaml`, `sdc-spec.protocol.yaml`, `sdc-plan.protocol.yaml`, `sdc-direction.protocol.yaml`
+  - `scripts/roadmap-read-action.yaml`
+- Read in the canon tree at `15cfece`:
+  - `AGENTS.md`
+  - `crates/canon/src/model/mod.rs`, `model/predicate.rs`
+  - `crates/canon/src/check/mod.rs`
+  - `crates/canon/src/diff/mod.rs`
+  - `ess/domains/protocol.yaml`
+  - `crates/canon-cli/tests/canon_check.rs`
+  - design § 39.5
+  - story:case-composition, story:case-inputs, story:protocol-imports, story:capability-scope
+- Date: 2026-11-20.
+
+## Who the supplier may be
+
+`supplied_by` names any other protocol: the parent's, an ancestor's, a sibling stage's or a
+child's. It is not limited to the parent. § Why shows the case that decides this: every copy in
+the SDC protocols comes from `sdc.direction`, which is a child of the root case and a sibling
+stage of `sdc.epic`. The session working on the SDC prototype asked on 2026-11-20 that the story
+say so.
+
+## Decided
+
+Option A of § Decision needed: the optional `supplied_by` field on an evidence kind. Decided on 2026-11-20 by the wave coordinator on the drafter's recommendation, after the operator accepted the story without choosing (`approval-record:accept-sdc-requests-2026-11-20`). The unit builds this option and does not reopen the choice.
+
+## A copied record is not always readable unchanged
+
+§ Decision needed says the runner copies a record "unchanged" from the supplier's case. The
+session working on the SDC prototype reported on 2026-11-20, from its end-to-end run, that its
+`roadmap.read` step could not copy a record literally: it had to drop `upstream_revisions.vision`,
+or Canon refused the record. The coordinator did not reproduce this. The likely cause, not
+verified: the record names an upstream artifact the reading protocol does not declare.
+
+This is open and the unit settles it in its first step, before the specification commit, and
+records the choice here:
+
+- A: out of scope. The runner strips what the reading protocol does not declare; the reference
+  says so. A stripped record loses its upstream binding in the reading case.
+- B: a record of a kind that declares `supplied_by` may name upstream artifacts the reading
+  protocol does not declare; they are carried and not checked there.
+
+The unit first reproduces the refusal with a fixture and names the validation code. The operator
+has not decided between A and B.
+
+## The refusal, reproduced by the SDC session
+
+Reported on 2026-11-20 by the session working on the SDC prototype, from a run of `canon evaluate`
+0.9.0; the coordinator did not rerun it. The case is saved in that session's directory under
+`docs/limitations/copied-record-upstream/` (`case.json`, one evidence file, `output.txt`).
+
+```
+error[undeclared-artifact]: evidence `e0062-roadmap.approve` records a revision of upstream artifact `vision`, which the protocol does not declare
+```
+
+The record was written under `sdc.direction`, which declares the artifact `vision`:
+`{kind: roadmap_approval, result: approved, subject: roadmap, subject_revision: …,
+upstream_revisions: {vision: …}}`. The receiving protocol `sdc.epic` declares `epic`, `roadmap` and
+`spec`. The SDC driver strips `upstream_revisions.vision` when it copies, so the record loses its
+binding to the vision revision in the receiving case. Four protocols receive the copy.
+
+The unit builds its fixture for the choice between A and B of the section above from this case:
+a supplied record whose `upstream_revisions` names an artifact only the supplier declares.
+
+## Decided on 2026-11-21: option B for the copied record
+
+Option B of § "A copied record is not always readable unchanged": a record whose kind declares
+`supplied_by` may name, in `upstream_revisions`, artifacts the reading protocol does not declare.
+They are carried and not checked or used in the reading case. A record of a kind without
+`supplied_by` is refused as `undeclared-artifact` as today.
+
+Decided by the wave coordinator. The operator did not choose; the coordinator had reported option
+A as its default on 2026-11-20 and changed it for two reasons. The runner can copy the record byte
+for byte, so a copy can be compared with the original, which option A gives up. And the operator
+said on 2026-11-21 to put the SDC prototype's needs first, and the session working on it stated
+that this story should end the stripping of `upstream_revisions` in its copy step. That session's
+statement is information; the decision is the coordinator's and is reversible until the unit
+merges.
+
+This changes § Outcome 4: `canon evaluate` changes in this one refusal and in nothing else. The
+unit adds it as expectation 11 of the named test and as a step of `CANON-SUPPLY-001`, and reports
+whether `canon diff` can still class a changed `supplied_by` as `NO SEMANTIC CHANGE`.
+
+## Decided in review, 2026-11-21
+
+Adversary pass 1 (`review-result:adversary-supplied-evidence-pass-1`) found two places where the
+story and the unit disagree. The wave coordinator decides both; the operator did not choose, and
+each is reversible until the unit merges.
+
+**A kind that is both supplied and produced by an action that requires a capability.** § Outcome 3
+says "a supplied kind is not governed in this protocol". The unit built: a supplied kind counts as
+produced without authority, and it stays governed when an action that requires a capability may
+also produce it. For such a kind `canon check` reports `authority-bypass` on an outcome that a
+supplied record alone makes legitimate. The code stands and this sentence replaces the one in
+§ Outcome 3: the declaration says a record of the kind can arrive without the local capability,
+and the finding states that fact; a protocol that does not want it declares one of the two ways
+and not both. Taking a supplied kind out of the governed kinds would hide the finding when a
+capability-free local action also produces the kind. No protocol found needs the combination; the
+SDC receivers have no local action that requires a capability and produces the supplied kind.
+
+**`canon diff` for `supplied_by`.** § Outcome 5 says every change is `NO SEMANTIC CHANGE`, written
+before option B made an evaluation read the field. Built and kept: adding a supplier is
+`EXPANSION` (record sets once refused are read; no earlier decision changes), removing it is
+`BREAKING`. Changed here: replacing the supplier with another protocol is `BREAKING`, not
+`NO SEMANTIC CHANGE`, to match the classifier's precedent for a name the runner acts on and
+nothing resolves (a changed `case_open` protocol).
+
+Also from that pass: the requirement text of `CANON-SUPPLY-001` states only what its scenario pins
+(a scenario has compile and evaluate steps), and names the test that holds the `canon check` and
+`canon validate` rules.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w3 from the implementor's reports
+and the merge of `impl/supplied-evidence`. It corrects the body where the two differ; the two
+sections "Decided on 2026-11-21" and "Decided in review, 2026-11-21" above hold the decisions.
+
+- **§ Outcome 4 has one exception** (option B): a record of a supplied kind may name undeclared
+  upstream artifacts. The check is in `crates/canon/src/eval/evidence.rs`. No later stage looks an
+  undeclared entry up: the invalidation stage reads entries by a rule's `upstream`, which the
+  validator requires to be declared, and a decision lists evidence ids, never upstream revisions.
+- **§ Outcome 3, first bullet, is replaced**: a supplied kind stays governed when an action that
+  requires a capability may also produce it.
+- **§ Outcome 5 is replaced**: adding a supplier is `EXPANSION`, removing it or replacing it is
+  `BREAKING`.
+- The sliced checker reads production nowhere in a slice: `check_by` takes every supplied kind
+  into its `produced` and `free` sets through one function, so slices, slice sizes and state
+  counts are those of the protocol without the field.
+- Two imports that name different suppliers for one kind stay refused as `conflicting-imports`;
+  an import whose kind is supplied by the root composes into a protocol refused as
+  `self-supplied-evidence`.
+- Adding `supplied_by` changes a protocol's IR digest: a protocol that imports it pins a new
+  digest.
+- As the implementor ran them: `canon check` on the SDC epic limitation protocol reports 8
+  findings as it is and 0 with `supplied_by: sdc.direction` on `roadmap_approval`, 36864 states
+  both times; the saved SDC case with the copied record evaluates against an IR with the field.
+- Not in § Scope and edited: `crates/canon/src/eval/evidence.rs`, `crates/canon/src/check/tests.rs`,
+  the requirement counts in the two count tests, and, by the coordinator at the merge from the
+  unit's patches, the help text of `canon check` in `crates/canon-cli/src/lib.rs` and one
+  paragraph of the module documentation of `crates/canon/src/eval/mod.rs`.
+- Added by the adversary: `crates/canon/tests/adversary_supplied_evidence.rs` (9 cases).
+- The requirement `CANON-SUPPLY-001` states only what its scenario pins; the scenario's header
+  names the tests that hold the `canon validate` and `canon check` rules.

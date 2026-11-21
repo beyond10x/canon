@@ -1,0 +1,1677 @@
+format: canon-conformance/1
+id: CANON-EVIDENCE-004
+covers: [CANON-EVIDENCE-004, CANON-DETERMINISM-001]
+fixture: fixtures/investigation/evidence-redelivery.yaml
+# A runner that delivers at least once may hand Canon the same evidence record twice
+# (story:evidence-redelivery). A record given more than once counts once when each copy equals
+# the first; a copy that differs is refused as `duplicate-identifier`.
+#
+# Two records are equal when `kind`, `result`, `subject`, `subject_revision`, `producer` and
+# `child_case` are equal as written, `observed_at` is equal as written text, and
+# `upstream_revisions` holds the same pairs in any order. `observed_at` is compared as text:
+# `12:00:00Z` and `12:00:00.000Z` differ, because the precision of an instant sets the resolution
+# at which records are ordered.
+#
+# The fixture declares the artifacts findings, source and data; the evidence kinds review, scan
+# and case_outcome; and the claims findings.reviewed (a review approved) and findings.resolved
+# (every child case accepted or declined). Record e1 is a review, approved, about findings at f1,
+# made against source s1 and data d1; e2 is a scan of the source; o1 is the outcome of the child
+# case CHG-1. Each step that expects `decision` expects the whole decision, so the steps that
+# repeat a decision expect the same bytes: the decision with a copy is the decision without it,
+# explanation included, and `computed_from.evidence` lists each id once. The determinism check of
+# `canon conform run --requirements` runs every step again with its evidence reversed, which moves
+# each copy from after the record to before it.
+steps:
+  # The control: two records, each given once. Every step below that expects a decision expects
+  # these bytes.
+  - id: single
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+        - format: canon-evidence/1
+          id: e2
+          kind: scan
+          result: clean
+          subject: source
+          subject_revision: s1
+    expect:
+      decision: |
+        {
+          "actions": {
+            "close": {
+              "reasons": [
+                {
+                  "children": [
+                    "accepted",
+                    "declined"
+                  ],
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "open_change": {
+              "reasons": [
+                {
+                  "capability": "case.open",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            },
+            "request_review": {
+              "status": "admissible"
+            }
+          },
+          "case": "RV-7",
+          "claims": {
+            "findings.resolved": {
+              "value": "unknown"
+            },
+            "findings.reviewed": {
+              "value": "true"
+            }
+          },
+          "explanation": {
+            "actions": {
+              "close": {
+                "because": [
+                  {
+                    "children": [
+                      "accepted",
+                      "declined"
+                    ],
+                    "value": "unknown"
+                  }
+                ],
+                "status": "blocked"
+              },
+              "open_change": {
+                "because": [
+                  {
+                    "capability": "case.open",
+                    "decision": "none"
+                  }
+                ],
+                "status": "approval-required"
+              }
+            },
+            "claims": {
+              "findings.resolved": {
+                "because": [
+                  {
+                    "children": [
+                      "accepted",
+                      "declined"
+                    ],
+                    "value": "unknown"
+                  }
+                ],
+                "value": "unknown"
+              }
+            },
+            "computed_from": {
+              "case": {
+                "artifacts": {
+                  "data": {
+                    "revision": "d1"
+                  },
+                  "findings": {
+                    "revision": "f1"
+                  },
+                  "source": {
+                    "revision": "s1"
+                  }
+                },
+                "format": "canon-case/1",
+                "id": "RV-7",
+                "protocol": "redelivery"
+              },
+              "evidence": [
+                "e1",
+                "e2"
+              ],
+              "protocol": "redelivery",
+              "protocol_revision": 1,
+              "semantics": {
+                "canon": "0.10.0",
+                "format": "canon-decision/1"
+              }
+            },
+            "outcomes": {
+              "resolved": {
+                "because": [
+                  {
+                    "claim": "findings.resolved",
+                    "value": "unknown"
+                  }
+                ],
+                "status": "blocked"
+              }
+            }
+          },
+          "format": "canon-decision/1",
+          "missing_evidence": {
+            "request_review": []
+          },
+          "outcomes": {
+            "resolved": {
+              "reasons": [
+                {
+                  "claim": "findings.resolved",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "reviewed": {
+              "status": "legitimate"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "open_change",
+                "capability": "case.open",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ]
+          },
+          "protocol": "redelivery",
+          "protocol_revision": 1
+        }
+
+  # Expectation 1. A second record equal to e1, after the others, is counted once.
+  - id: equal-copy
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+        - format: canon-evidence/1
+          id: e2
+          kind: scan
+          result: clean
+          subject: source
+          subject_revision: s1
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+    expect:
+      decision: |
+        {
+          "actions": {
+            "close": {
+              "reasons": [
+                {
+                  "children": [
+                    "accepted",
+                    "declined"
+                  ],
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "open_change": {
+              "reasons": [
+                {
+                  "capability": "case.open",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            },
+            "request_review": {
+              "status": "admissible"
+            }
+          },
+          "case": "RV-7",
+          "claims": {
+            "findings.resolved": {
+              "value": "unknown"
+            },
+            "findings.reviewed": {
+              "value": "true"
+            }
+          },
+          "explanation": {
+            "actions": {
+              "close": {
+                "because": [
+                  {
+                    "children": [
+                      "accepted",
+                      "declined"
+                    ],
+                    "value": "unknown"
+                  }
+                ],
+                "status": "blocked"
+              },
+              "open_change": {
+                "because": [
+                  {
+                    "capability": "case.open",
+                    "decision": "none"
+                  }
+                ],
+                "status": "approval-required"
+              }
+            },
+            "claims": {
+              "findings.resolved": {
+                "because": [
+                  {
+                    "children": [
+                      "accepted",
+                      "declined"
+                    ],
+                    "value": "unknown"
+                  }
+                ],
+                "value": "unknown"
+              }
+            },
+            "computed_from": {
+              "case": {
+                "artifacts": {
+                  "data": {
+                    "revision": "d1"
+                  },
+                  "findings": {
+                    "revision": "f1"
+                  },
+                  "source": {
+                    "revision": "s1"
+                  }
+                },
+                "format": "canon-case/1",
+                "id": "RV-7",
+                "protocol": "redelivery"
+              },
+              "evidence": [
+                "e1",
+                "e2"
+              ],
+              "protocol": "redelivery",
+              "protocol_revision": 1,
+              "semantics": {
+                "canon": "0.10.0",
+                "format": "canon-decision/1"
+              }
+            },
+            "outcomes": {
+              "resolved": {
+                "because": [
+                  {
+                    "claim": "findings.resolved",
+                    "value": "unknown"
+                  }
+                ],
+                "status": "blocked"
+              }
+            }
+          },
+          "format": "canon-decision/1",
+          "missing_evidence": {
+            "request_review": []
+          },
+          "outcomes": {
+            "resolved": {
+              "reasons": [
+                {
+                  "claim": "findings.resolved",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "reviewed": {
+              "status": "legitimate"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "open_change",
+                "capability": "case.open",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ]
+          },
+          "protocol": "redelivery",
+          "protocol_revision": 1
+        }
+
+  # Expectation 6. The copy directly after the record it copies, the other record last.
+  - id: copy-after-record
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+        - format: canon-evidence/1
+          id: e2
+          kind: scan
+          result: clean
+          subject: source
+          subject_revision: s1
+    expect:
+      decision: |
+        {
+          "actions": {
+            "close": {
+              "reasons": [
+                {
+                  "children": [
+                    "accepted",
+                    "declined"
+                  ],
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "open_change": {
+              "reasons": [
+                {
+                  "capability": "case.open",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            },
+            "request_review": {
+              "status": "admissible"
+            }
+          },
+          "case": "RV-7",
+          "claims": {
+            "findings.resolved": {
+              "value": "unknown"
+            },
+            "findings.reviewed": {
+              "value": "true"
+            }
+          },
+          "explanation": {
+            "actions": {
+              "close": {
+                "because": [
+                  {
+                    "children": [
+                      "accepted",
+                      "declined"
+                    ],
+                    "value": "unknown"
+                  }
+                ],
+                "status": "blocked"
+              },
+              "open_change": {
+                "because": [
+                  {
+                    "capability": "case.open",
+                    "decision": "none"
+                  }
+                ],
+                "status": "approval-required"
+              }
+            },
+            "claims": {
+              "findings.resolved": {
+                "because": [
+                  {
+                    "children": [
+                      "accepted",
+                      "declined"
+                    ],
+                    "value": "unknown"
+                  }
+                ],
+                "value": "unknown"
+              }
+            },
+            "computed_from": {
+              "case": {
+                "artifacts": {
+                  "data": {
+                    "revision": "d1"
+                  },
+                  "findings": {
+                    "revision": "f1"
+                  },
+                  "source": {
+                    "revision": "s1"
+                  }
+                },
+                "format": "canon-case/1",
+                "id": "RV-7",
+                "protocol": "redelivery"
+              },
+              "evidence": [
+                "e1",
+                "e2"
+              ],
+              "protocol": "redelivery",
+              "protocol_revision": 1,
+              "semantics": {
+                "canon": "0.10.0",
+                "format": "canon-decision/1"
+              }
+            },
+            "outcomes": {
+              "resolved": {
+                "because": [
+                  {
+                    "claim": "findings.resolved",
+                    "value": "unknown"
+                  }
+                ],
+                "status": "blocked"
+              }
+            }
+          },
+          "format": "canon-decision/1",
+          "missing_evidence": {
+            "request_review": []
+          },
+          "outcomes": {
+            "resolved": {
+              "reasons": [
+                {
+                  "claim": "findings.resolved",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "reviewed": {
+              "status": "legitimate"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "open_change",
+                "capability": "case.open",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ]
+          },
+          "protocol": "redelivery",
+          "protocol_revision": 1
+        }
+
+  # Expectation 2. A copy that writes the keys of `upstream_revisions` in another order is equal.
+  # The same bytes, the copy last.
+  - id: reordered-upstream-copy-last
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+        - format: canon-evidence/1
+          id: e2
+          kind: scan
+          result: clean
+          subject: source
+          subject_revision: s1
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            data: d1
+            source: s1
+          producer: reviewer-a
+    expect:
+      decision: |
+        {
+          "actions": {
+            "close": {
+              "reasons": [
+                {
+                  "children": [
+                    "accepted",
+                    "declined"
+                  ],
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "open_change": {
+              "reasons": [
+                {
+                  "capability": "case.open",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            },
+            "request_review": {
+              "status": "admissible"
+            }
+          },
+          "case": "RV-7",
+          "claims": {
+            "findings.resolved": {
+              "value": "unknown"
+            },
+            "findings.reviewed": {
+              "value": "true"
+            }
+          },
+          "explanation": {
+            "actions": {
+              "close": {
+                "because": [
+                  {
+                    "children": [
+                      "accepted",
+                      "declined"
+                    ],
+                    "value": "unknown"
+                  }
+                ],
+                "status": "blocked"
+              },
+              "open_change": {
+                "because": [
+                  {
+                    "capability": "case.open",
+                    "decision": "none"
+                  }
+                ],
+                "status": "approval-required"
+              }
+            },
+            "claims": {
+              "findings.resolved": {
+                "because": [
+                  {
+                    "children": [
+                      "accepted",
+                      "declined"
+                    ],
+                    "value": "unknown"
+                  }
+                ],
+                "value": "unknown"
+              }
+            },
+            "computed_from": {
+              "case": {
+                "artifacts": {
+                  "data": {
+                    "revision": "d1"
+                  },
+                  "findings": {
+                    "revision": "f1"
+                  },
+                  "source": {
+                    "revision": "s1"
+                  }
+                },
+                "format": "canon-case/1",
+                "id": "RV-7",
+                "protocol": "redelivery"
+              },
+              "evidence": [
+                "e1",
+                "e2"
+              ],
+              "protocol": "redelivery",
+              "protocol_revision": 1,
+              "semantics": {
+                "canon": "0.10.0",
+                "format": "canon-decision/1"
+              }
+            },
+            "outcomes": {
+              "resolved": {
+                "because": [
+                  {
+                    "claim": "findings.resolved",
+                    "value": "unknown"
+                  }
+                ],
+                "status": "blocked"
+              }
+            }
+          },
+          "format": "canon-decision/1",
+          "missing_evidence": {
+            "request_review": []
+          },
+          "outcomes": {
+            "resolved": {
+              "reasons": [
+                {
+                  "claim": "findings.resolved",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "reviewed": {
+              "status": "legitimate"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "open_change",
+                "capability": "case.open",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ]
+          },
+          "protocol": "redelivery",
+          "protocol_revision": 1
+        }
+
+  # Expectation 2 and 6. The same copy, first in the list.
+  - id: reordered-upstream-copy-first
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            data: d1
+            source: s1
+          producer: reviewer-a
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+        - format: canon-evidence/1
+          id: e2
+          kind: scan
+          result: clean
+          subject: source
+          subject_revision: s1
+    expect:
+      decision: |
+        {
+          "actions": {
+            "close": {
+              "reasons": [
+                {
+                  "children": [
+                    "accepted",
+                    "declined"
+                  ],
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "open_change": {
+              "reasons": [
+                {
+                  "capability": "case.open",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            },
+            "request_review": {
+              "status": "admissible"
+            }
+          },
+          "case": "RV-7",
+          "claims": {
+            "findings.resolved": {
+              "value": "unknown"
+            },
+            "findings.reviewed": {
+              "value": "true"
+            }
+          },
+          "explanation": {
+            "actions": {
+              "close": {
+                "because": [
+                  {
+                    "children": [
+                      "accepted",
+                      "declined"
+                    ],
+                    "value": "unknown"
+                  }
+                ],
+                "status": "blocked"
+              },
+              "open_change": {
+                "because": [
+                  {
+                    "capability": "case.open",
+                    "decision": "none"
+                  }
+                ],
+                "status": "approval-required"
+              }
+            },
+            "claims": {
+              "findings.resolved": {
+                "because": [
+                  {
+                    "children": [
+                      "accepted",
+                      "declined"
+                    ],
+                    "value": "unknown"
+                  }
+                ],
+                "value": "unknown"
+              }
+            },
+            "computed_from": {
+              "case": {
+                "artifacts": {
+                  "data": {
+                    "revision": "d1"
+                  },
+                  "findings": {
+                    "revision": "f1"
+                  },
+                  "source": {
+                    "revision": "s1"
+                  }
+                },
+                "format": "canon-case/1",
+                "id": "RV-7",
+                "protocol": "redelivery"
+              },
+              "evidence": [
+                "e1",
+                "e2"
+              ],
+              "protocol": "redelivery",
+              "protocol_revision": 1,
+              "semantics": {
+                "canon": "0.10.0",
+                "format": "canon-decision/1"
+              }
+            },
+            "outcomes": {
+              "resolved": {
+                "because": [
+                  {
+                    "claim": "findings.resolved",
+                    "value": "unknown"
+                  }
+                ],
+                "status": "blocked"
+              }
+            }
+          },
+          "format": "canon-decision/1",
+          "missing_evidence": {
+            "request_review": []
+          },
+          "outcomes": {
+            "resolved": {
+              "reasons": [
+                {
+                  "claim": "findings.resolved",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "reviewed": {
+              "status": "legitimate"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "open_change",
+                "capability": "case.open",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ]
+          },
+          "protocol": "redelivery",
+          "protocol_revision": 1
+        }
+
+  # The control for the next step: one case_outcome record, CHG-1 accepted. The `children` form
+  # of findings.resolved is true.
+  - id: child-outcome-single
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: accepted
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-1
+    expect:
+      decision: |
+        {
+          "actions": {
+            "close": {
+              "status": "admissible"
+            },
+            "open_change": {
+              "reasons": [
+                {
+                  "capability": "case.open",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            },
+            "request_review": {
+              "status": "admissible"
+            }
+          },
+          "case": "RV-7",
+          "claims": {
+            "findings.resolved": {
+              "value": "true"
+            },
+            "findings.reviewed": {
+              "value": "unknown"
+            }
+          },
+          "explanation": {
+            "actions": {
+              "open_change": {
+                "because": [
+                  {
+                    "capability": "case.open",
+                    "decision": "none"
+                  }
+                ],
+                "status": "approval-required"
+              }
+            },
+            "claims": {
+              "findings.reviewed": {
+                "because": [
+                  {
+                    "kind": "review",
+                    "status": "absent"
+                  }
+                ],
+                "value": "unknown"
+              }
+            },
+            "computed_from": {
+              "case": {
+                "artifacts": {
+                  "data": {
+                    "revision": "d1"
+                  },
+                  "findings": {
+                    "revision": "f1"
+                  },
+                  "source": {
+                    "revision": "s1"
+                  }
+                },
+                "format": "canon-case/1",
+                "id": "RV-7",
+                "protocol": "redelivery"
+              },
+              "evidence": [
+                "o1"
+              ],
+              "protocol": "redelivery",
+              "protocol_revision": 1,
+              "semantics": {
+                "canon": "0.10.0",
+                "format": "canon-decision/1"
+              }
+            },
+            "outcomes": {
+              "reviewed": {
+                "because": [
+                  {
+                    "claim": "findings.reviewed",
+                    "value": "unknown"
+                  }
+                ],
+                "status": "blocked"
+              }
+            }
+          },
+          "format": "canon-decision/1",
+          "missing_evidence": {
+            "request_review": [
+              "review"
+            ]
+          },
+          "outcomes": {
+            "resolved": {
+              "status": "legitimate"
+            },
+            "reviewed": {
+              "reasons": [
+                {
+                  "claim": "findings.reviewed",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "open_change",
+                "capability": "case.open",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ]
+          },
+          "protocol": "redelivery",
+          "protocol_revision": 1
+        }
+
+  # Expectation 3. An equal copy of a case_outcome record is neither refused as
+  # `duplicate-identifier` nor as `duplicate-child-case`; the `children` value is the single
+  # record's.
+  - id: child-outcome-equal-copy
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: accepted
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-1
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: accepted
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-1
+    expect:
+      decision: |
+        {
+          "actions": {
+            "close": {
+              "status": "admissible"
+            },
+            "open_change": {
+              "reasons": [
+                {
+                  "capability": "case.open",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            },
+            "request_review": {
+              "status": "admissible"
+            }
+          },
+          "case": "RV-7",
+          "claims": {
+            "findings.resolved": {
+              "value": "true"
+            },
+            "findings.reviewed": {
+              "value": "unknown"
+            }
+          },
+          "explanation": {
+            "actions": {
+              "open_change": {
+                "because": [
+                  {
+                    "capability": "case.open",
+                    "decision": "none"
+                  }
+                ],
+                "status": "approval-required"
+              }
+            },
+            "claims": {
+              "findings.reviewed": {
+                "because": [
+                  {
+                    "kind": "review",
+                    "status": "absent"
+                  }
+                ],
+                "value": "unknown"
+              }
+            },
+            "computed_from": {
+              "case": {
+                "artifacts": {
+                  "data": {
+                    "revision": "d1"
+                  },
+                  "findings": {
+                    "revision": "f1"
+                  },
+                  "source": {
+                    "revision": "s1"
+                  }
+                },
+                "format": "canon-case/1",
+                "id": "RV-7",
+                "protocol": "redelivery"
+              },
+              "evidence": [
+                "o1"
+              ],
+              "protocol": "redelivery",
+              "protocol_revision": 1,
+              "semantics": {
+                "canon": "0.10.0",
+                "format": "canon-decision/1"
+              }
+            },
+            "outcomes": {
+              "reviewed": {
+                "because": [
+                  {
+                    "claim": "findings.reviewed",
+                    "value": "unknown"
+                  }
+                ],
+                "status": "blocked"
+              }
+            }
+          },
+          "format": "canon-decision/1",
+          "missing_evidence": {
+            "request_review": [
+              "review"
+            ]
+          },
+          "outcomes": {
+            "resolved": {
+              "status": "legitimate"
+            },
+            "reviewed": {
+              "reasons": [
+                {
+                  "claim": "findings.reviewed",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "open_change",
+                "capability": "case.open",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ]
+          },
+          "protocol": "redelivery",
+          "protocol_revision": 1
+        }
+
+  # Expectation 4. A copy that differs only in `result`.
+  - id: differs-in-result
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+        - format: canon-evidence/1
+          id: e2
+          kind: scan
+          result: clean
+          subject: source
+          subject_revision: s1
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: rejected
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+    expect:
+      refusal: duplicate-identifier
+
+  # Expectation 5. A copy that differs only in the precision of `observed_at`: the same instant,
+  # written `12:00:00Z` and `12:00:00.000Z`.
+  - id: differs-in-observed-at-precision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+        - format: canon-evidence/1
+          id: e2
+          kind: scan
+          result: clean
+          subject: source
+          subject_revision: s1
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00.000Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+    expect:
+      refusal: duplicate-identifier
+
+  # A copy of another declared kind.
+  - id: differs-in-kind
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+        - format: canon-evidence/1
+          id: e2
+          kind: scan
+          result: clean
+          subject: source
+          subject_revision: s1
+        - format: canon-evidence/1
+          id: e1
+          kind: scan
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+    expect:
+      refusal: duplicate-identifier
+
+  # A copy about another artifact.
+  - id: differs-in-subject
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+        - format: canon-evidence/1
+          id: e2
+          kind: scan
+          result: clean
+          subject: source
+          subject_revision: s1
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: source
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+    expect:
+      refusal: duplicate-identifier
+
+  # A copy about another revision of the subject.
+  - id: differs-in-subject-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+        - format: canon-evidence/1
+          id: e2
+          kind: scan
+          result: clean
+          subject: source
+          subject_revision: s1
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f2
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+    expect:
+      refusal: duplicate-identifier
+
+  # A copy by another producer.
+  - id: differs-in-producer
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+        - format: canon-evidence/1
+          id: e2
+          kind: scan
+          result: clean
+          subject: source
+          subject_revision: s1
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-b
+    expect:
+      refusal: duplicate-identifier
+
+  # A copy against another revision of an upstream artifact.
+  - id: differs-in-upstream-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+        - format: canon-evidence/1
+          id: e2
+          kind: scan
+          result: clean
+          subject: source
+          subject_revision: s1
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d2
+          producer: reviewer-a
+    expect:
+      refusal: duplicate-identifier
+
+  # A copy that leaves an upstream artifact out.
+  - id: differs-in-upstream-artifacts
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+            data: d1
+          producer: reviewer-a
+        - format: canon-evidence/1
+          id: e2
+          kind: scan
+          result: clean
+          subject: source
+          subject_revision: s1
+        - format: canon-evidence/1
+          id: e1
+          kind: review
+          result: approved
+          subject: findings
+          subject_revision: f1
+          observed_at: 2026-11-20T12:00:00Z
+          upstream_revisions:
+            source: s1
+          producer: reviewer-a
+    expect:
+      refusal: duplicate-identifier
+
+  # A copy of a case_outcome record that differs is refused as `duplicate-identifier`: the
+  # identifier is checked before the child case.
+  - id: child-outcome-differs
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: accepted
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-1
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: declined
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-1
+    expect:
+      refusal: duplicate-identifier
+
+  # A copy of a case_outcome record that names another child case: another child's outcome
+  # under the same identifier, refused as `duplicate-identifier`.
+  - id: differs-in-child-case
+    evaluate:
+      case:
+        format: canon-case/1
+        id: RV-7
+        protocol: redelivery
+        artifacts:
+          findings: {revision: f1}
+          source: {revision: s1}
+          data: {revision: d1}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: accepted
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-1
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: accepted
+          subject: findings
+          subject_revision: f1
+          child_case: CHG-2
+    expect:
+      refusal: duplicate-identifier

@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T03:07:53Z",
+  "actor": "human:timo",
+  "artifact": "story:canon-simulate",
+  "kind": "story",
+  "revision": 14,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "on 55b5ab9 (specification only): canon_simulate FAILED, 2 passed, 2 failed (clap refuses simulate, exit 64) and every_canon_subcommand_is_declared_in_ess names canon.cli.Simulate; on e82f6de: workspace 1001 passed, 0 failed, conform 22 passed, 23 covered; the unit corrected hand-written fixture expectations in f29f4e7 after the red commit, which the adversary is asked to judge; VERIFIED by the coordinator from the unit's logs",
+    "reference": "w4/canon-simulate/red.log vs gate.log (session scratch)"
+  }
+}

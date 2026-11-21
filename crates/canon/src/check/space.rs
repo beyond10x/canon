@@ -164,6 +164,7 @@ impl Later<'_> {
 /// the values no record and one record without a producer, one bit per variant as before
 /// independence existed; records of one class observed before and after a move, or by producers
 /// independent on different dimensions, can be present together.
+#[derive(Clone)]
 struct Kind<'a> {
     id: &'a EvidenceKindId,
     /// A record of the dimension with no result: every record of it is this one, with its own id
@@ -351,6 +352,50 @@ pub(crate) struct Space<'a> {
     /// `case_outcome` record must give its child's outcome, and one no predicate names behaves as
     /// a record without a result towards each of them.
     unlisted: String,
+    /// Whether the protocol has an `after` or a `since` form reading evidence: how records are
+    /// observed, as [`UNPLACED`] and [`Space::evidence`] say. A slice keeps the whole space's,
+    /// whether or not it holds a later-record dimension.
+    after: bool,
+    /// For each case input, whether it holds one value in this space: an input a slice's subject
+    /// does not read holds the value a witness of the whole product would hold, and the bound
+    /// refusal does not name it. Every input of the whole space takes every value it declares.
+    fixed: Vec<bool>,
+}
+
+/// The dimensions of the whole space one subject reads (story:check-subject-slices), each as its
+/// position in its section: evidence dimensions, capabilities, decisions and case inputs. Every
+/// history, later-record and last-record dimension of an evidence dimension it holds is in the
+/// slice with it, and the order dimension orders the things it holds.
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct Slice {
+    kinds: BTreeSet<usize>,
+    capabilities: BTreeSet<usize>,
+    decisions: BTreeSet<usize>,
+    inputs: BTreeSet<usize>,
+}
+
+impl Slice {
+    /// Every dimension of either slice.
+    pub(crate) fn union(&self, other: &Slice) -> Slice {
+        Slice {
+            kinds: self.kinds.union(&other.kinds).copied().collect(),
+            capabilities: self
+                .capabilities
+                .union(&other.capabilities)
+                .copied()
+                .collect(),
+            decisions: self.decisions.union(&other.decisions).copied().collect(),
+            inputs: self.inputs.union(&other.inputs).copied().collect(),
+        }
+    }
+
+    /// Whether every dimension of `other` is in this slice.
+    pub(crate) fn covers(&self, other: &Slice) -> bool {
+        other.kinds.is_subset(&self.kinds)
+            && other.capabilities.is_subset(&self.capabilities)
+            && other.decisions.is_subset(&self.decisions)
+            && other.inputs.is_subset(&self.inputs)
+    }
 }
 
 /// One state: a value for each dimension, in dimension order.
@@ -551,6 +596,8 @@ impl<'a> Space<'a> {
             .flat_map(|kind| kind.profiles.iter().filter(|p| !p.is_empty()).cloned())
             .collect();
         let mut space = Space {
+            after: !later.is_empty(),
+            fixed: vec![false; ir.inputs.len()],
             producers: producers.into_iter().collect(),
             kinds,
             capabilities: capabilities.into_iter().collect(),
@@ -583,7 +630,206 @@ impl<'a> Space<'a> {
     /// Whether the protocol has an `after` or a `since` form reading evidence, which observes
     /// records as [`UNPLACED`] and [`Space::evidence`] say for such a protocol.
     fn after(&self) -> bool {
-        !self.later.is_empty()
+        self.after
+    }
+
+    /// The slice of the evidence dimensions `predicate` reads, directly or through the claims it
+    /// tests, and the case inputs it tests, likewise: what an outcome's requirement or a
+    /// property's `independent_of` claim reads.
+    pub(crate) fn predicate_slice(&self, ir: &Ir, predicate: &Predicate) -> Slice {
+        let kinds = self.closed(self.dimensions_read(ir, predicate).into_keys().collect());
+        let tested = inputs_tested(ir, predicate);
+        let inputs = self
+            .inputs
+            .iter()
+            .enumerate()
+            .filter(|(_, (id, _))| tested.contains(id))
+            .map(|(at, _)| at)
+            .collect();
+        Slice {
+            kinds,
+            inputs,
+            ..Slice::default()
+        }
+    }
+
+    /// The slice of an action: what its precondition reads and one capability dimension per
+    /// capability it requires.
+    pub(crate) fn action_slice(&self, ir: &Ir, action: &crate::ir::Action) -> Slice {
+        let mut slice = self.predicate_slice(ir, &action.precondition);
+        slice.capabilities = self
+            .capabilities
+            .iter()
+            .enumerate()
+            .filter(|(_, id)| action.requires.contains(id))
+            .map(|(at, _)| at)
+            .collect();
+        slice
+    }
+
+    /// The slice of an outcome: what its requirement reads, or its one decision dimension.
+    pub(crate) fn outcome_slice(&self, ir: &Ir, outcome: &crate::ir::Outcome) -> Slice {
+        match &outcome.requires {
+            OutcomeRequirement::Decision(name) => Slice {
+                decisions: self
+                    .decisions
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (decision, _))| *decision == name)
+                    .map(|(at, _)| at)
+                    .collect(),
+                ..Slice::default()
+            },
+            OutcomeRequirement::Predicate(predicate) => self.predicate_slice(ir, predicate),
+        }
+    }
+
+    /// `kinds` with every evidence dimension a last record of one of them is placed against: the
+    /// dimension of each later record its places name, and so on. A last record placed against a
+    /// thing outside the slice would stand anywhere in the order, which the slice's order of its
+    /// own things does not reach.
+    fn closed(&self, mut kinds: BTreeSet<usize>) -> BTreeSet<usize> {
+        loop {
+            let reached: Vec<usize> = self
+                .last
+                .iter()
+                .filter(|last| kinds.contains(&last.at))
+                .flat_map(|last| &last.places)
+                .map(|place| match place {
+                    Place::At(item) | Place::Past(item) => {
+                        match item.checked_sub(self.ordered.len()) {
+                            None => self.ordered[*item],
+                            Some(index) => self.later[index].at,
+                        }
+                    }
+                })
+                .filter(|at| !kinds.contains(at))
+                .collect();
+            if reached.is_empty() {
+                return kinds;
+            }
+            kinds.extend(reached);
+        }
+    }
+
+    /// The whole space's dimensions `slice` holds, as a space of its own: the same evidence
+    /// dimensions with the same classes, upstream artifacts and producer profiles, each history,
+    /// later-record and last-record dimension of an evidence dimension it holds, and an order
+    /// dimension over the things in the order it holds. Every other dimension holds the value of
+    /// least weight, which no state of the slice writes: no record, capability undecided,
+    /// decision not taken. A case input outside the slice holds the value whose rendering comes
+    /// first, which a witness of the whole product holds since an input weighs nothing; one whose
+    /// values do not render in an order that holds whatever follows them stays in the slice.
+    /// A state of the slice is written, and evaluated, as the whole product's state with those
+    /// values, its records at the instants its own order gives, in the same order.
+    pub(crate) fn slice(&self, slice: &Slice) -> Space<'a> {
+        let kept: Vec<usize> = slice.kinds.iter().copied().collect();
+        let position = |at: usize| {
+            kept.binary_search(&at)
+                .expect("a slice holds every dimension it places against")
+        };
+        let ordered: Vec<usize> = self
+            .ordered
+            .iter()
+            .filter(|at| slice.kinds.contains(at))
+            .map(|at| position(*at))
+            .collect();
+        let children: Vec<usize> = self
+            .children
+            .iter()
+            .filter(|at| slice.kinds.contains(at))
+            .map(|at| position(*at))
+            .collect();
+        let later_kept: Vec<usize> = (0..self.later.len())
+            .filter(|index| slice.kinds.contains(&self.later[*index].at))
+            .collect();
+        let later: Vec<Later<'a>> = later_kept
+            .iter()
+            .map(|index| Later {
+                at: position(self.later[*index].at),
+                ..self.later[*index]
+            })
+            .collect();
+        // A thing in the whole space's order as a thing in the slice's: things keep their order.
+        let item = |whole: usize| match whole.checked_sub(self.ordered.len()) {
+            None => {
+                let at = position(self.ordered[whole]);
+                ordered
+                    .iter()
+                    .position(|o| *o == at)
+                    .expect("an ordered dimension the slice holds")
+            }
+            Some(index) => {
+                ordered.len()
+                    + later_kept
+                        .iter()
+                        .position(|kept| *kept == index)
+                        .expect("a later record the slice holds")
+            }
+        };
+        let last: Vec<Last<'a>> = self
+            .last
+            .iter()
+            .filter(|last| slice.kinds.contains(&last.at))
+            .map(|last| Last {
+                at: position(last.at),
+                results: last.results.clone(),
+                places: last
+                    .places
+                    .iter()
+                    .map(|place| match place {
+                        Place::At(whole) => Place::At(item(*whole)),
+                        Place::Past(whole) => Place::Past(item(*whole)),
+                    })
+                    .collect(),
+            })
+            .collect();
+        let placeable = ordered.len() + later.len();
+        let orders = (placeable >= 2).then(|| weak_orders(placeable));
+        let mut fixed = Vec::new();
+        let inputs = self
+            .inputs
+            .iter()
+            .enumerate()
+            .map(|(at, (id, values))| {
+                let first = (!slice.inputs.contains(&at))
+                    .then(|| first_rendered(values))
+                    .flatten();
+                fixed.push(first.is_some());
+                match first {
+                    Some(value) => (*id, &values[value..=value]),
+                    None => (*id, *values),
+                }
+            })
+            .collect();
+        let mut space = Space {
+            kinds: kept.iter().map(|at| self.kinds[*at].clone()).collect(),
+            capabilities: slice
+                .capabilities
+                .iter()
+                .map(|at| self.capabilities[*at])
+                .collect(),
+            decisions: slice
+                .decisions
+                .iter()
+                .map(|at| self.decisions[*at].clone())
+                .collect(),
+            inputs,
+            ordered,
+            children,
+            later,
+            last,
+            orders: orders.flatten(),
+            rankings: Vec::new(),
+            producers: self.producers.clone(),
+            unlisted: self.unlisted.clone(),
+            after: self.after,
+            fixed,
+        };
+        if orders.is_some() && space.size().is_some_and(|size| size <= super::STATE_BOUND) {
+            space.rankings = rankings(space.placeable());
+        }
+        space
     }
 
     /// The evidence dimensions with a history dimension, in the order of their history
@@ -767,7 +1013,13 @@ impl<'a> Space<'a> {
         if self.placeable() < 2 {
             return vec![0; self.placeable()];
         }
-        self.rankings[state[self.order_at()] as usize].clone()
+        let order = state[self.order_at()] as usize;
+        match self.rankings.get(order) {
+            Some(ranks) => ranks.clone(),
+            // A space above the bound keeps no rankings; its probes take the first, all tied.
+            None if order == 0 => vec![0; self.placeable()],
+            None => panic!("a ranking is kept for every order a state takes"),
+        }
     }
 
     /// Whether the evidence dimension at `at` holds a record in `state`: a current one, or one its
@@ -883,7 +1135,9 @@ impl<'a> Space<'a> {
         let inputs = self
             .inputs
             .iter()
-            .map(|(id, values)| format!("input `{}` {}", one_line(id.as_str()), values.len()));
+            .zip(&self.fixed)
+            .filter(|(_, fixed)| !**fixed)
+            .map(|((id, values), _)| format!("input `{}` {}", one_line(id.as_str()), values.len()));
         let histories = self.with_history().map(|at| {
             let kind = &self.kinds[*at];
             let count = kind.histories().map_or_else(
@@ -954,6 +1208,77 @@ impl<'a> Space<'a> {
             .collect()
     }
 
+    /// The states that raise every refusal an evaluation of some state of this space raises, in
+    /// index order, each the first state that raises it: the least state, then each state in which
+    /// one dimension alone is not at its least value, holding
+    ///
+    /// - for an evidence dimension, each set of producers of its first class and upstream vector,
+    ///   its values below the number of sets and below its number of values (a dimension without
+    ///   classes has one value, and no record): the records of a dimension differ, as the evaluator
+    ///   checks them, only in their producers, since each names the dimension's kind, artifact and
+    ///   upstream artifacts, and its result and upstream revisions are never refused;
+    /// - for a capability, a decision, a case input or a later-record dimension, each value;
+    /// - for a history or a last-record dimension, its first value: the records it adds name the
+    ///   dimension's kind and artifact as its own records do, with no producer and no upstream
+    ///   revision.
+    ///
+    /// The order dimension stays at its least value: it moves only instants the evaluator compares.
+    /// A refusal is raised by one record, capability, decision or input value, which a state holds
+    /// whatever its other dimensions are, so the first state that raises a refusal is one of these.
+    /// Called only once the size is known to fit.
+    pub(crate) fn probes(&self) -> Vec<State> {
+        let radices = self.radices();
+        let least: State = vec![0; radices.len()];
+        let mut probes = vec![least.clone()];
+        let mut probe = |at: usize, value: u32| {
+            let mut state = least.clone();
+            state[at] = value;
+            probes.push(state);
+        };
+        for (at, kind) in self.kinds.iter().enumerate() {
+            // A dimension without classes, of a protocol that declares no artifact, has one value
+            // whatever its producer sets.
+            let radix = radices[at].expect("the size fits, so every radix does");
+            let sets = kind.values.as_ref().map_or(1, Vec::len);
+            for value in 1..u128::try_from(sets).expect("few producer sets").min(radix) {
+                probe(at, u32::try_from(value).expect("few producer sets"));
+            }
+        }
+        let first_history = self.first_history();
+        for (at, radix) in radices.iter().enumerate().skip(self.kinds.len()) {
+            let radix = radix.expect("the size fits, so every radix does");
+            let values =
+                if at >= first_history && at < self.first_later() || at >= self.first_last() {
+                    radix.min(2)
+                } else {
+                    radix
+                };
+            if at == self.order_at() && self.placeable() >= 2 {
+                continue;
+            }
+            for value in 1..values {
+                probe(
+                    at,
+                    u32::try_from(value).expect("a value within the bound fits u32"),
+                );
+            }
+        }
+        probes.sort_by_key(|state| self.index(state));
+        probes
+    }
+
+    /// Whether `state` is a state of this space: a value for each dimension, each below the number
+    /// of values the dimension has.
+    #[cfg(test)]
+    pub(super) fn is_state(&self, state: &State) -> bool {
+        let radices = self.radices();
+        state.len() == radices.len()
+            && state
+                .iter()
+                .zip(&radices)
+                .all(|(value, radix)| radix.is_some_and(|radix| u128::from(*value) < radix))
+    }
+
     /// The index of `state`: the inverse of [`Space::state`].
     pub(super) fn index(&self, state: &State) -> u128 {
         self.radices()
@@ -1008,13 +1333,53 @@ impl<'a> Space<'a> {
             .any(|value| *value != UNDECIDED)
     }
 
-    /// The evidence kinds present in `state`: a record of the kind, current or earlier, is in it.
-    pub(super) fn present(&self, state: &State) -> BTreeSet<&'a EvidenceKindId> {
+    /// The positions of the evidence dimensions `action` may produce records of: every dimension of
+    /// each kind its `may_produce` lists and, when it opens a child case, the `case_outcome`
+    /// dimension about its `case_open` subject when something reads that artifact by name,
+    /// otherwise the one standing for the artifacts nothing names (story:child-outcome-subject,
+    /// D1): a child's record is about the artifact the child was opened about. A protocol that
+    /// reads `case_outcome` about no artifact by name has one `case_outcome` dimension, which
+    /// every opening action produces, as before the key existed.
+    pub(crate) fn produced_by(&self, ir: &Ir, action: &crate::ir::Action) -> BTreeSet<usize> {
+        let opened = action.case_open.as_ref().zip(case_outcome(ir));
+        let named = |kind: &EvidenceKindId, artifact: &ArtifactId| {
+            readers(ir)
+                .flat_map(|(_, predicate)| reads_in(ir, predicate))
+                .any(|read| read.kind == kind && read.subject == Some(artifact))
+        };
         self.kinds
             .iter()
             .enumerate()
-            .filter(|(at, _)| self.holds(state, *at))
-            .map(|(_, kind)| kind.id)
+            .filter(|(_, dimension)| {
+                action.may_produce.contains(dimension.id)
+                    || opened.is_some_and(|(opening, kind)| {
+                        dimension.id == kind
+                            && match (&dimension.record, dimension.bound) {
+                                (Some(record), true) => record.subject == opening.subject,
+                                (None, true) => false,
+                                (_, false) => !named(kind, &opening.subject),
+                            }
+                    })
+            })
+            .map(|(at, _)| at)
+            .collect()
+    }
+
+    /// The positions of the evidence dimensions of each of `kinds`.
+    pub(super) fn dimensions_of_kinds(&self, kinds: &BTreeSet<&EvidenceKindId>) -> BTreeSet<usize> {
+        self.kinds
+            .iter()
+            .enumerate()
+            .filter(|(_, dimension)| kinds.contains(dimension.id))
+            .map(|(at, _)| at)
+            .collect()
+    }
+
+    /// The positions of the evidence dimensions present in `state`: a record of the dimension,
+    /// current or earlier, is in it.
+    pub(super) fn present_dimensions(&self, state: &State) -> BTreeSet<usize> {
+        (0..self.kinds.len())
+            .filter(|at| self.holds(state, *at))
             .collect()
     }
 
@@ -1628,6 +1993,45 @@ fn down_sets(profiles: &[Profile<'_>]) -> Option<Vec<Producers>> {
     Some(found)
 }
 
+/// The position of the value of a case input whose rendering comes first, when that holds whatever
+/// follows it: a state writes an input `` input `s` `v` ``, so of two states that differ only in it
+/// the one whose `` v` `` comes first in code-point order is written first, unless one such text
+/// begins another, and then what follows decides. `None` then, and the input stays in the slice.
+fn first_rendered(values: &[InputValue]) -> Option<usize> {
+    let texts: Vec<String> = values
+        .iter()
+        .map(|value| format!("{}`", one_line(value.as_str())))
+        .collect();
+    let (first, text) = texts.iter().enumerate().min_by(|a, b| a.1.cmp(b.1))?;
+    let alone = texts
+        .iter()
+        .all(|other| other == text || !other.starts_with(text.as_str()));
+    alone.then_some(first)
+}
+
+/// Every case input `predicate` tests, directly or through the claims it tests.
+fn inputs_tested<'a>(ir: &'a Ir, predicate: &'a Predicate) -> BTreeSet<&'a InputId> {
+    let mut tested = BTreeSet::new();
+    let mut visited: BTreeSet<&ClaimId> = BTreeSet::new();
+    let mut pending = vec![predicate];
+    while let Some(next) = pending.pop() {
+        next.visit(&mut |node| match node {
+            Predicate::Input(test) => {
+                tested.insert(&test.input);
+            }
+            Predicate::Claim(test) => {
+                if visited.insert(&test.claim)
+                    && let Some(claim) = ir.claims.get(&test.claim)
+                {
+                    pending.push(&claim.true_when);
+                }
+            }
+            _ => {}
+        });
+    }
+    tested
+}
+
 /// `` `d`, `e` ``: the dimensions of `profile`, in identifier order.
 fn listed(profile: &Profile<'_>) -> String {
     profile
@@ -1779,7 +2183,8 @@ pub(super) fn ordered_child_outcomes(ir: &Ir) -> Option<&EvidenceKindId> {
 
 /// What reads evidence in `predicate` itself, in source order: each evidence match, each kind an
 /// order form reads, and, for a `children` form, the kind `case_outcome` with each outcome it lists
-/// and `open`, about any artifact (story:case-composition).
+/// and `open`, about the artifact it names as its `subject` (story:child-outcome-subject), as an
+/// evidence match with a subject reads, and otherwise about any artifact (story:case-composition).
 fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
     let mut found = Vec::new();
     predicate.visit(&mut |node| match node {
@@ -1789,7 +2194,7 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
                 for result in outcomes.chain([OPEN_OUTCOME]) {
                     found.push(Read {
                         kind,
-                        subject: None,
+                        subject: form.subject.as_ref(),
                         result: Some(result),
                         independent_on: None,
                         ordered: false,
@@ -1857,8 +2262,9 @@ fn matches_read<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<&'a EvidenceMat
 type Reached<'a> = (&'a EvidenceKindId, Option<&'a ArtifactId>);
 
 /// What `predicate` reads, through the claims it tests: each evidence match it reaches, and each
-/// kind an order form it reaches reads, and `case_outcome`, about any artifact, for each
-/// `children` form it reaches.
+/// kind an order form it reaches reads, and `case_outcome` for each `children` form it reaches,
+/// about the artifact the form names as its subject, as an evidence match with a subject reads,
+/// or about any artifact (story:child-outcome-subject).
 fn evidence_reached<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Reached<'a>> {
     let mut reached = Vec::new();
     let mut visited: BTreeSet<&ClaimId> = BTreeSet::new();
@@ -1874,8 +2280,8 @@ fn evidence_reached<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Reached<'a>
             | Predicate::Since(_) => {
                 reached.extend(node.order_reads());
             }
-            Predicate::Children(_) => {
-                reached.extend(case_outcome(ir).map(|kind| (kind, None)));
+            Predicate::Children(form) => {
+                reached.extend(case_outcome(ir).map(|kind| (kind, form.subject.as_ref())));
             }
             Predicate::Claim(test) => {
                 if visited.insert(&test.claim)
@@ -1906,7 +2312,8 @@ pub(super) fn kinds_read<'a>(ir: &'a Ir, predicate: &'a Predicate) -> BTreeSet<&
 /// does not establish; `all`, `any` and `is: true` keep it. Each claim is visited once per
 /// position. An order form counts for every kind it reads whatever its position: with no record of
 /// its kinds it is `unknown` and so is its negation, so a record can help either hold. So does a
-/// `children` form for `case_outcome`, about any artifact.
+/// `children` form for `case_outcome`, about its subject when it names one, otherwise about any
+/// artifact.
 pub(super) fn positive_reads<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Reached<'a>> {
     let mut matches = Vec::new();
     let mut visited: BTreeSet<(&ClaimId, bool)> = BTreeSet::new();
@@ -1928,8 +2335,8 @@ pub(super) fn positive_reads<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Re
             | Predicate::Since(_) => {
                 matches.extend(next.order_reads());
             }
-            Predicate::Children(_) => {
-                matches.extend(case_outcome(ir).map(|kind| (kind, None)));
+            Predicate::Children(form) => {
+                matches.extend(case_outcome(ir).map(|kind| (kind, form.subject.as_ref())));
             }
             Predicate::Input(_) => {}
             Predicate::Claim(test) => {
@@ -1946,4 +2353,267 @@ pub(super) fn positive_reads<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Re
         }
     }
     matches
+}
+
+/// One evidence dimension as `canon simulate` walks it (story:canon-simulate): its kind, how a
+/// state writes it, its classes in class order, how a record of each of its producer profiles is
+/// written after its class, in profile order, and which profile is within which.
+pub(crate) struct Walked<'a> {
+    pub(crate) kind: &'a EvidenceKindId,
+    /// `` `k` ``, or `` `k` about `b` `` for a bound dimension.
+    pub(crate) name: String,
+    /// Empty for a dimension of a protocol that declares no artifact: no record can be about one.
+    pub(crate) classes: Vec<Option<&'a str>>,
+    /// Empty for the empty profile, otherwise `` by a producer independent on `d`, `e` ``.
+    pub(crate) profiles: Vec<String>,
+    /// `within[i][j]`: profile `i` is within profile `j`, so a record from a producer of profile
+    /// `j` meets every demand one of profile `i` meets.
+    pub(crate) within: Vec<Vec<bool>>,
+}
+
+/// What `canon simulate` needs of the space (story:canon-simulate). A walk holds its own records:
+/// for each evidence dimension and class, the producer profiles of its current records, observed
+/// after every move of an upstream artifact, so it never needs a dimension's whole table of
+/// values, which a dimension of many upstream artifacts or profiles does not fit in a `u32`. The
+/// rest of a walk's state is a state of this space with every evidence dimension at no record and
+/// every history dimension at its least value: capabilities, decisions and case inputs.
+impl<'a> Space<'a> {
+    /// Each evidence dimension, in dimension order, as a walk adds records to it.
+    pub(crate) fn walked(&self) -> Vec<Walked<'a>> {
+        self.kinds
+            .iter()
+            .map(|kind| Walked {
+                kind: kind.id,
+                name: kind.name(),
+                classes: if kind.record.is_some() {
+                    kind.classes.clone()
+                } else {
+                    Vec::new()
+                },
+                profiles: kind
+                    .profiles
+                    .iter()
+                    .map(|profile| {
+                        if profile.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" by a producer independent on {}", listed(profile))
+                        }
+                    })
+                    .collect(),
+                within: kind
+                    .profiles
+                    .iter()
+                    .map(|inner| {
+                        kind.profiles
+                            .iter()
+                            .map(|outer| inner.is_subset(outer))
+                            .collect()
+                    })
+                    .collect(),
+            })
+            .collect()
+    }
+
+    /// How many initial states a walk has: one per assignment of case-input values. `None` when
+    /// it does not fit a `u128`.
+    pub(crate) fn initial_count(&self) -> Option<u128> {
+        self.inputs.iter().try_fold(1u128, |total, (_, values)| {
+            total.checked_mul(u128::try_from(values.len()).ok()?)
+        })
+    }
+
+    /// The initial states: no record, no authority decision, no decision taken, and one per
+    /// assignment of case-input values, in input order, the last input varying fastest. Called
+    /// only once [`Space::initial_count`] is within the bound.
+    pub(crate) fn initial_states(&self) -> Vec<State> {
+        let length = self.radices().len();
+        let first_input = self.first_input();
+        let count = self.initial_count().expect("within the bound");
+        (0..count)
+            .map(|mut index| {
+                let mut state: State = vec![0; length];
+                for (at, (_, values)) in self.inputs.iter().enumerate().rev() {
+                    let radix = values.len() as u128;
+                    state[first_input + at] =
+                        u32::try_from(index % radix).expect("few input values");
+                    index /= radix;
+                }
+                state
+            })
+            .collect()
+    }
+
+    /// Each capability some action requires, in identifier order.
+    pub(crate) fn walked_capabilities(&self) -> &[&'a CapabilityId] {
+        &self.capabilities
+    }
+
+    /// `state` with the capability at `at` granted, or denied, when it is undecided there.
+    pub(crate) fn with_capability(&self, state: &State, at: usize, granted: bool) -> Option<State> {
+        let position = self.kinds.len() + at;
+        (state[position] == UNDECIDED).then(|| {
+            let mut walked = state.clone();
+            walked[position] = if granted { GRANTED } else { GRANTED + 1 };
+            walked
+        })
+    }
+
+    /// Each decision name some outcome requires, in identifier order.
+    pub(crate) fn walked_decisions(&self) -> Vec<&'a DecisionName> {
+        self.decisions.iter().map(|(name, _)| *name).collect()
+    }
+
+    /// `state` with the decision at `at` taken, when it is not taken there.
+    pub(crate) fn with_decision(&self, state: &State, at: usize) -> Option<State> {
+        let position = self.kinds.len() + self.capabilities.len() + at;
+        (state[position] == 0).then(|| {
+            let mut walked = state.clone();
+            walked[position] = 1;
+            walked
+        })
+    }
+
+    /// Whether every capability decision and every taken decision of `smaller` is in `larger`,
+    /// and both give every case input the same value: the part of a walk's containment its
+    /// records do not decide.
+    pub(crate) fn decided_within(&self, smaller: &State, larger: &State) -> bool {
+        let capabilities = self.kinds.len()..self.kinds.len() + self.capabilities.len();
+        let decisions = capabilities.end..capabilities.end + self.decisions.len();
+        let inputs = decisions.end..decisions.end + self.inputs.len();
+        capabilities
+            .chain(decisions)
+            .all(|at| smaller[at] == 0 || smaller[at] == larger[at])
+            && smaller[inputs.clone()] == larger[inputs]
+    }
+
+    /// The evidence records of a walk's records, as [`Space::evidence`] writes the current records
+    /// of a state: for each `(dimension, class, producers)` of `held`, in that order, one record
+    /// per producer profile, about the dimension's artifact at [`REVISION`], recording every
+    /// upstream artifact at [`REVISION`], with no observation instant. Then, for each
+    /// `(dimension, class)` of `expired`, a `case_outcome` record of that class held as expired
+    /// (R2a of story:canon-simulate): about its artifact at [`EARLIER`], as the history dimension
+    /// of a `children` form writes an earlier record, with no producer. The evaluator's revision
+    /// binding keeps it from every evidence match, as its freshness stage keeps an expired record,
+    /// and every `children` form reads it, as it reads an expired one (`eval/composition.rs`).
+    pub(crate) fn walk_evidence(
+        &self,
+        held: &[(usize, usize, Vec<usize>)],
+        expired: &[(usize, usize)],
+    ) -> Vec<EvidenceRecord> {
+        let mut records = Vec::new();
+        let current = held.iter().flat_map(|(at, class, producers)| {
+            producers
+                .iter()
+                .map(move |profile| (*at, *class, Some(*profile)))
+        });
+        let earlier = expired.iter().map(|(at, class)| (*at, *class, None));
+        for (at, class, profile) in current.chain(earlier) {
+            let kind = &self.kinds[at];
+            let Some(record) = &kind.record else {
+                continue;
+            };
+            let upstream_revisions = Declarations::new(
+                kind.upstreams
+                    .iter()
+                    .map(|artifact| ((*artifact).clone(), Revision::new(REVISION)))
+                    .collect(),
+            );
+            let mut walked = EvidenceRecord {
+                id: EvidenceId::new(format!("e{}", records.len())),
+                result: kind.classes[class].map(str::to_owned),
+                observed_at: None,
+                upstream_revisions,
+                producer: profile.and_then(|profile| self.producer(&kind.profiles[profile])),
+                ..record.clone()
+            };
+            if profile.is_none() {
+                walked.subject_revision = Revision::new(EARLIER);
+            }
+            if walked.kind.as_str() == CASE_OUTCOME {
+                walked.child_case = Some(CaseId::new(walked.id.as_str()));
+                if walked.result.is_none() {
+                    walked.result = Some(self.unlisted.clone());
+                }
+            }
+            records.push(walked);
+        }
+        records
+    }
+
+    /// The case-input values of a walk's state `state`, in input order.
+    pub(crate) fn walk_inputs<'s>(&self, state: &'s [u32]) -> &'s [u32] {
+        let first = self.kinds.len() + self.capabilities.len() + self.decisions.len();
+        &state[first..first + self.inputs.len()]
+    }
+
+    /// A walk's state as a report writes it, as [`Space::render`] writes a state: its records
+    /// (`held`, in dimension, class and profile order, each class's record held as expired, in
+    /// `expired`, after its current ones, `` evidence `k` result `r` expired ``), then the decided
+    /// capabilities, the taken decisions and the case inputs of `state`. It reads no dimension's
+    /// table of values, which a dimension too large for the check does not have.
+    pub(crate) fn render_walk(
+        &self,
+        state: &State,
+        held: &[(usize, usize, Vec<usize>)],
+        expired: &[(usize, usize)],
+    ) -> String {
+        let mut records: Vec<(usize, usize, Option<usize>)> = held
+            .iter()
+            .flat_map(|(at, class, producers)| {
+                producers
+                    .iter()
+                    .map(move |profile| (*at, *class, Some(*profile)))
+            })
+            .chain(expired.iter().map(|(at, class)| (*at, *class, None)))
+            .collect();
+        records.sort_by_key(|(at, class, profile)| (*at, *class, profile.is_none()));
+        let mut items = Vec::new();
+        for (at, class, profile) in records {
+            let kind = &self.kinds[at];
+            let name = kind.name();
+            let mut item = match kind.classes[class] {
+                Some(result) => format!("evidence {name} result `{}`", one_line(result)),
+                None => format!("evidence {name}"),
+            };
+            match profile {
+                Some(profile) => {
+                    let profile = &kind.profiles[profile];
+                    if !profile.is_empty() {
+                        item.push_str(&format!(
+                            " by a producer independent on {}",
+                            listed(profile)
+                        ));
+                    }
+                }
+                None => item.push_str(" expired"),
+            }
+            items.push(item);
+        }
+        let capabilities = &state[self.kinds.len()..];
+        for (id, value) in self.capabilities.iter().zip(capabilities) {
+            if *value != UNDECIDED {
+                let decision = if *value == GRANTED {
+                    "granted"
+                } else {
+                    "denied"
+                };
+                items.push(format!("capability `{}` {decision}", one_line(id.as_str())));
+            }
+        }
+        let decisions = &state[self.kinds.len() + self.capabilities.len()..];
+        for ((name, _), value) in self.decisions.iter().zip(decisions) {
+            if *value != 0 {
+                items.push(format!("decision `{}` taken", one_line(name.as_str())));
+            }
+        }
+        for (id, value) in self.inputs(state).iter() {
+            items.push(format!(
+                "input `{}` `{}`",
+                one_line(id.as_str()),
+                one_line(value.as_str())
+            ));
+        }
+        format!("{{{}}}", items.join(", "))
+    }
 }

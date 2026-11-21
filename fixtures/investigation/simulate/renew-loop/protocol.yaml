@@ -1,0 +1,42 @@
+format: protocol/1
+
+protocol:
+  id: simulate.renew
+  revision: 1
+  description: Seeded defect, an observation renewed and expiring forever while the seal the outcome needs is produced by nothing.
+
+artifacts:
+  document:
+    description: The document being observed.
+
+evidence_kinds:
+  observation:
+    description: An observation of the document, valid for an hour.
+    max_age: 1h
+  seal:
+    description: A seal on the document, which no action produces.
+
+claims:
+  document.observed:
+    description: The document has a fresh observation.
+    true_when:
+      evidence:
+        kind: observation
+
+  document.sealed:
+    description: The document is sealed.
+    true_when:
+      evidence:
+        kind: seal
+
+actions:
+  renew:
+    description: Observe the document again.
+    may_produce:
+      - evidence: observation
+
+outcomes:
+  sealed:
+    description: The document is sealed.
+    requires:
+      claim: document.sealed

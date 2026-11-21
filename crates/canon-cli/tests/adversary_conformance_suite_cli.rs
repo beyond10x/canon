@@ -91,7 +91,7 @@ fn the_real_registry_with_the_flag_is_the_plain_report_and_one_line() {
     assert_eq!(
         out(&checked),
         format!(
-            "{}requirements: 19 implemented, 19 covered, 0 planned\n",
+            "{}requirements: 29 implemented, 29 covered, 0 planned\n",
             out(&plain)
         )
     );
@@ -120,8 +120,11 @@ fn without_the_flag_no_check_runs() {
 /// The catalogue lists exactly the 15 requirements story:conformance-suite names and the ones
 /// later stories add (CANON-ORDER-002, story:evidence-order-after; CANON-ORDER-003,
 /// story:evidence-order-subsecond; CANON-ORDER-004, story:evidence-order-since; CANON-COMPOSE-001,
-/// story:case-composition), all implemented, and every one is covered by a scenario of the
-/// registry.
+/// story:case-composition; CANON-SCOPE-001, story:capability-scope; CANON-IMPORT-001,
+/// story:protocol-imports; CANON-AUTHORITY-002, story:authority-revision-binding;
+/// CANON-SUPPLY-001, story:supplied-evidence; CANON-COMPOSE-002, story:child-outcome-revision;
+/// CANON-FRONTIER-001, story:missing-evidence; CANON-PENDING-001, story:pending-decisions), all
+/// implemented, and every one is covered by a scenario of the registry.
 #[test]
 fn the_real_catalogue_is_the_requirements_the_stories_name() {
     let root = repository_root();
@@ -145,12 +148,16 @@ fn the_real_catalogue_is_the_requirements_the_stories_name() {
         "CANON-EVIDENCE-001",
         "CANON-EVIDENCE-002",
         "CANON-EVIDENCE-003",
+        "CANON-EVIDENCE-004",
         "CANON-AUTHORITY-001",
         "CANON-INDEPENDENCE-001",
         "CANON-OUTCOME-001",
         "CANON-OUTCOME-002",
         "CANON-INVALIDATION-001",
         "CANON-DETERMINISM-001",
+        "CANON-FRONTIER-001",
+        "CANON-PENDING-001",
+        "CANON-GROUND-001",
         "CANON-EXPLAIN-001",
         "CANON-OBLIGATION-001",
         "CANON-INPUT-001",
@@ -159,6 +166,12 @@ fn the_real_catalogue_is_the_requirements_the_stories_name() {
         "CANON-ORDER-003",
         "CANON-ORDER-004",
         "CANON-COMPOSE-001",
+        "CANON-IMPORT-001",
+        "CANON-SCOPE-001",
+        "CANON-AUTHORITY-002",
+        "CANON-SUPPLY-001",
+        "CANON-COMPOSE-002",
+        "CANON-COMPOSE-003",
     ];
     story.sort();
     assert_eq!(ids, story);
