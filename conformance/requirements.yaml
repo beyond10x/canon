@@ -112,6 +112,16 @@ requirements:
       NOT take a record observed at an overlapping instant as later, and MUST be UNKNOWN while the
       latest record or the order of a record it compares is not established.
     source: story:evidence-order-since
+  CANON-ORDER-005:
+    status: implemented
+    statement: >-
+      A predicate over an item that had one result on an earlier revision and another on the
+      current revision MUST read the history of records, MUST pair only records that name the same
+      item, MUST count an earlier record only on a revision the case snapshot lists as one the
+      current revision of its subject descends from, MUST be FALSE when a later record has no such
+      pair, and MUST be UNKNOWN when there is no later record or the snapshot does not give the
+      descent of its subject.
+    source: story:revision-ordering
   CANON-COMPOSE-001:
     status: implemented
     statement: >-
