@@ -22,7 +22,7 @@ scope:
   path: crates/canon/tests/protocol_write.rs
 - confidence: cited
   path: ess/domains/protocol.yaml
-revision: 9
+revision: 10
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T23:28:16Z", actor: "human:timo", revision: 7, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T23:28:16Z", actor: "human:timo", revision: 8, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
@@ -192,3 +192,10 @@ orchestrator of this plan may overrule it.
 - **D3, the adversary's cases.** The four green cases stay as they are. The six red cases are
   rewritten by the correction to pin D1 and D2: each keeps its input and asserts the behaviour
   decided above. The case at 5000 levels becomes the case at 1000 levels.
+
+- **D4, the depth test holds 500 levels, not 1000.** Added on 2026-11-21 after correction 1
+  (`94150485`) measured the stack: in a debug build on the workstation's compiler a predicate
+  1150 deep is written on a 2 MiB stack and one 1200 deep overflows it. 1000 levels leave about
+  15 percent, and a stack overflow aborts the whole test binary; the compiler in continuous
+  integration is a release newer and its frames may be larger. The test and the module docs name
+  500 levels, which leaves a factor of two. D2 is otherwise unchanged.
