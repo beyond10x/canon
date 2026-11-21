@@ -58,10 +58,11 @@
 //! - **Child-outcome step.** For each opening action whose mark is above none, one current record
 //!   of `case_outcome` arrives from one of its children, in the one dimension `canon check` counts
 //!   its action as producing (story:child-outcome-subject): the one about its `case_open` subject
-//!   when a form names that artifact, otherwise the one without a subject, and none when neither
-//!   exists, since nothing reads the child's record then, by the combinations an action step
-//!   takes: a runner records a child's outcome when the child ends, whether the opening action's
-//!   guard is still open or not. Canon runs nothing; the step says that a runner may record it
+//!   when the protocol reads `case_outcome` about that artifact by name, in a `children` form or
+//!   an evidence match, otherwise the one without a subject, and none when neither exists, since
+//!   nothing reads the child's record then, by the combinations an action step takes: a runner
+//!   records a child's outcome when the child ends, whether the opening action's guard is still
+//!   open or not. Canon runs nothing; the step says that a runner may record it
 //!   between two evaluations. A record of the class `open` keeps the mark: the child has not
 //!   ended. Any other class lowers it, from one to none, and from two or more to one or, since
 //!   more children may remain, to two or more; it is a step when it lowers the mark, even with
