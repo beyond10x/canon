@@ -30,10 +30,49 @@
 //! missing or not one of the seven has its other keywords checked only for being in the dialect,
 //! since which apply depends on the type. Problems come in document order, the keys of every
 //! object in code-point order, and the walk keeps a stack of its own, never recursing.
+//!
+//! # Checking a call (story:argument-validator)
+//!
+//! [`check_arguments`] checks one call's arguments against an action's schema. It is a pure
+//! function: it reads nothing but its two arguments, evaluates no call and takes no decision. A
+//! runner that holds an `ir::Action` passes `action.arguments.as_ref()`; one that holds
+//! `canon-ir/1` as JSON passes `ir["actions"][id]["arguments"]`, `None` when the key is absent.
+//!
+//! - An absent schema is `{"type": "object", "additionalProperties": false}`: the action takes
+//!   only `{}`.
+//! - A schema outside the dialect, which only a caller-built IR can hold, is returned as
+//!   [`ArgumentsRefused::Schema`], the pairs of JSON Pointer inside the schema and reason that
+//!   [`check`] gives `canon validate`, unchanged; no argument is checked.
+//! - Otherwise every refusal is reported as [`ArgumentsRefused::Arguments`], each an
+//!   [`ArgumentRefusal`]: the RFC 6901 pointer into the arguments (`""` for the whole document),
+//!   the keyword that refused and one line of text. Meaning is that of JSON Schema 2020-12.
+//! - `type`: an `integer` is any number with no fractional part, so `1.0` is an integer. When
+//!   `type` refuses at a location, no other keyword of that schema is checked there.
+//! - `enum`: values are equal when they are equal in JSON Schema's sense, numbers by exact value:
+//!   `1` and `1.0` are one value, and two integers a double cannot tell apart are two.
+//! - `required`: a missing name is refused at the object's pointer, the reason naming it, in the
+//!   order the schema lists the names.
+//! - `additionalProperties: false`: an undeclared member is refused at the member's pointer.
+//! - `properties` and `items` descend into the members and items a schema describes, and only
+//!   those, so the depth reached is at most [`MAX_SCHEMA_DEPTH`].
+//! - `minItems`, `maxItems` count the array's items; `minLength`, `maxLength` count the string's
+//!   Unicode code points.
+//! - `minimum`, `maximum` compare exactly: an integer is never compared through a double, and a
+//!   fractional number is compared by its exact value. A number the JSON text writes beyond the
+//!   range of a 64-bit integer is the double `serde_json` reads it as.
+//! - `title` and `description` never refuse.
+//!
+//! Refusals come in document order: a location's own refusals first, its keywords in code-point
+//! order (`enum`, the maximums, the minimums, then `required`), then its members in code-point
+//! order of their names, or its items in order. The same input gives the same refusals.
 
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
+use std::fmt;
 
-use serde_json::{Map, Value};
+use serde_json::{Map, Number, Value, json};
+
+use crate::model::one_line;
 
 /// How deep schemas nest: far below the bound on predicates, since every pass over a schema value
 /// (parsing, writing, reading back, comparing and dropping it) recurses once per level.
@@ -345,24 +384,54 @@ fn of_type(value: &Value, ty: &str) -> bool {
     }
 }
 
-/// JSON Schema's equality of two scalars: numbers by value, so `1` and `1.0` are one value.
+/// JSON Schema's equality of two scalars: numbers by exact value, so `1` and `1.0` are one value
+/// and two integers a double cannot tell apart are two.
 pub(crate) fn same(left: &Value, right: &Value) -> bool {
     match (left, right) {
-        (Value::Number(left), Value::Number(right)) => {
-            match (integer_of(left), integer_of(right)) {
-                (Some(left), Some(right)) => left == right,
-                _ => left.as_f64() == right.as_f64(),
-            }
-        }
+        (Value::Number(left), Value::Number(right)) => compare(left, right) == Ordering::Equal,
         _ => left == right,
     }
 }
 
-fn integer_of(number: &serde_json::Number) -> Option<i128> {
+fn integer_of(number: &Number) -> Option<i128> {
     number
         .as_i64()
         .map(i128::from)
         .or_else(|| number.as_u64().map(i128::from))
+}
+
+/// The exact order of two JSON numbers, each a 64-bit integer or a finite double.
+fn compare(left: &Number, right: &Number) -> Ordering {
+    match (integer_of(left), integer_of(right)) {
+        (Some(left), Some(right)) => left.cmp(&right),
+        (Some(left), None) => against_double(left, double(right)),
+        (None, Some(right)) => against_double(right, double(left)).reverse(),
+        (None, None) => double(left)
+            .partial_cmp(&double(right))
+            .unwrap_or(Ordering::Equal),
+    }
+}
+
+fn double(number: &Number) -> f64 {
+    number.as_f64().unwrap_or(f64::NAN)
+}
+
+/// The exact order of an integer and a finite double.
+fn against_double(integer: i128, double: f64) -> Ordering {
+    // 2^127: every double at or beyond it is above every i128, and every double at or below its
+    // negation is below.
+    let limit = i128::MAX as f64;
+    if double >= limit {
+        return Ordering::Less;
+    }
+    if double <= -limit {
+        return Ordering::Greater;
+    }
+    let floor = double.floor();
+    match integer.cmp(&(floor as i128)) {
+        Ordering::Equal if double > floor => Ordering::Less,
+        order => order,
+    }
 }
 
 /// The offences of `required` on an object schema.
@@ -397,6 +466,263 @@ fn required_items(
             let at = pointers.child(here, index.to_string());
             items.push(Item::Offence { at, reason });
         }
+    }
+}
+
+/// One refusal of a call's arguments by the schema (story:argument-validator).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArgumentRefusal {
+    /// The RFC 6901 JSON Pointer into the arguments document; `""` is the whole document.
+    pub pointer: String,
+    /// The dialect keyword that refused: `type`, `enum`, `required`, `additionalProperties`,
+    /// `minimum`, `maximum`, `minLength`, `maxLength`, `minItems` or `maxItems`.
+    pub keyword: &'static str,
+    /// Why, in one line of text.
+    pub reason: String,
+}
+
+impl fmt::Display for ArgumentRefusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "arguments at `{}`: {}", self.pointer, self.reason)
+    }
+}
+
+/// Why [`check_arguments`] refused a call (story:argument-validator).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArgumentsRefused {
+    /// The schema is outside the dialect: each pair is the JSON Pointer inside the schema and the
+    /// reason, as `canon validate` reports it. No argument was checked.
+    Schema(Vec<(String, String)>),
+    /// The arguments do not satisfy the schema: every refusal, in document order. Never empty.
+    Arguments(Vec<ArgumentRefusal>),
+}
+
+impl fmt::Display for ArgumentsRefused {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ArgumentsRefused::Schema(offences) => {
+                for (index, (pointer, reason)) in offences.iter().enumerate() {
+                    let separator = if index == 0 { "" } else { "; " };
+                    write!(f, "{separator}schema at `{pointer}`: {reason}")?;
+                }
+            }
+            ArgumentsRefused::Arguments(refusals) => {
+                for (index, refusal) in refusals.iter().enumerate() {
+                    let separator = if index == 0 { "" } else { "; " };
+                    write!(f, "{separator}{refusal}")?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for ArgumentsRefused {}
+
+/// Checks one call's arguments against an action's argument schema: `Ok` when they satisfy it,
+/// else every refusal. The schema is `Action::arguments`, `None` for an action that declares none,
+/// which takes only `{}`. Pure; the module documentation states the meaning of each keyword and
+/// the order of the refusals.
+pub fn check_arguments(schema: Option<&Value>, arguments: &Value) -> Result<(), ArgumentsRefused> {
+    let absent = json!({"type": "object", "additionalProperties": false});
+    let schema = match schema {
+        Some(schema) => {
+            let offences = check(schema);
+            if !offences.is_empty() {
+                return Err(ArgumentsRefused::Schema(offences));
+            }
+            schema
+        }
+        None => &absent,
+    };
+    let mut walk = Walk::default();
+    walk.value(schema, arguments);
+    if walk.refusals.is_empty() {
+        Ok(())
+    } else {
+        Err(ArgumentsRefused::Arguments(walk.refusals))
+    }
+}
+
+/// The refusals so far, and the pointer of the value being checked.
+#[derive(Default)]
+struct Walk {
+    pointer: String,
+    refusals: Vec<ArgumentRefusal>,
+}
+
+impl Walk {
+    fn refuse(&mut self, keyword: &'static str, reason: String) {
+        self.refusals.push(ArgumentRefusal {
+            pointer: self.pointer.clone(),
+            keyword,
+            reason,
+        });
+    }
+
+    /// Checks `doc`, the member or item `token` of the current value, against `schema`.
+    fn child(&mut self, token: &str, schema: &Value, doc: &Value) {
+        let length = self.pointer.len();
+        self.pointer.push('/');
+        self.pointer
+            .push_str(&token.replace('~', "~0").replace('/', "~1"));
+        self.value(schema, doc);
+        self.pointer.truncate(length);
+    }
+
+    /// Checks `doc` at the current pointer against `schema`, which `check` has found to be in the
+    /// dialect: so every keyword read here is well formed, and the descent is at most
+    /// [`MAX_SCHEMA_DEPTH`] deep.
+    fn value(&mut self, schema: &Value, doc: &Value) {
+        let Some(schema) = schema.as_object() else {
+            return;
+        };
+        let Some(ty) = schema.get("type").and_then(Value::as_str) else {
+            return;
+        };
+        if !is_type(doc, ty) {
+            let reason = match doc {
+                Value::Number(_) if ty == "integer" => {
+                    "expected `integer`, found a number with a fractional part".to_owned()
+                }
+                _ => format!("expected `{ty}`, found {}", kind(doc)),
+            };
+            self.refuse("type", reason);
+            return;
+        }
+        if let Some(Value::Array(values)) = schema.get("enum")
+            && !values.iter().any(|value| same(value, doc))
+        {
+            self.refuse(
+                "enum",
+                "the value is not one of the `enum` values".to_owned(),
+            );
+        }
+        match doc {
+            Value::Number(number) => self.bounds(schema, number),
+            Value::String(text) => {
+                let length = text.chars().count() as u64;
+                if let Some(maximum) = schema.get("maxLength").and_then(Value::as_u64)
+                    && length > maximum
+                {
+                    self.refuse(
+                        "maxLength",
+                        format!("{length} code points is above `maxLength` {maximum}"),
+                    );
+                }
+                if let Some(minimum) = schema.get("minLength").and_then(Value::as_u64)
+                    && length < minimum
+                {
+                    self.refuse(
+                        "minLength",
+                        format!("{length} code points is below `minLength` {minimum}"),
+                    );
+                }
+            }
+            Value::Array(items) => self.array(schema, items),
+            Value::Object(members) => self.object(schema, members),
+            _ => {}
+        }
+    }
+
+    fn bounds(&mut self, schema: &Map<String, Value>, number: &Number) {
+        if let Some(Value::Number(maximum)) = schema.get("maximum")
+            && compare(number, maximum) == Ordering::Greater
+        {
+            self.refuse("maximum", format!("{number} is above `maximum` {maximum}"));
+        }
+        if let Some(Value::Number(minimum)) = schema.get("minimum")
+            && compare(number, minimum) == Ordering::Less
+        {
+            self.refuse("minimum", format!("{number} is below `minimum` {minimum}"));
+        }
+    }
+
+    fn array(&mut self, schema: &Map<String, Value>, items: &[Value]) {
+        let length = items.len() as u64;
+        if let Some(maximum) = schema.get("maxItems").and_then(Value::as_u64)
+            && length > maximum
+        {
+            self.refuse(
+                "maxItems",
+                format!("{length} items is above `maxItems` {maximum}"),
+            );
+        }
+        if let Some(minimum) = schema.get("minItems").and_then(Value::as_u64)
+            && length < minimum
+        {
+            self.refuse(
+                "minItems",
+                format!("{length} items is below `minItems` {minimum}"),
+            );
+        }
+        if let Some(schema) = schema.get("items") {
+            for (index, item) in items.iter().enumerate() {
+                self.child(&index.to_string(), schema, item);
+            }
+        }
+    }
+
+    fn object(&mut self, schema: &Map<String, Value>, members: &Map<String, Value>) {
+        if let Some(Value::Array(names)) = schema.get("required") {
+            for name in names.iter().filter_map(Value::as_str) {
+                if !members.contains_key(name) {
+                    self.refuse(
+                        "required",
+                        format!("`{}` is required and missing", one_line(name)),
+                    );
+                }
+            }
+        }
+        let declared = schema.get("properties").and_then(Value::as_object);
+        let closed = schema.get("additionalProperties") == Some(&Value::Bool(false));
+        let mut names: Vec<&String> = members.keys().collect();
+        names.sort();
+        for name in names {
+            match declared.and_then(|properties| properties.get(name.as_str())) {
+                Some(property) => self.child(name, property, &members[name.as_str()]),
+                None if closed => {
+                    let length = self.pointer.len();
+                    self.pointer.push('/');
+                    self.pointer
+                        .push_str(&name.replace('~', "~0").replace('/', "~1"));
+                    self.refuse(
+                        "additionalProperties",
+                        format!("`{}` is not declared in `properties`", one_line(name)),
+                    );
+                    self.pointer.truncate(length);
+                }
+                None => {}
+            }
+        }
+    }
+}
+
+/// Whether a JSON value is of a dialect type: an integer is a number with no fractional part.
+fn is_type(doc: &Value, ty: &str) -> bool {
+    match (ty, doc) {
+        ("object", Value::Object(_))
+        | ("array", Value::Array(_))
+        | ("string", Value::String(_))
+        | ("number", Value::Number(_))
+        | ("boolean", Value::Bool(_))
+        | ("null", Value::Null) => true,
+        ("integer", Value::Number(number)) => {
+            integer_of(number).is_some() || double(number).fract() == 0.0
+        }
+        _ => false,
+    }
+}
+
+/// What a JSON value is, for a reason.
+fn kind(doc: &Value) -> &'static str {
+    match doc {
+        Value::Null => "`null`",
+        Value::Bool(_) => "`boolean`",
+        Value::Number(_) => "`number`",
+        Value::String(_) => "`string`",
+        Value::Array(_) => "`array`",
+        Value::Object(_) => "`object`",
     }
 }
 
