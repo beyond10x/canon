@@ -123,6 +123,16 @@ compatibility decisions and keep unreleased capability claims explicit.
   change to permissions or to an agent's instructions still need the operator's own word; an
   action the operator's rules or the harness refuse is not done because `runbook` asks for it.
 
+A pull request whose changed files are all planning or prose skips the build and the tests. The one
+path list is `scripts/classify-changes.sh` (`git diff --no-renames --name-only` of the pull request
+on stdin or `--diff <base>`); `check.yml` and `pages.yml` both run it and keep their job names and
+triggers. Its three answers: `planning-only` (`.engineering/` except `.engineering/planning/story/`,
+`docs/`, and `*.md` in the repository root other than `AGENTS.md`) runs no step after the
+classifier and the job ends green; `docs-site-only` (`website/` and `.engineering/planning/story/`)
+runs `task docs-site-check`, which is `task docs-check` plus the tests that read hand-written pages;
+`code` (everything else, `AGENTS.md`, a push to `main`, an empty list, any failure) runs `task
+check`. `crates/canon/tests/planning_only_classifier.rs` holds both sides of the list.
+
 ## Releases
 
 Releases are source releases at bare-version tags, starting with `0.1.0`. Update the workspace
