@@ -1,0 +1,74 @@
+format: protocol/1
+
+protocol:
+  id: operations
+  revision: 1
+  description: Inspect and compare the metrics of a service, publish a report and page on an anomaly, under scoped authority.
+
+artifacts:
+  service:
+    description: The service under operation.
+
+evidence_kinds:
+  anomaly_report:
+    description: A report of an anomaly in the service.
+
+claims:
+  anomaly.reported:
+    description: An anomaly in the service has been reported.
+    true_when:
+      evidence:
+        kind: anomaly_report
+
+actions:
+  inspect:
+    description: Read the metrics of namespace foo in cluster prod-eu.
+    requires:
+      - capability: metrics.read
+        scope:
+          cluster: prod-eu
+          namespace: foo
+
+  compare:
+    description: Compare the metrics of every cluster, with each scope it reads named.
+    requires:
+      - capability: metrics.read
+        scope:
+          namespace: bar
+      - capability: metrics.read
+        scope:
+          cluster: prod-us
+      - capability: metrics.read
+        scope:
+          cluster: prod-eu
+          namespace: foo
+      - capability: metrics.read
+      - capability: metrics.read
+        scope:
+          cluster: prod-eu
+
+  publish:
+    description: Publish a report built from the metrics of cluster prod-eu.
+    requires:
+      - capability: report.write
+      - capability: metrics.read
+        scope:
+          cluster: prod-eu
+
+  escalate:
+    description: Page the on-call operator about a reported anomaly.
+    precondition:
+      claim: anomaly.reported
+    requires:
+      - capability: pager.send
+
+outcomes:
+  inconclusive:
+    description: The operation ends without a finding, by an explicit decision.
+    requires:
+      decision: explicitly_inconclusive
+
+  abandoned:
+    description: The operation is given up, by an explicit decision.
+    requires:
+      decision: explicitly_abandoned

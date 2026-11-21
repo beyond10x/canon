@@ -182,3 +182,23 @@ requirements:
       no claim lists it in excluded_evidence, and MUST NOT depend on its result or on whether its
       kind declares supplied_by. The section MUST NOT change any other section.
     source: story:missing-evidence
+  CANON-PENDING-001:
+    status: implemented
+    statement: >-
+      The decision MUST list under pending_decisions.authority one entry per requirement an
+      approval-required action names as not decided or as require_approval, giving the action, the
+      capability, the scope when the requirement has one, that decision as current, the case
+      snapshot's revision as case_revision when the snapshot has one, and the options granted and
+      denied. It MUST NOT list a requirement that is granted, nor any requirement of a blocked
+      action, whether its precondition is not true or a requirement of it is denied. A requirement
+      covered only by authority decisions bound to another case revision MUST be listed as not
+      decided. The entries MUST be ordered by action, then capability, then scope: no scope first,
+      and two scopes by their key-value pairs in key order, compared pair by pair, key before
+      value, a scope that is a prefix of the other first. The decision MUST list under
+      pending_decisions.decisions, in outcome order, one entry per outcome blocked because no
+      explicit decision applies, giving the outcome, the decision, the case revision and the option
+      taken; for a snapshot without a revision it MUST give neither a case revision nor an option.
+      An explicit decision taken at the snapshot's revision MUST remove its outcome's entry, and
+      one taken at another revision MUST NOT. A list with no entry MUST be left out. The section
+      MUST NOT change any other section.
+    source: story:pending-decisions

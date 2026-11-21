@@ -1,0 +1,2242 @@
+format: canon-conformance/1
+id: CANON-PENDING-001
+covers: [CANON-PENDING-001]
+fixture: fixtures/investigation/pending-decisions.yaml
+# Pending decisions (story:pending-decisions). The decision's `pending_decisions` section lists the
+# decisions the evaluation waits on, each a canon-authority/1 or canon-decisions/1 entry that would
+# change a status in the same decision, computed from the inputs `canon evaluate` already takes.
+#
+# - `authority` holds one entry per reason `{"capability", "decision": "none" | "require_approval",
+#   "scope"?}` of an `approval-required` action of the `actions` section: `{"action",
+#   "capability", "scope"?, "current", "case_revision"?, "options": ["granted", "denied"]}`.
+#   `current` is the reason's decision, `scope` is written when the requirement has one and
+#   `case_revision` is the case snapshot's `revision`, written when it has one. A `blocked` action
+#   has no entry. Entries are ordered by action id, then capability, then scope: no scope first,
+#   then two scopes by their key-value pairs in key order, compared pair by pair, key before value,
+#   by code point, a scope that is a prefix of the other first.
+# - `decisions` holds one entry per outcome blocked with the reason `{"decision": <name>,
+#   "present": false}`: `{"outcome", "decision", "case_revision"?, "options"}`, in outcome-id order.
+#   `options` is `["taken"]` when the snapshot has a revision, and `[]`, with no `case_revision`,
+#   when it has none.
+# - Each of the two is written only when it has an entry.
+#
+# The fixture declares four actions and two outcomes. `inspect` requires metrics.read at `{cluster:
+# prod-eu, namespace: foo}`. `compare` requires metrics.read at five scopes, declared out of order:
+# `{namespace: bar}`, `{cluster: prod-us}`, `{cluster: prod-eu, namespace: foo}`, none and
+# `{cluster: prod-eu}`; their order in the section is none, `{cluster: prod-eu}`, `{cluster:
+# prod-eu, namespace: foo}`, `{cluster: prod-us}`, `{namespace: bar}`, which a comparison of values
+# before keys, or of the scopes' sizes, would not give. `publish` requires report.write, declared
+# first, and metrics.read at `{cluster: prod-eu}`. `escalate` requires pager.send, and its
+# precondition, the claim anomaly.reported, is true only with an anomaly_report record. The outcomes
+# `inconclusive` and `abandoned`, declared in that order, require the explicit decisions
+# `explicitly_inconclusive` and `explicitly_abandoned`.
+#
+# Every step lists `actions`, `outcomes` and `pending_decisions`, so each entry stands beside the
+# reason it comes from, except the last, which lists every other section. That the section is
+# absent when nothing is pending is not a step's expectation: the runner fails a listed section the
+# decision does not carry and compares no section it does not list. The absence is held by the unit
+# tests of crates/canon/src/eval/pending.rs and by crates/canon/tests/pending_decisions.rs. The
+# case snapshot is at revision c2 unless a step says otherwise.
+steps:
+  # Expectation 1. No authority and no decisions. Every requirement of the three actions whose
+  # precondition holds is not decided, so each is listed with `current: none`, in action, then
+  # capability, then scope order; `escalate` is blocked by its precondition and has no entry. Both
+  # outcomes are blocked for want of a decision and are listed, `abandoned` first.
+  - id: nothing-given
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-7
+        protocol: operations
+        revision: c2
+        artifacts:
+          service: {revision: s1}
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "compare": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none"
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-us"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "namespace": "bar"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            },
+            "escalate": {
+              "reasons": [
+                {
+                  "claim": "anomaly.reported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "inspect": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            },
+            "publish": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                },
+                {
+                  "capability": "report.write",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "outcomes": {
+            "abandoned": {
+              "reasons": [
+                {
+                  "decision": "explicitly_abandoned",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            },
+            "inconclusive": {
+              "reasons": [
+                {
+                  "decision": "explicitly_inconclusive",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu",
+                  "namespace": "foo"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-us"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "namespace": "bar"
+                }
+              },
+              {
+                "action": "inspect",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu",
+                  "namespace": "foo"
+                }
+              },
+              {
+                "action": "publish",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              },
+              {
+                "action": "publish",
+                "capability": "report.write",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ],
+            "decisions": [
+              {
+                "case_revision": "c2",
+                "decision": "explicitly_abandoned",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "abandoned"
+              },
+              {
+                "case_revision": "c2",
+                "decision": "explicitly_inconclusive",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "inconclusive"
+              }
+            ]
+          }
+        }
+
+  # Expectation 2. A `require_approval` entry covers inspect's requirement, and so does a `granted`
+  # entry: `require_approval` wins over `granted`, so the requirement is listed with `current:
+  # require_approval`, and its options are still `granted` and `denied`. The same entries decide
+  # compare's requirement at `{cluster: prod-eu, namespace: foo}` alike; the `granted` entry, at
+  # `{namespace: foo}`, covers no other requirement.
+  - id: require-approval
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-7
+        protocol: operations
+        revision: c2
+        artifacts:
+          service: {revision: s1}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-eu, namespace: foo}
+          decision: require_approval
+        - capability: metrics.read
+          scope: {namespace: foo}
+          decision: granted
+    expect:
+      decision: |
+        {
+          "actions": {
+            "compare": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none"
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "require_approval",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-us"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "namespace": "bar"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            },
+            "escalate": {
+              "reasons": [
+                {
+                  "claim": "anomaly.reported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "inspect": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "require_approval",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            },
+            "publish": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                },
+                {
+                  "capability": "report.write",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "outcomes": {
+            "abandoned": {
+              "reasons": [
+                {
+                  "decision": "explicitly_abandoned",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            },
+            "inconclusive": {
+              "reasons": [
+                {
+                  "decision": "explicitly_inconclusive",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "require_approval",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu",
+                  "namespace": "foo"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-us"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "namespace": "bar"
+                }
+              },
+              {
+                "action": "inspect",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "require_approval",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu",
+                  "namespace": "foo"
+                }
+              },
+              {
+                "action": "publish",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              },
+              {
+                "action": "publish",
+                "capability": "report.write",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ],
+            "decisions": [
+              {
+                "case_revision": "c2",
+                "decision": "explicitly_abandoned",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "abandoned"
+              },
+              {
+                "case_revision": "c2",
+                "decision": "explicitly_inconclusive",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "inconclusive"
+              }
+            ]
+          }
+        }
+
+  # Expectation 3, granted. A `granted` entry at `{cluster: prod-eu, namespace: foo}` covers
+  # inspect's requirement: `inspect` is admissible and has no entry. Compare's requirement at the
+  # same scope is granted too and is not listed; its others are.
+  - id: granted
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-7
+        protocol: operations
+        revision: c2
+        artifacts:
+          service: {revision: s1}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-eu, namespace: foo}
+          decision: granted
+    expect:
+      decision: |
+        {
+          "actions": {
+            "compare": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none"
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-us"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "namespace": "bar"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            },
+            "escalate": {
+              "reasons": [
+                {
+                  "claim": "anomaly.reported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "inspect": {
+              "status": "admissible"
+            },
+            "publish": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                },
+                {
+                  "capability": "report.write",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "outcomes": {
+            "abandoned": {
+              "reasons": [
+                {
+                  "decision": "explicitly_abandoned",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            },
+            "inconclusive": {
+              "reasons": [
+                {
+                  "decision": "explicitly_inconclusive",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-us"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "namespace": "bar"
+                }
+              },
+              {
+                "action": "publish",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              },
+              {
+                "action": "publish",
+                "capability": "report.write",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ],
+            "decisions": [
+              {
+                "case_revision": "c2",
+                "decision": "explicitly_abandoned",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "abandoned"
+              },
+              {
+                "case_revision": "c2",
+                "decision": "explicitly_inconclusive",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "inconclusive"
+              }
+            ]
+          }
+        }
+
+  # Expectation 3, denied. A `denied` entry at the same scope blocks `inspect`, and `compare`,
+  # which requires metrics.read there too: neither has an entry, since asking again would not
+  # change a denial. `publish` is listed as in the first step.
+  - id: denied
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-7
+        protocol: operations
+        revision: c2
+        artifacts:
+          service: {revision: s1}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-eu, namespace: foo}
+          decision: denied
+    expect:
+      decision: |
+        {
+          "actions": {
+            "compare": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "denied",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "blocked"
+            },
+            "escalate": {
+              "reasons": [
+                {
+                  "claim": "anomaly.reported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "inspect": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "denied",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "blocked"
+            },
+            "publish": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                },
+                {
+                  "capability": "report.write",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "outcomes": {
+            "abandoned": {
+              "reasons": [
+                {
+                  "decision": "explicitly_abandoned",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            },
+            "inconclusive": {
+              "reasons": [
+                {
+                  "decision": "explicitly_inconclusive",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "publish",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              },
+              {
+                "action": "publish",
+                "capability": "report.write",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ],
+            "decisions": [
+              {
+                "case_revision": "c2",
+                "decision": "explicitly_abandoned",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "abandoned"
+              },
+              {
+                "case_revision": "c2",
+                "decision": "explicitly_inconclusive",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "inconclusive"
+              }
+            ]
+          }
+        }
+
+  # Expectation 4. metrics.read at every scope and report.write are granted, pager.send is not
+  # decided, and no record makes anomaly.reported true. `escalate` is blocked by its precondition
+  # and has no entry although it requires a capability nothing decides, so nothing is listed under
+  # `authority`, and the key is left out.
+  - id: precondition-not-true
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-7
+        protocol: operations
+        revision: c2
+        artifacts:
+          service: {revision: s1}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          decision: granted
+        - capability: report.write
+          decision: granted
+    expect:
+      decision: |
+        {
+          "actions": {
+            "compare": {
+              "status": "admissible"
+            },
+            "escalate": {
+              "reasons": [
+                {
+                  "claim": "anomaly.reported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "inspect": {
+              "status": "admissible"
+            },
+            "publish": {
+              "status": "admissible"
+            }
+          },
+          "outcomes": {
+            "abandoned": {
+              "reasons": [
+                {
+                  "decision": "explicitly_abandoned",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            },
+            "inconclusive": {
+              "reasons": [
+                {
+                  "decision": "explicitly_inconclusive",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "pending_decisions": {
+            "decisions": [
+              {
+                "case_revision": "c2",
+                "decision": "explicitly_abandoned",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "abandoned"
+              },
+              {
+                "case_revision": "c2",
+                "decision": "explicitly_inconclusive",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "inconclusive"
+              }
+            ]
+          }
+        }
+
+  # Expectation 5. Of the two capabilities `publish` requires, report.write is granted: only
+  # metrics.read at `{cluster: prod-eu}` is listed for it. The entries follow action, capability,
+  # scope order: compare's five scopes in the order the header gives, then inspect, then publish.
+  - id: one-of-two-granted
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-7
+        protocol: operations
+        revision: c2
+        artifacts:
+          service: {revision: s1}
+      evidence: []
+      authority:
+        - capability: report.write
+          decision: granted
+    expect:
+      decision: |
+        {
+          "actions": {
+            "compare": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none"
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-us"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "namespace": "bar"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            },
+            "escalate": {
+              "reasons": [
+                {
+                  "claim": "anomaly.reported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "inspect": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            },
+            "publish": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "outcomes": {
+            "abandoned": {
+              "reasons": [
+                {
+                  "decision": "explicitly_abandoned",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            },
+            "inconclusive": {
+              "reasons": [
+                {
+                  "decision": "explicitly_inconclusive",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu",
+                  "namespace": "foo"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-us"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "namespace": "bar"
+                }
+              },
+              {
+                "action": "inspect",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu",
+                  "namespace": "foo"
+                }
+              },
+              {
+                "action": "publish",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              }
+            ],
+            "decisions": [
+              {
+                "case_revision": "c2",
+                "decision": "explicitly_abandoned",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "abandoned"
+              },
+              {
+                "case_revision": "c2",
+                "decision": "explicitly_inconclusive",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "inconclusive"
+              }
+            ]
+          }
+        }
+
+  # Expectation 6, at the current revision. Both explicit decisions are taken at c2: both outcomes
+  # are legitimate, nothing is listed under `decisions`, and the key is left out. The authority
+  # entries stay.
+  - id: decisions-at-current-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-7
+        protocol: operations
+        revision: c2
+        artifacts:
+          service: {revision: s1}
+      evidence: []
+      decisions:
+        - decision: explicitly_inconclusive
+          outcome: inconclusive
+          principal: lead-operator
+          case_revision: c2
+        - decision: explicitly_abandoned
+          outcome: abandoned
+          principal: lead-operator
+          case_revision: c2
+    expect:
+      decision: |
+        {
+          "actions": {
+            "compare": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none"
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-us"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "namespace": "bar"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            },
+            "escalate": {
+              "reasons": [
+                {
+                  "claim": "anomaly.reported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "inspect": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            },
+            "publish": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                },
+                {
+                  "capability": "report.write",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "outcomes": {
+            "abandoned": {
+              "decided_by": {
+                "decision": "explicitly_abandoned",
+                "principals": [
+                  "lead-operator"
+                ]
+              },
+              "status": "legitimate"
+            },
+            "inconclusive": {
+              "decided_by": {
+                "decision": "explicitly_inconclusive",
+                "principals": [
+                  "lead-operator"
+                ]
+              },
+              "status": "legitimate"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu",
+                  "namespace": "foo"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-us"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "namespace": "bar"
+                }
+              },
+              {
+                "action": "inspect",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu",
+                  "namespace": "foo"
+                }
+              },
+              {
+                "action": "publish",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              },
+              {
+                "action": "publish",
+                "capability": "report.write",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ]
+          }
+        }
+
+  # Expectation 6, at an earlier revision. `explicitly_inconclusive` is taken at c1, which does not
+  # apply at c2: `inconclusive` stays blocked and listed. `explicitly_abandoned` is taken at c2 and
+  # `abandoned` is not listed.
+  - id: decision-at-earlier-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-7
+        protocol: operations
+        revision: c2
+        artifacts:
+          service: {revision: s1}
+      evidence: []
+      decisions:
+        - decision: explicitly_inconclusive
+          outcome: inconclusive
+          principal: lead-operator
+          case_revision: c1
+        - decision: explicitly_abandoned
+          outcome: abandoned
+          principal: lead-operator
+          case_revision: c2
+    expect:
+      decision: |
+        {
+          "actions": {
+            "compare": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none"
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-us"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "namespace": "bar"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            },
+            "escalate": {
+              "reasons": [
+                {
+                  "claim": "anomaly.reported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "inspect": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            },
+            "publish": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                },
+                {
+                  "capability": "report.write",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "outcomes": {
+            "abandoned": {
+              "decided_by": {
+                "decision": "explicitly_abandoned",
+                "principals": [
+                  "lead-operator"
+                ]
+              },
+              "status": "legitimate"
+            },
+            "inconclusive": {
+              "reasons": [
+                {
+                  "decision": "explicitly_inconclusive",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu",
+                  "namespace": "foo"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-us"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "namespace": "bar"
+                }
+              },
+              {
+                "action": "inspect",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu",
+                  "namespace": "foo"
+                }
+              },
+              {
+                "action": "publish",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              },
+              {
+                "action": "publish",
+                "capability": "report.write",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ],
+            "decisions": [
+              {
+                "case_revision": "c2",
+                "decision": "explicitly_inconclusive",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "inconclusive"
+              }
+            ]
+          }
+        }
+
+  # Expectation 7. A `granted` entry bound to c1 would cover inspect's requirement, but does not
+  # apply at c2 (CANON-AUTHORITY-002): the requirement is listed with `current: none`, and so is
+  # every other.
+  - id: grant-bound-to-earlier-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-7
+        protocol: operations
+        revision: c2
+        artifacts:
+          service: {revision: s1}
+      evidence: []
+      authority:
+        - capability: metrics.read
+          scope: {cluster: prod-eu, namespace: foo}
+          decision: granted
+          case_revision: c1
+    expect:
+      decision: |
+        {
+          "actions": {
+            "compare": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none"
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-us"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "namespace": "bar"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            },
+            "escalate": {
+              "reasons": [
+                {
+                  "claim": "anomaly.reported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "inspect": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            },
+            "publish": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                },
+                {
+                  "capability": "report.write",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "outcomes": {
+            "abandoned": {
+              "reasons": [
+                {
+                  "decision": "explicitly_abandoned",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            },
+            "inconclusive": {
+              "reasons": [
+                {
+                  "decision": "explicitly_inconclusive",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu",
+                  "namespace": "foo"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-us"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "namespace": "bar"
+                }
+              },
+              {
+                "action": "inspect",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu",
+                  "namespace": "foo"
+                }
+              },
+              {
+                "action": "publish",
+                "capability": "metrics.read",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              },
+              {
+                "action": "publish",
+                "capability": "report.write",
+                "case_revision": "c2",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ],
+            "decisions": [
+              {
+                "case_revision": "c2",
+                "decision": "explicitly_abandoned",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "abandoned"
+              },
+              {
+                "case_revision": "c2",
+                "decision": "explicitly_inconclusive",
+                "options": [
+                  "taken"
+                ],
+                "outcome": "inconclusive"
+              }
+            ]
+          }
+        }
+
+  # Expectation 8. The snapshot has no revision. No entry has `case_revision`, and each outcome
+  # entry has `options: []`: no canon-decisions/1 entry applies to a snapshot without a revision.
+  # An authority entry keeps its options: an entry bound to no case revision applies.
+  - id: snapshot-without-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-7
+        protocol: operations
+        artifacts:
+          service: {revision: s1}
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "compare": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none"
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-us"
+                  }
+                },
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "namespace": "bar"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            },
+            "escalate": {
+              "reasons": [
+                {
+                  "claim": "anomaly.reported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "inspect": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu",
+                    "namespace": "foo"
+                  }
+                }
+              ],
+              "status": "approval-required"
+            },
+            "publish": {
+              "reasons": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "none",
+                  "scope": {
+                    "cluster": "prod-eu"
+                  }
+                },
+                {
+                  "capability": "report.write",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "outcomes": {
+            "abandoned": {
+              "reasons": [
+                {
+                  "decision": "explicitly_abandoned",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            },
+            "inconclusive": {
+              "reasons": [
+                {
+                  "decision": "explicitly_inconclusive",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "pending_decisions": {
+            "authority": [
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu",
+                  "namespace": "foo"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-us"
+                }
+              },
+              {
+                "action": "compare",
+                "capability": "metrics.read",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "namespace": "bar"
+                }
+              },
+              {
+                "action": "inspect",
+                "capability": "metrics.read",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu",
+                  "namespace": "foo"
+                }
+              },
+              {
+                "action": "publish",
+                "capability": "metrics.read",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ],
+                "scope": {
+                  "cluster": "prod-eu"
+                }
+              },
+              {
+                "action": "publish",
+                "capability": "report.write",
+                "current": "none",
+                "options": [
+                  "granted",
+                  "denied"
+                ]
+              }
+            ],
+            "decisions": [
+              {
+                "decision": "explicitly_abandoned",
+                "options": [],
+                "outcome": "abandoned"
+              },
+              {
+                "decision": "explicitly_inconclusive",
+                "options": [],
+                "outcome": "inconclusive"
+              }
+            ]
+          }
+        }
+
+  # Expectation 9. An anomaly_report record makes anomaly.reported true, every capability is
+  # granted at every scope and both explicit decisions are taken at c2: every action is admissible
+  # and every outcome legitimate, so nothing is pending and the decision has no `pending_decisions`
+  # key. The step lists every other section, and their bytes are the ones `canon evaluate` printed
+  # for this input on the commit before story:pending-decisions.
+  - id: nothing-pending
+    evaluate:
+      case:
+        format: canon-case/1
+        id: OPS-7
+        protocol: operations
+        revision: c2
+        artifacts:
+          service: {revision: s1}
+      evidence:
+        - format: canon-evidence/1
+          id: anomaly-1
+          kind: anomaly_report
+          subject: service
+          subject_revision: s1
+      authority:
+        - capability: metrics.read
+          decision: granted
+        - capability: report.write
+          decision: granted
+        - capability: pager.send
+          decision: granted
+      decisions:
+        - decision: explicitly_inconclusive
+          outcome: inconclusive
+          principal: lead-operator
+          case_revision: c2
+        - decision: explicitly_abandoned
+          outcome: abandoned
+          principal: lead-operator
+          case_revision: c2
+    expect:
+      decision: |
+        {
+          "actions": {
+            "compare": {
+              "status": "admissible"
+            },
+            "escalate": {
+              "status": "admissible"
+            },
+            "inspect": {
+              "status": "admissible"
+            },
+            "publish": {
+              "status": "admissible"
+            }
+          },
+          "case": "OPS-7",
+          "claims": {
+            "anomaly.reported": {
+              "value": "true"
+            }
+          },
+          "explanation": {
+            "computed_from": {
+              "authority": [
+                {
+                  "capability": "metrics.read",
+                  "decision": "granted"
+                },
+                {
+                  "capability": "pager.send",
+                  "decision": "granted"
+                },
+                {
+                  "capability": "report.write",
+                  "decision": "granted"
+                }
+              ],
+              "case": {
+                "artifacts": {
+                  "service": {
+                    "revision": "s1"
+                  }
+                },
+                "format": "canon-case/1",
+                "id": "OPS-7",
+                "protocol": "operations",
+                "revision": "c2"
+              },
+              "decisions": [
+                {
+                  "case_revision": "c2",
+                  "decision": "explicitly_abandoned",
+                  "outcome": "abandoned",
+                  "principal": "lead-operator"
+                },
+                {
+                  "case_revision": "c2",
+                  "decision": "explicitly_inconclusive",
+                  "outcome": "inconclusive",
+                  "principal": "lead-operator"
+                }
+              ],
+              "evidence": [
+                "anomaly-1"
+              ],
+              "protocol": "operations",
+              "protocol_revision": 1,
+              "semantics": {
+                "canon": "0.9.0",
+                "format": "canon-decision/1"
+              }
+            }
+          },
+          "format": "canon-decision/1",
+          "outcomes": {
+            "abandoned": {
+              "decided_by": {
+                "decision": "explicitly_abandoned",
+                "principals": [
+                  "lead-operator"
+                ]
+              },
+              "status": "legitimate"
+            },
+            "inconclusive": {
+              "decided_by": {
+                "decision": "explicitly_inconclusive",
+                "principals": [
+                  "lead-operator"
+                ]
+              },
+              "status": "legitimate"
+            }
+          },
+          "protocol": "operations",
+          "protocol_revision": 1
+        }
