@@ -67,6 +67,10 @@
         "child_case": {
           "description": "The child case a `case_outcome` record is about (story:case-composition): one record per child case, its `result` the child's outcome, `open` while the child runs. Written only on a `case_outcome` record, which must name its child and give an outcome.",
           "$ref": "#/$defs/Identifier"
+        },
+        "item": {
+          "description": "What the observation is about within its subject, such as the one check it ran (story:revision-ordering): opaque text without whitespace or a control character, compared for equality only, which a `descended` form pairs an earlier and a later record on. A record without it takes no part in that form.",
+          "type": "string"
         }
       },
       "required": [
