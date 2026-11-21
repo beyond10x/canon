@@ -176,17 +176,94 @@ const MUTUAL_WITH_NOTE: &str = "format: protocol/1\n\
     \x20 done: {description: Done., requires: {all: [{claim: drafted}, {claim: reviewed}]}}\n";
 
 /// `{}` is stuck: the supplied `note` leads to `{note}`, which is stuck too. So `{}` is reported
-/// with an empty path and no state waits.
+/// with an empty path and no state waits. Pass 2: `{note}` contains `{}`, so R5 (one finding per
+/// smallest state) ends the finding with the count of the other stuck state.
 #[test]
 fn a_supplied_kind_nothing_reads_does_not_turn_a_stuck_state_into_waiting() {
     let report = simulate::simulate(&compiled(MUTUAL_WITH_NOTE)).expect("walked");
     let first = report.findings.first().map(ToString::to_string);
     let expected = "stuck-state: state {}: no outcome is legitimate and no action is admissible \
-                    or approval-required; path: empty";
+                    or approval-required; path: empty; 1 other stuck state contains it";
     assert!(
         first.as_deref() == Some(expected) && report.waiting == Some(0),
         "expected the first finding {expected:?} and 0 waiting, got {:?} and {:?}:\n{report}",
         first,
         report.waiting
+    );
+}
+
+/// Pass 2. A `case_outcome` kind that declares `max_age`: open a child case while unlocked, lock
+/// once every child ended accepted, and the outcome needs both.
+const CHILD_EXPIRY: &str = "format: protocol/1\n\
+    protocol: {id: p, revision: 1, description: A protocol.}\n\
+    artifacts: {findings: {description: The findings.}}\n\
+    evidence_kinds:\n\
+    \x20 case_outcome: {description: The outcome of a child case., max_age: 1h}\n\
+    \x20 lock: {description: A lock.}\n\
+    claims:\n\
+    \x20 resolved: {description: Every child ended accepted., true_when: {children: {in: \
+    [accepted]}}}\n\
+    \x20 locked: {description: Locked., true_when: {evidence: {kind: lock}}}\n\
+    actions:\n\
+    \x20 open_change: {description: Open a child while unlocked., precondition: {claim: locked, \
+    is: unknown}, case_open: {protocol: q, subject: findings}}\n\
+    \x20 lock: {description: Lock once resolved., precondition: {claim: resolved}, may_produce: \
+    [{evidence: lock}]}\n\
+    outcomes:\n\
+    \x20 done: {description: Resolved and locked., requires: {all: [{claim: resolved}, {claim: \
+    locked}]}}\n";
+
+/// R2: the state after an expiry step evaluates as a case in which that record is past its
+/// `max_age`. The `children` form reads every record the evidence check accepted, expired ones
+/// included (`eval/composition.rs`: "an expiry ... does not undo" a child's outcome). The real
+/// case: the child ended accepted, the case locked, two hours pass; `done` stays legitimate. The
+/// walk instead drops the `case_outcome` record and reports `{evidence lock}` stuck.
+#[test]
+fn an_expired_child_outcome_still_counts_for_the_children_form() {
+    let ir = compiled(CHILD_EXPIRY);
+    let case = eval::read_case(
+        "format: canon-case/1\nid: C-1\nprotocol: p\nartifacts: {findings: {revision: r1}}\n",
+    )
+    .expect("a case");
+    let evidence = [
+        "format: canon-evidence/1\nid: e1\nkind: case_outcome\nsubject: findings\n\
+         subject_revision: r1\nchild_case: C-2\nresult: accepted\n\
+         observed_at: 2026-01-01T00:00:00Z\n"
+            .to_owned(),
+        "format: canon-evidence/1\nid: e2\nkind: lock\nsubject: findings\nsubject_revision: r1\n\
+         observed_at: 2026-01-01T00:10:00Z\n"
+            .to_owned(),
+    ]
+    .iter()
+    .map(|text| eval::read_evidence(text).expect("a record"))
+    .collect::<Vec<_>>();
+    let decision = eval::evaluate_with(
+        &ir,
+        &case,
+        &evidence,
+        Supplied {
+            at: Some("2026-01-01T02:00:00Z"),
+            ..Supplied::default()
+        },
+    )
+    .expect("evaluates");
+    let outcomes = decision.outcomes.expect("outcomes");
+    assert_eq!(
+        outcomes["done"]["status"], "legitimate",
+        "the real case keeps `done` once the child outcome has expired"
+    );
+
+    let report = simulate::simulate(&ir).expect("walked");
+    let stuck: Vec<String> = report
+        .findings
+        .iter()
+        .filter(|finding| matches!(finding, Finding::StuckState(_) | Finding::Cycle { .. }))
+        .map(ToString::to_string)
+        .collect();
+    assert!(
+        stuck.is_empty(),
+        "findings a real case refutes (an expired child outcome still resolves the children \
+         form):\n{}\nwhole report:\n{report}",
+        stuck.join("\n")
     );
 }
