@@ -273,10 +273,13 @@ pub const OPEN_OUTCOME: &str = "open";
 /// The form over the case's child cases, written `{children: {in: [<outcome>, ...]}}`: whether
 /// every child case ended with one of the outcomes listed. It reads every `case_outcome` record
 /// the evidence check accepted, as the order forms read the history, or with `revision: current`
-/// only those about the current revision of their subject: `unknown` with no record read, `false`
-/// when a record's outcome is neither listed nor `open` (a child that ended outside the set),
-/// otherwise `unknown` when a child is still `open` and `true` when every child ended with a
-/// listed outcome.
+/// only those about the current revision of their subject, and with `subject` only those about
+/// that artifact: `unknown` with no record read, `false` when a record's outcome is neither listed
+/// nor `open` (a child that ended outside the set), otherwise `unknown` when a child is still
+/// `open` and `true` when every child ended with a listed outcome. It counts only the records it
+/// is given. Canon does not write them; the runner that opens a child case does, with two duties:
+/// a record's `subject` is the `case_open` subject of the action that opened the child, and the
+/// runner writes a record with the outcome `open` when it opens the child.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ChildOutcomes {
@@ -289,6 +292,11 @@ pub struct ChildOutcomes {
     /// snapshot's current revision of their `subject`.
     #[serde(default, deserialize_with = "super::present::optional")]
     pub revision: Option<ChildRevision>,
+    /// The declared artifact the records are about (story:child-outcome-subject): absent, records
+    /// about every artifact; named, only the `case_outcome` records whose `subject` it is. A record
+    /// about another artifact is not read: it neither establishes nor contradicts the form.
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub subject: Option<ArtifactId>,
 }
 
 /// Which `case_outcome` records a `children` form reads (story:child-outcome-revision). A terminal

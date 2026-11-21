@@ -283,7 +283,12 @@ commands:
       # evidence match reading case_outcome it has no expiry step, otherwise it is held as
       # expired, absent to every evidence match. Limit: a step adds one record, so where an
       # action's guard closes on its first record the walk never holds two records of one taking
-      # together, and an outcome that needs both is reported as unreached.
+      # together, and an outcome that needs both is reported as unreached. A child's outcome
+      # arrives only in the case_outcome dimension its opening action produces, as canon check
+      # counts it: about the action's case_open subject when the protocol reads case_outcome about
+      # that artifact by name, in a children form or an evidence match, otherwise without a
+      # subject; an open record keeps a count above none on an action that produces its
+      # dimension. A protocol that reads case_outcome about no artifact by name walks as before.
       # read from: .engineering/planning/story/canon-simulate.md:69-80
       # read from: .engineering/planning/story/canon-simulate.md:235
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R1 to R5
@@ -291,6 +296,7 @@ commands:
       # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 1", D1
       # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, D5: an `open` record is a child that has not ended"
       # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 2: D3 is withdrawn"
+      # read from: .engineering/planning/story/child-outcome-subject.md, section "Decided in review, after adversary pass 1", D1 and D2
       - name: rejected
         external: >-
           the document is rejected, the walk is refused (an order form, or more than 65536

@@ -68,9 +68,12 @@
 //!   (story:child-outcome-revision), it reads only the records whose `subject_revision` is the
 //!   case snapshot's current revision of their `subject`, by the same rules: a record about
 //!   another revision neither establishes nor contradicts it, and with no record read it is
-//!   `unknown` (CANON-COMPOSE-002). `revision: any` reads what no key reads. No record is listed
-//!   in `excluded_evidence` because of it, and a reason names it with its `revision` when the IR
-//!   writes one.
+//!   `unknown` (CANON-COMPOSE-002). `revision: any` reads what no key reads. With `subject: A`
+//!   (story:child-outcome-subject), it reads only the records whose `subject` is `A`, and with
+//!   `revision: current` too only those at the current revision of `A`: a record about another
+//!   artifact neither establishes nor contradicts it (CANON-COMPOSE-003). No record is listed in
+//!   `excluded_evidence` because of it, and a reason names it with its `revision` and its
+//!   `subject` when the IR writes them.
 //!
 //! `unknown` and `false` are never collapsed, and only `true` satisfies a positive requirement.
 //!
@@ -263,7 +266,8 @@
 //!   <kind>, "then": <kind>, "result": <result>, "value": <its value>}`, with `"subject"` added
 //!   when it names one, then each form over the child cases that decides it, `{"children":
 //!   [<outcome>, ...], "value": <its value>}`, with `"revision": "current"` added when the form
-//!   reads only the current revision (story:child-outcome-revision), or
+//!   reads only the current revision (story:child-outcome-revision) and `"subject": <artifact>`
+//!   when it names one (story:child-outcome-subject), or
 //!   `{"requirement": "unsatisfiable"}` when none does. `blocked` too when the precondition is
 //!   `true` and the authority decisions deny a requirement of the action, each a reason
 //!   `{"capability": <id>, "decision": "denied"}`. `approval-required` when the precondition is
@@ -646,7 +650,8 @@ pub(crate) fn order_reasons<'a>(
 
 /// The reason each `children` form among `forms` gives, as a blocked action names it, with its
 /// value over the records it reads of the `history`, against the current revisions of the case's
-/// `artifacts` (`composition.rs`): each form once, by its outcome list and then its `revision`.
+/// `artifacts` (`composition.rs`): each form once, by its outcome list, then its `revision`, then
+/// its `subject`.
 pub(crate) fn children_reasons<'a>(
     forms: impl IntoIterator<Item = &'a ChildOutcomes>,
     history: &[EvidenceRecord],

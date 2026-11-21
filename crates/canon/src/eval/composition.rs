@@ -9,8 +9,9 @@
 //! child's outcome is a fact about the child case, which a later revision of the parent's
 //! artifact, an expiry or an invalidation rule does not undo. A form with `revision: current`
 //! (story:child-outcome-revision) reads only those whose `subject_revision` is the case snapshot's
-//! current revision of their `subject`; [`read`] is that selection, the one the form's value and
-//! its reason share.
+//! current revision of their `subject`, and one with `subject` (story:child-outcome-subject) only
+//! those whose `subject` is that artifact; [`read`] is that selection, the one the form's value
+//! and its reason share.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -31,17 +32,23 @@ pub(crate) fn is_case_outcome(record: &EvidenceRecord) -> bool {
     record.kind.as_str() == CASE_OUTCOME
 }
 
-/// The records of `history` that `form` reads, in the order given: every `case_outcome` record,
-/// and, when the form says `revision: current`, only one whose `subject_revision` is the current
+/// The records of `history` that `form` reads, in the order given: every `case_outcome` record;
+/// when the form says `revision: current`, only one whose `subject_revision` is the current
 /// revision `artifacts` gives its `subject` (none when `artifacts` is `None`, or does not list the
-/// subject). Each key of the form that selects records is one condition here.
+/// subject); and when the form names a `subject`, only one about that artifact. Each key of the
+/// form that selects records is one condition here.
 pub(crate) fn read<'r>(
     form: &'r ChildOutcomes,
     history: &'r [EvidenceRecord],
     artifacts: Option<&'r Artifacts>,
 ) -> impl Iterator<Item = &'r EvidenceRecord> + 'r {
     history.iter().filter(move |record| {
-        is_case_outcome(record) && (!form.current_only() || at_current_revision(record, artifacts))
+        is_case_outcome(record)
+            && (!form.current_only() || at_current_revision(record, artifacts))
+            && form
+                .subject
+                .as_ref()
+                .is_none_or(|subject| *subject == record.subject)
     })
 }
 
@@ -81,26 +88,35 @@ pub(crate) fn value(
 }
 
 /// The reason each `children` form among `forms` gives, named by its outcome list as the IR writes
-/// it and by its `revision` when the IR writes one, with its value over `history` and
-/// `artifacts`: `{"children": [<outcome>, ...], "value": <value>}`, with `"revision": "current"`
-/// added for a form that reads only the current revision. Each form once, two that differ only in
-/// `revision` being two, in the order of their outcome lists, then no `revision` first.
+/// it and by its `revision` and `subject` when the IR writes them, with its value over `history`
+/// and `artifacts`: `{"children": [<outcome>, ...], "value": <value>}`, with `"revision":
+/// "current"` added for a form that reads only the current revision and `"subject": <artifact>`
+/// for a form that names one. Each form once, two that differ only in `revision` or only in
+/// `subject` being two, in the order of their outcome lists, then no `revision` first, then no
+/// `subject` first and then in subject order.
 pub(crate) fn reasons<'a>(
     forms: impl IntoIterator<Item = &'a ChildOutcomes>,
     history: &[EvidenceRecord],
     artifacts: Option<&Artifacts>,
 ) -> Vec<Json> {
     // `any` and no key are one form, as the IR writes them.
-    let forms: BTreeSet<(&[String], bool)> = forms
+    let forms: BTreeSet<(&[String], bool, Option<&ArtifactId>)> = forms
         .into_iter()
-        .map(|form| (form.r#in.as_slice(), form.current_only()))
+        .map(|form| {
+            (
+                form.r#in.as_slice(),
+                form.current_only(),
+                form.subject.as_ref(),
+            )
+        })
         .collect();
     forms
         .into_iter()
-        .map(|(outcomes, current)| {
+        .map(|(outcomes, current, subject)| {
             let form = ChildOutcomes {
                 r#in: outcomes.to_vec(),
                 revision: current.then(|| "current".parse().expect("a revision")),
+                subject: subject.cloned(),
             };
             let listed = outcomes.iter().map(|outcome| Json::from(outcome.as_str()));
             let mut reason = Map::from_iter([
@@ -112,6 +128,9 @@ pub(crate) fn reasons<'a>(
             ]);
             if current {
                 reason.insert("revision".to_owned(), Json::from("current"));
+            }
+            if let Some(subject) = subject {
+                reason.insert("subject".to_owned(), Json::from(subject.as_str()));
             }
             Json::Object(reason)
         })
@@ -307,7 +326,116 @@ mod tests {
         ChildOutcomes {
             r#in: vec!["accepted".to_owned(), "declined".to_owned()],
             revision: None,
+            subject: None,
         }
+    }
+
+    fn about_artifact(subject: &str, revision: &str, record: EvidenceRecord) -> EvidenceRecord {
+        EvidenceRecord {
+            subject: ArtifactId::new(subject),
+            subject_revision: Revision::new(revision),
+            ..record
+        }
+    }
+
+    fn naming(subject: &str, form: ChildOutcomes) -> ChildOutcomes {
+        ChildOutcomes {
+            subject: Some(ArtifactId::new(subject)),
+            ..form
+        }
+    }
+
+    /// story:child-outcome-subject: with `subject` the form reads only the records about that
+    /// artifact, at whatever revision, or with `revision: current` too only those at its current
+    /// revision; a record about another artifact neither establishes nor contradicts it. `findings`
+    /// is at `f2` and `report` at `r1`.
+    #[test]
+    fn a_form_naming_a_subject_reads_only_records_about_it() {
+        let at = Declarations::new(vec![
+            (
+                ArtifactId::new("findings"),
+                CaseArtifact {
+                    revision: Revision::new("f2"),
+                },
+            ),
+            (
+                ArtifactId::new("report"),
+                CaseArtifact {
+                    revision: Revision::new("r1"),
+                },
+            ),
+        ]);
+        let named = naming("findings", resolved());
+        let named_now = current(naming("findings", resolved()));
+        let old_abandoned = about_artifact("findings", "f1", outcome("o1", "c1", "abandoned"));
+        let new_accepted = about_artifact("findings", "f2", outcome("o2", "c2", "accepted"));
+        let report_abandoned = about_artifact("report", "r1", outcome("o3", "c3", "abandoned"));
+        let report_accepted = about_artifact("report", "r1", outcome("o3", "c3", "accepted"));
+        for (records, named_value, now_value, unnamed_value, why) in [
+            (
+                vec![report_accepted.clone()],
+                Truth::Unknown,
+                Truth::Unknown,
+                Truth::True,
+                "only a record about another artifact",
+            ),
+            (
+                vec![new_accepted.clone(), report_abandoned.clone()],
+                Truth::True,
+                Truth::True,
+                Truth::False,
+                "another artifact's child ended outside the set",
+            ),
+            (
+                vec![old_abandoned, new_accepted, report_accepted],
+                Truth::False,
+                Truth::True,
+                Truth::True,
+                "an earlier child of the subject ended outside the set",
+            ),
+        ] {
+            assert_eq!(
+                super::value(&named, &records, Some(&at)),
+                named_value,
+                "named: {why}"
+            );
+            assert_eq!(
+                super::value(&named_now, &records, Some(&at)),
+                now_value,
+                "named and current: {why}"
+            );
+            assert_eq!(
+                super::value(&current(resolved()), &records, Some(&at)),
+                unnamed_value,
+                "current, no subject: {why}"
+            );
+        }
+    }
+
+    /// Forms that differ only in `subject` give one reason each, named by it, no subject first and
+    /// then in subject order, whatever the order given; one given twice is one reason.
+    #[test]
+    fn reasons_name_the_form_with_its_subject() {
+        let records = [about_artifact(
+            "report",
+            "r1",
+            outcome("o1", "c1", "abandoned"),
+        )];
+        let report = naming("report", resolved());
+        let findings = naming("findings", resolved());
+        let reasons = super::reasons(
+            [&report, &resolved(), &findings, &report],
+            &records,
+            Some(&findings_at("f1")),
+        );
+        assert_eq!(
+            Json::Array(reasons),
+            serde_json::json!([
+                {"children": ["accepted", "declined"], "value": "false"},
+                {"children": ["accepted", "declined"], "subject": "findings", "value": "unknown"},
+                {"children": ["accepted", "declined"], "subject": "report", "value": "false"},
+            ])
+        );
     }
 
     /// The story's values: UNKNOWN with no record and while a child is open, TRUE once every

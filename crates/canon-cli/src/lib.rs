@@ -130,9 +130,12 @@ pub enum Command {
     /// something that demands nothing reads it. Evidence a `children` form reads (`case_outcome`)
     /// is also there with earlier records at a superseded revision, each record the outcome of a
     /// child case of its own, and with no place in the order, which the form does not read; an
-    /// action that opens a child case (`case_open`) counts as producing `case_outcome`; and a
-    /// protocol that reads `case_outcome` with both a `children` form and an order form is refused
-    /// (`ordered-child-outcomes`). Each outcome, action and property is decided over the
+    /// action that opens a child case (`case_open`) counts as producing `case_outcome` about its
+    /// `case_open` subject when the protocol reads `case_outcome` about that artifact by name, in
+    /// a `children` form or an evidence match, otherwise without a subject, and a `children` form
+    /// naming a `subject` reads only records about it; and a protocol that reads `case_outcome`
+    /// with both a `children` form and an order form is refused (`ordered-child-outcomes`). Each
+    /// outcome, action and property is decided over the
     /// evidence, authority, decisions and case inputs it reads (its slice), with the findings and
     /// witness states the whole state space gives, and the summary counts the whole state space; a
     /// check in which one slice holds more than 65536 states is refused, naming that outcome,
@@ -164,9 +167,12 @@ pub enum Command {
     /// (`case_open`) the walk counts the children that have not ended: none, one, or two or more.
     /// A step of the action raises the count, a child's outcome arrives while it is above none,
     /// and an outcome other than `open` lowers it, or from two or more may also leave it at two
-    /// or more, and replaces an `open` record, since one record is one child. A state holding an
-    /// `open` record, current or held as expired, keeps some count above none, because an `open`
-    /// record is a child that has not ended. A state names each action with a count above none
+    /// or more, and replaces an `open` record, since one record is one child. A child of an
+    /// opening action records `case_outcome` about the artifact the action's `case_open` names
+    /// when the protocol reads `case_outcome` about that artifact by name, otherwise without a
+    /// subject. A state holding an `open` record, current or held as expired, keeps the count of
+    /// some action that produces that record above none, because an `open` record is a child that
+    /// has not ended. A state names each action with a count above none
     /// (`action a opened a child`, `action a opened 2 or more children`). An expired
     /// `case_outcome` record still counts for a `children` form: with no evidence match reading
     /// `case_outcome` it does not expire, and otherwise it is held as expired, absent to every

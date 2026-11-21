@@ -237,3 +237,16 @@ requirements:
       an identifier as invalid-identifier. Two entries that differ only in their grounds MUST be
       refused as duplicate-identifier.
     source: story:decision-grounds
+  CANON-COMPOSE-003:
+    status: implemented
+    statement: >-
+      A predicate over the outcomes of the child cases MAY name an artifact as its subject. Naming
+      one, it MUST read only the outcome records whose subject is that artifact, and, bound to the
+      current revision too, only those among them whose subject revision is the case snapshot's
+      current revision of it; a record about another artifact MUST NOT establish or contradict it.
+      Over the records it reads it MUST follow CANON-COMPOSE-001, counting only the records it is
+      given. Without a subject it MUST read the records about every artifact, and its compiled
+      form MUST be the form it had before the subject existed. A blocked action MUST name the
+      predicate in its reasons with its subject, and two predicates that differ only in their
+      subject MUST be two reasons, the one without a subject first.
+    source: story:child-outcome-subject

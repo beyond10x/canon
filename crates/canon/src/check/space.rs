@@ -1333,13 +1333,53 @@ impl<'a> Space<'a> {
             .any(|value| *value != UNDECIDED)
     }
 
-    /// The evidence kinds present in `state`: a record of the kind, current or earlier, is in it.
-    pub(super) fn present(&self, state: &State) -> BTreeSet<&'a EvidenceKindId> {
+    /// The positions of the evidence dimensions `action` may produce records of: every dimension of
+    /// each kind its `may_produce` lists and, when it opens a child case, the `case_outcome`
+    /// dimension about its `case_open` subject when something reads that artifact by name,
+    /// otherwise the one standing for the artifacts nothing names (story:child-outcome-subject,
+    /// D1): a child's record is about the artifact the child was opened about. A protocol that
+    /// reads `case_outcome` about no artifact by name has one `case_outcome` dimension, which
+    /// every opening action produces, as before the key existed.
+    pub(crate) fn produced_by(&self, ir: &Ir, action: &crate::ir::Action) -> BTreeSet<usize> {
+        let opened = action.case_open.as_ref().zip(case_outcome(ir));
+        let named = |kind: &EvidenceKindId, artifact: &ArtifactId| {
+            readers(ir)
+                .flat_map(|(_, predicate)| reads_in(ir, predicate))
+                .any(|read| read.kind == kind && read.subject == Some(artifact))
+        };
         self.kinds
             .iter()
             .enumerate()
-            .filter(|(at, _)| self.holds(state, *at))
-            .map(|(_, kind)| kind.id)
+            .filter(|(_, dimension)| {
+                action.may_produce.contains(dimension.id)
+                    || opened.is_some_and(|(opening, kind)| {
+                        dimension.id == kind
+                            && match (&dimension.record, dimension.bound) {
+                                (Some(record), true) => record.subject == opening.subject,
+                                (None, true) => false,
+                                (_, false) => !named(kind, &opening.subject),
+                            }
+                    })
+            })
+            .map(|(at, _)| at)
+            .collect()
+    }
+
+    /// The positions of the evidence dimensions of each of `kinds`.
+    pub(super) fn dimensions_of_kinds(&self, kinds: &BTreeSet<&EvidenceKindId>) -> BTreeSet<usize> {
+        self.kinds
+            .iter()
+            .enumerate()
+            .filter(|(_, dimension)| kinds.contains(dimension.id))
+            .map(|(at, _)| at)
+            .collect()
+    }
+
+    /// The positions of the evidence dimensions present in `state`: a record of the dimension,
+    /// current or earlier, is in it.
+    pub(super) fn present_dimensions(&self, state: &State) -> BTreeSet<usize> {
+        (0..self.kinds.len())
+            .filter(|at| self.holds(state, *at))
             .collect()
     }
 
@@ -2143,7 +2183,8 @@ pub(super) fn ordered_child_outcomes(ir: &Ir) -> Option<&EvidenceKindId> {
 
 /// What reads evidence in `predicate` itself, in source order: each evidence match, each kind an
 /// order form reads, and, for a `children` form, the kind `case_outcome` with each outcome it lists
-/// and `open`, about any artifact (story:case-composition).
+/// and `open`, about the artifact it names as its `subject` (story:child-outcome-subject), as an
+/// evidence match with a subject reads, and otherwise about any artifact (story:case-composition).
 fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
     let mut found = Vec::new();
     predicate.visit(&mut |node| match node {
@@ -2153,7 +2194,7 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
                 for result in outcomes.chain([OPEN_OUTCOME]) {
                     found.push(Read {
                         kind,
-                        subject: None,
+                        subject: form.subject.as_ref(),
                         result: Some(result),
                         independent_on: None,
                         ordered: false,
@@ -2221,8 +2262,9 @@ fn matches_read<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<&'a EvidenceMat
 type Reached<'a> = (&'a EvidenceKindId, Option<&'a ArtifactId>);
 
 /// What `predicate` reads, through the claims it tests: each evidence match it reaches, and each
-/// kind an order form it reaches reads, and `case_outcome`, about any artifact, for each
-/// `children` form it reaches.
+/// kind an order form it reaches reads, and `case_outcome` for each `children` form it reaches,
+/// about the artifact the form names as its subject, as an evidence match with a subject reads,
+/// or about any artifact (story:child-outcome-subject).
 fn evidence_reached<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Reached<'a>> {
     let mut reached = Vec::new();
     let mut visited: BTreeSet<&ClaimId> = BTreeSet::new();
@@ -2238,8 +2280,8 @@ fn evidence_reached<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Reached<'a>
             | Predicate::Since(_) => {
                 reached.extend(node.order_reads());
             }
-            Predicate::Children(_) => {
-                reached.extend(case_outcome(ir).map(|kind| (kind, None)));
+            Predicate::Children(form) => {
+                reached.extend(case_outcome(ir).map(|kind| (kind, form.subject.as_ref())));
             }
             Predicate::Claim(test) => {
                 if visited.insert(&test.claim)
@@ -2270,7 +2312,8 @@ pub(super) fn kinds_read<'a>(ir: &'a Ir, predicate: &'a Predicate) -> BTreeSet<&
 /// does not establish; `all`, `any` and `is: true` keep it. Each claim is visited once per
 /// position. An order form counts for every kind it reads whatever its position: with no record of
 /// its kinds it is `unknown` and so is its negation, so a record can help either hold. So does a
-/// `children` form for `case_outcome`, about any artifact.
+/// `children` form for `case_outcome`, about its subject when it names one, otherwise about any
+/// artifact.
 pub(super) fn positive_reads<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Reached<'a>> {
     let mut matches = Vec::new();
     let mut visited: BTreeSet<(&ClaimId, bool)> = BTreeSet::new();
@@ -2292,8 +2335,8 @@ pub(super) fn positive_reads<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Re
             | Predicate::Since(_) => {
                 matches.extend(next.order_reads());
             }
-            Predicate::Children(_) => {
-                matches.extend(case_outcome(ir).map(|kind| (kind, None)));
+            Predicate::Children(form) => {
+                matches.extend(case_outcome(ir).map(|kind| (kind, form.subject.as_ref())));
             }
             Predicate::Input(_) => {}
             Predicate::Claim(test) => {

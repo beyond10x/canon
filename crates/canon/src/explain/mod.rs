@@ -42,8 +42,10 @@
 //!   first, then every `before`, then every `first`, then every `since`, each form once), then
 //!   each form over the child cases it holds, `{"children": [<outcome>, ...], "value": <value>}`,
 //!   with `"revision": "current"` added for a form that reads only the records about the current
-//!   revision of their subject (story:child-outcome-revision), over the same history, each form
-//!   once, in the order of its outcome list, then no `revision` first (story:case-composition),
+//!   revision of their subject (story:child-outcome-revision) and `"subject": <artifact>` for a
+//!   form that names one (story:child-outcome-subject), over the same history, each form once, in
+//!   the order of its outcome list, then no `revision` first, then no `subject` first and then in
+//!   subject order (story:case-composition),
 //!   then each record an evidence match the claim reaches reads (as its
 //!   `excluded_evidence` list counts them), written as below, then each evidence match it reaches
 //!   that reads no record of the evidence set, `{"kind": <kind>, "status": "absent"}`, with

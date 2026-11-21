@@ -20,9 +20,9 @@
 //!   evidence match without a result has `"result": null`; a claim test without `is` has
 //!   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
 //!   true; absent lists and sections are empty. The fifteen exceptions are an evidence kind's
-//!   `max_age` and its `supplied_by`, the `subject` of an evidence match or an order form, an
-//!   evidence match's `independent_on`, an obligation's `applicable_when`, an action's
-//!   `arguments`, an action's `case_open`, an action's `author` and its `revises`, the
+//!   `max_age` and its `supplied_by`, the `subject` of an evidence match, an order form or a
+//!   `children` form, an evidence match's `independent_on`, an obligation's `applicable_when`, an
+//!   action's `arguments`, an action's `case_open`, an action's `author` and its `revises`, the
 //!   `decided_by` of an evidence kind an action may produce, the `scope` of a capability
 //!   requirement, the `revision` of a `children` form, the `invalidation` section, the `case`
 //!   section and the `independence_dimensions` section: each written only when it is declared (a
@@ -43,8 +43,9 @@
 //!   The form over the child cases is `{"children": {"in": [...]}}`, or `{"children": {"in":
 //!   [...], "revision": "current"}}` when it reads only the records about the current revision of
 //!   their subject (story:child-outcome-revision): `revision: any` reads what no key reads and is
-//!   written as no key. An action's `case_open` is `{"protocol": …, "subject": …}`, as declared
-//!   (story:case-composition).
+//!   written as no key. A form that reads only the records about one artifact adds `"subject":
+//!   …`, as declared (story:child-outcome-subject). An action's `case_open` is `{"protocol": …,
+//!   "subject": …}`, as declared (story:case-composition).
 //!   An action's `arguments` is its JSON Schema as declared, the same JSON value, its object keys
 //!   sorted like every object's (story:action-arguments).
 //! - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
@@ -53,9 +54,9 @@
 //!   other requirement is its predicate.
 //! - **Resolved references.** Only a document the validator accepts compiles, so every claim and
 //!   evidence kind the IR references is declared in it (`case_outcome` wherever a `children` form
-//!   reads it), and so is every artifact an evidence match or an order form names as its subject,
-//!   an action revises (`revises`) or opens a case about (`case_open`) or an invalidation rule
-//!   names as its upstream
+//!   reads it), and so is every artifact an evidence match, an order form or a `children` form
+//!   names as its subject, an action revises (`revises`) or opens a case about (`case_open`) or an
+//!   invalidation rule names as its upstream
 //!   artifact, every input an input test names, with every value it lists, and every dimension an
 //!   evidence match demands independence on.
 //!
@@ -399,10 +400,12 @@ pub(crate) fn normalize(predicate: &Predicate) -> Predicate {
             independent_on: matching.independent_on.clone().map(unique),
             ..matching.clone()
         }),
-        // `revision: any` reads what no key reads, and is one form with it.
+        // `revision: any` reads what no key reads, and is one form with it. `subject` is carried
+        // as written.
         Predicate::Children(form) => Predicate::Children(ChildOutcomes {
             r#in: unique(form.r#in.clone()),
             revision: form.revision.filter(|_| form.current_only()),
+            subject: form.subject.clone(),
         }),
         Predicate::Claim(_)
         | Predicate::First(_)
@@ -473,7 +476,8 @@ fn scopes(requires: &[model::CapabilityRequirement]) -> BTreeMap<CapabilityId, V
 ///    result, then subject; no subject comes before any subject.
 /// 8. Two `children` forms compare the outcomes they list, in their own (code-point) order,
 ///    pairwise as text; when one list runs out first, the shorter list comes first; then by
-///    `revision`, none before `current`. Two forms that differ only in `revision` are two members.
+///    `revision`, none before `current`; then by `subject`, none before any, two as text. Two
+///    forms that differ only in `revision`, or only in `subject`, are two members.
 fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
     fn form(predicate: &Predicate) -> u8 {
         match predicate {
@@ -611,12 +615,21 @@ fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
                     return order;
                 }
             }
-            left.r#in.len().cmp(&right.r#in.len()).then_with(|| {
-                optional(
-                    left.revision.map(|revision| revision.as_str()),
-                    right.revision.map(|revision| revision.as_str()),
-                )
-            })
+            left.r#in
+                .len()
+                .cmp(&right.r#in.len())
+                .then_with(|| {
+                    optional(
+                        left.revision.map(|revision| revision.as_str()),
+                        right.revision.map(|revision| revision.as_str()),
+                    )
+                })
+                .then_with(|| {
+                    optional(
+                        left.subject.as_ref().map(|subject| subject.as_str()),
+                        right.subject.as_ref().map(|subject| subject.as_str()),
+                    )
+                })
         }
         _ => form(left).cmp(&form(right)),
     }
@@ -980,11 +993,21 @@ fn predicate_value(predicate: &Predicate) -> Value {
             ]),
         )]),
         // `"revision"` only when the form reads the current revision alone, so a form without the
-        // key, or with `any`, is written as it was before the key existed.
-        Predicate::Children(form @ ChildOutcomes { r#in, revision: _ }) => {
+        // key, or with `any`, is written as it was before the key existed; `"subject"` only when
+        // the form names one.
+        Predicate::Children(
+            form @ ChildOutcomes {
+                r#in,
+                revision: _,
+                subject,
+            },
+        ) => {
             let mut written = vec![("in", Value::Array(r#in.iter().map(Value::string).collect()))];
             if form.current_only() {
                 written.push(("revision", Value::string("current")));
+            }
+            if let Some(subject) = subject {
+                written.push(("subject", Value::string(subject.as_str())));
             }
             Value::object([("children", Value::object(written))])
         }
