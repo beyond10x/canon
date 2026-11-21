@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T23:25:35Z",
+  "actor": "human:timo",
+  "artifact": "story:revision-ordering",
+  "kind": "story",
+  "revision": 34,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "finding 7, ess/domains/protocol.yaml:821, judgement: an item that failed on an ancestor and still fails is UNKNOWN; the value stays as the story's value table decides it (F1 to F8, accepted before the pass); the comment of EvidenceDescended now says so and shows the pattern that gives FALSE for it",
+    "reference": "6cb78878",
+    "review": "review-result:adversary-revision-ordering-pass-1",
+    "outcome": "no-op"
+  }
+}

@@ -9,6 +9,8 @@ relations:
 - serves: vision:governed-autonomy
 scope:
 - confidence: inferred
+  path: .cargo/config.toml
+- confidence: inferred
   path: .config/nextest.toml
 - confidence: cited
   path: .github/workflows/check.yml
@@ -19,9 +21,21 @@ scope:
 - confidence: cited
   path: Taskfile.yml
 - confidence: inferred
+  path: crates/canon-cli/Cargo.toml
+- confidence: inferred
+  path: crates/canon-cli/tests
+- confidence: inferred
   path: crates/canon-cli/tests/adversary2_review_hardening.rs
 - confidence: inferred
+  path: crates/canon-expr/Cargo.toml
+- confidence: inferred
+  path: crates/canon-expr/tests
+- confidence: inferred
+  path: crates/canon/Cargo.toml
+- confidence: inferred
   path: crates/canon/src/check/tests.rs
+- confidence: inferred
+  path: crates/canon/tests
 - confidence: inferred
   path: crates/canon/tests/adversary2_invalidation.rs
 - confidence: inferred
@@ -40,7 +54,7 @@ scope:
   path: crates/canon/tests/invalidation_evaluation_cost.rs
 - confidence: inferred
   path: crates/canon/tests/missing_keys.rs
-revision: 14
+revision: 20
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 8}
 - {from: "proposed", to: "active", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 9}
@@ -221,3 +235,66 @@ and names what the measurement has to settle. Each binds the unit in addition to
   in `crates/canon/src` against 354 run at `1c402241`; the unit states the reason for the 12.
 - `.github/workflows/pages.yml:39` runs `cargo test -p canon-docs` outside the gate. It is not in
   the 120 s bound; the unit reports its time.
+
+## Added 2026-11-21 at 23:16 CET: few test binaries, no full debug info
+
+`~/beyond10x/AGENTS.md` § Tests stay fast gained a line (lines 44-47): "Test binaries are few:
+one integration-test binary per crate (`tests/main.rs` with modules), and `[profile.dev] debug =
+false` or a test profile without full debug info." Its cause, in the same line: another
+repository's first whole-workspace nextest run "linked 516 test executables of up to 269 MB
+each, 33 GB in `target/debug/deps` within 15 minutes; canon's step runs 162 binaries one after
+another." The `host-operator` session sent it for this story and asks for the binary count
+before and after.
+
+Counted at `67e5dee8`: 100 files in `crates/canon/tests`, 55 in `crates/canon-cli/tests`, 3 in
+`crates/canon-expr/tests`; each is one test executable today.
+
+It binds this story, in addition to § Acceptance:
+
+- One integration-test binary per crate, and a test profile without full debug info. The unit
+  measures link time and the size of `target/` before and after, and reports the number of test
+  executables before and after, per crate.
+- A test file that is in no module tree never runs and nothing fails. A test reads each crate's
+  `tests/` directory and fails when a `.rs` file there is not a declared module of the one
+  binary. The count of tests from the runner is equal before and after.
+- The form that keeps every test file at its path is preferred (`autotests = false` and one
+  `[[test]]`): other stories and the store's typed scopes name files under `crates/*/tests/`.
+- Everything that names a test binary changes with it: the `--test` lines of `Taskfile.yml`,
+  `AGENTS.md`, the tests that re-run their own binary with `--exact`. `pages.yml` is not this
+  unit's; what must change there is handed over as a patch.
+- Tests that relied on one process per file are named, with the runner each remaining test line
+  uses.
+
+## Corrected 2026-11-21: `OnceLock` is not a shared fixture under this runner
+
+"What the unit does" step 4 names `OnceLock` in the test binary. The workspace rule was
+corrected the same evening (`~/beyond10x/AGENTS.md` lines 26-32, found in another repository):
+"A `OnceLock` or other in-process global is not this form under cargo-nextest, which runs each
+test in its own process, so the fixture is built once per test". The `host-operator` session
+sent the correction. Step 4 above is kept as written; this section replaces its mechanism.
+
+- The accepted forms of a product made once: a committed generated file with a digest of its
+  sources and a fast check of the digest; a cache on disk under `target/` keyed by the digest of
+  its sources; a setup step that runs once before the tests.
+- The unit says, from its measurement, for each slow test whether its time is one product built
+  again in several tests or work inside one test. A cache is built only for the first kind.
+- A cache on disk gets two tests: two processes that build it at once leave a whole file (write
+  to a temporary name, then rename), and a changed source misses the cache.
+
+## Corrected 2026-11-21: a profile setting in the manifest loses on the workstation
+
+The workspace rule was corrected again (`~/beyond10x/AGENTS.md` lines 44-52, found in another
+repository; sent by the `host-operator` session): `~/.cargo/config.toml` on the workstation sets
+`[profile.dev] debug = "line-tables-only"`, and a cargo config file wins over the manifest, so
+`[profile.dev] debug = false` in `Cargo.toml` has no effect there.
+
+- Every profile setting of this story (the debug level, and the optimization of step 3) is
+  proved on a built test binary: `readelf -S` and the binary's size before and after, and a
+  timing for the optimization.
+- A setting that loses in the manifest goes into the repository's `.cargo/config.toml` or the
+  environment of the gate's test task (`CARGO_PROFILE_DEV_DEBUG=false`). The unit says what CI
+  gets and what the workstation gets for each setting, and they are equal.
+- `.cargo/config.toml` is this unit's for `[profile.*]` only; story:local-gate-equals-ci keeps
+  `[env]` and the rest and merges after it. The typed scope gains the file.
+- One `cargo clean` after the switch, with the size of `target/` before it and after the next
+  full build.

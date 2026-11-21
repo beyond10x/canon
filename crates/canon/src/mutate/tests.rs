@@ -147,6 +147,28 @@ fn obligations_and_order_forms() {
 }
 
 #[test]
+fn nothing_inside_a_descended_form_is_mutated() {
+    // The `descended` form is walked past like every order form: its results are neither changed
+    // nor counted among the results `change-result` offers, and the `all` members beside it are
+    // still sites.
+    let body = "artifacts: {a: {}}\nevidence_kinds: {k: {}}\n\
+        claims: {c: {true_when: {all: [\
+        {descended: {first: {kind: k, result: x}, then: {kind: k, result: z}, subject: a}}, \
+        {evidence: {kind: k, result: y}}, {evidence: {kind: k, result: w}}]}}}\n";
+    assert_eq!(
+        sites(body),
+        [
+            "drop-conjunct claim `c` true_when all[0]",
+            "drop-conjunct claim `c` true_when all[1]",
+            "drop-conjunct claim `c` true_when all[2]",
+            "all-to-any claim `c` true_when",
+            "change-result claim `c` true_when all[1] result `y` to `w`",
+            "change-result claim `c` true_when all[2] result `w` to `y`",
+        ]
+    );
+}
+
+#[test]
 fn a_protocol_with_nothing_to_mutate_has_no_mutant() {
     assert!(
         sites("evidence_kinds: {k: {}}\nclaims: {c: {true_when: {evidence: {kind: k}}}}\n")

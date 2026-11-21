@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T23:25:34Z",
+  "actor": "human:timo",
+  "artifact": "story:revision-ordering",
+  "kind": "story",
+  "revision": 34,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "finding 1, crates/canon/src/eval/case.rs:96, contract-drift: the invalid-identifier refusal of a descends_from entry named the revision only; it now names the case, the revision and the artifact, as the other two refusals do; the adversary case an_ancestor_that_is_not_an_identifier_is_refused_naming_the_case_and_the_artifact passes",
+    "reference": "ce73975e",
+    "review": "review-result:adversary-revision-ordering-pass-1",
+    "outcome": "fixed"
+  }
+}

@@ -897,3 +897,17 @@ fn a_walk_with_revise_steps_stays_within_the_check_product() {
         );
     }
 }
+
+/// A protocol with a `descended` form (story:revision-ordering) is refused as `ordered-evidence`,
+/// as one with any other order form is, naming the first declaration that has one.
+#[test]
+fn a_descended_form_is_refused_as_ordered_evidence() {
+    let source = format!(
+        "{HEAD}evidence_kinds: {{run: {{}}}}\nactions: {{go: {{may_produce: [{{evidence: run}}]}}}}\n\
+         outcomes: {{done: {{requires: {{descended: {{first: {{kind: run, result: failed}}, \
+         then: {{kind: run, result: passed}}, subject: doc}}}}}}}}\n"
+    );
+    let refusal = simulate(&compiled(&source)).expect_err("refused");
+    assert_eq!(refusal.code(), "ordered-evidence");
+    assert!(refusal.to_string().contains("outcome `done`"), "{refusal}");
+}

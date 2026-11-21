@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T23:25:34Z",
+  "actor": "human:timo",
+  "artifact": "story:revision-ordering",
+  "kind": "story",
+  "revision": 34,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "finding 4, crates/canon/src/explain/mod.rs:349, judgement: computed_from left descends_from out, so decisions with different values over the same evidence carried equal computed_from; each case artifact now carries descends_from as written; test the_descent_the_case_gives_is_recorded_as_written",
+    "reference": "5eea4ada",
+    "review": "review-result:adversary-revision-ordering-pass-1",
+    "outcome": "fixed"
+  }
+}

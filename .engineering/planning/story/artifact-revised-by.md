@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:artifact-revised-by
 kind: story
-status: draft
+status: active
 title: Declare artifacts revised by another protocol with revised_by, and count a state that waits on that revision as waiting in canon simulate
 tags:
 - from-request
@@ -39,7 +39,10 @@ scope:
   path: fixtures/investigation/revised-by/
 - confidence: inferred
   path: fixtures/investigation/simulate/revised-by/
-revision: 13
+revision: 16
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-21T23:23:18Z", actor: "human:timo", revision: 15}
+- {from: "proposed", to: "active", at: "2026-11-21T23:23:18Z", actor: "human:timo", revision: 16}
 ---
 ## Outcome
 
@@ -192,3 +195,23 @@ Recommendation: X. story:simulate-record-groups says `NO SEMANTIC CHANGE` "as it
 - **Canon files read:** `crates/canon/src/{validate,ir,diff,model}/mod.rs`, `ir/imports.rs`, `eval/read.rs`, `ess/domains/protocol.yaml`, and `simulate/mod.rs` at `4b36d52` (tree `canon-w4-canon-simulate`).
 - **SDC files read** (`f364b6b`): the eight protocols; `requests/16/{classification.txt,classify.out,classify.py}`; `w5/sdc-run/*.txt`.
 - **Commands:** `canon-sim validate` and `simulate` on `requests/18/doc.protocol.yaml` and a `supplied_by` variant. 2026-11-21.
+
+## Decided
+
+Accepted on 2026-11-22 on the operator's word in the coordinating session: "accept the main
+story, and then accept all of them, put all of them into a single way" (the plan page's
+§ Replan 16 holds the whole message and the coordinator's reading of it). The line of § Order,
+"not accepted until the `sdc` session has the measurement", is replaced by that word
+(`approval-record:accept-artifact-revised-by-2026-11-22`).
+
+The two choices of § Decision needed, taken by the coordinator as the story recommends:
+
+- **1 A.** The external revise step is offered in every state; a step that returns its state is
+  dropped.
+- **2 X.** `canon diff` reports adding, removing and replacing `revised_by` as
+  `NO SEMANTIC CHANGE`.
+
+The unit builds these and does not reopen them. The `file:line` references of this story were
+read from trees older than the wave branch of 2026-11-22: the unit reads each one again before
+it builds on it. story:simulate-revise-step and story:child-outcome-recovery change the same
+walk; this unit merges after the second.
