@@ -1,0 +1,352 @@
+format: canon-conformance/1
+id: CANON-FRONTIER-001
+covers: [CANON-FRONTIER-001]
+fixture: fixtures/investigation/missing-evidence.yaml
+# Missing evidence (story:missing-evidence). The decision's `missing_evidence` section maps each
+# admissible action whose `may_produce` is not empty to the kinds of that list that have no
+# applicable record, in kind-identifier order. A record is applicable when the revision-binding and
+# freshness stages leave it and no claim lists it in `excluded_evidence`. An empty list means every
+# kind the action may produce has an applicable record. The fixture declares five actions:
+# `inspect` may produce supporting_observation, `attempt_falsification` falsification_attempt and
+# `request_peer_review` peer_review; `summarize` produces nothing; `publish_finding` needs the claim
+# explanation.supported and the capability finding.publish. `request_peer_review` is admissible only
+# while an observation has the result needs_review, and `publish_finding` never is here (blocked
+# without support, approval-required with it), so only `inspect` and `attempt_falsification` are
+# keys, except in the last step. The claim reads falsification_attempt through a match that demands
+# independence on different_principal, so every case lists reviewer-2 on it and every falsification
+# record that is to count names reviewer-2 as its producer. supporting_observation has `max_age: 1h`
+# and the invalidation rule dataset.revised invalidates explanation.supported for a record made
+# against another dataset revision than the case's. The section is the only one every step lists.
+steps:
+  # Expectation 1. No evidence: both producing actions list their kind. The blocked
+  # `publish_finding`, `request_peer_review` and the admissible `summarize`, which produces
+  # nothing, are not keys.
+  - id: no-evidence
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-20
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+          dataset: {revision: d1}
+        independence:
+          author-1: []
+          reviewer-2: [different_principal]
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "status": "admissible"
+            },
+            "inspect": {
+              "status": "admissible"
+            },
+            "publish_finding": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "request_peer_review": {
+              "reasons": [
+                {
+                  "evidence": "supporting_observation",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            },
+            "summarize": {
+              "status": "admissible"
+            }
+          },
+          "missing_evidence": {
+            "attempt_falsification": [
+              "falsification_attempt"
+            ],
+            "inspect": [
+              "supporting_observation"
+            ]
+          }
+        }
+
+  # Expectation 2. Both records at the current revision, fresh, not invalidated, the producer
+  # independent: both lists are empty.
+  - id: both-records-current
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-20
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+          dataset: {revision: d1}
+        independence:
+          author-1: []
+          reviewer-2: [different_principal]
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          producer: reviewer-2
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "missing_evidence": {
+            "attempt_falsification": [],
+            "inspect": []
+          }
+        }
+
+  # Expectation 3. A falsification record whose result does not satisfy the claim (refuted, not
+  # survived) is an applicable record all the same: the section reads records, not claim values.
+  - id: record-with-another-result
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-20
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+          dataset: {revision: d1}
+        independence:
+          author-1: []
+          reviewer-2: [different_principal]
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: refuted
+          producer: reviewer-2
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "missing_evidence": {
+            "attempt_falsification": [],
+            "inspect": []
+          }
+        }
+
+  # Expectation 4. Both records are bound to r1 and the case is at r2: the revision-binding stage
+  # sets both aside, so both kinds are listed.
+  - id: records-at-another-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-20
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r2}
+          dataset: {revision: d1}
+        independence:
+          author-1: []
+          reviewer-2: [different_principal]
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          producer: reviewer-2
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "missing_evidence": {
+            "attempt_falsification": [
+              "falsification_attempt"
+            ],
+            "inspect": [
+              "supporting_observation"
+            ]
+          }
+        }
+
+  # Expectation 5. The observation was made 2.5 hours before the evaluation instant and its kind
+  # allows one hour: the freshness stage sets it aside, so its kind is listed. The falsification
+  # kind has no `max_age`.
+  - id: record-older-than-its-kind-allows
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-20
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+          dataset: {revision: d1}
+        independence:
+          author-1: []
+          reviewer-2: [different_principal]
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+          observed_at: 2026-10-04T10:00:00Z
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          producer: reviewer-2
+          subject: explanation
+          subject_revision: r1
+      at: 2026-10-04T12:30:00Z
+    expect:
+      decision: |
+        {
+          "missing_evidence": {
+            "attempt_falsification": [],
+            "inspect": [
+              "supporting_observation"
+            ]
+          }
+        }
+
+  # Expectation 6. The observation recorded dataset revision d1 and the case is at d2: the rule
+  # dataset.revised invalidates it for explanation.supported, which lists it as `invalidated`, so
+  # its kind is listed although the record is bound to the current revision and is fresh.
+  - id: record-invalidated-by-an-upstream-change
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-20
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+          dataset: {revision: d2}
+        independence:
+          author-1: []
+          reviewer-2: [different_principal]
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+          upstream_revisions:
+            dataset: d1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          producer: reviewer-2
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "missing_evidence": {
+            "attempt_falsification": [],
+            "inspect": [
+              "supporting_observation"
+            ]
+          }
+        }
+
+  # Expectation 7. The falsification record names author-1, whom the case lists on no dimension:
+  # the match that demands independence on different_principal rejects it, so
+  # explanation.supported lists it as `not_independent` and its kind is listed.
+  - id: record-whose-producer-is-not-independent
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-20
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+          dataset: {revision: d1}
+        independence:
+          author-1: []
+          reviewer-2: [different_principal]
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          producer: author-1
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "missing_evidence": {
+            "attempt_falsification": [
+              "falsification_attempt"
+            ],
+            "inspect": []
+          }
+        }
+
+  # Expectation 8. A kind that declares `supplied_by` is listed like any other: the observation
+  # carries the result needs_review, which makes `request_peer_review` admissible, and no record of
+  # peer_review, the kind it may produce and investigation.review supplies, exists. The section
+  # reads `may_produce` and the records, not where a kind comes from.
+  - id: supplied-kind-without-a-record
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-20
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+          dataset: {revision: d1}
+        independence:
+          author-1: []
+          reviewer-2: [different_principal]
+      evidence:
+        - format: canon-evidence/1
+          id: observation-1
+          kind: supporting_observation
+          result: needs_review
+          subject: explanation
+          subject_revision: r1
+        - format: canon-evidence/1
+          id: falsification-1
+          kind: falsification_attempt
+          result: survived
+          producer: reviewer-2
+          subject: explanation
+          subject_revision: r1
+    expect:
+      decision: |
+        {
+          "missing_evidence": {
+            "attempt_falsification": [],
+            "inspect": [],
+            "request_peer_review": [
+              "peer_review"
+            ]
+          }
+        }

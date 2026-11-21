@@ -162,3 +162,14 @@ requirements:
       the same record without those entries gives. The same record under a kind without
       supplied_by MUST be refused as undeclared-artifact.
     source: story:supplied-evidence
+  CANON-FRONTIER-001:
+    status: implemented
+    statement: >-
+      The decision MUST map each admissible action whose may_produce is not empty to the evidence
+      kinds of that list that have no applicable record, in kind-identifier order, and MUST NOT
+      list an action that is blocked, one that is approval-required or one whose may_produce is
+      empty. A record MUST be applicable when the revision-binding and freshness stages leave it and
+      no claim lists it in excluded_evidence, and MUST NOT depend on its result or on whether its
+      kind declares supplied_by. The section MUST be absent when no action qualifies, and MUST NOT
+      change any other section.
+    source: story:missing-evidence
