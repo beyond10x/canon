@@ -29,9 +29,9 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   evidence match without a result has `"result": null`; a claim test without `is` has
   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
   true; absent lists and sections are empty. The fifteen exceptions are an evidence kind's
-  `max_age` and its `supplied_by`, the `subject` of an evidence match or an order form, an
-  evidence match's `independent_on`, an obligation's `applicable_when`, an action's
-  `arguments`, an action's `case_open`, an action's `author` and its `revises`, the
+  `max_age` and its `supplied_by`, the `subject` of an evidence match, an order form or a
+  `children` form, an evidence match's `independent_on`, an obligation's `applicable_when`, an
+  action's `arguments`, an action's `case_open`, an action's `author` and its `revises`, the
   `decided_by` of an evidence kind an action may produce, the `scope` of a capability
   requirement, the `revision` of a `children` form, the `invalidation` section, the `case`
   section and the `independence_dimensions` section: each written only when it is declared (a
@@ -50,8 +50,7 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   `{"since": {"last": …, "then": {"kind": …, "result": …}}}`.
   The form over the child cases is `{"children": {"in": [...]}}`, or `{"children": {"in": [...], "revision": "current"}}` when it reads only the records about the current revision of
   their subject (story:child-outcome-revision): `revision: any` reads what no key reads and is
-  written as no key. An action's `case_open` is `{"protocol": …, "subject": …}`, as declared
-  (story:case-composition).
+  written as no key. A form that reads only the records about one artifact adds `"subject": …`, as declared (story:child-outcome-subject). An action's `case_open` is `{"protocol": …, "subject": …}`, as declared (story:case-composition).
   An action's `arguments` is its JSON Schema as declared, the same JSON value, its object keys
   sorted like every object's (story:action-arguments).
 - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
@@ -60,9 +59,9 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   other requirement is its predicate.
 - **Resolved references.** Only a document the validator accepts compiles, so every claim and
   evidence kind the IR references is declared in it (`case_outcome` wherever a `children` form
-  reads it), and so is every artifact an evidence match or an order form names as its subject,
-  an action revises (`revises`) or opens a case about (`case_open`) or an invalidation rule
-  names as its upstream
+  reads it), and so is every artifact an evidence match, an order form or a `children` form
+  names as its subject, an action revises (`revises`) or opens a case about (`case_open`) or an
+  invalidation rule names as its upstream
   artifact, every input an input test names, with every value it lists, and every dimension an
   evidence match demands independence on.
 

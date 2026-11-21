@@ -63,7 +63,9 @@ does not depend on the order the sections are written in:
    an empty `in` list, `empty-child-outcomes`, or an outcome it lists more than once,
    `duplicate-child-outcome`, once for every listing after its first, then `open` listed,
    `open-child-outcome`, once, then the evidence kind `case_outcome` when it is not declared,
-   `undeclared-evidence-kind`, every one naming the declaration the form is written in): those
+   `undeclared-evidence-kind`, then the artifact it names as its `subject` when that is not
+   declared, `undeclared-artifact` (story:child-outcome-subject), every one naming the
+   declaration the form is written in): those
    in claims first, then those in obligations (each obligation's discharge predicate, followed
    by every evidence match, order form and `children` form it holds, which a discharge
    predicate may not: it tests only claim values, each kind an order form names once, the kind
