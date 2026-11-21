@@ -1,0 +1,49 @@
+format: protocol/1
+
+protocol:
+  id: epic
+  revision: 1
+  description: Deliver a spec through child story cases, each about the spec; the epic is built once the stories delivered the spec as it stands.
+
+artifacts:
+  spec:
+    description: The epic's spec; each child story case is opened about it.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child story case, one record per child, about the spec at the revision the child's outcome was computed against; open while the child runs.
+
+claims:
+  delivered.current:
+    description: Every child story case about the spec's current revision ended delivered.
+    true_when:
+      children:
+        in: [delivered]
+        revision: current
+  delivered.any:
+    description: Every child story case ended delivered, about whatever revision of the spec.
+    true_when:
+      children:
+        in: [delivered]
+
+actions:
+  open_story:
+    description: Open a child story case about the spec, worked by another party.
+    requires:
+      - capability: case.open
+    case_open:
+      protocol: story
+      subject: spec
+
+  build:
+    description: Build the epic once every child story case about the spec's current revision ended delivered.
+    precondition:
+      children:
+        in: [delivered]
+        revision: current
+
+outcomes:
+  built:
+    description: The epic was built from stories that delivered the spec as it stands.
+    requires:
+      claim: delivered.current

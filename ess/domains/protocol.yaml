@@ -734,9 +734,9 @@ types:
   # (story:case-composition): whether every child case ended with one of the outcomes listed. It
   # reads every case_outcome record the evidence check accepted, one per child case: its
   # child_case names the child, its result the child's outcome, `open` while the child runs,
-  # otherwise its terminal outcome (accepted, declined, inconclusive, abandoned, ...). It reads
-  # them as the order forms read the history, at whatever revision of their subject, expired or
-  # invalidated: a child's outcome is a fact about the child case, which a later revision of the
+  # otherwise its terminal outcome (accepted, declined, inconclusive, abandoned, ...). Without
+  # `revision: current` (the field below) it reads them as the order forms read the history, at
+  # whatever revision of their subject, expired or invalidated: a child's outcome is a fact about the child case, which a later revision of the
   # parent's artifact does not undo, and a child left out would let the parent conclude without
   # it. No record is unknown, since no applicable evidence is unknown; a record whose outcome is
   # neither listed nor `open`, a child that ended outside the set, is false; otherwise any child
@@ -757,6 +757,34 @@ types:
       # read from: crates/canon/src/model/predicate.rs:265-268
       - name: in
         type: List<String>
+      # Which records the form reads (story:child-outcome-revision): absent or `any`, every
+      # case_outcome record the evidence check accepted, as above; `current`, only those whose
+      # subject_revision is the case snapshot's current revision of their subject. A record about
+      # an earlier revision is then not read: it neither establishes nor contradicts the form and
+      # is not listed in excluded_evidence, and with no record read the form is unknown. canon-ir/1
+      # writes `"revision": "current"` only when the form says `current`, so `any` and absent
+      # compile to one form, and the IR of a protocol without the key is unchanged. A blocked
+      # action's or outcome's reason and the explanation name the form with the key the same way.
+      # What it means is CANON-COMPOSE-002 (conformance/scenarios/child-outcome-revision.yaml), not
+      # this file.
+      # read from: .engineering/planning/story/child-outcome-revision.md:51-64
+      # read from: .engineering/planning/story/child-outcome-revision.md:109
+      # read from: .engineering/planning/story/child-outcome-revision.md:126-128
+      - name: revision
+        type: Optional<canon.protocol.ChildRevision>
+
+  # Which case_outcome records a `children` form reads (story:child-outcome-revision): `any`, every
+  # one the evidence check accepted; `current`, only one whose subject_revision is the case
+  # snapshot's current revision of its subject. A terminal record's subject_revision is the revision
+  # the child's outcome was computed against: the child's own revision of the subject at its
+  # terminating evaluation when the child protocol declares the subject artifact, otherwise the
+  # parent's revision of the subject when the child was opened. Canon does not write the record and
+  # compares only that revision with the snapshot's.
+  # read from: .engineering/planning/story/child-outcome-revision.md:126-128
+  # read from: .engineering/planning/story/child-outcome-revision.md:263-276
+  - name: canon.protocol.ChildRevision
+    kind: enum
+    variants: ["any", "current"]
 
   # Source text may leave `is` out; it then reads as true (crates/canon/src/model/predicate.rs:501).
   # read from: crates/canon/src/model/predicate.rs:271-276

@@ -162,3 +162,13 @@ requirements:
       the same record without those entries gives. The same record under a kind without
       supplied_by MUST be refused as undeclared-artifact.
     source: story:supplied-evidence
+  CANON-COMPOSE-002:
+    status: implemented
+    statement: >-
+      A predicate over the outcomes of the child cases MAY be bound to the current revision. Bound,
+      it MUST read only the outcome records whose subject revision is the case snapshot's current
+      revision of their subject, MUST NOT treat a record about another revision as contradicting
+      it, and MUST be UNKNOWN when it reads no record; over the records it reads it MUST follow
+      CANON-COMPOSE-001. Unbound, it MUST read every outcome record, and its compiled form MUST
+      be the form it had before the binding existed.
+    source: story:child-outcome-revision

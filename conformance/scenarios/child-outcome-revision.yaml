@@ -1,0 +1,420 @@
+format: canon-conformance/1
+id: CANON-COMPOSE-002
+covers: [CANON-COMPOSE-002]
+fixture: fixtures/investigation/child-outcome-revision.yaml
+# The fixture is an epic whose child story cases are each opened about its spec. Claim
+# delivered.current is `{children: {in: [delivered], revision: current}}`: it reads only the
+# case_outcome records whose subject_revision is the case snapshot's current revision of their
+# subject. Claim delivered.any is the same form without `revision`, which reads every record, as
+# CANON-COMPOSE-001's form does. Action build requires the `revision: current` form; outcome built
+# requires delivered.current. Over the records it reads, the form follows CANON-COMPOSE-001: FALSE
+# once a child ended outside the set, otherwise UNKNOWN while a child is open or with no record,
+# TRUE when every child ended delivered. A record about an earlier revision of the spec is not read
+# by the `revision: current` form: it neither establishes nor contradicts it.
+steps:
+  # Expectation 1. The form compiles with `"revision": "current"` only where the protocol writes
+  # it; delivered.any compiles with no `revision` key, as every form did before the key existed.
+  - id: compile
+    compile: {}
+    expect:
+      canon-ir: |
+        {
+          "actions": {
+            "build": {
+              "description": "Build the epic once every child story case about the spec's current revision ended delivered.",
+              "effect": null,
+              "may_produce": [],
+              "precondition": {
+                "children": {
+                  "in": [
+                    "delivered"
+                  ],
+                  "revision": "current"
+                }
+              },
+              "requires": []
+            },
+            "open_story": {
+              "case_open": {
+                "protocol": "story",
+                "subject": "spec"
+              },
+              "description": "Open a child story case about the spec, worked by another party.",
+              "effect": null,
+              "may_produce": [],
+              "precondition": {
+                "all": []
+              },
+              "requires": [
+                {
+                  "capability": "case.open"
+                }
+              ]
+            }
+          },
+          "artifacts": {
+            "spec": {
+              "description": "The epic's spec; each child story case is opened about it."
+            }
+          },
+          "claims": {
+            "delivered.any": {
+              "description": "Every child story case ended delivered, about whatever revision of the spec.",
+              "true_when": {
+                "children": {
+                  "in": [
+                    "delivered"
+                  ]
+                }
+              }
+            },
+            "delivered.current": {
+              "description": "Every child story case about the spec's current revision ended delivered.",
+              "true_when": {
+                "children": {
+                  "in": [
+                    "delivered"
+                  ],
+                  "revision": "current"
+                }
+              }
+            }
+          },
+          "evidence_kinds": {
+            "case_outcome": {
+              "description": "The outcome of one child story case, one record per child, about the spec at the revision the child's outcome was computed against; open while the child runs."
+            }
+          },
+          "format": "canon-ir/1",
+          "obligations": {},
+          "outcomes": {
+            "built": {
+              "description": "The epic was built from stories that delivered the spec as it stands.",
+              "requires": {
+                "claim": {
+                  "id": "delivered.current",
+                  "is": "true"
+                }
+              }
+            }
+          },
+          "protocol": {
+            "description": "Deliver a spec through child story cases, each about the spec; the epic is built once the stories delivered the spec as it stands.",
+            "id": "epic",
+            "revision": 1
+          }
+        }
+
+  # Expectations 2 and 6. The spec is at s2 and the only record, about s1, says delivered. The
+  # `revision: current` form reads no record: UNKNOWN, and built is blocked. delivered.any reads it:
+  # TRUE. Neither claim lists the s1 record in excluded_evidence. The blocked action's reason names
+  # the form with `"revision": "current"` and its value.
+  - id: only-an-outcome-about-an-earlier-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: EPIC-1
+        protocol: epic
+        artifacts:
+          spec: {revision: s2}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: delivered
+          subject: spec
+          subject_revision: s1
+          child_case: STORY-1
+    expect:
+      decision: |
+        {
+          "actions": {
+            "build": {
+              "reasons": [
+                {
+                  "children": [
+                    "delivered"
+                  ],
+                  "revision": "current",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "open_story": {
+              "reasons": [
+                {
+                  "capability": "case.open",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "claims": {
+            "delivered.any": {
+              "value": "true"
+            },
+            "delivered.current": {
+              "value": "unknown"
+            }
+          },
+          "outcomes": {
+            "built": {
+              "reasons": [
+                {
+                  "claim": "delivered.current",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 3. One child delivered about s1, one delivered about s2: the form reads the s2
+  # record alone, TRUE; build is admissible and built legitimate.
+  - id: an-outcome-about-the-current-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: EPIC-1
+        protocol: epic
+        artifacts:
+          spec: {revision: s2}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: delivered
+          subject: spec
+          subject_revision: s1
+          child_case: STORY-1
+        - format: canon-evidence/1
+          id: o2
+          kind: case_outcome
+          result: delivered
+          subject: spec
+          subject_revision: s2
+          child_case: STORY-2
+    expect:
+      decision: |
+        {
+          "actions": {
+            "build": {
+              "status": "admissible"
+            },
+            "open_story": {
+              "reasons": [
+                {
+                  "capability": "case.open",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "claims": {
+            "delivered.any": {
+              "value": "true"
+            },
+            "delivered.current": {
+              "value": "true"
+            }
+          },
+          "outcomes": {
+            "built": {
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # Expectation 4. One child abandoned about s1, one delivered about s2. The abandoned record is
+  # about an earlier revision, so the `revision: current` form does not read it: TRUE. The form
+  # without `revision` reads it: FALSE, a child that ended outside the set.
+  - id: an-abandoned-outcome-about-an-earlier-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: EPIC-1
+        protocol: epic
+        artifacts:
+          spec: {revision: s2}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: abandoned
+          subject: spec
+          subject_revision: s1
+          child_case: STORY-1
+        - format: canon-evidence/1
+          id: o2
+          kind: case_outcome
+          result: delivered
+          subject: spec
+          subject_revision: s2
+          child_case: STORY-2
+    expect:
+      decision: |
+        {
+          "claims": {
+            "delivered.any": {
+              "value": "false"
+            },
+            "delivered.current": {
+              "value": "true"
+            }
+          },
+          "outcomes": {
+            "built": {
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # Expectation 5, first half. One child abandoned about s2, the current revision: FALSE, and the
+  # blocked action names the form with its value.
+  - id: an-abandoned-outcome-about-the-current-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: EPIC-1
+        protocol: epic
+        artifacts:
+          spec: {revision: s2}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: abandoned
+          subject: spec
+          subject_revision: s2
+          child_case: STORY-1
+    expect:
+      decision: |
+        {
+          "actions": {
+            "build": {
+              "reasons": [
+                {
+                  "children": [
+                    "delivered"
+                  ],
+                  "revision": "current",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            },
+            "open_story": {
+              "reasons": [
+                {
+                  "capability": "case.open",
+                  "decision": "none"
+                }
+              ],
+              "status": "approval-required"
+            }
+          },
+          "claims": {
+            "delivered.any": {
+              "value": "false"
+            },
+            "delivered.current": {
+              "value": "false"
+            }
+          }
+        }
+
+  # Expectation 5, second half. The same child open about s2 instead: UNKNOWN.
+  - id: an-open-child-about-the-current-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: EPIC-1
+        protocol: epic
+        artifacts:
+          spec: {revision: s2}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: open
+          subject: spec
+          subject_revision: s2
+          child_case: STORY-1
+    expect:
+      decision: |
+        {
+          "claims": {
+            "delivered.any": {
+              "value": "unknown"
+            },
+            "delivered.current": {
+              "value": "unknown"
+            }
+          }
+        }
+
+  # The story's outcome, beyond its seven expectations: a child still open about an earlier
+  # revision is not read either, so it does not hold the `revision: current` form UNKNOWN once a
+  # child about the current revision delivered; the form without `revision` waits for it.
+  - id: an-open-child-about-an-earlier-revision
+    evaluate:
+      case:
+        format: canon-case/1
+        id: EPIC-1
+        protocol: epic
+        artifacts:
+          spec: {revision: s2}
+      evidence:
+        - format: canon-evidence/1
+          id: o1
+          kind: case_outcome
+          result: open
+          subject: spec
+          subject_revision: s1
+          child_case: STORY-1
+        - format: canon-evidence/1
+          id: o2
+          kind: case_outcome
+          result: delivered
+          subject: spec
+          subject_revision: s2
+          child_case: STORY-2
+    expect:
+      decision: |
+        {
+          "claims": {
+            "delivered.any": {
+              "value": "unknown"
+            },
+            "delivered.current": {
+              "value": "true"
+            }
+          }
+        }
+
+  # No record: UNKNOWN for both forms, Canon's rule that no applicable evidence is UNKNOWN.
+  - id: no-child-record
+    evaluate:
+      case:
+        format: canon-case/1
+        id: EPIC-1
+        protocol: epic
+        artifacts:
+          spec: {revision: s2}
+      evidence: []
+    expect:
+      decision: |
+        {
+          "claims": {
+            "delivered.any": {
+              "value": "unknown"
+            },
+            "delivered.current": {
+              "value": "unknown"
+            }
+          }
+        }
