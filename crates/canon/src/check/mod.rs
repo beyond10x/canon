@@ -383,7 +383,7 @@ use crate::model::{
     ProtocolId, Revision, one_line,
 };
 
-pub(crate) use space::{REVISION, Slice, Space, State};
+pub(crate) use space::{REVISION, Slice, Space, State, Walked};
 
 /// The most states [`check`] evaluates; a larger space is refused.
 pub const STATE_BOUND: u128 = 65_536;
@@ -1007,7 +1007,7 @@ pub(crate) fn witness(
 
 /// The evidence kinds `action` may produce: each its `may_produce` lists and, when it opens a child
 /// case (story:case-composition), `case_outcome`, which carries the child's outcome back.
-fn produces<'a>(
+pub(crate) fn produces<'a>(
     ir: &'a Ir,
     action: &'a crate::ir::Action,
 ) -> impl Iterator<Item = &'a EvidenceKindId> {
@@ -1017,7 +1017,7 @@ fn produces<'a>(
 
 /// The evidence kinds another protocol's cases produce (story:supplied-evidence): each that
 /// declares `supplied_by`. Produced, as an action's are, and without authority in this protocol.
-fn supplied(ir: &Ir) -> impl Iterator<Item = &EvidenceKindId> {
+pub(crate) fn supplied(ir: &Ir) -> impl Iterator<Item = &EvidenceKindId> {
     ir.evidence_kinds
         .iter()
         .filter(|(_, kind)| kind.supplied_by.is_some())

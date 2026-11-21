@@ -2311,3 +2311,188 @@ pub(super) fn positive_reads<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Re
     }
     matches
 }
+
+/// One evidence dimension as `canon simulate` walks it (story:canon-simulate): its kind, how a
+/// state writes it, its classes in class order and how a record of each of its producer profiles
+/// is written after its class, in profile order.
+pub(crate) struct Walked<'a> {
+    pub(crate) kind: &'a EvidenceKindId,
+    /// `` `k` ``, or `` `k` about `b` `` for a bound dimension.
+    pub(crate) name: String,
+    pub(crate) classes: Vec<Option<&'a str>>,
+    /// Empty for the empty profile, otherwise `` by a producer independent on `d`, `e` ``.
+    pub(crate) profiles: Vec<String>,
+}
+
+/// The states of the whole space a walk from the empty case reaches (story:canon-simulate): only
+/// adding steps, each a current record of one class and profile, an authority decision on an
+/// undecided capability or a decision taken. A walk takes no step on a history, later-record,
+/// last-record or order dimension, which stay at their least value.
+impl<'a> Space<'a> {
+    /// Each evidence dimension, in dimension order, as a walk adds records to it.
+    pub(crate) fn walked(&self) -> Vec<Walked<'a>> {
+        self.kinds
+            .iter()
+            .map(|kind| Walked {
+                kind: kind.id,
+                name: kind.name(),
+                classes: if kind.record.is_some() {
+                    kind.classes.clone()
+                } else {
+                    Vec::new()
+                },
+                profiles: kind
+                    .profiles
+                    .iter()
+                    .map(|profile| {
+                        if profile.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" by a producer independent on {}", listed(profile))
+                        }
+                    })
+                    .collect(),
+            })
+            .collect()
+    }
+
+    /// The first evidence dimension whose values a state cannot hold, as the bound refusal names
+    /// it with its number of values: one with more producer sets than the bound, or more values
+    /// than a `u32` holds. `None` when every dimension fits.
+    pub(crate) fn unwalkable(&self) -> Option<String> {
+        self.kinds.iter().find_map(|kind| {
+            let fits = kind.values.is_some()
+                && kind
+                    .radix()
+                    .is_some_and(|radix| radix <= u128::from(u32::MAX) + 1);
+            if fits {
+                return None;
+            }
+            let count = match (kind.radix(), &kind.values, kind.variants()) {
+                (Some(n), ..) => n.to_string(),
+                (None, Some(values), Some(variants)) => format!("{}^{variants}", values.len()),
+                (None, Some(values), None) => format!(
+                    "{}^({} * 2^{})",
+                    values.len(),
+                    kind.classes.len(),
+                    kind.upstreams.len()
+                ),
+                (None, None, _) => format!(
+                    "more than {}^({} * 2^{})",
+                    super::STATE_BOUND,
+                    kind.classes.len(),
+                    kind.upstreams.len()
+                ),
+            };
+            Some(format!("evidence kind {} {count}", kind.dimension_name()))
+        })
+    }
+
+    /// How many initial states a walk has: one per assignment of case-input values. `None` when
+    /// it does not fit a `u128`.
+    pub(crate) fn initial_count(&self) -> Option<u128> {
+        self.inputs.iter().try_fold(1u128, |total, (_, values)| {
+            total.checked_mul(u128::try_from(values.len()).ok()?)
+        })
+    }
+
+    /// The initial states: no record, no authority decision, no decision taken, and one per
+    /// assignment of case-input values, in input order, the last input varying fastest. Called
+    /// only once [`Space::initial_count`] is within the bound.
+    pub(crate) fn initial_states(&self) -> Vec<State> {
+        let length = self.radices().len();
+        let first_input = self.first_input();
+        let count = self.initial_count().expect("within the bound");
+        (0..count)
+            .map(|mut index| {
+                let mut state: State = vec![0; length];
+                for (at, (_, values)) in self.inputs.iter().enumerate().rev() {
+                    let radix = values.len() as u128;
+                    state[first_input + at] =
+                        u32::try_from(index % radix).expect("few input values");
+                    index /= radix;
+                }
+                state
+            })
+            .collect()
+    }
+
+    /// `state` with one more current record in the evidence dimension at `at`: of its class at
+    /// `class`, observed after every move of an upstream artifact, from a producer of its profile
+    /// at `profile`. The state itself when such a record, or one from a producer independent on
+    /// more, is already there. Called only when [`Space::unwalkable`] is `None`.
+    pub(crate) fn with_record(
+        &self,
+        state: &State,
+        at: usize,
+        class: usize,
+        profile: usize,
+    ) -> State {
+        let kind = &self.kinds[at];
+        let values = kind.values.as_ref().expect("a walkable dimension");
+        let base = values.len() as u128;
+        let vectors = u128::from(kind.vectors().expect("a walkable dimension"));
+        let variant = u32::try_from(class as u128 * vectors).expect("a walkable dimension");
+        let place = base.pow(variant);
+        let value = u128::from(state[at]);
+        let digit = (value / place) % base;
+        let held = &values[usize::try_from(digit).expect("a digit")];
+        let within =
+            |inner: usize, outer: usize| kind.profiles[inner].is_subset(&kind.profiles[outer]);
+        let members: Vec<usize> = (0..kind.profiles.len())
+            .filter(|q| held.iter().any(|p| within(*q, *p)) || within(*q, profile))
+            .collect();
+        let greatest: Producers = members
+            .iter()
+            .copied()
+            .filter(|member| {
+                !members
+                    .iter()
+                    .any(|other| other != member && within(*member, *other))
+            })
+            .collect();
+        let next = values
+            .iter()
+            .position(|producers| *producers == greatest)
+            .expect("a down-closed set is a value") as u128;
+        let mut walked = state.clone();
+        walked[at] =
+            u32::try_from(value - digit * place + next * place).expect("a walkable dimension");
+        walked
+    }
+
+    /// Each capability some action requires, in identifier order.
+    pub(crate) fn walked_capabilities(&self) -> &[&'a CapabilityId] {
+        &self.capabilities
+    }
+
+    /// `state` with the capability at `at` granted, or denied, when it is undecided there.
+    pub(crate) fn with_capability(&self, state: &State, at: usize, granted: bool) -> Option<State> {
+        let position = self.kinds.len() + at;
+        (state[position] == UNDECIDED).then(|| {
+            let mut walked = state.clone();
+            walked[position] = if granted { GRANTED } else { GRANTED + 1 };
+            walked
+        })
+    }
+
+    /// Each decision name some outcome requires, in identifier order.
+    pub(crate) fn walked_decisions(&self) -> Vec<&'a DecisionName> {
+        self.decisions.iter().map(|(name, _)| *name).collect()
+    }
+
+    /// `state` with the decision at `at` taken, when it is not taken there.
+    pub(crate) fn with_decision(&self, state: &State, at: usize) -> Option<State> {
+        let position = self.kinds.len() + self.capabilities.len() + at;
+        (state[position] == 0).then(|| {
+            let mut walked = state.clone();
+            walked[position] = 1;
+            walked
+        })
+    }
+
+    /// The state as a report writes it, as [`Space::render`] does.
+    pub(crate) fn rendered(&self, state: &State) -> String {
+        self.render(state)
+    }
+}
