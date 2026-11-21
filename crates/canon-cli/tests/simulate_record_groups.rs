@@ -446,6 +446,38 @@ fn simulate_walks_the_chain_in_group_steps() {
     );
 }
 
+/// The protocol writer (`model::write`, story:protocol-writer) writes `records_together` after
+/// `may_produce`, its groups and their kinds in model order, unsorted and repeated as given, and
+/// leaves an empty list out; the text reads back to an equal model, and writing that again gives
+/// the same bytes.
+#[test]
+fn the_protocol_writer_keeps_groups_in_model_order() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        evidence_kinds: {a: {}, b: {}, c: {}, d: {}}\n\
+        actions:\n  \
+          act:\n    \
+            records_together: [{kinds: [d, c]}, {kinds: [b, a, b]}]\n    \
+            may_produce: [{evidence: d}, {evidence: c}, {evidence: b}, {evidence: a}]\n";
+    let protocol = model::parse(source).expect("parses");
+    let text = model::write(&protocol);
+    assert!(
+        text.contains(
+            "      \"may_produce\": [\n        {\n          \"evidence\": \"d\"\n        },\n        {\n          \"evidence\": \"c\"\n        },\n        {\n          \"evidence\": \"b\"\n        },\n        {\n          \"evidence\": \"a\"\n        }\n      ],\n      \"records_together\": [\n        {\n          \"kinds\": [\n            \"d\",\n            \"c\"\n          ]\n        },\n        {\n          \"kinds\": [\n            \"b\",\n            \"a\",\n            \"b\"\n          ]\n        }\n      ]\n    }\n"
+        ),
+        "{text}"
+    );
+    let read = model::parse(&text).expect("the written text parses");
+    assert_eq!(read, protocol);
+    assert_eq!(model::write(&read), text);
+    let empty = model::parse(&source.replace(
+        "records_together: [{kinds: [d, c]}, {kinds: [b, a, b]}]",
+        "records_together: []",
+    ))
+    .expect("parses");
+    assert!(!model::write(&empty).contains("records_together"));
+}
+
 /// Groups are written sorted, and the kinds within each group sorted, each once; the IR reads
 /// back to the same IR and the same bytes.
 #[test]

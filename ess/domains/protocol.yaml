@@ -194,7 +194,7 @@ types:
       # sorted within each group, each kind once.
       # read from: .engineering/planning/story/simulate-record-groups.md:48-67
       # read from: .engineering/planning/story/simulate-record-groups.md:233-235
-      # read from: crates/canon/src/model/mod.rs:239-245
+      # read from: crates/canon/src/model/mod.rs:242-248
       - name: records_together
         type: List<canon.protocol.RecordGroup>
       # The one argument schema the action declares (story:action-arguments). Absent: the action
@@ -346,12 +346,12 @@ types:
   # One group of an action's records_together (story:simulate-record-groups): kinds one run of
   # the action records together, all of them or none. A named type, not a list of lists.
   # read from: .engineering/planning/story/simulate-record-groups.md:48-52
-  # read from: crates/canon/src/model/mod.rs:337-345
+  # read from: crates/canon/src/model/mod.rs:340-348
   - name: canon.protocol.RecordGroup
     kind: struct
     fields:
       # The kinds of the group: two or more distinct kinds the action may produce.
-      # read from: crates/canon/src/model/mod.rs:342-344
+      # read from: crates/canon/src/model/mod.rs:345-347
       - name: kinds
         type: List<canon.protocol.EvidenceKindId>
 
