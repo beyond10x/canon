@@ -30,7 +30,9 @@ fixture: fixtures/investigation/explanation.yaml
 #
 # A section with nothing to explain is not written. Serialization is canonical: equivalent inputs
 # give byte-identical output (CANON-DETERMINISM-001), so each step expects the whole decision, and
-# the three steps expect the same bytes.
+# the three steps expect the same bytes. Both records are set aside as `revision_mismatch`, so the
+# `missing_evidence` section (story:missing-evidence) lists the kind each admissible action may
+# produce.
 steps:
   # The investigation's only evidence is bound to revision r1 of the explanation, which the case
   # has superseded with r2. The blocked `supported` outcome is traced to `explanation.supported`
@@ -135,6 +137,14 @@ steps:
             }
           },
           "format": "canon-decision/1",
+          "missing_evidence": {
+            "attempt_falsification": [
+              "falsification_attempt"
+            ],
+            "inspect": [
+              "supporting_observation"
+            ]
+          },
           "outcomes": {
             "supported": {
               "reasons": [
@@ -251,6 +261,14 @@ steps:
             }
           },
           "format": "canon-decision/1",
+          "missing_evidence": {
+            "attempt_falsification": [
+              "falsification_attempt"
+            ],
+            "inspect": [
+              "supporting_observation"
+            ]
+          },
           "outcomes": {
             "supported": {
               "reasons": [
@@ -367,6 +385,14 @@ steps:
             }
           },
           "format": "canon-decision/1",
+          "missing_evidence": {
+            "attempt_falsification": [
+              "falsification_attempt"
+            ],
+            "inspect": [
+              "supporting_observation"
+            ]
+          },
           "outcomes": {
             "supported": {
               "reasons": [
