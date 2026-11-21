@@ -30,6 +30,7 @@
 //!   (`actions.rs`). Claims come first, in claim-id order, then evidence matches, in kind order and
 //!   then subject order (no subject first), each kind and subject once, then inputs, then order
 //!   forms, then forms over the child cases (`{"children": [<outcome>, ...], "value": <value>}`).
+//!   A form that reads only the current revision adds `"revision": "current"` to its reason.
 //!   A blocked outcome always states at least one reason: a requirement no test decides against
 //!   is one that cannot be met (it is blocked only by an empty `any`, or a `not` over an
 //!   empty `all`), and gives `{"requirement": "unsatisfiable"}`. An outcome that requires an

@@ -250,7 +250,8 @@
 //!   <its value>}`, `{"first": <kind>, "result": <result>, "value": <its value>}` or `{"since":
 //!   <kind>, "then": <kind>, "result": <result>, "value": <its value>}`, with `"subject"` added
 //!   when it names one, then each form over the child cases that decides it, `{"children":
-//!   [<outcome>, ...], "value": <its value>}`, or
+//!   [<outcome>, ...], "value": <its value>}`, with `"revision": "current"` added when the form
+//!   reads only the current revision (story:child-outcome-revision), or
 //!   `{"requirement": "unsatisfiable"}` when none does. `blocked` too when the precondition is
 //!   `true` and the authority decisions deny a requirement of the action, each a reason
 //!   `{"capability": <id>, "decision": "denied"}`. `approval-required` when the precondition is
