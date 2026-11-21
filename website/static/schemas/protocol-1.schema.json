@@ -730,7 +730,7 @@
       ]
     },
     "ChildOutcomes": {
-      "description": "The form over the case's child cases, written `{children: {in: [<outcome>, ...]}}`: whether every child case ended with one of the outcomes listed. It reads every `case_outcome` record the evidence check accepted, as the order forms read the history: `unknown` with no record, `false` when a record's outcome is neither listed nor `open` (a child that ended outside the set), otherwise `unknown` when a child is still `open` and `true` when every child ended with a listed outcome.",
+      "description": "The form over the case's child cases, written `{children: {in: [<outcome>, ...]}}`: whether every child case ended with one of the outcomes listed. It reads every `case_outcome` record the evidence check accepted, as the order forms read the history, or with `revision: current` only those about the current revision of their subject: `unknown` with no record read, `false` when a record's outcome is neither listed nor `open` (a child that ended outside the set), otherwise `unknown` when a child is still `open` and `true` when every child ended with a listed outcome.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -740,6 +740,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "revision": {
+          "description": "Which records the form reads (story:child-outcome-revision): absent or `any`, every `case_outcome` record; `current`, only those whose `subject_revision` is the case snapshot's current revision of their `subject`.",
+          "$ref": "#/$defs/ChildRevision"
         }
       },
       "required": [
@@ -778,6 +782,13 @@
       "required": [
         "kind",
         "result"
+      ]
+    },
+    "ChildRevision": {
+      "description": "Which `case_outcome` records a `children` form reads (story:child-outcome-revision). A terminal record's `subject_revision` is the revision the child's outcome was computed against: when the child protocol declares the subject artifact, the child's own revision of it at its terminating evaluation; when it does not, the parent's revision of the subject when the child was opened. Canon does not write the record: it compares that revision with the case snapshot's.",
+      "enum": [
+        "any",
+        "current"
       ]
     }
   }
