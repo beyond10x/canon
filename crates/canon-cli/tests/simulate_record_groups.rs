@@ -27,11 +27,15 @@
 //!    in `canon_simulate.rs`, still holds the walk without groups.)
 //!
 //! `simulate_walks_the_chain_in_group_steps` holds expectation 7 (condition 2 of the story's
-//! `## Decided`): `chain`, a structure-preserving rename of a four-stage protocol whose
+//! `## Decided`): `fixtures/record-group-large/chain`, a structure-preserving rename of a
+//! four-stage protocol whose
 //! third-stage check records two kinds in one run under the guard that neither is recorded, with
 //! the declaration, gives 405 reachable states and 35 findings standing for 89 states, as the
 //! story figured them before any binary had the step. Without the declaration it gives the line
-//! the story recorded from the binary, 405 states and 42 findings standing for 88.
+//! the story recorded from the binary, 405 states and 42 findings standing for 88. It sits
+//! outside `fixtures/investigation/`, whose every protocol `canon generate` is run over by
+//! `adversary_scenario_generation.rs`: generating from its space (49152 states) adds about a
+//! minute to that test in a debug build.
 //!
 //! `canon evaluate`, `canon check` and `canon generate` give the same bytes for `pair` and
 //! `grouped`, one test each.
@@ -45,6 +49,9 @@ use b10x_canon::model;
 
 /// The fixture family, relative to the repository root.
 const FIXTURES: &str = "fixtures/investigation/record-group";
+
+/// The large fixture of expectation 7, relative to the repository root.
+const LARGE: &str = "fixtures/record-group-large";
 
 /// Each fixture directory the walk is run on, with its exit status.
 const WALKED: [(&str, i32); 3] = [("pair", 1), ("grouped", 0), ("result", 1)];
@@ -379,7 +386,8 @@ fn read_source(case: &str) -> String {
 #[test]
 fn simulate_walks_the_chain_in_group_steps() {
     let declaration = "    records_together:\n      - kinds: [query_done, query_form]\n";
-    let source = read_source("chain");
+    let chain = format!("{LARGE}/chain/protocol.yaml");
+    let source = read(&chain);
     assert_eq!(source.matches(declaration).count(), 1);
     let dir = scratch("chain");
     let ungrouped = dir.join("protocol.yaml");
@@ -397,7 +405,7 @@ fn simulate_walks_the_chain_in_group_steps() {
         text(&first.stdout)
     };
 
-    let grouped = walk(&protocol("chain"));
+    let grouped = walk(&chain);
     assert_eq!(
         grouped.lines().last(),
         Some(
@@ -579,7 +587,7 @@ fn every_record_group_fixture_is_read() {
     };
     let root = repository_root().join(FIXTURES);
     let mut named: Vec<String> = WALKED.iter().map(|(case, _)| (*case).to_owned()).collect();
-    named.extend(["chain".to_owned(), "invalid".to_owned()]);
+    named.push("invalid".to_owned());
     named.sort();
     assert_eq!(entries(root.clone()), named);
     for (case, _) in WALKED {
@@ -589,7 +597,9 @@ fn every_record_group_fixture_is_read() {
             "{case}"
         );
     }
-    assert_eq!(entries(root.join("chain")), ["protocol.yaml"]);
+    let large = repository_root().join(LARGE);
+    assert_eq!(entries(large.clone()), ["chain"]);
+    assert_eq!(entries(large.join("chain")), ["protocol.yaml"]);
     let mut refused: Vec<String> = REFUSED.iter().map(|(file, _)| (*file).to_owned()).collect();
     refused.sort();
     assert_eq!(entries(root.join("invalid")), refused);
