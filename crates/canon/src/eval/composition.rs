@@ -187,6 +187,7 @@ mod tests {
             ArtifactId::new("findings"),
             CaseArtifact {
                 revision: Revision::new(revision),
+                descends_from: None,
             },
         )])
     }
@@ -315,6 +316,7 @@ mod tests {
             upstream_revisions: Declarations::default(),
             producer: None,
             child_case: child.map(CaseId::new),
+            item: None,
         }
     }
 
@@ -356,12 +358,14 @@ mod tests {
                 ArtifactId::new("findings"),
                 CaseArtifact {
                     revision: Revision::new("f2"),
+                    descends_from: None,
                 },
             ),
             (
                 ArtifactId::new("report"),
                 CaseArtifact {
                     revision: Revision::new("r1"),
+                    descends_from: None,
                 },
             ),
         ]);

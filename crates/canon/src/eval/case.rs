@@ -10,7 +10,7 @@ use serde_yaml_ng::Value;
 use super::read::{malformed, yaml};
 use super::{Refusal, identifier, unsupported_format};
 use crate::ir::Ir;
-use crate::model::{CASE_FORMAT, Case, InputId, one_line};
+use crate::model::{ArtifactId, CASE_FORMAT, Case, CaseArtifact, InputId, one_line};
 
 /// Reads one `canon-case/1` document: parsed as YAML, then read as [`case_from_value`] reads it.
 pub fn read_case(text: &str) -> Result<Case, Refusal> {
@@ -36,6 +36,7 @@ pub(super) fn check(ir: &Ir, case: &Case) -> Result<(), Refusal> {
     for (artifact, entry) in case.artifacts.iter() {
         identifier("case artifact identifier", artifact.as_str())?;
         identifier("artifact revision", entry.revision.as_str())?;
+        descent(case, artifact, entry)?;
     }
     if case.protocol != ir.protocol.id {
         return Err(Refusal::new(
@@ -85,6 +86,38 @@ pub(super) fn check(ir: &Ir, case: &Case) -> Result<(), Refusal> {
     super::independence::check(ir, case)
 }
 
+/// Checks the revisions an artifact's current revision descends from (story:revision-ordering),
+/// in the order written: each an identifier (`invalid-identifier`), listed once
+/// (`duplicate-identifier`), and not the current revision itself, which does not descend from
+/// itself (`self-descent`), each refusal naming the case, the artifact and the revision.
+fn descent(case: &Case, artifact: &ArtifactId, entry: &CaseArtifact) -> Result<(), Refusal> {
+    let mut seen = BTreeSet::new();
+    for revision in entry.descends_from.iter().flatten() {
+        identifier("artifact ancestor revision", revision.as_str())?;
+        let named = || {
+            format!(
+                "case `{}` lists revision `{}` among those artifact `{}` descends from",
+                one_line(case.id.as_str()),
+                one_line(revision.as_str()),
+                one_line(artifact.as_str())
+            )
+        };
+        if !seen.insert(revision) {
+            return Err(Refusal::new(
+                "duplicate-identifier",
+                format!("{} more than once", named()),
+            ));
+        }
+        if *revision == entry.revision {
+            return Err(Refusal::new(
+                "self-descent",
+                format!("{}, which is its current revision", named()),
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Checks the case's inputs against those the protocol declares: each input the case gives, in the
 /// order written, is an identifier with an identifier for its value, is declared by the protocol
 /// (`undeclared-input`), is given once (`duplicate-identifier`) and has a value its input declares
@@ -129,4 +162,60 @@ fn inputs(ir: &Ir, case: &Case) -> Result<(), Refusal> {
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const PROTOCOL: &str = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\nevidence_kinds: {k: {}}\n";
+
+    fn ir() -> Ir {
+        crate::ir::compile(&crate::model::parse(PROTOCOL).expect("parses")).expect("compiles")
+    }
+
+    fn case(artifact: &str) -> Case {
+        read_case(&format!(
+            "format: canon-case/1\nid: C-1\nprotocol: p\nartifacts: {{a: {artifact}}}\n"
+        ))
+        .expect("reads")
+    }
+
+    /// `descends_from` (story:revision-ordering): absent, empty and listing other revisions is
+    /// accepted; an entry that is not an identifier, one listed twice and the current revision
+    /// itself are refused, naming the case, the revision and the artifact.
+    #[test]
+    fn descends_from_is_refused_when_it_lists_a_revision_twice_or_the_current_one() {
+        for accepted in [
+            "{revision: r2}",
+            "{revision: r2, descends_from: []}",
+            "{revision: r2, descends_from: [r1, r0]}",
+        ] {
+            if let Err(refusal) = check(&ir(), &case(accepted)) {
+                panic!("{accepted}: {refusal}");
+            }
+        }
+        for (artifact, code, message) in [
+            (
+                "{revision: r2, descends_from: ['r 1']}",
+                "invalid-identifier",
+                "artifact ancestor revision `r 1` is empty or contains whitespace or a control character",
+            ),
+            (
+                "{revision: r2, descends_from: [r1, r0, r1]}",
+                "duplicate-identifier",
+                "case `C-1` lists revision `r1` among those artifact `a` descends from more than once",
+            ),
+            (
+                "{revision: r2, descends_from: [r1, r2]}",
+                "self-descent",
+                "case `C-1` lists revision `r2` among those artifact `a` descends from, which is its current revision",
+            ),
+        ] {
+            let refusal = check(&ir(), &case(artifact)).expect_err(artifact);
+            assert_eq!(refusal.code(), code, "{artifact}");
+            assert_eq!(refusal.to_string(), message, "{artifact}");
+        }
+    }
 }

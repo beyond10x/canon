@@ -960,6 +960,7 @@ pub(crate) fn evaluate_records(
                 .map(|id| {
                     let current = CaseArtifact {
                         revision: revision.clone(),
+                        descends_from: space.descends_from(),
                     };
                     (id.clone(), current)
                 })

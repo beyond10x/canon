@@ -2,9 +2,10 @@
 //!
 //! A predicate is one of `all`, `any`, `not`, an evidence match by kind, optional result and
 //! optional subject, a test on a claim value, a test on a case input's value, one of the four order
-//! forms over the evidence history, or the form over the case's child cases. Written in source as
-//! a map with exactly one of the keys `all`, `any`, `not`, `evidence`, `claim`, `input`, `first`,
-//! `before`, `after`, `since` or `children`; a claim test may add `is`, which defaults to `true`,
+//! forms over the evidence history, the order form over revisions (`descended`), or the form over
+//! the case's child cases. Written in source as a map with exactly one of the keys `all`, `any`,
+//! `not`, `evidence`, `claim`, `input`, `first`, `before`, `after`, `since`, `descended` or
+//! `children`; a claim test may add `is`, which defaults to `true`,
 //! and an input test adds `in`, the values it is true for (`{input: severity, in: [high]}`).
 //!
 //! The order forms read the evidence history: every record of their kind (about their `subject`
@@ -28,9 +29,9 @@
 //! with `R`, has no `observed_at`, and otherwise `true` when one of `K2` with `R` comes after the
 //! earliest instant of `K1`, `unknown` when one only shares that instant (other than the first
 //! record itself: a record is not later than itself), and `false` when none comes after it. A
-//! record of `K2` with another result takes no part. `K1` and `K2` may be one kind. A known limit:
-//! a record bound to any earlier revision counts, whether or not the current revision descends
-//! from it, since Canon does not know how revisions descend (story:revision-ordering).
+//! record of `K2` with another result takes no part. `K1` and `K2` may be one kind. `after` reads
+//! no descent: a record bound to any earlier revision counts, whether or not the current revision
+//! descends from it; `descended` below is the form that reads it (story:revision-ordering).
 //! `{since: {last: K1, then: {kind: K2, result: R}}}` asks whether a record of `K2` with result `R`,
 //! at the subject and subject revision of the latest record of `K1`, was observed after that
 //! record: `unknown` with no record of `K1`, `false` with no record of `K2` with `R`, `unknown`
@@ -40,6 +41,17 @@
 //! such record is observed before it or there is none, and `unknown` otherwise, and the form is
 //! `true` when every latest record gives `true`, `false` when every one gives `false`, and
 //! `unknown` otherwise. A record at a revision descended from the latest record's does not count.
+//!
+//! `{descended: {first: {kind: K1, result: R1}, then: {kind: K2, result: R2}}}`
+//! (story:revision-ordering) orders by revision, not by instant: whether an item that had result
+//! `R1` in a record of `K1` on a revision the current revision of its subject descends from has
+//! result `R2` in a record of `K2` on the current revision. A later record is one of `K2` with `R2`
+//! that names an `item` and is about the case snapshot's current revision of its subject; an
+//! earlier record for it is one of `K1` with `R1` with the same `item`, about the same subject, at
+//! a revision the snapshot lists in that artifact's `descends_from`. `true` when a later record
+//! has an earlier record; otherwise `unknown` with no later record, or when the snapshot gives no
+//! `descends_from` for the subject of one; otherwise `false`. A record without an `item` takes no
+//! part, and `observed_at` is not read.
 //!
 //! An evidence match may demand independence: `{evidence: {kind: K, result: R, independent_on:
 //! [D, ...]}}` reads a record only when it names a `producer` and the case's `independence` map
@@ -147,6 +159,9 @@ pub enum Predicate {
     /// Whether a record of a kind with a result, at the subject revision of the latest record of a
     /// kind in the evidence history, was observed after that record.
     Since(EvidenceSince),
+    /// Whether an item that had a result on a revision the current revision of its subject
+    /// descends from has a result on the current revision (story:revision-ordering).
+    Descended(EvidenceDescended),
     /// Whether every child case of the case ended with one of the outcomes listed, over its
     /// `case_outcome` records (story:case-composition).
     Children(ChildOutcomes),
@@ -229,8 +244,30 @@ pub struct EvidenceSince {
     pub subject: Option<ArtifactId>,
 }
 
+/// An order form over revisions (story:revision-ordering): whether an item that had `first.result`
+/// in a record of `first.kind`, on a revision the case snapshot lists in its subject's
+/// `descends_from`, has `then.result` in a record of `then.kind` about the current revision of
+/// that subject, all about `subject` when it names one. It reads every record of the two kinds the
+/// evidence check accepted, excluded or not, and pairs records only on equal `item`. `first` and
+/// `then` may name one kind.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EvidenceDescended {
+    /// The earlier record: its kind and its result.
+    #[serde(deserialize_with = "super::present::required")]
+    pub first: LaterRecord,
+    /// The later record, about the current revision: its kind and its result.
+    #[serde(deserialize_with = "super::present::required")]
+    pub then: LaterRecord,
+    /// The declared artifact the records of both kinds are about; without it, records about any
+    /// artifact.
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub subject: Option<ArtifactId>,
+}
+
 /// What an `after` form reads later than the first record of its `first` kind, and a `since` form
-/// later than the latest record of its `last` kind: a record of `kind` with `result`.
+/// later than the latest record of its `last` kind: a record of `kind` with `result`. A
+/// `descended` form names each of the two records it pairs by one.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LaterRecord {
@@ -401,6 +438,7 @@ impl Predicate {
             | Predicate::Before(_)
             | Predicate::After(_)
             | Predicate::Since(_)
+            | Predicate::Descended(_)
             | Predicate::Children(_) => {}
         }
     }
@@ -427,8 +465,8 @@ impl Predicate {
         found
     }
 
-    /// Every order form (`first`, `before`, `after` and `since`) inside this predicate, in source
-    /// order.
+    /// Every order form (`first`, `before`, `after`, `since` and `descended`) inside this
+    /// predicate, in source order.
     pub fn order_forms(&self) -> Vec<&Predicate> {
         let mut found = Vec::new();
         self.visit(&mut |predicate| {
@@ -438,6 +476,7 @@ impl Predicate {
                     | Predicate::Before(_)
                     | Predicate::After(_)
                     | Predicate::Since(_)
+                    | Predicate::Descended(_)
             ) {
                 found.push(predicate);
             }
@@ -447,7 +486,8 @@ impl Predicate {
 
     /// The evidence an order form reads, as `(kind, subject)` pairs: `first`'s kind, `before`'s two
     /// kinds, `first` then `then`, `after`'s two kinds, `first` then `then.kind`, or `since`'s two
-    /// kinds, `last` then `then.kind`, each with the form's subject. Empty for any other form.
+    /// kinds, `last` then `then.kind`, or `descended`'s two kinds, `first.kind` then `then.kind`,
+    /// each with the form's subject. Empty for any other form.
     pub fn order_reads(&self) -> Vec<(&EvidenceKindId, Option<&ArtifactId>)> {
         match self {
             Predicate::First(form) => vec![(&form.kind, form.subject.as_ref())],
@@ -461,6 +501,10 @@ impl Predicate {
             ],
             Predicate::Since(form) => vec![
                 (&form.last, form.subject.as_ref()),
+                (&form.then.kind, form.subject.as_ref()),
+            ],
+            Predicate::Descended(form) => vec![
+                (&form.first.kind, form.subject.as_ref()),
                 (&form.then.kind, form.subject.as_ref()),
             ],
             _ => Vec::new(),
@@ -499,6 +543,8 @@ pub(crate) struct WrittenPredicate {
     #[serde(default, deserialize_with = "super::present::form")]
     pub(crate) since: Option<EvidenceSince>,
     #[serde(default, deserialize_with = "super::present::form")]
+    pub(crate) descended: Option<EvidenceDescended>,
+    #[serde(default, deserialize_with = "super::present::form")]
     pub(crate) children: Option<ChildOutcomes>,
 }
 
@@ -519,6 +565,7 @@ impl TryFrom<WrittenPredicate> for Predicate {
             before,
             after,
             since,
+            descended,
             children,
         } = written;
         let forms = [
@@ -532,6 +579,7 @@ impl TryFrom<WrittenPredicate> for Predicate {
             before.is_some(),
             after.is_some(),
             since.is_some(),
+            descended.is_some(),
             children.is_some(),
         ]
         .into_iter()
@@ -539,7 +587,7 @@ impl TryFrom<WrittenPredicate> for Predicate {
         .count();
         if forms != 1 {
             return Err(format!(
-                "a predicate has exactly one of `all`, `any`, `not`, `evidence`, `claim`, `input`, `first`, `before`, `after`, `since` or `children`, found {forms}"
+                "a predicate has exactly one of `all`, `any`, `not`, `evidence`, `claim`, `input`, `first`, `before`, `after`, `since`, `descended` or `children`, found {forms}"
             ));
         }
         if is.is_some() && claim.is_none() {
@@ -573,6 +621,8 @@ impl TryFrom<WrittenPredicate> for Predicate {
             Predicate::After(form)
         } else if let Some(form) = since {
             Predicate::Since(form)
+        } else if let Some(form) = descended {
+            Predicate::Descended(form)
         } else if let Some(form) = children {
             Predicate::Children(form)
         } else {

@@ -53,26 +53,45 @@
 //! record is not later than itself, and no candidate is observed after the latest anchor, so the
 //! form is never `true`.
 //!
-//! A record bound to a revision of its subject that does not descend from the current one counts
-//! like any other: Canon does not know how revisions descend (story:revision-ordering). For the
-//! same reason, a `since` candidate at a revision descended from its anchor's does not count.
+//! These four read no descent: a record bound to a revision of its subject that does not descend
+//! from the current one counts like any other, and a `since` candidate at a revision descended
+//! from its anchor's does not count.
+//!
+//! `{descended: {first: {kind: K1, result: R1}, then: {kind: K2, result: R2}}}`
+//! (story:revision-ordering, CANON-ORDER-005) orders by descent, which the case snapshot gives
+//! (`descends_from` of each artifact, every revision its current one descends from), and reads no
+//! `observed_at`. A later record is a record of `K2` with result `R2` that names an `item` and is
+//! about the snapshot's current revision of its subject; a record about another revision takes no
+//! part. An earlier record for it is a record of `K1` with result `R1` that names the same `item`,
+//! is about the same subject, and is about a revision listed in that subject's `descends_from`.
+//! `true` when some later record has an earlier record; otherwise `unknown` with no later record,
+//! or when the snapshot gives no `descends_from` for the subject of one; otherwise `false`. A
+//! record without an `item` takes no part, and items compare as text.
 
 use serde_json::{Map, Value};
 
 use super::claims::reads;
+use super::composition::Artifacts;
 use crate::model::{
-    ArtifactId, EvidenceAfter, EvidenceKindId, EvidenceOrder, EvidenceRecord, EvidenceSince,
-    FirstResult, Predicate, Truth,
+    ArtifactId, EvidenceAfter, EvidenceDescended, EvidenceKindId, EvidenceOrder, EvidenceRecord,
+    EvidenceSince, FirstResult, LaterRecord, Predicate, Truth,
 };
 
-/// The value of an order form over the `history`; `None` for any other form.
-pub(crate) fn value(predicate: &Predicate, history: &[EvidenceRecord]) -> Option<Truth> {
+/// The value of an order form over the `history`, with `artifacts` the case snapshot's artifacts,
+/// which only `descended` reads (none gives no artifact a current revision); `None` for any other
+/// form.
+pub(crate) fn value(
+    predicate: &Predicate,
+    history: &[EvidenceRecord],
+    artifacts: Option<&Artifacts>,
+) -> Option<Truth> {
     let ticks = || ticks(history);
     match predicate {
         Predicate::First(form) => Some(first(form, history, &ticks())),
         Predicate::Before(form) => Some(before(form, history, &ticks())),
         Predicate::After(form) => Some(after(form, history, &ticks())),
         Predicate::Since(form) => Some(since(form, history, &ticks())),
+        Predicate::Descended(form) => Some(descended(form, history, artifacts)),
         _ => None,
     }
 }
@@ -266,9 +285,51 @@ fn since(form: &EvidenceSince, history: &[EvidenceRecord], ticks: &[Option<i128>
     }
 }
 
+/// `descended` (story:revision-ordering): whether a later record, of `form.then` about the current
+/// revision of its subject and naming an item, has an earlier record, of `form.first` with the same
+/// item and subject, about a revision that subject's `descends_from` lists, as the module docs say.
+fn descended(
+    form: &EvidenceDescended,
+    history: &[EvidenceRecord],
+    artifacts: Option<&Artifacts>,
+) -> Truth {
+    let subject = form.subject.as_ref();
+    let of = |read: &LaterRecord, record: &EvidenceRecord| {
+        reads(&read.kind, subject, record)
+            && record.result.as_deref() == Some(read.result.as_str())
+            && record.item.is_some()
+    };
+    let artifact = |record: &EvidenceRecord| artifacts?.get(&record.subject);
+    let (mut later, mut undescended) = (false, false);
+    for then in history.iter().filter(|record| of(&form.then, record)) {
+        let Some(current) = artifact(then).filter(|a| a.revision == then.subject_revision) else {
+            continue;
+        };
+        later = true;
+        let Some(ancestors) = &current.descends_from else {
+            undescended = true;
+            continue;
+        };
+        if history.iter().any(|first| {
+            of(&form.first, first)
+                && first.item == then.item
+                && first.subject == then.subject
+                && ancestors.contains(&first.subject_revision)
+        }) {
+            return Truth::True;
+        }
+    }
+    if !later || undescended {
+        Truth::Unknown
+    } else {
+        Truth::False
+    }
+}
+
 /// How the reasons order the order forms: every `after` first, then every `before`, then every
-/// `first`, then every `since`, each by its fields as text (no subject before any subject).
-type Key<'a> = (u8, &'a str, &'a str, &'a str, Option<&'a str>);
+/// `first`, then every `since`, then every `descended`, each by its fields as text (no subject
+/// before any subject).
+type Key<'a> = (u8, &'a str, &'a str, &'a str, &'a str, Option<&'a str>);
 
 fn key(predicate: &Predicate) -> Option<Key<'_>> {
     match predicate {
@@ -277,12 +338,14 @@ fn key(predicate: &Predicate) -> Option<Key<'_>> {
             form.first.as_str(),
             form.then.kind.as_str(),
             form.then.result.as_str(),
+            "",
             form.subject.as_ref().map(ArtifactId::as_str),
         )),
         Predicate::Before(form) => Some((
             1,
             form.first.as_str(),
             form.then.as_str(),
+            "",
             "",
             form.subject.as_ref().map(ArtifactId::as_str),
         )),
@@ -291,11 +354,21 @@ fn key(predicate: &Predicate) -> Option<Key<'_>> {
             form.kind.as_str(),
             form.result.as_str(),
             "",
+            "",
             form.subject.as_ref().map(ArtifactId::as_str),
         )),
         Predicate::Since(form) => Some((
             3,
             form.last.as_str(),
+            form.then.kind.as_str(),
+            form.then.result.as_str(),
+            "",
+            form.subject.as_ref().map(ArtifactId::as_str),
+        )),
+        Predicate::Descended(form) => Some((
+            4,
+            form.first.kind.as_str(),
+            form.first.result.as_str(),
             form.then.kind.as_str(),
             form.then.result.as_str(),
             form.subject.as_ref().map(ArtifactId::as_str),
@@ -304,14 +377,17 @@ fn key(predicate: &Predicate) -> Option<Key<'_>> {
     }
 }
 
-/// The reason each of `forms` gives, with its value over the `history`, each form once, `after`
-/// forms first, then `before`, then `first`, then `since` forms: `{"after": K1, "then": K2,
-/// "result": R, "value": <truth>}`, `{"before": K1, "then": K2, "value": <truth>}`, `{"first": K,
-/// "result": R, "value": <truth>}` or `{"since": K1, "then": K2, "result": R, "value": <truth>}`,
-/// with `"subject": A` added when the form names one. What is not an order form is skipped.
+/// The reason each of `forms` gives, with its value over the `history` and the case snapshot's
+/// `artifacts`, each form once, `after` forms first, then `before`, then `first`, then `since`,
+/// then `descended` forms: `{"after": K1, "then": K2, "result": R, "value": <truth>}`,
+/// `{"before": K1, "then": K2, "value": <truth>}`, `{"first": K, "result": R, "value": <truth>}`,
+/// `{"since": K1, "then": K2, "result": R, "value": <truth>}` or `{"descended": K1,
+/// "first_result": R1, "then": K2, "then_result": R2, "value": <truth>}`, with `"subject": A`
+/// added when the form names one. What is not an order form is skipped.
 pub(crate) fn reasons<'a>(
     forms: impl IntoIterator<Item = &'a Predicate>,
     history: &[EvidenceRecord],
+    artifacts: Option<&Artifacts>,
 ) -> Vec<Value> {
     let mut keyed: Vec<(Key<'a>, &'a Predicate)> = forms
         .into_iter()
@@ -322,7 +398,7 @@ pub(crate) fn reasons<'a>(
     keyed
         .into_iter()
         .filter_map(|(_, form)| {
-            let truth = value(form, history)?.to_string();
+            let truth = value(form, history, artifacts)?.to_string();
             let (subject, mut entry) = match form {
                 Predicate::After(form) => (
                     form.subject.as_ref(),
@@ -352,6 +428,24 @@ pub(crate) fn reasons<'a>(
                         ("since".to_owned(), Value::from(form.last.as_str())),
                         ("then".to_owned(), Value::from(form.then.kind.as_str())),
                         ("result".to_owned(), Value::from(form.then.result.as_str())),
+                    ]),
+                ),
+                Predicate::Descended(form) => (
+                    form.subject.as_ref(),
+                    Map::from_iter([
+                        (
+                            "descended".to_owned(),
+                            Value::from(form.first.kind.as_str()),
+                        ),
+                        (
+                            "first_result".to_owned(),
+                            Value::from(form.first.result.as_str()),
+                        ),
+                        ("then".to_owned(), Value::from(form.then.kind.as_str())),
+                        (
+                            "then_result".to_owned(),
+                            Value::from(form.then.result.as_str()),
+                        ),
                     ]),
                 ),
                 _ => return None,
@@ -388,6 +482,7 @@ mod tests {
             observed_at: at.map(Instant::new),
             upstream_revisions: Declarations::default(),
             child_case: None,
+            item: None,
         }
     }
 
@@ -448,7 +543,7 @@ mod tests {
                 "no result is not the result",
             ),
         ] {
-            assert_eq!(value(&form, &history), Some(expected), "{why}");
+            assert_eq!(value(&form, &history, None), Some(expected), "{why}");
         }
     }
 
@@ -488,7 +583,7 @@ mod tests {
                 "the earliest of each counts",
             ),
         ] {
-            assert_eq!(value(&form, &history), Some(expected), "{why}");
+            assert_eq!(value(&form, &history, None), Some(expected), "{why}");
         }
     }
 
@@ -561,7 +656,7 @@ mod tests {
                 "the earliest first record counts",
             ),
         ] {
-            assert_eq!(value(&form, &history), Some(expected), "{why}");
+            assert_eq!(value(&form, &history, None), Some(expected), "{why}");
         }
     }
 
@@ -587,7 +682,7 @@ mod tests {
             (vec![green("g", T1)], F, "no record with the result"),
             (vec![red("r", None)], U, "unplaced"),
         ] {
-            assert_eq!(value(&form, &history), Some(expected), "{why}");
+            assert_eq!(value(&form, &history, None), Some(expected), "{why}");
         }
     }
 
@@ -600,19 +695,19 @@ mod tests {
             record("m", "m", None, "b", T1),
         ];
         assert_eq!(
-            value(&first_of("k", "failed", Some("a")), &history),
+            value(&first_of("k", "failed", Some("a")), &history, None),
             Some(Truth::True)
         );
         assert_eq!(
-            value(&first_of("k", "failed", None), &history),
+            value(&first_of("k", "failed", None), &history, None),
             Some(Truth::False)
         );
         assert_eq!(
-            value(&before_of("k", "m", Some("a")), &history),
+            value(&before_of("k", "m", Some("a")), &history, None),
             Some(Truth::Unknown)
         );
         assert_eq!(
-            value(&before_of("k", "m", None), &history),
+            value(&before_of("k", "m", None), &history, None),
             Some(Truth::Unknown)
         );
     }
@@ -627,7 +722,7 @@ mod tests {
         ];
         let history = [record("r", "k", Some("failed"), "a", T1)];
         assert_eq!(
-            reasons(&forms, &history),
+            reasons(&forms, &history, None),
             [
                 serde_json::json!({"before": "k", "then": "m", "value": "unknown"}),
                 serde_json::json!({"first": "k", "result": "failed", "subject": "a", "value": "true"}),
@@ -652,7 +747,7 @@ mod tests {
             record("r", "m", Some("failed"), "a", T2),
         ];
         assert_eq!(
-            reasons(&forms, &history),
+            reasons(&forms, &history, None),
             [
                 serde_json::json!({"after": "k", "then": "m", "result": "failed", "value": "true"}),
                 serde_json::json!({"after": "k", "then": "m", "result": "failed", "subject": "a", "value": "true"}),
@@ -774,7 +869,7 @@ mod tests {
                 "another result unplaced takes no part",
             ),
         ] {
-            assert_eq!(value(&form, &history), Some(expected), "{why}");
+            assert_eq!(value(&form, &history, None), Some(expected), "{why}");
         }
     }
 
@@ -818,7 +913,7 @@ mod tests {
             (vec![green("g", "h1", T1)], F, "no record with the result"),
             (vec![red("r", "h1", None)], U, "unplaced"),
         ] {
-            assert_eq!(value(&form, &history), Some(expected), "{why}");
+            assert_eq!(value(&form, &history, None), Some(expected), "{why}");
         }
         let mut rng = Rng(0x5EC0_4D5A_F7E2_0003);
         for _ in 0..20_000 {
@@ -828,7 +923,7 @@ mod tests {
                     for kind in ["k", "m"] {
                         let form = since_of(kind, kind, result, subject);
                         assert_ne!(
-                            value(&form, &history),
+                            value(&form, &history, None),
                             Some(Truth::True),
                             "{form:?} over {history:?}"
                         );
@@ -849,15 +944,15 @@ mod tests {
             record("s", "m", Some("failed"), "b", T0),
         ];
         assert_eq!(
-            value(&since_of("k", "m", "failed", Some("a")), &history),
+            value(&since_of("k", "m", "failed", Some("a")), &history, None),
             Some(Truth::True)
         );
         assert_eq!(
-            value(&since_of("k", "m", "failed", Some("b")), &history),
+            value(&since_of("k", "m", "failed", Some("b")), &history, None),
             Some(Truth::False)
         );
         assert_eq!(
-            value(&since_of("k", "m", "failed", None), &history),
+            value(&since_of("k", "m", "failed", None), &history, None),
             Some(Truth::False)
         );
     }
@@ -879,7 +974,7 @@ mod tests {
             record("r", "m", Some("failed"), "a", T2),
         ];
         assert_eq!(
-            reasons(&forms, &history),
+            reasons(&forms, &history, None),
             [
                 serde_json::json!({"after": "k", "then": "m", "result": "failed", "value": "true"}),
                 serde_json::json!({"before": "k", "then": "m", "value": "true"}),
@@ -1117,7 +1212,7 @@ mod tests {
             ),
         ];
         for (form, history, expected, why) in cases {
-            assert_eq!(value(form, &history), Some(expected), "{why}");
+            assert_eq!(value(form, &history, None), Some(expected), "{why}");
         }
     }
 
@@ -1310,7 +1405,7 @@ mod tests {
             for form in &forms {
                 let expected = whole_seconds::value(form, &history);
                 assert_eq!(
-                    value(form, &history),
+                    value(form, &history, None),
                     Some(expected),
                     "{form:?} over {history:?}"
                 );
@@ -1349,8 +1444,8 @@ mod tests {
                 })
                 .collect();
             for form in &forms {
-                let before = value(form, &coarse).expect("an order form");
-                let after = value(form, &fine).expect("an order form");
+                let before = value(form, &coarse, None).expect("an order form");
+                let after = value(form, &fine, None).expect("an order form");
                 if before != Truth::Unknown {
                     compared += 1;
                     assert_eq!(after, before, "{form:?}: {coarse:?} refined to {fine:?}");
@@ -1362,6 +1457,210 @@ mod tests {
         assert!(
             compared > 0 && settled > 0,
             "{compared} compared, {settled} settled"
+        );
+    }
+
+    fn descended_of(first: &str, then: &str, subject: Option<&str>) -> Predicate {
+        Predicate::Descended(EvidenceDescended {
+            first: LaterRecord {
+                kind: EvidenceKindId::new("k"),
+                result: first.to_owned(),
+            },
+            then: LaterRecord {
+                kind: EvidenceKindId::new("k"),
+                result: then.to_owned(),
+            },
+            subject: subject.map(ArtifactId::new),
+        })
+    }
+
+    /// The case snapshot's artifacts: `a` at `r2`, descending from `ancestors` when given, and `b`
+    /// at `r2` descending from `r1`.
+    fn snapshot(ancestors: Option<&[&str]>) -> Artifacts {
+        let listed = |revisions: &[&str]| revisions.iter().map(|r| Revision::new(*r)).collect();
+        Declarations::new(vec![
+            (
+                ArtifactId::new("a"),
+                crate::model::CaseArtifact {
+                    revision: Revision::new("r2"),
+                    descends_from: ancestors.map(listed),
+                },
+            ),
+            (
+                ArtifactId::new("b"),
+                crate::model::CaseArtifact {
+                    revision: Revision::new("r2"),
+                    descends_from: Some(listed(&["r1"])),
+                },
+            ),
+        ])
+    }
+
+    /// A record of `k` with `result` about `subject` at `revision`, naming `item` when given, at no
+    /// instant: `descended` reads none.
+    fn run(result: &str, subject: &str, revision: &str, item: Option<&str>) -> EvidenceRecord {
+        let mut record = at_revision(record("e", "k", Some(result), subject, None), revision);
+        record.item = item.map(str::to_owned);
+        record
+    }
+
+    /// Every row of the table in the `ess/` comment of `EvidenceDescended` (story:revision-ordering),
+    /// and the mixed cases: a failure with no later pass, a pass with no earlier failure, two items
+    /// of which one satisfies the form, records without an item, a pass about an earlier revision,
+    /// the current revision as an ancestor, and records about another artifact.
+    #[test]
+    fn descended_pairs_an_item_across_a_descended_revision() {
+        use Truth::{False as F, True as T, Unknown as U};
+        let form = descended_of("failed", "passed", Some("a"));
+        let given = snapshot(Some(&["r1", "r0"]));
+        let red = |revision, item| run("failed", "a", revision, Some(item));
+        let green = |revision, item| run("passed", "a", revision, Some(item));
+        for (history, artifacts, expected, why) in [
+            (vec![], Some(&given), U, "no record"),
+            (
+                vec![red("r1", "t")],
+                Some(&given),
+                U,
+                "a failure, no pass now",
+            ),
+            (
+                vec![green("r2", "t")],
+                Some(&given),
+                F,
+                "a pass now, no failure",
+            ),
+            (
+                vec![red("r1", "t"), green("r2", "t")],
+                Some(&given),
+                T,
+                "failed on an ancestor, passes now",
+            ),
+            (
+                vec![red("r0", "t"), green("r2", "t")],
+                Some(&given),
+                T,
+                "failed on an earlier ancestor",
+            ),
+            (
+                vec![red("r3", "t"), green("r2", "t")],
+                Some(&given),
+                F,
+                "failed on a revision not listed",
+            ),
+            (
+                vec![red("r2", "t"), green("r2", "t")],
+                Some(&given),
+                F,
+                "both on the current revision",
+            ),
+            (
+                vec![red("r1", "t"), green("r2", "u")],
+                Some(&given),
+                F,
+                "two items",
+            ),
+            (
+                vec![red("r1", "t"), green("r2", "t"), green("r2", "u")],
+                Some(&given),
+                T,
+                "two items, one satisfies",
+            ),
+            (
+                vec![red("r1", "t"), green("r1", "t")],
+                Some(&given),
+                U,
+                "a pass about an earlier revision takes no part",
+            ),
+            (
+                vec![
+                    run("failed", "a", "r1", None),
+                    run("passed", "a", "r2", None),
+                ],
+                Some(&given),
+                U,
+                "records without an item take no part",
+            ),
+            (
+                vec![run("failed", "a", "r1", None), green("r2", "t")],
+                Some(&given),
+                F,
+                "a failure without an item pairs with nothing",
+            ),
+            (
+                vec![red("r1", "t"), green("r2", "t")],
+                Some(&snapshot(None)),
+                U,
+                "descends_from not given",
+            ),
+            (
+                vec![red("r1", "t"), green("r2", "t")],
+                Some(&snapshot(Some(&[]))),
+                F,
+                "descends from none",
+            ),
+            (
+                vec![red("r1", "t"), green("r2", "t")],
+                None,
+                U,
+                "no snapshot",
+            ),
+            (
+                vec![
+                    run("failed", "b", "r1", Some("t")),
+                    run("passed", "b", "r2", Some("t")),
+                ],
+                Some(&given),
+                U,
+                "records about another artifact are not read",
+            ),
+        ] {
+            assert_eq!(value(&form, &history, artifacts), Some(expected), "{why}");
+        }
+    }
+
+    /// Without a subject the form reads every artifact, pairing records only about one artifact:
+    /// an artifact without `descends_from` leaves it `unknown` unless another pair holds.
+    #[test]
+    fn descended_without_a_subject_pairs_records_about_one_artifact() {
+        let form = descended_of("failed", "passed", None);
+        let given = snapshot(None);
+        let history = [
+            run("failed", "a", "r1", Some("t")),
+            run("passed", "b", "r2", Some("t")),
+        ];
+        assert_eq!(value(&form, &history, Some(&given)), Some(Truth::False));
+        let history = [
+            run("failed", "b", "r1", Some("t")),
+            run("passed", "a", "r2", Some("t")),
+            run("passed", "b", "r2", Some("t")),
+        ];
+        assert_eq!(value(&form, &history, Some(&given)), Some(Truth::True));
+        let history = [
+            run("failed", "b", "r0", Some("t")),
+            run("passed", "a", "r2", Some("t")),
+            run("passed", "b", "r2", Some("t")),
+        ];
+        assert_eq!(value(&form, &history, Some(&given)), Some(Truth::Unknown));
+    }
+
+    /// `descended` reasons come after every other, once each, with both results and the subject.
+    #[test]
+    fn descended_reasons_come_last_and_name_both_results() {
+        let forms = [
+            descended_of("failed", "passed", Some("a")),
+            since_of("k", "m", "failed", None),
+            descended_of("failed", "passed", Some("a")),
+        ];
+        let history = [
+            run("failed", "a", "r1", Some("t")),
+            run("passed", "a", "r2", Some("t")),
+        ];
+        assert_eq!(
+            reasons(&forms, &history, Some(&snapshot(Some(&["r1"])))),
+            [
+                serde_json::json!({"since": "k", "then": "m", "result": "failed", "value": "false"}),
+                serde_json::json!({"descended": "k", "first_result": "failed", "then": "k", "then_result": "passed", "subject": "a", "value": "true"}),
+            ]
         );
     }
 }

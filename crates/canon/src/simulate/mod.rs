@@ -254,7 +254,7 @@
 //!
 //! First, as `canon check` does, an IR nested beyond the evaluator's depth bound is refused as
 //! `predicate-too-deep`, and claims that test each other in a cycle as `claim-cycle`. Then a
-//! protocol with an order form (`first`, `before`, `after`, `since`) is refused as
+//! protocol with an order form (`first`, `before`, `after`, `since`, `descended`) is refused as
 //! `ordered-evidence`, naming the first declaration that has one: the space puts a dimension's
 //! current records at one instant, so a sequence of records of one dimension has no state there.
 //! Then the walk is refused as `reachable-state-bound` when it would visit more than

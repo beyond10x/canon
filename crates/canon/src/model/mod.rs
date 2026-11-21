@@ -58,9 +58,9 @@ pub use ids::{
 };
 pub use parse::{FORMAT, ParseError, parse};
 pub use predicate::{
-    CASE_OUTCOME, ChildOutcomes, ChildRevision, ClaimTest, EvidenceAfter, EvidenceMatch,
-    EvidenceOrder, EvidenceSince, FirstResult, InputTest, LaterRecord, OPEN_OUTCOME, Predicate,
-    Truth,
+    CASE_OUTCOME, ChildOutcomes, ChildRevision, ClaimTest, EvidenceAfter, EvidenceDescended,
+    EvidenceMatch, EvidenceOrder, EvidenceSince, FirstResult, InputTest, LaterRecord, OPEN_OUTCOME,
+    Predicate, Truth,
 };
 pub use properties::{
     PROPERTIES_FORMAT, Properties, Property, PropertyDependency, PropertyId, PropertySubject,

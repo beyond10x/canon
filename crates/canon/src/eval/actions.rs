@@ -292,7 +292,7 @@ pub(super) fn unmet(
             ("value".to_owned(), value),
         ]))
     });
-    let order_reasons = super::order::reasons(named.orders, evidence.history);
+    let order_reasons = super::order::reasons(named.orders, evidence.history, evidence.artifacts);
     let children_reasons =
         super::composition::reasons(named.children, evidence.history, evidence.artifacts);
     claim_reasons
@@ -350,7 +350,11 @@ fn deciding<'a>(
                 named.inputs.insert(&test.input);
             }
         }
-        Predicate::First(_) | Predicate::Before(_) | Predicate::After(_) | Predicate::Since(_) => {
+        Predicate::First(_)
+        | Predicate::Before(_)
+        | Predicate::After(_)
+        | Predicate::Since(_)
+        | Predicate::Descended(_) => {
             if value(node) != goal {
                 named.orders.push(node);
             }
@@ -456,6 +460,7 @@ mod tests {
             observed_at: None,
             upstream_revisions: crate::model::Declarations::default(),
             child_case: None,
+            item: None,
         };
         let records = [record];
         let section = section(

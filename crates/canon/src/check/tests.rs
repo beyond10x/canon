@@ -572,6 +572,7 @@ fn claim_values_with(
                 .map(|id| {
                     let current = CaseArtifact {
                         revision: Revision::new(REVISION),
+                        descends_from: None,
                     };
                     (id.clone(), current)
                 })
@@ -639,6 +640,7 @@ fn every_value_of_every_order_form_is_reached_jointly_with_the_evidence_matches(
                     observed_at: at.map(crate::model::Instant::new),
                     upstream_revisions: Declarations::default(),
                     child_case: None,
+                    item: None,
                 }
             })
             .collect();
@@ -653,6 +655,127 @@ fn every_value_of_every_order_form_is_reached_jointly_with_the_evidence_matches(
     // The space is not trivially everything: `first_k_a` true and `first_k` false needs `b`'s
     // first record before `a`'s, so both orders are reached.
     assert!(reached.len() > 100, "{}", reached.len());
+}
+
+/// A protocol with a `descended` form (story:revision-ordering) over one kind, beside evidence
+/// matches on its two results and a `first` on another kind.
+const DESCENDED: &str = "format: protocol/1\n\
+    protocol: {id: p, revision: 1}\n\
+    artifacts: {a: {}}\n\
+    evidence_kinds: {k: {}, m: {}}\n\
+    claims:\n\
+    \x20\x20red_then_green: {true_when: {descended: {first: {kind: k, result: failed}, \
+    then: {kind: k, result: passed}}}}\n\
+    \x20\x20passes: {true_when: {evidence: {kind: k, result: passed}}}\n\
+    \x20\x20fails: {true_when: {evidence: {kind: k, result: failed}}}\n\
+    \x20\x20first_m: {true_when: {first: {kind: m, result: passed}}}\n\
+    actions: {run: {may_produce: [{evidence: k}, {evidence: m}]}}\n\
+    outcomes: {done: {requires: {all: [{claim: red_then_green}, {claim: passes}]}}}\n";
+
+/// The value of every claim of `ir`, in claim order, for `evidence` and a case whose every artifact
+/// is at `r` and descends from `ancestors`.
+fn claim_values_descending(
+    ir: &Ir,
+    evidence: &[crate::model::EvidenceRecord],
+    ancestors: Option<Vec<Revision>>,
+) -> Vec<crate::model::Truth> {
+    let case = Case {
+        format: CASE_FORMAT.to_owned(),
+        independence: Declarations::default(),
+        id: CaseId::new("check"),
+        protocol: ir.protocol.id.clone(),
+        artifacts: Declarations::new(
+            ir.artifacts
+                .keys()
+                .map(|id| {
+                    let current = CaseArtifact {
+                        revision: Revision::new(REVISION),
+                        descends_from: ancestors.clone(),
+                    };
+                    (id.clone(), current)
+                })
+                .collect(),
+        ),
+        termination: None,
+        revision: None,
+        inputs: Declarations::default(),
+    };
+    eval::evaluate(ir, &case, evidence)
+        .expect("evaluates")
+        .claims
+        .iter()
+        .map(|(_, entry)| entry.value)
+        .collect()
+}
+
+/// Soundness of the space for `descended` (story:revision-ordering): the space's case says every
+/// artifact descends from `r0`, and every combination of claim values an evidence set and a
+/// snapshot give, records of either kind, with any result, at the current revision, at `r0` or
+/// at `r1`, naming the space's item, another or none, at one of two instants or none, under a
+/// `descends_from` absent, empty, `[r0]` or `[r1, r0]`, is the combination of some state; and
+/// the form takes each of its three values in some state.
+#[test]
+fn every_value_of_descended_is_reached_jointly_with_the_evidence_matches() {
+    let ir = compiled(DESCENDED);
+    let space = Space::new(&ir);
+    assert_eq!(space.descends_from(), Some(vec![Revision::new("r0")]));
+    let size = space.size().expect("fits");
+    let reached: BTreeSet<Vec<crate::model::Truth>> = (0..size)
+        .map(|index| {
+            let evidence = space.evidence(&space.state(index));
+            claim_values_descending(&ir, &evidence, space.descends_from())
+        })
+        .collect();
+    let forms: BTreeSet<crate::model::Truth> = reached.iter().map(|values| values[3]).collect();
+    assert_eq!(forms.len(), 3, "{reached:?}");
+    let mut rng = Rng(0x5EC0_4D5A_F7E2_0005);
+    let instants = [
+        Some("2026-10-01T09:00:00Z"),
+        Some("2026-10-01T09:00:01Z"),
+        None,
+    ];
+    for _ in 0..20_000 {
+        let records: Vec<crate::model::EvidenceRecord> = (0..rng.below(6))
+            .map(|n| crate::model::EvidenceRecord {
+                format: crate::model::EVIDENCE_FORMAT.to_owned(),
+                producer: None,
+                id: crate::model::EvidenceId::new(format!("h{n}")),
+                kind: EvidenceKindId::new(["k", "m"][rng.below(2)]),
+                result: [Some("passed"), Some("failed"), None][rng.below(3)].map(str::to_owned),
+                subject: crate::model::ArtifactId::new("a"),
+                subject_revision: Revision::new(["r", "r0", "r1"][rng.below(3)]),
+                observed_at: instants[rng.below(3)].map(crate::model::Instant::new),
+                upstream_revisions: Declarations::default(),
+                child_case: None,
+                item: [Some("item"), Some("other"), None][rng.below(3)].map(str::to_owned),
+            })
+            .collect();
+        let ancestors = [
+            None,
+            Some(vec![]),
+            Some(vec![Revision::new("r0")]),
+            Some(vec![Revision::new("r1"), Revision::new("r0")]),
+        ][rng.below(4)]
+        .clone();
+        let values = claim_values_descending(&ir, &records, ancestors.clone());
+        assert!(
+            reached.contains(&values),
+            "no state gives {values:?}, which {records:?} under {ancestors:?} gives"
+        );
+    }
+}
+
+/// `canon check` of a protocol with a `descended` form reaches the outcome that needs it: a
+/// failure about `r0` and a pass about the current revision, one item.
+#[test]
+fn descended_is_checked_over_the_history_dimension() {
+    let ir = compiled(DESCENDED);
+    let report = check(&ir, None).expect("checked");
+    assert!(
+        !report.to_string().contains("unreachable-outcome"),
+        "{report}"
+    );
+    assert_slices_agree(&ir, None, DESCENDED);
 }
 
 /// A protocol with order forms is checked over its history and order dimensions: an outcome no
@@ -846,6 +969,7 @@ fn every_combination_of_demands_met_is_reached_by_a_state() {
                 observed_at: None,
                 upstream_revisions: Declarations::default(),
                 child_case: None,
+                item: None,
             })
             .collect();
         let values = claim_values_with(&ir, &records, independence.clone());
@@ -964,6 +1088,7 @@ fn a_dimension_only_demanding_matches_read_has_no_record_without_a_producer() {
                 observed_at: None,
                 upstream_revisions: Declarations::default(),
                 child_case: None,
+                item: None,
             })
             .collect();
         let values = claim_values_with(&ir, &records, independence.clone());
@@ -1039,6 +1164,7 @@ fn unreached_histories(
                 observed_at: instants[rng.below(4)].map(crate::model::Instant::new),
                 upstream_revisions: Declarations::default(),
                 child_case: None,
+                item: None,
             })
             .collect();
         let values = claim_values(&ir, &records);

@@ -85,6 +85,7 @@ fn same_record(first: &EvidenceRecord, copy: &EvidenceRecord) -> bool {
         upstream_revisions,
         producer,
         child_case,
+        item,
     } = first;
     let EvidenceRecord {
         format: copy_format,
@@ -97,6 +98,7 @@ fn same_record(first: &EvidenceRecord, copy: &EvidenceRecord) -> bool {
         upstream_revisions: copy_upstream_revisions,
         producer: copy_producer,
         child_case: copy_child_case,
+        item: copy_item,
     } = copy;
     fn pairs(upstream: &Declarations<ArtifactId, Revision>) -> Vec<(&ArtifactId, &Revision)> {
         let mut pairs: Vec<_> = upstream.iter().collect();
@@ -114,6 +116,7 @@ fn same_record(first: &EvidenceRecord, copy: &EvidenceRecord) -> bool {
         && pairs(upstream_revisions) == pairs(copy_upstream_revisions)
         && producer == copy_producer
         && child_case == copy_child_case
+        && item == copy_item
 }
 
 /// One record of [`check`], refused without its citation, which [`check`] adds. Returns whether
@@ -151,6 +154,9 @@ fn check_record<'a>(
     }
     if let Some(child) = &record.child_case {
         identifier(&format!("{named} child case identifier"), child.as_str())?;
+    }
+    if let Some(item) = &record.item {
+        identifier(&format!("{named} item"), item)?;
     }
     if let Some(observed_at) = &record.observed_at
         && observed_at.seconds().is_none()
@@ -441,6 +447,7 @@ mod tests {
                 e2.replace("2026-10-04T12:00:00Z", "yesterday"),
                 "`e2`",
             ),
+            ("item", format!("{e2}item: 't 1'\n"), "`e2`"),
             (
                 "repeated id",
                 text("e1").replace("12:00:00Z", "12:00:00.000Z"),
@@ -535,7 +542,10 @@ mod tests {
     fn a_copy_that_differs_in_any_field_is_refused() {
         let message = "evidence `e1` is given more than once with different content";
         let outcome = OUTCOME.replace("id: o1", "id: e1");
+        let with_item = format!("{REDELIVERED}item: t1\n");
         let cases: Vec<(&str, &str, String)> = vec![
+            ("item", &with_item, with_item.replace("t1", "t2")),
+            ("item left out", &with_item, REDELIVERED.to_owned()),
             ("result", REDELIVERED, REDELIVERED.replace("pass", "fail")),
             (
                 "result left out",

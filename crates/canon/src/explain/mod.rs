@@ -529,7 +529,11 @@ fn claims(
                 pending.extend(declared.true_when.claim_references());
                 let mut because = claim_reasons(&declared.true_when, values);
                 because.extend(input_reasons(&declared.true_when, inputs));
-                because.extend(order_reasons(declared.true_when.order_forms(), history));
+                because.extend(order_reasons(
+                    declared.true_when.order_forms(),
+                    history,
+                    &case.artifacts,
+                ));
                 because.extend(children_reasons(
                     declared.true_when.children_forms(),
                     history,
