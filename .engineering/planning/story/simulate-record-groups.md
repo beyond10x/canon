@@ -36,7 +36,7 @@ scope:
   path: ess/domains/protocol.yaml
 - confidence: inferred
   path: fixtures/investigation/record-group/
-revision: 14
+revision: 15
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T04:43:47Z", actor: "human:timo", revision: 13, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
 - {from: "proposed", to: "active", at: "2026-11-21T04:43:47Z", actor: "human:timo", revision: 14, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
@@ -229,3 +229,7 @@ Two conditions the same session set, which bind the unit:
 2. The figures for A came from the drafter's Python walk. The story's acceptance repeats them from the Rust binary: sdc.intake at `f364b6b` with the declaration on `questions.check` and the guard `all` gives 405 reachable states and 35 findings standing for 89 states. This is expectation 7 of § Acceptance, added here. The unit takes a copy of that protocol as a fixture with the two edits, names its source, and holds no SDC vocabulary in Canon's code. No Python stays in the repository.
 
 The story was accepted under the operator's standing grant (`approval-record:accept-sdc-request-15-2026-11-21`). The unit builds option A and does not reopen the choice.
+
+## Correction, 2026-11-21
+
+§ Outcome 2 says `canon diff` reports a change of a group as `NO SEMANTIC CHANGE` "as it does for `supplied_by`". That precedent is wrong: since the review of story:supplied-evidence, adding `supplied_by` is `EXPANSION` and removing or replacing it is `BREAKING`, because the evaluator reads it. The class `NO SEMANTIC CHANGE` for `records_together` stands on its own reason: `canon evaluate`, `canon check` and `canon generate` read nothing of it. Noted by the drafter of story:artifact-revised-by and recorded here by the wave coordinator.
