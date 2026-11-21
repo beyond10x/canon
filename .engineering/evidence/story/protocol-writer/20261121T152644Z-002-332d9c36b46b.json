@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T15:26:44Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-writer",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "write overflowed the stack on a predicate built in Rust 5000 deep while the docs said such a model is still written: decided D2, D4 and D5, write stays recursive, the Depth section states the stack use and two cases hold 400 levels on a 2 MiB stack",
+    "reference": "story:protocol-writer, Decided in review; impl/protocol-writer 3abd8a06",
+    "review": "review-result:adversary-protocol-writer-pass-1",
+    "outcome": "fixed"
+  }
+}

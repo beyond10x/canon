@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T15:26:44Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-writer",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "blocker: parse gives keys longer than the reader's simple-key limit and their written text does not read back: decided D1, the round trip is promised for keys of at most 1022 bytes as written; pass 2 measured 1022 and 1023 in 135 combinations of place and key form",
+    "reference": "story:protocol-writer, Decided in review; impl/protocol-writer 94150485",
+    "review": "review-result:adversary-protocol-writer-pass-1",
+    "outcome": "fixed"
+  }
+}

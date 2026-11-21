@@ -22,7 +22,7 @@ scope:
   path: crates/canon/tests/protocol_write.rs
 - confidence: cited
   path: ess/domains/protocol.yaml
-revision: 10
+revision: 11
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T23:28:16Z", actor: "human:timo", revision: 7, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
 - {from: "proposed", to: "active", at: "2026-11-20T23:28:16Z", actor: "human:timo", revision: 8, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w2"}
@@ -199,3 +199,22 @@ orchestrator of this plan may overrule it.
   15 percent, and a stack overflow aborts the whole test binary; the compiler in continuous
   integration is a release newer and its frames may be larger. The test and the module docs name
   500 levels, which leaves a factor of two. D2 is otherwise unchanged.
+
+## Decided in review, after adversary pass 2
+
+The second and last adversary pass (`review-result:adversary-protocol-writer-pass-2`) was green:
+the four findings of pass 1 are closed, the key limit is 1022 bytes in 135 combinations of place
+and key form, and `parse` refuses every longer key it was given. It returned one warning and one
+note, both introduced by the unit, and three green cases (`26b7de25`). Decided on 2026-11-21 by
+the wave coordinator; the session the operator named orchestrator of this plan may overrule it.
+
+- **D5, the depth figure is 400 levels, for every predicate shape.** D4 took 500 levels from a
+  measurement of `not` alone. Pass 2 measured each shape on a 2 MiB stack in a debug build: `not`
+  holds 1152 levels, `all` and `any` hold 808, an `arguments` array 2209 and an `arguments`
+  object 1945. `all` and `any` take two calls per level, so 500 levels leave them a factor of
+  1.62. The module docs and both depth cases (`not`, and the `all` case pass 2 added) name 400
+  levels, which leaves a factor of two for the deepest-running shape. The docs sentence "recurses
+  once per level" is corrected to say that `all` and `any` take two calls per level. This is the
+  correction after the last pass; the coordinator reads its diff.
+- **D6, the note.** The two mutants the unit's cases let through (a backspace written in six
+  bytes, more stack in the list of predicates) are killed by the pass's cases, which stay.

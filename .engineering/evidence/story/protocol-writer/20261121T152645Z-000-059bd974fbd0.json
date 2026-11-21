@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T15:26:45Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-writer",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "the documented 500 levels left all and any a factor of 1.62 on a 2 MiB stack: decided D5, the docs and both depth cases name 400 levels and the docs say all and any take two calls per level",
+    "reference": "story:protocol-writer, Decided in review; impl/protocol-writer 3abd8a06",
+    "review": "review-result:adversary-protocol-writer-pass-2",
+    "outcome": "fixed"
+  }
+}
