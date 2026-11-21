@@ -1,0 +1,49 @@
+format: protocol/1
+
+protocol:
+  id: simulate.clean
+  revision: 1
+  description: Review a report once it has a draft; every case can reach the outcome.
+
+artifacts:
+  report:
+    description: The report being written and reviewed.
+
+evidence_kinds:
+  draft:
+    description: A draft of the report.
+  review:
+    description: A review of the report.
+
+claims:
+  report.drafted:
+    description: The report has a draft.
+    true_when:
+      evidence:
+        kind: draft
+
+  report.reviewed:
+    description: The report has a review.
+    true_when:
+      evidence:
+        kind: review
+
+actions:
+  write_draft:
+    description: Write a draft of the report.
+    may_produce:
+      - evidence: draft
+
+  review_report:
+    description: Review the report, once it has a draft.
+    precondition:
+      claim: report.drafted
+      is: true
+    may_produce:
+      - evidence: review
+
+outcomes:
+  reviewed:
+    description: The report is reviewed.
+    requires:
+      claim: report.reviewed

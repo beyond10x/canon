@@ -1,0 +1,1 @@
+error[reachable-state-bound]: protocol `simulate.wide` revision 1 reaches more than the bound of 65536 states; a partial walk is not reported

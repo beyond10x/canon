@@ -388,7 +388,7 @@ use crate::model::{
     ProtocolId, Revision, one_line,
 };
 
-pub(crate) use space::{REVISION, Slice, Space, State};
+pub(crate) use space::{REVISION, Slice, Space, State, Walked};
 
 /// The most states [`check`] evaluates; a larger space is refused.
 pub const STATE_BOUND: u128 = 65_536;
@@ -946,8 +946,19 @@ fn enumerate<'s, 'a>(ir: &Ir, space: &'s Space<'a>) -> Result<Enumerated<'s, 'a>
 
 /// Evaluates one state with the evaluator and keeps each action's and outcome's status.
 pub(crate) fn evaluate(ir: &Ir, space: &Space<'_>, state: &State) -> Result<Evaluated, Refusal> {
+    evaluate_records(ir, space, state, space.evidence(state))
+}
+
+/// [`evaluate`] over `evidence` in place of the records of `state`'s evidence dimensions, whose
+/// capabilities, decisions and case inputs it still reads: how `canon simulate` evaluates a state
+/// of its walk, which holds its records itself (story:canon-simulate).
+pub(crate) fn evaluate_records(
+    ir: &Ir,
+    space: &Space<'_>,
+    state: &State,
+    evidence: Vec<crate::model::EvidenceRecord>,
+) -> Result<Evaluated, Refusal> {
     let revision = Revision::new(space::REVISION);
-    let evidence = space.evidence(state);
     let case = Case {
         format: CASE_FORMAT.to_owned(),
         independence: space.independence(&evidence),
@@ -1012,7 +1023,7 @@ pub(crate) fn witness(
 
 /// The evidence kinds `action` may produce: each its `may_produce` lists and, when it opens a child
 /// case (story:case-composition), `case_outcome`, which carries the child's outcome back.
-fn produces<'a>(
+pub(crate) fn produces<'a>(
     ir: &'a Ir,
     action: &'a crate::ir::Action,
 ) -> impl Iterator<Item = &'a EvidenceKindId> {
@@ -1022,7 +1033,7 @@ fn produces<'a>(
 
 /// The evidence kinds another protocol's cases produce (story:supplied-evidence): each that
 /// declares `supplied_by`. Produced, as an action's are, and without authority in this protocol.
-fn supplied(ir: &Ir) -> impl Iterator<Item = &EvidenceKindId> {
+pub(crate) fn supplied(ir: &Ir) -> impl Iterator<Item = &EvidenceKindId> {
     ir.evidence_kinds
         .iter()
         .filter(|(_, kind)| kind.supplied_by.is_some())

@@ -1,0 +1,2 @@
+stuck-state: state {capability `sign` denied}: no outcome is legitimate and no action is admissible or approval-required; path: capability `sign` denied; 3 other stuck states contain it
+simulated: protocol `simulate.contained` revision 1: 16 reachable states, 4 terminable (outcome `approved` 4), 0 waiting on supplied evidence or expiry, 1 finding (4 stuck or cycle states)
