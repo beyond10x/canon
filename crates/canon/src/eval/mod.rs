@@ -95,7 +95,10 @@
 //! `child_case` when given), its
 //! `observed_at` when given (an instant, a fraction of one to nine digits allowed, else
 //! `invalid-instant`), its id
-//! (used once in the set), its kind (declared by the protocol) and each upstream artifact
+//! (used once in the set: a copy equal to the first counts once, and a copy that differs is
+//! refused as `duplicate-identifier`, `` evidence `e1` is given more than once with different
+//! content ``, story:evidence-redelivery), its kind (declared by the protocol) and each upstream
+//! artifact
 //! (declared by the protocol, else `undeclared-artifact`, naming the record and the artifact, unless
 //! the record's kind declares `supplied_by`: such a record, copied unchanged from a case under its
 //! supplier, may name artifacts only the supplier declares, carried and neither checked nor read,
@@ -104,7 +107,8 @@
 //! else `missing-child-case`) and its outcome (a `result`, else `missing-child-outcome`), and for a
 //! record of any other kind no child case (else `misplaced-child-case`); then, over the whole set,
 //! one `case_outcome` record per child case, whatever its revision (else `duplicate-child-case`,
-//! naming the least such child and its records in evidence-id order, citing each). A record's
+//! naming the least such child and its records in evidence-id order, citing each; an equal copy of
+//! a record is not another record, and counts once). A record's
 //! subject and subject revision are checked here as identifiers only; the revision-binding stage
 //! reads them. Every refusal of a record names it (`` evidence `e2` format is `canon-evidence/2`,
 //! expected `canon-evidence/1` ``, `` evidence `e2` kind identifier `k k` is empty or … ``), and
@@ -179,7 +183,8 @@
 //! concept; this module holds only the order:
 //!
 //! 1. check the compiled protocol's depth (`depth.rs`), the case snapshot (`case.rs`) and the
-//!    evidence set (`evidence.rs`);
+//!    evidence set (`evidence.rs`), which keeps the first of any records equal under one id, so
+//!    every later step reads each id once;
 //! 2. read the supplied inputs: authority decisions (`authority.rs`), the evaluation instant
 //!    (`freshness.rs`) and explicit decisions (`decisions.rs`);
 //! 3. run the exclusion stages in order: revision binding (`binding.rs`), freshness
@@ -452,7 +457,8 @@ pub fn evaluate_with(
 ) -> Result<Decision, Refusal> {
     depth::check(ir)?;
     case::check(ir, case)?;
-    evidence::check(ir, evidence)?;
+    let distinct = evidence::check(ir, evidence)?;
+    let evidence = distinct.as_slice();
     let authority = authority::read(supplied.authority)?;
     let at = freshness::instant(supplied.at)?;
     let decisions = decisions::read(supplied.decisions)?;
@@ -881,9 +887,9 @@ mod tests {
             ),
             (
                 CASE.to_owned(),
-                vec![pass.clone(), pass.clone()],
+                vec![pass.clone(), record("e1", "fail")],
                 "duplicate-identifier",
-                "evidence `e1` is given more than once",
+                "evidence `e1` is given more than once with different content",
             ),
             (
                 CASE.to_owned(),
@@ -1292,5 +1298,43 @@ mod tests {
                 {"claim": "red_first", "value": "true"},
             ])
         );
+    }
+
+    /// A record given more than once counts once when every copy equals the first
+    /// (story:evidence-redelivery): the decision is the one without the copy, byte for byte, the
+    /// explanation included, wherever the copy stands, and the explanation lists the id once.
+    #[test]
+    fn an_equal_copy_of_a_record_counts_once() {
+        let (pass, fail) = (record("e1", "pass"), record("e2", "fail"));
+        let single = decide(CASE, &[pass.clone(), fail.clone()]).expect("decides");
+        let expected = render(&single);
+        for evidence in [
+            vec![pass.clone(), fail.clone(), pass.clone()],
+            vec![pass.clone(), pass.clone(), fail.clone()],
+            vec![fail.clone(), pass.clone(), pass.clone(), pass.clone()],
+        ] {
+            let decision = decide(CASE, &evidence).expect("an equal copy is not refused");
+            assert_eq!(render(&decision), expected, "{evidence:?}");
+            assert_eq!(
+                decision.explanation.as_ref().expect("explained")["computed_from"]["evidence"],
+                serde_json::json!(["e1", "e2"])
+            );
+        }
+    }
+
+    /// A copy that differs from the first is refused as `duplicate-identifier`, naming and citing
+    /// the record, whichever copy comes first.
+    #[test]
+    fn a_differing_copy_of_a_record_is_refused() {
+        let (pass, fail) = (record("e1", "pass"), record("e1", "fail"));
+        for evidence in [vec![pass.clone(), fail.clone()], vec![fail, pass]] {
+            let refusal = decide(CASE, &evidence).expect_err("refused");
+            assert_eq!(refusal.code(), "duplicate-identifier");
+            assert_eq!(
+                refusal.to_string(),
+                "evidence `e1` is given more than once with different content"
+            );
+            assert_eq!(refusal.evidence(), [EvidenceId::new("e1")]);
+        }
     }
 }
