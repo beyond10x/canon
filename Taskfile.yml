@@ -129,3 +129,11 @@ tasks:
     desc: Validate the AEP planning store.
     cmds:
       - aep plan artifact validate
+
+  regenerate-scenarios:
+    desc: "Rewrite crates/canon/tests/generated/investigation-scenarios.txt, the committed scenarios of every fixture and their digest (a few minutes; the slow lane compares it byte for byte)."
+    env:
+      CANON_REGENERATE_SCENARIOS: "1"
+      SLOT_TIMEOUT: 30m
+    cmds:
+      - '{{.ESS_ENV}} cargo test -p b10x-canon --locked --test main -- --exact adversary_scenario_generation::every_generated_witness_passes_and_is_minimal_over_every_investigation_protocol'

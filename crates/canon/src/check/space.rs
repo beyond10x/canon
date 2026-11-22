@@ -2339,8 +2339,14 @@ pub(super) fn readers(ir: &Ir) -> impl Iterator<Item = (Reader, &Predicate)> {
         .actions
         .iter()
         .map(|(id, action)| (Reader::Action(id.clone()), &action.precondition));
+    // A decision's `when` holds claims and case inputs only (story:decision-condition, D4 B), so
+    // it adds no dimension to the space; its claims' evidence is what it reads, and an outcome
+    // that reads it is named as one whose predicate does.
     let outcomes = ir.outcomes.iter().filter_map(|(id, outcome)| {
-        let requirement = outcome.requires.predicate()?;
+        let requirement = outcome
+            .requires
+            .predicate()
+            .or_else(|| outcome.requires.when())?;
         Some((Reader::Outcome(id.clone()), requirement))
     });
     claims.chain(obligations).chain(actions).chain(outcomes)

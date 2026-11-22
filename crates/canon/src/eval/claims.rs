@@ -234,6 +234,8 @@ impl<'a> Walk<'a> {
 
     /// Marks the moved records at the places `kept` as kept out, or no longer kept out.
     fn keep_out(&mut self, kept: &[usize], out: bool) {
+        #[cfg(test)]
+        super::invalidation_cost::marked(kept.len());
         for place in kept {
             self.kept_out[*place] = out;
         }
@@ -284,6 +286,8 @@ impl<'a> Walk<'a> {
                 format!("claims test each other in a cycle: {}", path.join(" -> ")),
             ));
         }
+        #[cfg(test)]
+        super::invalidation_cost::evaluated();
         let claim = self.claims[number].1;
         self.in_progress.push(number);
         self.open[number] = true;
