@@ -17,6 +17,12 @@
 //! protocol that adds an artifact, a case input or an order form under an `all`, or changes the
 //! case an action opens, is `BREAKING`, so below the floor, though it may tighten.
 //!
+//! A limit of that classification (decision D124, a floor rule for added actions is a design
+//! change beyond story:protocol-floor): an added action is an `EXPANSION`, and every `EXPANSION`
+//! passes. The floor guards only what the protocol that declares an action requires, so a new
+//! action that produces a finding the floor guards, without the capability the floor requires of
+//! it, is not caught.
+//!
 //! The protocol does not name its floor; the caller supplies it. Passing a compiled import as the
 //! floor checks that a refinement only tightens what it imports.
 

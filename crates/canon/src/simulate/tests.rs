@@ -955,6 +955,45 @@ fn an_external_revision_is_written_as_protocol_revises() {
     );
 }
 
+/// story:artifact-revised-by § Acceptance 7: an external revision is tried after the supplied
+/// steps. The state `{u, s}` (`s` supplied) is reached at depth 4 from `{t, u, s}` by `q` revising
+/// `a`, which `t` is about, and from `{u}` by `s` arriving; both parents are first reached from
+/// `{t, u}` at depth 3, the supplied step first, so the shortest path to `{u, s}` ends with the
+/// revision. `produce_x` is open only while `s` is unknown, so `{u}` is no stuck state that
+/// would contain `{u, s}` and keep it from being printed.
+#[test]
+fn an_external_revision_is_tried_after_the_supplied_steps() {
+    let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+        artifacts: {a: {revised_by: q}, b: {}}\n\
+        evidence_kinds: {t: {}, u: {}, x: {}, s: {supplied_by: r}, n: {}}\n\
+        claims:\n\
+        \x20 c: {true_when: {evidence: {kind: t, subject: a}}}\n\
+        \x20 g: {true_when: {any: [{evidence: {kind: t, subject: a}}, {evidence: {kind: u, subject: b}}]}}\n\
+        \x20 sup: {true_when: {evidence: {kind: s, subject: b}}}\n\
+        \x20 never: {true_when: {evidence: {kind: n}}}\n\
+        actions:\n\
+        \x20 produce_t: {precondition: {claim: g, is: unknown}, may_produce: [{evidence: t}]}\n\
+        \x20 produce_u: {precondition: {claim: c, is: true}, may_produce: [{evidence: u}]}\n\
+        \x20 produce_x: {precondition: {all: [{claim: g, is: true}, {claim: sup, is: unknown}]}, \
+        may_produce: [{evidence: x}]}\n\
+        outcomes: {o: {requires: {claim: never}}}\n";
+    let text = report(source);
+    let line = text
+        .lines()
+        .find(|line| {
+            line.starts_with("stuck-state: state {evidence `s` about `b`, evidence `u` about `b`}")
+        })
+        .unwrap_or_else(|| panic!("no stuck state {{s, u}} printed:\n{text}"));
+    assert!(
+        line.contains(
+            "path: action `produce_t` produces evidence `t` about `a`, then action `produce_u` \
+             produces evidence `u` about `b`, then protocol `r` supplies evidence `s` about `b`, then \
+             protocol `q` revises `a`;"
+        ),
+        "{line}"
+    );
+}
+
 /// story:child-outcome-recovery, § Outcome 5: an action whose `case_open` subject is the artifact
 /// the space's `case_outcome` dimension is about (here `a`, the least id) is walked as before: no
 /// record is written about an artifact, and a revision of `b` leaves the failed outcome current.

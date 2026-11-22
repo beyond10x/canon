@@ -7,7 +7,8 @@
 //! a revision of `a` sets aside only the child outcomes about `a`, and a child's outcome is about
 //! the artifact its opening action's `case_open` names. The space does not change; `canon check`
 //! counts the one dimension. A protocol with no `case_open`, or whose only subject is the one the
-//! space's dimension is about, is not split and is walked and written as before.
+//! space's dimension is about, or in which no action `revises` an artifact and no artifact
+//! declares `revised_by`, is not split and is walked and written as before.
 //!
 //! A child that has not ended when its subject is revised may end against the revision it was
 //! opened at, or against the new one. The walk keeps one bit per opening action of a split
@@ -43,8 +44,17 @@ pub(super) fn split<'a>(
     let originals = dimensions.len();
     let mut source: Vec<usize> = (0..originals).collect();
     let mut redirected = BTreeMap::new();
+    // A revision can move an artifact an action `revises` or another protocol revises
+    // (`revised_by`). A protocol with neither has no revision to set a child outcome aside, and
+    // the one dimension serves: the walk is as before the split. (The fixture
+    // `revise-child-other-subject` revises `a` and opens about `b`, and keeps the split.)
+    let revisable = ir.actions.values().any(|action| !action.revises.is_empty())
+        || ir
+            .artifacts
+            .values()
+            .any(|artifact| artifact.revised_by.is_some());
     for at in 0..originals {
-        if dimensions[at].kind.as_str() != CASE_OUTCOME {
+        if !revisable || dimensions[at].kind.as_str() != CASE_OUTCOME {
             continue;
         }
         let openers: Vec<(usize, &ArtifactId)> = ir

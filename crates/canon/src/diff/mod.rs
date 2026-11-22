@@ -75,8 +75,8 @@
 //! under an `all` strengthens it, a member added under an `any` weakens it, `not` reverses the
 //! direction, and two evidence matches, claim tests or input tests imply each other only when they
 //! are equal, so an input test whose `in` list changed implies nothing it did not before. What it
-//! cannot show is classified as changed. An order form (`first`, `before`, `after`, `since`) and a
-//! `children` form are compared structurally only: a predicate whose such forms, taken as a set,
+//! cannot show is classified as changed. An order form (`first`, `before`, `after`, `since`,
+//! `descended`) and a `children` form are compared structurally only: a predicate whose such forms, taken as a set,
 //! differ between the revisions is changed (`BREAKING`), whatever members around them were added
 //! or removed; one whose such forms are the same is classified by implication, each form implying
 //! only an equal one. A `children` form whose outcome list grew is weaker, but, like an input
@@ -1936,5 +1936,65 @@ mod tests {
         assert!(implies(&since("red"), &since("red")));
         assert!(!implies(&since("red"), &since("green")));
         assert!(!implies(&since("red"), &evidence("m")));
+    }
+
+    /// A `descended` is compared structurally like the other order forms
+    /// (story:revision-ordering): a change to its records, result or subject is `BREAKING`; with
+    /// the same order forms, a member added under an `all` strengthens (`TIGHTENING`), one removed
+    /// weakens (`RELAXATION`), reordering members changes nothing, and it implies only an equal
+    /// one. The implication arm `(Descended, Descended)` is what decides the first three.
+    #[test]
+    fn a_descended_form_is_compared_by_implication_when_unchanged() {
+        let claim = |true_when: &str| {
+            ir(&format!(
+                "artifacts: {{a: {{}}}}\nevidence_kinds: {{k: {{}}, m: {{}}}}\nclaims: {{c: {{true_when: {true_when}}}}}\n"
+            ))
+        };
+        let red = "{descended: {first: {kind: k, result: red}, then: {kind: m, result: red}}}";
+        let both = format!("{{all: [{{evidence: {{kind: k}}}}, {red}]}}");
+        for to in [
+            "{descended: {first: {kind: m, result: red}, then: {kind: m, result: red}}}",
+            "{descended: {first: {kind: k, result: green}, then: {kind: m, result: red}}}",
+            "{descended: {first: {kind: k, result: red}, then: {kind: m, result: green}}}",
+            "{descended: {first: {kind: k, result: red}, then: {kind: m, result: red}, subject: a}}",
+        ] {
+            assert_eq!(
+                lines(&claim(red), &claim(to)),
+                ["BREAKING: claim `c` predicate changed"],
+                "{red} -> {to}"
+            );
+        }
+        assert_eq!(
+            lines(&claim(red), &claim(&both)),
+            ["TIGHTENING: claim `c` predicate strengthened"]
+        );
+        assert_eq!(
+            lines(&claim(&both), &claim(red)),
+            ["RELAXATION: claim `c` predicate weakened"]
+        );
+        assert!(
+            lines(
+                &claim(&both),
+                &claim(&format!("{{all: [{red}, {{evidence: {{kind: k}}}}]}}"))
+            )
+            .is_empty()
+        );
+        assert!(lines(&claim(red), &claim(red)).is_empty());
+        let descended = |result: &str| {
+            Predicate::Descended(Box::new(crate::model::EvidenceDescended {
+                first: crate::model::LaterRecord {
+                    kind: EvidenceKindId::new("k"),
+                    result: "red".to_owned(),
+                },
+                then: crate::model::LaterRecord {
+                    kind: EvidenceKindId::new("m"),
+                    result: result.to_owned(),
+                },
+                subject: None,
+            }))
+        };
+        assert!(implies(&descended("red"), &descended("red")));
+        assert!(!implies(&descended("red"), &descended("green")));
+        assert!(!implies(&descended("red"), &evidence("m")));
     }
 }

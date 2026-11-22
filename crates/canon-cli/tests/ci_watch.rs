@@ -32,6 +32,16 @@ fn repo_root() -> PathBuf {
 /// Runs the script against a stub `gh` that prints `answer` and records its arguments.
 /// Returns the output, the recorded `gh` arguments and the wall time.
 fn watch(case: &str, answer: &str, extra: &[&str]) -> (Output, String, f64) {
+    watch_with(case, answer, extra, &[])
+}
+
+/// `watch` with environment variables set for the script.
+fn watch_with(
+    case: &str,
+    answer: &str,
+    extra: &[&str],
+    environment: &[(&str, &str)],
+) -> (Output, String, f64) {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
         .join("ci-watch")
         .join(case);
@@ -62,6 +72,8 @@ fn watch(case: &str, answer: &str, extra: &[&str]) -> (Output, String, f64) {
         .arg("28")
         .env("PATH", path)
         .env_remove("CI_WATCH_GH")
+        .env_remove("CI_WATCH_REQUIRE")
+        .envs(environment.iter().copied())
         .output()
         .expect("sh runs scripts/ci-watch");
     let args = fs::read_to_string(dir.join("args")).unwrap_or_default();
@@ -119,4 +131,72 @@ fn a_check_still_pending_past_the_timeout_exits_non_zero() {
     );
     assert!(args.lines().count() >= 2, "it polled again: {args}");
     assert!(secs < 5.0, "the timeout of 2 s held for {secs} s");
+}
+
+/// `gh pr checks` of a pull request on which only `pages.yml` reported: the job of `check.yml`
+/// (`canon / task check`) is not in the answer.
+const ONLY_DOCUMENTATION: &str =
+    "Build documentation\tpass\t2m1s\thttps://github.com/beyond10x/canon/actions/runs/2/job/2\n";
+
+#[test]
+fn the_default_required_check_is_the_job_of_check_yml() {
+    let workflow = fs::read_to_string(repo_root().join(".github/workflows/check.yml"))
+        .expect("check.yml is readable");
+    assert!(
+        workflow.contains("    name: canon / task check\n"),
+        "check.yml names no job `canon / task check`"
+    );
+    let (out, _, _) = watch("default-missing", ONLY_DOCUMENTATION, &[]);
+    assert_eq!(out.status.code(), Some(1), "{}", text(&out.stderr));
+    assert!(
+        text(&out.stderr).contains("required check(s) never reported: `canon / task check`"),
+        "stderr: {}",
+        text(&out.stderr)
+    );
+}
+
+#[test]
+fn require_names_the_checks_that_must_be_present() {
+    let (out, _, _) = watch(
+        "require-replaces",
+        ONLY_DOCUMENTATION,
+        &["--require", "Build documentation"],
+    );
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+
+    let (out, _, _) = watch(
+        "require-two",
+        PASSED,
+        &["--require", "canon / task check", "--require", "Deploy"],
+    );
+    assert_eq!(out.status.code(), Some(1), "{}", text(&out.stdout));
+    let stderr = text(&out.stderr);
+    assert!(stderr.contains("`Deploy`"), "stderr: {stderr}");
+    assert!(!stderr.contains("`canon / task check`"), "stderr: {stderr}");
+
+    let (out, _, _) = watch_with(
+        "require-environment",
+        ONLY_DOCUMENTATION,
+        &[],
+        &[("CI_WATCH_REQUIRE", "Build documentation")],
+    );
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+}
+
+#[test]
+fn a_branch_with_no_pull_request_exits_2_at_once_saying_what_to_use() {
+    let (out, args, secs) = watch(
+        "no-pull-request",
+        "no pull requests found for branch \"feature\"\n",
+        &[],
+    );
+    assert_eq!(out.status.code(), Some(2), "{}", text(&out.stdout));
+    let stderr = text(&out.stderr);
+    assert_eq!(stderr.lines().count(), 1, "one line: {stderr}");
+    assert!(
+        stderr.contains("pull request") && stderr.contains("gh run list --branch"),
+        "stderr: {stderr}"
+    );
+    assert_eq!(args.lines().count(), 1, "it asked once: {args}");
+    assert!(secs < 1.5, "it did not wait: {secs} s");
 }

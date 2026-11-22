@@ -168,7 +168,12 @@ fn simulate(case: &str) -> Output {
     canon(&["simulate", "--path", &protocol(case)])
 }
 
-/// Runs each of `cases` twice and returns what differs from its expectation.
+/// The largest fixture (3160 states, about 4 s in a debug build): `failures` walks it once, and
+/// `simulate_walks_the_largest_recovery_fixture_the_same_twice` holds its second run to the first.
+const WALKED_ONCE: [&str; 1] = ["revise-child-two-subjects"];
+
+/// Runs each of `cases` twice, except those of `WALKED_ONCE`, and returns what differs from its
+/// expectation.
 fn failures(cases: &[&str]) -> Vec<String> {
     let mut failures = Vec::new();
     for case in cases {
@@ -198,6 +203,9 @@ fn failures(cases: &[&str]) -> Vec<String> {
                 text(&first.stdout),
                 text(&first.stderr),
             ));
+            continue;
+        }
+        if WALKED_ONCE.contains(case) {
             continue;
         }
         let second = simulate(case);
@@ -336,13 +344,14 @@ fn simulate_revises_declared_artifacts() {
 /// 4. `revise-child-late`: a path holds a child's outcome written `earlier` after
 ///    `` action `fix` revises `b` ``.
 ///
-/// The text of each is held byte for byte; two runs give the same bytes (`failures`).
+/// The text of each is held byte for byte; two runs give the same bytes (`failures`, and for the
+/// largest fixture `simulate_walks_the_largest_recovery_fixture_the_same_twice`).
 #[test]
 fn simulate_sets_aside_child_outcomes_of_the_revised_subject() {
     let mut failures = failures(&RECOVERY);
 
-    // `failures` ran each case twice and held its output to `report.txt`; the three properties
-    // below read that file, so the walk of the largest fixture (about 8 s) is not run a third time.
+    // `failures` walked each case and held its output to `report.txt`; the properties
+    // below read that file, so no walk is repeated for them.
     let report = |case: &str| read(&format!("{FIXTURES}/{case}/report.txt"));
     let current = report("revise-child-current");
     let findings = |report: &str| {
@@ -398,6 +407,22 @@ fn simulate_sets_aside_child_outcomes_of_the_revised_subject() {
         ));
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// A second, independent run of the largest recovery fixture gives the bytes of `report.txt`, to
+/// which the one walk of `simulate_sets_aside_child_outcomes_of_the_revised_subject` holds the
+/// first: the two runs give the same bytes.
+#[test]
+fn simulate_walks_the_largest_recovery_fixture_the_same_twice() {
+    for case in WALKED_ONCE {
+        let output = simulate(case);
+        assert_eq!(
+            text(&output.stdout),
+            read(&format!("{FIXTURES}/{case}/report.txt")),
+            "{case}: a second run gave different bytes"
+        );
+        assert_eq!(text(&output.stderr), "", "{case}");
+    }
 }
 
 /// The red run must not come from a fixture typo: every fixture protocol is one `canon validate`
