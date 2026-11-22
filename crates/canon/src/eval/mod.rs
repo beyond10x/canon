@@ -790,10 +790,19 @@ fn excluded_for(
 /// default 2 MiB. 64 MiB leaves room; it is reserved, not touched, until used.
 const DEEP_STACK: usize = 64 << 20;
 
+#[cfg(test)]
+thread_local! {
+    /// The threads [`on_deep_stack`] started for calls made on this thread; read by the unit test
+    /// that holds the count of many small calls.
+    static SPAWNED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Runs `work` on a thread with [`DEEP_STACK`], so how deep a protocol's predicates may nest does
 /// not depend on the caller's stack. The thread reads nothing and the result is the same as on the
 /// caller's thread. A panic in `work` is resumed on the caller's thread.
 fn on_deep_stack<T: Send>(work: impl FnOnce() -> T + Send) -> T {
+    #[cfg(test)]
+    SPAWNED.with(|spawned| spawned.set(spawned.get() + 1));
     std::thread::scope(|scope| {
         let worker = std::thread::Builder::new()
             .name("canon-eval".to_owned())
@@ -1415,6 +1424,32 @@ mod tests {
 
     /// A copy that differs from the first is refused as `duplicate-identifier`, naming and citing
     /// the record, whichever copy comes first.
+    /// Many small calls from a thread with a small stack start at most one thread for the deep
+    /// stack, however many calls there are (story:evaluate-without-thread-per-call).
+    #[test]
+    fn two_thousand_calls_spawn_at_most_one_thread() {
+        const CALLS: usize = 2000;
+        let spawned = std::thread::Builder::new()
+            .stack_size(256 << 10)
+            .spawn(|| {
+                let (ir, case) = (ir(), read_case(CASE).expect("case"));
+                for at in 0..CALLS {
+                    let evidence = [read_evidence(&record(&format!("e{at}"), "pass")).expect("e")];
+                    let decision =
+                        evaluate_with(&ir, &case, &evidence, Supplied::default()).expect("decides");
+                    assert_eq!(decision.claims.len(), 5);
+                }
+                SPAWNED.with(|spawned| spawned.get())
+            })
+            .expect("the caller's thread starts")
+            .join()
+            .expect("the caller's thread ends normally");
+        assert!(
+            spawned <= 1,
+            "{CALLS} calls started {spawned} threads for the deep stack"
+        );
+    }
+
     #[test]
     fn a_differing_copy_of_a_record_is_refused() {
         let (pass, fail) = (record("e1", "pass"), record("e1", "fail"));

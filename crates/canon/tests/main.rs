@@ -94,6 +94,7 @@ mod claim_direction;
 mod decision_grounds;
 mod ess_gate;
 mod ess_model_matches;
+mod evaluate_many_small_cases;
 mod evidence_independence;
 mod explain_subject;
 mod invalidation_evaluation_cost;
