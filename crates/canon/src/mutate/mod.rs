@@ -30,7 +30,8 @@
 //! subject and `independent_on` of every match; the order forms `first`, `before`, `after`,
 //! `since` and `descended`, whose results `change-result` neither changes nor counts; `children`
 //! forms; an outcome that requires an explicit decision (`requires: {decision: …}`), its `when`
-//! condition included (story:decision-condition). Untouched
+//! condition included (story:decision-condition); the report names each such outcome as skipped.
+//! Untouched
 //! altogether: artifacts, evidence kinds (their `max_age` and `supplied_by` included), an action's `effect`, `author`,
 //! `may_produce` (with `decided_by`), `records_together`, `revises`, `arguments` and `case_open`,
 //! invalidation rules, case inputs, independence dimensions, imports, every description, and the
@@ -87,8 +88,13 @@
 //! survived: <operator> <site>: <categories>[ (strengthening)]; no scenario fails
 //! weak point: <operator> <site>: <categories> (weakening); no scenario fails
 //! invalid: <operator> <site>: <code>[, <code>…]
+//! skipped: outcome `<id>` requires decision `<name>`; no operator mutates a decision or its condition
 //! mutate: <n> mutants, <n> killed, <n> survived (<n> weak points), <n> invalid
 //! ```
+//!
+//! A `skipped` line comes for each outcome that requires an explicit decision, in identifier
+//! order, after every mutant line and before the summary; a protocol without one has none, and the
+//! summary does not count them.
 //!
 //! `<site>` is the section and identifier (``claim `explanation.supported` ``), the field
 //! (`true_when`, `discharged_when`, `applicable_when`, `precondition`, `requires`), and the path to
@@ -243,9 +249,14 @@ impl Report {
         self.mutants.iter().filter(|m| m.is_weak_point()).count()
     }
 
-    /// The report text: one line per mutant, then the summary line.
+    /// The report text: one line per mutant, one line per skipped site, then the summary line.
     pub fn render(&self) -> String {
         let mut text: String = self.mutants.iter().map(Classified::line).collect();
+        for site in &self.skipped {
+            text.push_str(&format!(
+                "skipped: {site}; no operator mutates a decision or its condition\n"
+            ));
+        }
         let count = |verdict: fn(&Verdict) -> bool| {
             self.mutants.iter().filter(|m| verdict(&m.verdict)).count()
         };
@@ -471,9 +482,22 @@ where
     })
 }
 
-/// The sites of `protocol` no operator makes a mutant at, each written for the report.
-pub fn skipped_sites(_protocol: &Protocol) -> Vec<String> {
-    Vec::new()
+/// The sites of `protocol` no operator makes a mutant at that the report names: each outcome that
+/// requires an explicit decision, in identifier order, its `when` condition included. The other
+/// sites walked past (`any`, `not`, claim tests and so on) are parts of a site that is mutated.
+pub fn skipped_sites(protocol: &Protocol) -> Vec<String> {
+    protocol
+        .outcomes
+        .iter()
+        .filter_map(|(id, outcome)| {
+            let decision = outcome.requires.decision()?;
+            Some(format!(
+                "outcome `{}` requires decision `{}`",
+                model::one_line(id.as_str()),
+                model::one_line(decision.as_str())
+            ))
+        })
+        .collect()
 }
 
 /// The protocol composed with its imports and compiled.
