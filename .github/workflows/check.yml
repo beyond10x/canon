@@ -103,7 +103,6 @@ jobs:
 
       - name: task test-slow
         if: steps.classify.outputs.class == 'code'
-        continue-on-error: true
         run: task test-slow
 
       - name: task docs-site-check
