@@ -339,7 +339,9 @@ fn simulate_revises_declared_artifacts() {
 fn simulate_sets_aside_child_outcomes_of_the_revised_subject() {
     let mut failures = failures(&RECOVERY);
 
-    let report = |case: &str| text(&simulate(case).stdout);
+    // `failures` ran each case twice and held its output to `report.txt`; the three properties
+    // below read that file, so the walk of the largest fixture (about 8 s) is not run a third time.
+    let report = |case: &str| read(&format!("{FIXTURES}/{case}/report.txt"));
     let current = report("revise-child-current");
     let findings = |report: &str| {
         report
