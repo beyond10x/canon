@@ -37,7 +37,9 @@
 //!   them is the IR it was before they existed. A production's `decided_by` is resolved: the
 //!   action's `author` when the production declares none (story:judgement-marking), so
 //!   `author: program` and a `decided_by` equal to the action's `author` compile to no key. An evidence kind's `supplied_by` is the protocol id as
-//!   declared, a name nothing resolves (story:supplied-evidence). A capability requirement is `{"capability": …}`, or `{"capability": …, "scope":
+//!   declared, a name nothing resolves (story:supplied-evidence). An artifact's `revised_by` is
+//!   one more such key: written after its `description` only when the protocol declares it
+//!   (story:artifact-revised-by). A capability requirement is `{"capability": …}`, or `{"capability": …, "scope":
 //!   {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
 //!   section is `{<id>: {"description": …}}`. The `case` section is
 //!   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
@@ -56,8 +58,9 @@
 //!   sorted like every object's (story:action-arguments).
 //! - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
 //!   it was written, and an input test `{"input": {"id": …, "in": [...]}}`. An outcome that
-//!   requires an explicit decision has the requirement `{"decision": <name>}`, as written; any
-//!   other requirement is its predicate.
+//!   requires an explicit decision has the requirement `{"decision": <name>}`, as written, with
+//!   `"when": <predicate>`, normalized like every predicate, only when the decision has a condition
+//!   (story:decision-condition); any other requirement is its predicate.
 //! - **Resolved references.** Only a document the validator accepts compiles, so every claim and
 //!   evidence kind the IR references is declared in it (`case_outcome` wherever a `children` form
 //!   reads it), and so is every artifact an evidence match, an order form or a `children` form
@@ -122,10 +125,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::model::{
     self, ActionId, Age, ArtifactId, Author, CapabilityId, CaseOpening, ChildOutcomes, ClaimId,
-    ClaimTest, EffectClass, EvidenceAfter, EvidenceDescended, EvidenceKindId, EvidenceMatch,
-    EvidenceOrder, EvidenceSince, FirstResult, IndependenceDimensionId, InputId, InputTest,
-    InputValue, InvalidationRuleId, ObligationId, OutcomeId, OutcomeRequirement, Predicate,
-    Protocol, ProtocolId, ScopeKey, ScopeValue, Truth,
+    ClaimTest, DecisionRequirement, EffectClass, EvidenceAfter, EvidenceDescended, EvidenceKindId,
+    EvidenceMatch, EvidenceOrder, EvidenceSince, FirstResult, IndependenceDimensionId, InputId,
+    InputTest, InputValue, InvalidationRuleId, ObligationId, OutcomeId, OutcomeRequirement,
+    Predicate, Protocol, ProtocolId, ScopeKey, ScopeValue, Truth,
 };
 use crate::validate::{self, Problem};
 
@@ -141,7 +144,7 @@ pub const FORMAT: &str = "canon-ir/1";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ir {
     pub protocol: Header,
-    pub artifacts: BTreeMap<ArtifactId, Described>,
+    pub artifacts: BTreeMap<ArtifactId, Artifact>,
     pub evidence_kinds: BTreeMap<EvidenceKindId, EvidenceKind>,
     pub claims: BTreeMap<ClaimId, Claim>,
     pub obligations: BTreeMap<ObligationId, Obligation>,
@@ -171,11 +174,19 @@ pub struct Header {
     pub description: Option<String>,
 }
 
-/// A declaration that carries nothing but its description: an artifact or an independence
-/// dimension.
+/// A declaration that carries nothing but its description: an independence dimension.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Described {
     pub description: Option<String>,
+}
+
+/// An artifact: its description and the protocol whose cases revise it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Artifact {
+    pub description: Option<String>,
+    /// The protocol whose cases revise the artifact, as declared; `None` when the protocol names
+    /// none, and `canon-ir/1` then writes no `revised_by` key.
+    pub revised_by: Option<ProtocolId>,
 }
 
 /// An evidence kind: its description, how old a record of it may be and still apply, and the
@@ -303,8 +314,9 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
             revision: protocol.protocol.revision,
             description: protocol.protocol.description.clone(),
         },
-        artifacts: keyed(&protocol.artifacts, |artifact| {
-            described(&artifact.description)
+        artifacts: keyed(&protocol.artifacts, |artifact| Artifact {
+            description: artifact.description.clone(),
+            revised_by: artifact.revised_by.clone(),
         }),
         evidence_kinds: keyed(&protocol.evidence_kinds, |kind| EvidenceKind {
             description: kind.description.clone(),
@@ -368,7 +380,12 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
                 OutcomeRequirement::Predicate(predicate) => {
                     OutcomeRequirement::Predicate(normalize(predicate))
                 }
-                OutcomeRequirement::Decision(name) => OutcomeRequirement::Decision(name.clone()),
+                OutcomeRequirement::Decision(requirement) => {
+                    OutcomeRequirement::Decision(DecisionRequirement {
+                        decision: requirement.decision.clone(),
+                        when: requirement.when.as_ref().map(normalize),
+                    })
+                }
             },
         }),
         invalidation: keyed(&protocol.invalidation, |rule| InvalidationRule {
@@ -696,7 +713,16 @@ impl Ir {
                     ("description", description(&self.protocol.description)),
                 ]),
             ),
-            ("artifacts", section(&self.artifacts, described)),
+            (
+                "artifacts",
+                section(&self.artifacts, |artifact| {
+                    let mut fields = vec![("description", description(&artifact.description))];
+                    if let Some(reviser) = &artifact.revised_by {
+                        fields.push(("revised_by", Value::string(reviser.as_str())));
+                    }
+                    Value::object(fields)
+                }),
+            ),
             (
                 "evidence_kinds",
                 section(&self.evidence_kinds, |kind| {
@@ -916,12 +942,17 @@ fn description(text: &Option<String>) -> Value {
     Value::optional(text.as_deref())
 }
 
-/// A predicate requirement as its predicate; a decision requirement as `{"decision": <name>}`.
+/// A predicate requirement as its predicate; a decision requirement as `{"decision": <name>}`,
+/// with `"when": <predicate>` only when it has a condition.
 fn requirement_value(requirement: &OutcomeRequirement) -> Value {
     match requirement {
         OutcomeRequirement::Predicate(predicate) => predicate_value(predicate),
-        OutcomeRequirement::Decision(name) => {
-            Value::object([("decision", Value::string(name.as_str()))])
+        OutcomeRequirement::Decision(requirement) => {
+            let mut members = vec![("decision", Value::string(requirement.decision.as_str()))];
+            if let Some(when) = &requirement.when {
+                members.push(("when", predicate_value(when)));
+            }
+            Value::object(members)
         }
     }
 }
@@ -1471,5 +1502,22 @@ mod tests {
             "{compiled}"
         );
         assert!(!ir(&format!("{HEADER}evidence_kinds: {{plain: {{}}}}\n")).contains("supplied_by"));
+    }
+
+    /// A reviser is written as declared, after the artifact's description, and only on the
+    /// artifact that names one: a protocol naming none compiles to the bytes it did before.
+    #[test]
+    fn a_reviser_is_written_only_where_declared() {
+        let compiled = ir(&format!(
+            "{HEADER}artifacts: {{revised: {{revised_by: other.stage, description: d}}, \
+             plain: {{}}}}\n"
+        ));
+        assert!(
+            compiled.contains(
+                "  \"artifacts\": {\n    \"plain\": {\n      \"description\": null\n    },\n    \"revised\": {\n      \"description\": \"d\",\n      \"revised_by\": \"other.stage\"\n    }\n  },\n"
+            ),
+            "{compiled}"
+        );
+        assert!(!ir(&format!("{HEADER}artifacts: {{plain: {{}}}}\n")).contains("revised_by"));
     }
 }

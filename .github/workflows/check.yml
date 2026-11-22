@@ -20,7 +20,7 @@ jobs:
   check:
     name: canon / task check
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -60,6 +60,19 @@ jobs:
           tar -xzf "$RUNNER_TEMP/task.tar.gz" -C "$RUNNER_TEMP/task-bin" task
           echo "$RUNNER_TEMP/task-bin" >> "$GITHUB_PATH"
 
+      - name: Install cargo-nextest
+        if: steps.classify.outputs.class != 'planning-only'
+        env:
+          NEXTEST_VERSION: "0.9.143"
+          NEXTEST_SHA256: 66786b9abe23920d022a182d1416b1bbc8130dd4872a9553d76985a1708dcd1e
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/nextest.tar.gz" \
+            "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-$NEXTEST_VERSION/cargo-nextest-$NEXTEST_VERSION-x86_64-unknown-linux-gnu.tar.gz"
+          echo "$NEXTEST_SHA256  $RUNNER_TEMP/nextest.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/nextest.tar.gz" -C "$HOME/.cargo/bin" cargo-nextest
+          cargo nextest --version
+
       - name: Install ess
         if: steps.classify.outputs.class == 'code'
         env:
@@ -80,6 +93,10 @@ jobs:
       - name: task check
         if: steps.classify.outputs.class == 'code'
         run: task check
+
+      - name: task test-slow
+        if: steps.classify.outputs.class == 'code'
+        run: task test-slow
 
       - name: task docs-site-check
         if: steps.classify.outputs.class == 'docs-site-only'

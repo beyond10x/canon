@@ -8,6 +8,8 @@ protocol:
 artifacts:
   spec:
     description: The epic's spec; each child story case is opened about it.
+  epic:
+    description: The epic itself; a child case that plans or releases it is opened about it.
 
 evidence_kinds:
   case_outcome:

@@ -65,7 +65,7 @@ pub use predicate::{
 pub use properties::{
     PROPERTIES_FORMAT, Properties, Property, PropertyDependency, PropertyId, PropertySubject,
 };
-pub use requirement::OutcomeRequirement;
+pub use requirement::{DecisionRequirement, OutcomeRequirement};
 pub use write::write;
 
 /// A `protocol/1` source document as written.
@@ -178,6 +178,13 @@ pub struct Import {
 pub struct Artifact {
     #[serde(default, deserialize_with = "present::optional")]
     pub description: Option<String>,
+    /// The protocol whose cases revise this artifact (story:artifact-revised-by): any protocol
+    /// but this one, named and never resolved. `canon evaluate`, `canon check` and `canon
+    /// generate` read nothing from it; `canon simulate` offers a revise step for the artifact in
+    /// every state. Absent: no protocol is said to revise it, or the protocol's own actions do,
+    /// through `revises`.
+    #[serde(default, deserialize_with = "present::optional")]
+    pub revised_by: Option<ProtocolId>,
 }
 
 /// A kind of evidence the protocol admits.

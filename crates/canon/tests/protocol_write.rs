@@ -228,7 +228,7 @@ fn keys_follow_the_order_of_the_struct_that_declares_them() {
         \x20 ch: {true_when: {children: {subject: art, revision: current, in: [x]}}}\n\
         \x20 i: {true_when: {input: i, in: [a]}}\n\
         evidence_kinds: {ev: {supplied_by: other, max_age: 5m, description: d}}\n\
-        artifacts: {art: {description: d}}\n";
+        artifacts: {art: {revised_by: q, description: d}}\n";
     let protocol = model::parse(source).expect("parses");
     let text = write(&protocol);
     // A mapping keeps the order it is read in, which `serde_json::Value` does not.
@@ -258,7 +258,10 @@ fn keys_follow_the_order_of_the_struct_that_declares_them() {
         ]
     );
     assert_eq!(keys(&value["protocol"]), ["id", "revision", "description"]);
-    assert_eq!(keys(&value["artifacts"]["art"]), ["description"]);
+    assert_eq!(
+        keys(&value["artifacts"]["art"]),
+        ["description", "revised_by"]
+    );
     assert_eq!(
         keys(&value["evidence_kinds"]["ev"]),
         ["description", "max_age", "supplied_by"]
@@ -613,6 +616,11 @@ fn walk(value: &Json, of: &Ty, shapes: &BTreeMap<String, Shape>, written: &mut B
                 Some(Shape::Union(variants)) if name == "OutcomeRequirement" => {
                     if object.contains_key("decision") {
                         written.insert("OutcomeRequirement.decision".to_owned());
+                        let decision = variants
+                            .iter()
+                            .find(|(variant, _)| variant == "decision")
+                            .expect("a decision variant");
+                        walk(value, &decision.1, shapes, written);
                     } else {
                         written.insert("OutcomeRequirement.predicate".to_owned());
                         let predicate = variants

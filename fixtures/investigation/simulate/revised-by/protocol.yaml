@@ -1,0 +1,45 @@
+format: protocol/1
+
+protocol:
+  id: simulate.revised.by
+  revision: 1
+  description: Record a test of a document once; the outcome needs a passing test. Cases of another protocol revise the document.
+
+artifacts:
+  doc:
+    description: The document under test.
+    revised_by: simulate.revised.by.owner
+
+evidence_kinds:
+  test:
+    description: A test of the document; its result is pass or another.
+
+claims:
+  checked:
+    description: A test of the current revision of the document exists.
+    true_when:
+      evidence:
+        kind: test
+        subject: doc
+  passed:
+    description: A test of the current revision of the document passed.
+    true_when:
+      evidence:
+        kind: test
+        subject: doc
+        result: pass
+
+actions:
+  check:
+    description: Test the document, once.
+    precondition:
+      claim: checked
+      is: unknown
+    may_produce:
+      - evidence: test
+
+outcomes:
+  done:
+    description: The document passed its test.
+    requires:
+      claim: passed

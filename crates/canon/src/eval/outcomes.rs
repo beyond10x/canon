@@ -117,12 +117,23 @@ pub(super) fn section(
     }
     let mut entries = serde_json::Map::new();
     for (id, outcome) in &ir.outcomes {
+        // A decision counts only while its condition, when it has one, is `true` at this
+        // evaluation (CANON-OUTCOME-003): a decision given while it is `false` or `unknown` is
+        // neither counted nor refused.
+        let condition = outcome
+            .requires
+            .when()
+            .map(|when| (when, predicate(when, claims, inputs, evidence)))
+            .filter(|(_, value)| *value != Truth::True);
         let decided_by = match &outcome.requires {
             OutcomeRequirement::Predicate(_) => None,
-            OutcomeRequirement::Decision(name) => applying
-                .map(|decisions| decisions.decided_by(name, id, case.revision.as_ref()))
+            OutcomeRequirement::Decision(_) if condition.is_some() => None,
+            OutcomeRequirement::Decision(requirement) => applying
+                .map(|decisions| {
+                    decisions.decided_by(&requirement.decision, id, case.revision.as_ref())
+                })
                 .filter(|principals| !principals.is_empty())
-                .map(|principals| (name, principals)),
+                .map(|principals| (&requirement.decision, principals)),
         };
         let legitimate = match &outcome.requires {
             OutcomeRequirement::Predicate(requires) => {
@@ -153,7 +164,12 @@ pub(super) fn section(
                 "status": "blocked",
                 "reasons": match &outcome.requires {
                     OutcomeRequirement::Predicate(requires) => reasons(requires, claims, inputs, evidence),
-                    OutcomeRequirement::Decision(name) => {
+                    OutcomeRequirement::Decision(_) if condition.is_some() => {
+                        let (when, _) = condition.expect("checked by the guard");
+                        reasons(when, claims, inputs, evidence)
+                    }
+                    OutcomeRequirement::Decision(requirement) => {
+                        let name = &requirement.decision;
                         let mut reason = serde_json::json!({"decision": name.as_str(), "present": false});
                         let stale = applying
                             .map(|decisions| decisions.stale_grounds(name, id))

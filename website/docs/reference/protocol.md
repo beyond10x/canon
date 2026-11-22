@@ -47,6 +47,7 @@ A thing whose revisions evidence is bound to.
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `description` | text | optional | — |
+| `revised_by` | [identifier](#identifiers) (`ProtocolId`) | optional | The protocol whose cases revise this artifact (story:artifact-revised-by): any protocol but this one, named and never resolved. `canon evaluate`, `canon check` and `canon generate` read nothing from it; `canon simulate` offers a revise step for the artifact in every state. Absent: no protocol is said to revise it, or the protocol's own actions do, through `revises`. |
 
 ## `EvidenceKind`
 
@@ -314,7 +315,8 @@ What an outcome requires.
 
 | Key | Value | Meaning |
 |---|---|---|
-| `decision` | [identifier](#identifiers) (`DecisionName`) | The outcome is legitimate only with an explicit decision of this name, for the outcome, taken at the case snapshot's current revision. |
+| `decision` | [identifier](#identifiers) (`DecisionName`) | The outcome is legitimate only with an explicit decision of this name, for the outcome, taken at the case snapshot's current revision, and, when it has a condition, only while that is `true`. |
+| `when` | [`Predicate`](#predicate) | Allowed only beside `decision`. The decision counts when this is `true` at the evaluation, whenever it was taken; absent, it counts whenever it applies. A decision given while this is `false` or `unknown` is ignored at that evaluation, neither counted nor refused, and the same decision counts at a later evaluation once this is `true`: a caller that wants "taken after the condition held" enforces that itself. Claims and case inputs only; an evidence match, an order form or a `children` form is refused as `evidence-in-decision-condition`. |
 | — | [`Predicate`](#predicate) | Written as the [`Predicate`](#predicate) itself, with its keys and no key of its own. The outcome is legitimate when the predicate is `true`. |
 
 ## `CaseInput`

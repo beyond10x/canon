@@ -108,6 +108,15 @@
 //! - **Supplied step.** A kind that declares `supplied_by` is produced by another protocol's
 //!   cases (story:supplied-evidence), and no action step produces it: a record of it may arrive at
 //!   any step, from any state, by the combinations an action step takes.
+//! - **External revise step** (story:artifact-revised-by). An artifact that declares `revised_by`
+//!   is revised by the cases of another protocol, and a case of it may move the artifact to a new
+//!   revision between two evaluations: the step is offered in every state, one per such artifact
+//!   in identifier order, and its successor is the revision of that artifact, as a revise step
+//!   makes it, with no record added. It is no step when its successor is the state it starts from.
+//!   It is no action step: it raises no mark, and it is outside the test that every step of every
+//!   admissible action returns a state, as a supplied step is. Canon revises nothing, and nothing
+//!   checks that the named protocol revises the artifact: the declaration states a fact Canon
+//!   cannot see, as `supplied_by` does. Written `` protocol `q` revises `a` ``.
 //! - **Child-outcome step.** For each opening action whose mark is above none, one current record
 //!   of `case_outcome` arrives from one of its children, in the one dimension `canon check` counts
 //!   its action as producing (story:child-outcome-subject): the one about its `case_open` subject
@@ -167,7 +176,8 @@
 //! fastest, each member's dimensions, classes and profiles in the space's orders, then its revise
 //! steps, the subsets of its `revises` in lexicographic order of their sorted ids (`[a]`,
 //! `[a, b]`, `[b]`), each with no record, then its records and group combinations in the order
-//! above, a revise step counting as one step; supplied kinds the same way; the child-outcome
+//! above, a revise step counting as one step; supplied kinds the same way; the external revise
+//! steps, by artifact in identifier order; the child-outcome
 //! step, by opening action, dimension, class and profile, each plain successor before its
 //! replacing ones, and each with the lower mark before the kept one; expiring kinds in dimension
 //! order, then classes; capabilities in identifier order, `granted` before `denied`; decisions in
@@ -202,7 +212,11 @@
 //! steps that can open it. It is no finding; the summary counts it when the protocol declares a
 //! supplied or an expiring kind, `` W waiting on supplied evidence or expiry ``, and when it
 //! declares an action that opens a child case, `` W waiting on supplied evidence, a child outcome
-//! or expiry ``. An open state a revise step leads out of neither waits nor is a finding.
+//! or expiry ``. An open state a revise step leads out of neither waits nor is a finding. A state
+//! only an external revise step opens waits too, and a protocol with an artifact that declares
+//! `revised_by` says so: `` W waiting on supplied evidence, expiry or a revision by another
+//! protocol `` (`` supplied evidence, a child outcome, expiry or a revision by another protocol ``
+//! with an action that opens a child case).
 //!
 //! One finding is printed per smallest state (R5): among the states of one kind, `stuck-state`
 //! or `cycle`, one is printed when no other of that kind is contained in it. State A is contained
@@ -242,7 +256,7 @@
 //! line, its records in kind-id order joined by ` and `, `` action `a` produces evidence `k`
 //! and evidence `l` result `r` ``), `` action `a` revises `b`, `c` `` (`` action `a` revises `b`
 //! and produces evidence `k` `` with a record or a group), `` protocol `s`
-//! supplies evidence `k` ``, `` a child of action `a` records evidence `case_outcome` result `r`
+//! supplies evidence `k` ``, `` protocol `q` revises `a` ``, `` a child of action `a` records evidence `case_outcome` result `r`
 //! ``, `` evidence `k` expires ``, `` capability `c` denied ``, `` decision `d` taken ``, joined
 //! by `, then `, or `empty`. The findings are followed by the summary: `` simulated: protocol `p`
 //! revision 1: N reachable states, T terminable (outcome `a` x, outcome `b` y), W waiting on
@@ -273,10 +287,13 @@
 //! denial is reported, and a denial a runner binds to a case revision is walked as lasting. The
 //! records of a dimension no match names an artifact for are about the first artifact no match
 //! of the kind names, as the space takes them, so a revision of that artifact sets every such
-//! record aside, `case_outcome` records of a protocol that reads them about no artifact by name
-//! included, and a revision of another artifact sets none of them aside. A child that has not
-//! ended keeps recording at the current revision after its subject is revised: a child's outcome
-//! always arrives as a current record.
+//! record aside and a revision of another artifact sets none of them aside; the exception is
+//! the `case_outcome` records of children that actions open about several artifacts, which the
+//! walk keeps about the `case_open` subject of the action (`recovery`,
+//! story:child-outcome-recovery), so a revision sets aside only the child outcomes about its
+//! artifact. A child that has not ended when its subject is revised may end against the earlier
+//! revision or the new one: from the third value of its action's mark its outcome arrives as an
+//! earlier record as well as a current one.
 //!
 //! # Cost
 //!
@@ -301,6 +318,7 @@ use crate::model::{
     Predicate, ProtocolId, one_line,
 };
 
+mod recovery;
 #[cfg(test)]
 mod tests;
 
@@ -496,6 +514,9 @@ pub struct Report {
     /// Whether some action opens a child case, so a child's outcome may open a waiting state and
     /// the summary names it among what the waiting states wait on.
     pub child_outcomes: bool,
+    /// Whether some artifact declares `revised_by`, so a revision by another protocol may open a
+    /// waiting state and the summary names it among what the waiting states wait on.
+    pub revisions: bool,
     /// How many reachable states the printed stuck states and cycles stand for.
     pub dead: usize,
     pub findings: Vec<Finding>,
@@ -532,10 +553,13 @@ impl fmt::Display for Report {
             terminable.push_str(&format!(" ({})", outcomes.join(", ")));
         }
         if let Some(waiting) = self.waiting {
-            let on = if self.child_outcomes {
-                "supplied evidence, a child outcome or expiry"
-            } else {
-                "supplied evidence or expiry"
+            let on = match (self.child_outcomes, self.revisions) {
+                (false, false) => "supplied evidence or expiry",
+                (true, false) => "supplied evidence, a child outcome or expiry",
+                (false, true) => "supplied evidence, expiry or a revision by another protocol",
+                (true, true) => {
+                    "supplied evidence, a child outcome, expiry or a revision by another protocol"
+                }
             };
             terminable.push_str(&format!(", {waiting} waiting on {on}"));
         }
@@ -602,7 +626,19 @@ enum Step {
         adds: Adds,
     },
     Supplied(Added),
+    /// The artifact `at` of those that declare `revised_by` moves to a new revision, a case of
+    /// the protocol that revises it having revised it (story:artifact-revised-by).
+    External {
+        at: usize,
+    },
     Child {
+        action: usize,
+        record: Added,
+        replacing: Option<Replacing>,
+    },
+    /// A child's outcome that arrives as an earlier record, from the third value of the mark of
+    /// `action` (story:child-outcome-recovery).
+    Late {
         action: usize,
         record: Added,
         replacing: Option<Replacing>,
@@ -646,6 +682,9 @@ struct Layout<'d, 'a> {
     /// The position of each action that opens a child case, in action order: mark `i` is
     /// `openers[i]`'s.
     openers: Vec<usize>,
+    /// For each opener, the `case_open` subject when its mark has a third value
+    /// (story:child-outcome-recovery), otherwise `None`; empty before [`Layout::flagging`].
+    flagged: Vec<Option<ArtifactId>>,
 }
 
 impl<'d, 'a> Layout<'d, 'a> {
@@ -704,6 +743,7 @@ impl<'d, 'a> Layout<'d, 'a> {
             moving,
             marks: at,
             openers: Vec::new(),
+            flagged: Vec::new(),
         }
     }
 
@@ -770,12 +810,12 @@ impl<'d, 'a> Layout<'d, 'a> {
                 }
             }
         }
-        walked
+        self.after_revision(walked, artifacts)
     }
 
     /// The whole length of a walk's state.
     fn length(&self) -> usize {
-        self.marks + (2 * self.openers.len()).div_ceil(32)
+        self.marks + (2 * self.openers.len()).div_ceil(32) + self.flag_words()
     }
 
     /// The mark of opener `at` (`openers[at]`) in `state`: 0 for none, 1 for one child that has
@@ -792,6 +832,9 @@ impl<'d, 'a> Layout<'d, 'a> {
         let word = &mut marked[self.marks + 2 * at / 32];
         *word &= !(0b11 << (2 * at % 32));
         *word |= [0b00, 0b01, 0b11][usize::from(mark)] << (2 * at % 32);
+        if mark == 0 {
+            return self.settled(marked, at);
+        }
         marked
     }
 
@@ -1032,7 +1075,7 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
     }
     let limit = usize::try_from(check::STATE_BOUND).expect("the bound fits usize");
 
-    let dimensions = space.walked();
+    let (dimensions, split) = recovery::split(ir, &space, space.walked());
     let initial = space.initial_states();
     let base = initial.first().map_or(0, Vec::len);
     // R2a: an expired `case_outcome` record still counts for a `children` form. With no evidence
@@ -1043,10 +1086,17 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
     // story:simulate-revise-step: the artifacts some action declares in `revises`. A record about
     // one of them that a `children` form reads is held as earlier after a revision, and is
     // written `… earlier`; a dimension with one of them upstream has a vector per subset of them.
+    // An artifact another protocol revises (story:artifact-revised-by) is revisable too.
+    let external: Vec<(&ArtifactId, &ProtocolId)> = ir
+        .artifacts
+        .iter()
+        .filter_map(|(id, artifact)| artifact.revised_by.as_ref().map(|by| (id, by)))
+        .collect();
     let revisable: BTreeSet<&ArtifactId> = ir
         .actions
         .values()
         .flat_map(|action| &action.revises)
+        .chain(external.iter().map(|(artifact, _)| *artifact))
         .collect();
     let revised_earlier: Vec<bool> = dimensions
         .iter()
@@ -1086,7 +1136,9 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         .map(|(at, _)| at)
         .collect();
     let child_outcomes = !openers.is_empty();
-    let layout = Layout::revising(&dimensions, base, &holds, moving).marking(openers);
+    let layout = Layout::revising(&dimensions, base, &holds, moving)
+        .marking(openers)
+        .flagging(ir, &split);
     // Each action's revise subsets: the non-empty subsets of its `revises`, in order of their
     // sorted ids; none for an action that declares no `revises`.
     let action_subsets: Vec<Vec<Vec<&ArtifactId>>> = ir
@@ -1098,7 +1150,7 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         })
         .collect();
     let of_kinds = |kinds: &BTreeSet<&EvidenceKindId>| -> Vec<usize> {
-        (0..dimensions.len())
+        (0..split.originals)
             .filter(|at| kinds.contains(dimensions[*at].kind))
             .collect()
     };
@@ -1193,6 +1245,7 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
                 .collect()
         })
         .collect();
+    let produced = split.redirect(&layout.openers, produced);
     let child_records: Vec<Vec<Added>> = produced.iter().map(|at| records(at)).collect();
     // For each dimension, the position of its class `open`, which a child that ends replaces.
     let open_class: Vec<Option<usize>> = dimensions
@@ -1225,8 +1278,8 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         .filter(|(_, kind)| kind.max_age.is_some())
         .map(|(id, _)| id)
         .collect();
-    let expiring: Vec<usize> = of_kinds(&expiring_kinds)
-        .into_iter()
+    let expiring: Vec<usize> = (0..dimensions.len())
+        .filter(|at| expiring_kinds.contains(dimensions[*at].kind))
         .filter(|at| matched || !is_case_outcome(&dimensions[*at]))
         .collect();
     let capabilities = space.walked_capabilities().len();
@@ -1257,7 +1310,7 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
             ir,
             &space,
             &state[..base].to_vec(),
-            space.walk_evidence(&held, &layout.expired(&state)),
+            split.evidence(&space, &dimensions, &held, &layout.expired(&state)),
         )
         .map_err(|refusal| Refusal::new(refusal.code(), refusal.to_string()))?;
         let legitimate: Vec<usize> = (0..ir.outcomes.len())
@@ -1364,6 +1417,15 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
                 successors.push((walked, Step::Supplied(*record)));
             }
         }
+        // After the supplied steps, before the expiry steps: the artifacts another protocol
+        // revises, in identifier order. No action step: it counts neither for `returns` nor for
+        // `revisers`.
+        for (at, (artifact, _)) in external.iter().enumerate() {
+            let walked = layout.revise(&state, &[*artifact]);
+            if walked != state {
+                successors.push((walked, Step::External { at }));
+            }
+        }
         for (at, action, mark) in layout.raised(&state) {
             for record in &child_records[at] {
                 let Added {
@@ -1418,6 +1480,13 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
                 }
             }
         }
+        successors.extend(recovery::late(
+            &layout,
+            &state,
+            &child_records,
+            &open_class,
+            &open_held,
+        ));
         for dimension in &expiring {
             for class in 0..dimensions[*dimension].classes.len() {
                 if layout.present(&state, *dimension, class) {
@@ -1610,15 +1679,30 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
                     added(record)
                 )
             }
+            Step::External { at } => format!(
+                "protocol `{}` revises `{}`",
+                one_line(external[*at].1.as_str()),
+                one_line(external[*at].0.as_str())
+            ),
             Step::Child {
+                action,
+                record,
+                replacing,
+            }
+            | Step::Late {
                 action,
                 record,
                 replacing,
             } => {
                 let mut text = format!(
-                    "a child of action `{}` records {}",
+                    "a child of action `{}` records {}{}",
                     action_id(*action),
-                    added(record)
+                    added(record),
+                    if matches!(step, Step::Late { .. }) {
+                        " earlier"
+                    } else {
+                        ""
+                    }
                 );
                 let open = format!("result `{OPEN_OUTCOME}`");
                 match replacing {
@@ -1662,7 +1746,9 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
     };
     // A state as the space writes it, then each mark above none in action order.
     let rendered = |at: usize| {
-        let mut text = space.render_walk(
+        let mut text = split.render(
+            &space,
+            &dimensions,
             &states[at][..base].to_vec(),
             &layout.held(&states[at]),
             &layout.expired(&states[at]),
@@ -1827,9 +1913,13 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
             .cloned()
             .zip(legitimate_in.iter().copied())
             .collect(),
-        waiting: (!supplied_kinds.is_empty() || !expiring_kinds.is_empty() || child_outcomes)
-            .then_some(waiting),
+        waiting: (!supplied_kinds.is_empty()
+            || !expiring_kinds.is_empty()
+            || child_outcomes
+            || !external.is_empty())
+        .then_some(waiting),
         child_outcomes,
+        revisions: !external.is_empty(),
         dead: stuck.len() + cycles.len(),
         findings,
     })

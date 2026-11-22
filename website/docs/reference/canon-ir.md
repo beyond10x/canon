@@ -46,7 +46,9 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   them is the IR it was before they existed. A production's `decided_by` is resolved: the
   action's `author` when the production declares none (story:judgement-marking), so
   `author: program` and a `decided_by` equal to the action's `author` compile to no key. An evidence kind's `supplied_by` is the protocol id as
-  declared, a name nothing resolves (story:supplied-evidence). A capability requirement is `{"capability": …}`, or `{"capability": …, "scope": {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
+  declared, a name nothing resolves (story:supplied-evidence). An artifact's `revised_by` is
+  one more such key: written after its `description` only when the protocol declares it
+  (story:artifact-revised-by). A capability requirement is `{"capability": …}`, or `{"capability": …, "scope": {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
   section is `{<id>: {"description": …}}`. The `case` section is
   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
   authored: `{"first": {"kind": …, "result": …}}`, `{"before": {"first": …, "then": …}}`,
@@ -60,8 +62,9 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   sorted like every object's (story:action-arguments).
 - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
   it was written, and an input test `{"input": {"id": …, "in": [...]}}`. An outcome that
-  requires an explicit decision has the requirement `{"decision": <name>}`, as written; any
-  other requirement is its predicate.
+  requires an explicit decision has the requirement `{"decision": <name>}`, as written, with
+  `"when": <predicate>`, normalized like every predicate, only when the decision has a condition
+  (story:decision-condition); any other requirement is its predicate.
 - **Resolved references.** Only a document the validator accepts compiles, so every claim and
   evidence kind the IR references is declared in it (`case_outcome` wherever a `children` form
   reads it), and so is every artifact an evidence match, an order form or a `children` form
