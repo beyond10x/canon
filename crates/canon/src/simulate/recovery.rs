@@ -11,7 +11,10 @@
 //! declares `revised_by`, is not split and is walked and written as before.
 //!
 //! A child that has not ended when its subject is revised may end against the revision it was
-//! opened at, or against the new one. The walk keeps one bit per opening action of a split
+//! opened at, or against the new one; this holds for a child about the artifact the space's
+//! dimension is about too (story:simulate-child-about-own-artifact), which keeps that dimension
+//! and has no other, where some predicate tells an earlier record from a current one
+//! ([`sees_earlier_records`]): otherwise the walk is as before. The walk keeps one bit per opening action of a split
 //! dimension, set by a revision of the subject while a child of the action has not ended and
 //! cleared when none is left: the third value of the action's mark. From it a child's outcome
 //! also arrives as an earlier record, written `… earlier`; the step of the opening action leaves
@@ -22,7 +25,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{Added, Layout, Replacing, State, Step};
 use crate::check::{Space, Walked};
 use crate::ir::Ir;
-use crate::model::{ArtifactId, CASE_OUTCOME, EvidenceRecord, one_line};
+use crate::model::{ArtifactId, CASE_OUTCOME, ChildRevision, EvidenceRecord, Predicate, one_line};
 
 /// How the walk's dimensions relate to the space's: the first `originals` are the space's, each
 /// later one a `case_outcome` dimension about one subject, standing for `source` of it.
@@ -30,7 +33,8 @@ pub(super) struct Split {
     pub(super) source: Vec<usize>,
     pub(super) originals: usize,
     /// For each action that opens a child case and whose children record in a split dimension, by
-    /// position, the dimension about its `case_open` subject.
+    /// position, the dimension about its `case_open` subject; for one whose subject is the
+    /// artifact the space's dimension is about, that dimension itself.
     pub(super) redirected: BTreeMap<usize, usize>,
 }
 
@@ -53,6 +57,7 @@ pub(super) fn split<'a>(
             .artifacts
             .values()
             .any(|artifact| artifact.revised_by.is_some());
+    let sees_earlier = sees_earlier_records(ir);
     for at in 0..originals {
         if !revisable || dimensions[at].kind.as_str() != CASE_OUTCOME {
             continue;
@@ -74,6 +79,17 @@ pub(super) fn split<'a>(
             .iter()
             .all(|subject| dimensions[at].subject.as_ref() == Some(*subject))
         {
+            // The children are about the artifact the dimension is about: no new dimension. When
+            // some predicate tells an earlier record from a current one, the opener is redirected
+            // to its own dimension (`redirect` maps it to itself), so a revision of that artifact
+            // gives its mark the third value and its child may end against the earlier revision.
+            // Otherwise a child that ends late is read as one that ended before the revision, and
+            // the walk is unchanged.
+            if sees_earlier {
+                for (position, _) in &openers {
+                    redirected.insert(*position, at);
+                }
+            }
             continue;
         }
         for subject in subjects {
@@ -109,6 +125,35 @@ pub(super) fn split<'a>(
             redirected,
         },
     )
+}
+
+/// Whether some predicate of the protocol reads a `case_outcome` record differently when it is an
+/// earlier one: a `children` form with `revision: current`, or an evidence match of the kind. A
+/// `children` form without it reads current and earlier records alike, so a child that ends
+/// against the earlier revision leaves every claim as one that ended before the revision does.
+fn sees_earlier_records(ir: &Ir) -> bool {
+    let predicates = ir
+        .claims
+        .values()
+        .map(|claim| &claim.true_when)
+        .chain(ir.obligations.values().map(|o| &o.discharged_when))
+        .chain(ir.actions.values().map(|action| &action.precondition))
+        .chain(
+            ir.outcomes
+                .values()
+                .filter_map(|outcome| outcome.requires.predicate()),
+        );
+    let mut seen = false;
+    for predicate in predicates {
+        predicate.visit(&mut |node| match node {
+            Predicate::Children(form) => {
+                seen |= form.revision == Some(ChildRevision::Current);
+            }
+            Predicate::Evidence(matching) => seen |= matching.kind.as_str() == CASE_OUTCOME,
+            _ => {}
+        });
+    }
+    seen
 }
 
 type Held = (usize, usize, u32, Vec<usize>);

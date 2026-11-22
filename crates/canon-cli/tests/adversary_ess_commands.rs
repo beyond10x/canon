@@ -114,7 +114,7 @@ fn named<'a>(commands: &'a mut [Value], name: &str) -> &'a mut Value {
 
 /// The spec-first commit of a new command (AGENTS.md § ESS: "declares the change in
 /// `ess/domains/cli.yaml` in its first commit"), written by copying `canon.cli.Validate` and not
-/// changing `naming.wire`. ESS 0.97.3 compiles two commands with one wire; the gate must name the
+/// changing `naming.wire`. ESS 0.97.4 compiles two commands with one wire; the gate must name the
 /// command that is no `canon` subcommand.
 #[test]
 fn an_ess_command_sharing_a_wire_is_named() {
@@ -244,7 +244,7 @@ fn long_flags_on_every_command_line_level_are_declared() {
         .args(["specify", "compile", "--path", "ess", "--format", "json"])
         .current_dir(tree())
         .output()
-        .expect("`ess` 0.97.3 is on PATH");
+        .expect("`ess` 0.97.4 is on PATH");
     assert!(output.status.success(), "ess specify compile failed");
     let ir: Value = serde_yaml_ng::from_slice(&output.stdout).expect("IR is JSON");
     let mut ess_side: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();

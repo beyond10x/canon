@@ -83,7 +83,7 @@ jobs:
       - name: Install ess
         if: steps.classify.outputs.class == 'code'
         env:
-          ESS_VERSION: "0.97.3"
+          ESS_VERSION: "0.97.4"
           ESS_SHA256: d709e59830699f6588d14621847b702aa100142c045de8761e90c5aeeab98c88
         run: |
           set -euo pipefail
@@ -103,7 +103,6 @@ jobs:
 
       - name: task test-slow
         if: steps.classify.outputs.class == 'code'
-        continue-on-error: true
         run: task test-slow
 
       - name: task docs-site-check

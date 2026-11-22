@@ -295,3 +295,25 @@ fn every_check_fixture_is_an_expectation() {
         assert_eq!(files, wanted, "{case}");
     }
 }
+
+/// `canon check --help` names the history modes a `descended` form and another order form read
+/// one kind in (story:check-descended-two-result-history): records that name no item and keep
+/// their instants, earlier records observed after the current ones, and earlier records of two
+/// results observed at two instants. The help is wrapped, so words are compared, not lines.
+#[test]
+fn check_help_names_the_history_modes_of_descended() {
+    let help = text(&canon(&["check", "--help"]).stdout)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    for mode in [
+        "records that name no item and keep their instants",
+        "earlier records observed after the current ones",
+        "earlier records of two results observed at two instants",
+    ] {
+        assert!(
+            help.contains(mode),
+            "`canon check --help` lacks `{mode}`:\n{help}"
+        );
+    }
+}

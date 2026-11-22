@@ -122,7 +122,11 @@ pub enum Command {
     /// claim is there in any combination of observed before and after each upstream artifact
     /// moved, one record each. Evidence an order form reads (`first`, `before`, `after`, `since`, `descended`)
     /// is also there with earlier records at a superseded revision, or with no known instant, in
-    /// every order of first observations; evidence an `after` or a `since` compares with its result
+    /// every order of first observations; evidence a `descended` form and another order form read
+    /// is also there in three more histories: records that name no item and keep their instants,
+    /// earlier records observed after the current ones, and earlier records of two results
+    /// observed at two instants, the lowest or the highest result first; evidence an `after` or a
+    /// `since` compares with its result
     /// also with a later record of that result, placed anywhere in that order or at no known
     /// instant; and evidence a `since` reads as its last kind also with a last record at a
     /// superseded revision, placed in that order on its own, with or just after its own first
@@ -203,9 +207,10 @@ pub enum Command {
     /// aside, and the protocol is walked and written as without the split.
     /// A child that has not ended when its subject is revised may end against the
     /// earlier revision: its outcome then arrives as an earlier record (a step written `… earlier`)
-    /// as well as a current one. A child opened about the artifact the space already uses does not
-    /// end against an earlier revision; the walk of such a protocol is unchanged. An action without
-    /// `revises` has no revise step. A state is open when action (record and revise), supplied,
+    /// as well as a current one, whatever artifact the child was opened about; for the artifact
+    /// the space already uses, only in a protocol whose `children` form says `revision: current`
+    /// or whose evidence match reads `case_outcome`, since no other claim tells the two apart. An
+    /// action without `revises` has no revise step. A state is open when action (record and revise), supplied,
     /// external revise, child-outcome, expiry and authority steps lead from it to a legitimate
     /// outcome; decisions do not count. A state only an external revise step opens waits, and
     /// when some artifact declares `revised_by` the summary counts the waiting states as waiting
@@ -268,10 +273,7 @@ pub enum Command {
     /// otherwise prints `floor: breached` and each `RELAXATION` and `BREAKING` change, naming the
     /// identifiers it touches, and exits 1. The floor and the protocol keep their own ids,
     /// revisions and descriptions, which are not compared. The protocol does not name its floor;
-    /// pass a compiled import as the floor to check that a refinement only tightens it. An added
-    /// action is an `EXPANSION`, and every `EXPANSION` passes, so the floor guards only what the
-    /// protocol that declares an action requires: an action added to the protocol that produces
-    /// a finding the floor guards, without the capability the floor requires of it, is not caught.
+    /// pass a compiled import as the floor to check that a refinement only tightens it.
     Floor {
         /// The organization's floor, a `protocol/1` document compiled as `canon compile` prints it.
         #[arg(long)]

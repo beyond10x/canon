@@ -425,6 +425,8 @@ mod freshness;
 mod grounds;
 mod independence;
 mod invalidation;
+#[cfg(test)]
+mod invalidation_cost;
 mod json;
 mod missing;
 mod obligations;
