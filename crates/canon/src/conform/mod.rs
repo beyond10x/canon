@@ -544,6 +544,12 @@ pub fn run_with_imports(
     Verdict::Passed
 }
 
+#[cfg(test)]
+thread_local! {
+    /// How many fixtures this thread composed and compiled; the count tests read it.
+    static COMPILES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// The fixture's compiled protocol, composed with its imports, or why the step that needs it fails.
 fn compiled_fixture(
     scenario: &Scenario,
@@ -573,6 +579,8 @@ fn compiled_fixture(
         })?;
         imported.push(document);
     }
+    #[cfg(test)]
+    COMPILES.with(|count| count.set(count.get() + 1));
     ir::compose(&protocol, &imported)
         .and_then(|composed| ir::compile(&composed))
         .map_err(|problems| {
@@ -1547,6 +1555,51 @@ mod tests {
                     + 1
             )
         );
+    }
+
+    /// A scenario of one compile step and `evaluate_steps` evaluate steps, all of which pass on
+    /// [`PROTOCOL`].
+    fn many_step_scenario(id: &str, evaluate_steps: usize) -> String {
+        let mut source = scenario_text(id, &compiled());
+        for n in 0..evaluate_steps {
+            source.push_str(&format!(
+                "  - id: e{n}\n    evaluate:\n      case: {CASE}\n      evidence: []\n    expect:\n      decision: |\n{DECISION}"
+            ));
+        }
+        source
+    }
+
+    fn compiles_during<T>(work: impl FnOnce() -> T) -> (T, usize) {
+        let before = COMPILES.with(std::cell::Cell::get);
+        let result = work();
+        (result, COMPILES.with(std::cell::Cell::get) - before)
+    }
+
+    #[test]
+    fn a_scenario_compiles_its_fixture_once_however_many_steps_it_has() {
+        let scenario = parse(&many_step_scenario("S", 21)).expect("parses");
+        assert_eq!(scenario.steps.len(), 22);
+        let (verdict, compiles) = compiles_during(|| run(&scenario, Ok(PROTOCOL)));
+        assert_eq!(verdict, Verdict::Passed);
+        assert_eq!(compiles, 1, "a 22-step scenario run on its own");
+
+        let files = [
+            ScenarioFile {
+                path: "a.yaml".to_owned(),
+                text: Ok(many_step_scenario("A", 21)),
+            },
+            ScenarioFile {
+                path: "b.yaml".to_owned(),
+                text: Ok(many_step_scenario("B", 2)),
+            },
+        ];
+        let (report, compiles) =
+            compiles_during(|| run_registry(&files, |_| Ok(PROTOCOL.to_owned())));
+        assert_eq!(
+            report.render(),
+            "passed: scenario `A`\npassed: scenario `B`\nconform: 2 passed, 0 failed, 0 unreadable\n"
+        );
+        assert_eq!(compiles, 2, "a registry of two scenarios, 22 and 3 steps");
     }
 
     #[test]
