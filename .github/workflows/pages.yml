@@ -42,6 +42,18 @@ jobs:
       - name: Install the compiler pinned in rust-toolchain.toml
         if: steps.classify.outputs.class != 'planning-only'
         run: rustup toolchain install
+      - name: Install cargo-nextest
+        if: steps.classify.outputs.class != 'planning-only'
+        env:
+          NEXTEST_VERSION: "0.9.143"
+          NEXTEST_SHA256: 66786b9abe23920d022a182d1416b1bbc8130dd4872a9553d76985a1708dcd1e
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/nextest.tar.gz" \
+            "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-$NEXTEST_VERSION/cargo-nextest-$NEXTEST_VERSION-x86_64-unknown-linux-gnu.tar.gz"
+          echo "$NEXTEST_SHA256  $RUNNER_TEMP/nextest.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/nextest.tar.gz" -C "$HOME/.cargo/bin" cargo-nextest
+          cargo nextest --version
       - if: steps.classify.outputs.class != 'planning-only'
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
@@ -51,7 +63,7 @@ jobs:
       - name: Check the generated pages are current
         if: steps.classify.outputs.class != 'planning-only'
         run: |
-          cargo test --locked -p canon-docs
+          cargo nextest run --locked -p canon-docs
           cargo build --locked -p canon-cli
           cargo run --locked -p canon-docs -- generate --check
       - name: Build the Docusaurus site

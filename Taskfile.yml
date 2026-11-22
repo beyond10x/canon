@@ -107,7 +107,7 @@ tasks:
   docs-site-check:
     desc: The checks of a pull request that changes only the documentation site (answer docs-site-only of scripts/classify-changes.sh).
     cmds:
-      - cargo test -p canon-docs --locked
+      - cargo nextest run -p canon-docs --locked
       - cargo nextest run -p b10x-canon --locked --test main -E 'test(/^(adversary_binding_docs|adversary_obligations_docs|adversary2_decisions_docs|adversary2_binding_eval)::/)'
       - task: docs-check
 
