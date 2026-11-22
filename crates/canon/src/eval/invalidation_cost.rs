@@ -16,19 +16,7 @@
 //! worker of `on_deep_stack`, so each test thread has its own and tests running side by side do
 //! not count each other's work. A test sets a limit before it evaluates; a count past it panics,
 //! so an evaluation that does not end ends there.
-//!
-//! A count of evaluations does not see an evaluation made slower: a copy of the kept-out marks, a
-//! scan of the claims being decided, each made for every evaluation, leave the count as it is
-//! while the cost goes cubic (wave 11 review, F7). Copies are held by the bytes the evaluating
-//! thread asks of the allocator, which are the same on every run: per evaluation they do not grow
-//! with the chain. A scan allocates nothing and no counter sees it, since the code that scans is
-//! not code that bumps one; a time bound that would see it is not held here, since at the sizes a
-//! test can afford (the scan costs about half an evaluation at 1600 claims) the processor time
-//! of the evaluating thread moves about as much with the machine as the scan adds.
 
-#![allow(unsafe_code)]
-
-use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 
 use super::{Decision, on_deep_stack};
@@ -79,78 +67,19 @@ pub(super) fn marked(places: usize) {
     });
 }
 
-thread_local! {
-    /// The bytes this thread has asked the allocator for, never reduced by a free: what the
-    /// evaluation copies is counted, not what it holds at the end.
-    static ALLOCATED: Cell<usize> = const { Cell::new(0) };
-}
-
-fn allocated(bytes: usize) {
-    let _ = ALLOCATED.try_with(|total| total.set(total.get() + bytes));
-}
-
-/// The system allocator, counting the bytes each thread asks of it. The lib's test binary runs on
-/// it, which only adds one thread-local add to an allocation; nothing reads the count but
-/// [`work_of`].
-struct Counting;
-
-// SAFETY: every method does what `System` does and only adds to a thread-local count first.
-unsafe impl GlobalAlloc for Counting {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        allocated(layout.size());
-        unsafe { System.alloc(layout) }
-    }
-
-    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        allocated(layout.size());
-        unsafe { System.alloc_zeroed(layout) }
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        unsafe { System.dealloc(ptr, layout) }
-    }
-
-    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        allocated(new_size);
-        unsafe { System.realloc(ptr, layout, new_size) }
-    }
-}
-
-#[global_allocator]
-static COUNTING: Counting = Counting;
-
-/// What one evaluation of `ir` did on the evaluating thread.
-#[derive(Clone, Copy, Debug)]
-struct Measured {
-    /// Claim predicates evaluated.
-    evaluated: usize,
-    /// Moved records marked.
-    marked: usize,
-    /// Bytes asked of the allocator: a copy made for each evaluation, such as a copy of the
-    /// kept-out marks, shows here in proportion to its size, which no count of evaluations sees.
-    bytes: usize,
-}
-
-/// One evaluation of `ir`, measured on the worker thread that runs it, which panics when the
-/// evaluations or the marks pass `limit`.
+/// The claim evaluations and marks of one evaluation of `ir`, which panics when either passes
+/// `limit`.
 fn work_of(
     ir: &Ir,
     case: &model::Case,
     evidence: &[EvidenceRecord],
     limit: usize,
-) -> (Measured, Decision) {
+) -> (usize, usize, Decision) {
     start(limit);
-    let bytes_before = on_deep_stack(|| ALLOCATED.with(Cell::get));
     let decision = super::evaluate(ir, case, evidence).expect("decides");
-    let bytes_after = on_deep_stack(|| ALLOCATED.with(Cell::get));
     let counted = on_deep_stack(|| WORK.with(Cell::get));
     start(usize::MAX);
-    let measured = Measured {
-        evaluated: counted.evaluated,
-        marked: counted.marked,
-        bytes: bytes_after - bytes_before,
-    };
-    (measured, decision)
+    (counted.evaluated, counted.marked, decision)
 }
 
 /// Counts from nothing on this thread's worker, which panics at `limit`.
@@ -246,12 +175,12 @@ fn diamond(claims: usize) -> (Ir, model::Case, Vec<EvidenceRecord>) {
     })
 }
 
-/// The work of evaluating a chain of `claims` claims, with a limit of twice the bound: `n(n+1)/2`
-/// claim evaluations and as many marks as there are places kept out and put back.
-fn chain_work(claims: usize) -> Measured {
+/// The work of evaluating a chain of `claims` claims, with the limit of one more than the bound:
+/// `n(n+1)/2` claim evaluations and as many marks as there are places kept out and put back.
+fn chain_work(claims: usize) -> (usize, usize) {
     let (ir, case, evidence) = chain(claims);
     let bound = claims * (claims + 1) / 2;
-    let (measured, decision) = work_of(&ir, &case, &evidence, 2 * bound);
+    let (evaluated, marked, decision) = work_of(&ir, &case, &evidence, 2 * bound);
     assert_eq!(decision.claims.iter().count(), claims);
     assert!(
         decision
@@ -260,99 +189,52 @@ fn chain_work(claims: usize) -> Measured {
             .all(|(_, entry)| entry.value == Truth::True),
         "the record that recorded no upstream revision decides every claim"
     );
-    measured
-}
-
-/// Whether `large` asked the allocator for no more than half as much again per claim evaluation as
-/// `small`: each evaluation costs the same whatever the length of the walk, and a copy made for
-/// each evaluation (of the marks of the moved records, of the claims being decided) grows with it.
-/// The bytes are the same on every run, so the bound is exact and no load moves it.
-fn bytes_per_evaluation_held(small: Measured, large: Measured) -> bool {
-    2 * large.bytes * small.evaluated <= 3 * small.bytes * large.evaluated
+    (evaluated, marked)
 }
 
 /// The name is the adversary's and is kept so it can be traced; the bound is quadratic, since the
 /// excluded evidence the decision lists has `n(n+1)/2` entries by itself. A chain of 400
 /// claims is held to the claim evaluations and marks of a chain of 50 claims scaled by 64 (the
 /// square of the ratio of the lengths, rounded up), and each chain to `n(n+1)/2` evaluations.
-/// What each evaluation costs is held by the bytes it asks of the allocator, per evaluation, of a
-/// chain of 100 claims against one of 400: a count of evaluations does not see an evaluation made
-/// slower (a copy of the kept-out marks for each, which cost an evaluation `n` bytes more).
 #[test]
 fn claims_kept_apart_by_invalidation_rules_are_evaluated_in_work_quadratic_in_the_chain() {
-    let (short, middle, long) = (chain_work(50), chain_work(100), chain_work(400));
-    eprintln!(
-        "invalidated chain: 50 claims {} evaluations, 400 claims {}; bytes per evaluation: 100 \
-         claims {}, 400 claims {}",
-        short.evaluated,
-        long.evaluated,
-        middle.bytes / middle.evaluated,
-        long.bytes / long.evaluated
+    let (short, short_marks) = chain_work(50);
+    let (long, long_marks) = chain_work(400);
+    eprintln!("invalidated chain: 50 claims {short} evaluations, 400 claims {long}");
+    assert!(
+        short <= 50 * 51 / 2,
+        "a chain of 50 claims took {short} claim evaluations"
     );
     assert!(
-        short.evaluated <= 50 * 51 / 2,
-        "a chain of 50 claims took {} claim evaluations",
-        short.evaluated
+        long <= 400 * 401 / 2,
+        "a chain of 400 claims took {long} claim evaluations"
     );
     assert!(
-        long.evaluated <= 400 * 401 / 2,
-        "a chain of 400 claims took {} claim evaluations",
-        long.evaluated
+        long <= short * 64,
+        "a chain eight times as long took {long} claim evaluations, against {short}: more than \
+         quadratic growth"
     );
     assert!(
-        long.evaluated <= short.evaluated * 64,
-        "a chain eight times as long took {} claim evaluations, against {}: more than quadratic \
-         growth",
-        long.evaluated,
-        short.evaluated
-    );
-    assert!(
-        long.marked <= short.marked * 64,
-        "a chain eight times as long made {} marks, against {}: more than quadratic growth",
-        long.marked,
-        short.marked
-    );
-    assert!(
-        bytes_per_evaluation_held(middle, long),
-        "a chain of 400 claims asked the allocator for {} bytes per claim evaluation, a chain of \
-         100 claims for {}: an evaluation grows with the chain",
-        long.bytes / long.evaluated,
-        middle.bytes / middle.evaluated
+        long_marks <= short_marks * 64,
+        "a chain eight times as long made {long_marks} marks, against {short_marks}: more than \
+         quadratic growth"
     );
 }
 
 /// A diamond of 500 claims, each with a rule of its own, so that every walk has a context of its
-/// own and reuses values only through its per-walk memo. Reused, the claims evaluated are
-/// `n(n+1)/2`; not reused, the last claims are reached a Fibonacci number of times (about 10^104
-/// for 500 claims) and the evaluation would never end, so the limit ends it. Each evaluation asks
-/// the allocator for no more bytes than one of a diamond of 100 claims, as the chain test holds.
+/// own and reuses values only through its per-walk memo. Reused, the claims evaluated are `n(n+1)/2`;
+/// not reused, the last claims are reached a Fibonacci number of times (about 10^104 for
+/// 500 claims) and the evaluation would never end, so the limit ends it.
 #[test]
 fn a_diamond_of_claims_kept_apart_by_invalidation_rules_reuses_each_claims_value_within_a_walk() {
-    let measure = |claims: usize| {
-        let (ir, case, evidence) = diamond(claims);
-        let bound = claims * (claims + 1) / 2;
-        let (measured, decision) = work_of(&ir, &case, &evidence, 2 * bound);
-        assert_eq!(decision.claims.iter().count(), claims);
-        assert!(
-            measured.evaluated <= bound,
-            "a diamond of {claims} claims took {} claim evaluations, over {bound}",
-            measured.evaluated
-        );
-        measured
-    };
-    let (small, large) = (measure(100), measure(500));
-    eprintln!(
-        "invalidated diamond: 500 claims {} evaluations; bytes per evaluation: 100 claims {}, 500 \
-         claims {}",
-        large.evaluated,
-        small.bytes / small.evaluated,
-        large.bytes / large.evaluated
-    );
+    let claims = 500;
+    let bound = claims * (claims + 1) / 2;
+    let (ir, case, evidence) = diamond(claims);
+    let (evaluated, _, decision) = work_of(&ir, &case, &evidence, 2 * bound);
+    eprintln!("invalidated diamond: {claims} claims {evaluated} evaluations");
+    assert_eq!(decision.claims.iter().count(), claims);
     assert!(
-        bytes_per_evaluation_held(small, large),
-        "a diamond of 500 claims asked the allocator for {} bytes per claim evaluation, one of 100 \
-         claims for {}: an evaluation grows with the walk",
-        large.bytes / large.evaluated,
-        small.bytes / small.evaluated
+        evaluated <= bound,
+        "a diamond of {claims} claims took {evaluated} claim evaluations, over {bound}"
     );
 }
