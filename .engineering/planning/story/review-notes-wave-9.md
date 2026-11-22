@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:review-notes-wave-9
 kind: story
-status: active
+status: implemented
 title: 'Six notes of the wave 9 review: fix, file or close each'
 tags:
 - from-finding
@@ -22,10 +22,11 @@ scope:
   path: crates/canon/src/mutate/mod.rs
 - confidence: cited
   path: crates/canon/tests/main.rs
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-22T17:21:52Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
 - {from: "proposed", to: "active", at: "2026-11-22T17:21:52Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
+- {from: "active", to: "implemented", at: "2026-11-22T21:20:37Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
 ---
 ## Outcome
 
