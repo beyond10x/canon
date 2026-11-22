@@ -329,6 +329,16 @@ fn floor_refuses_an_added_action_that_publishes_without_the_floors_capability() 
         "the help no longer states the limit: {}",
         text(&help.stdout)
     );
+    let flat = text(&help.stdout)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        flat.contains(
+            "repeats an action the floor guards with a capability and lacks that capability"
+        ),
+        "the help names the rule for an added action: {flat}"
+    );
     let floor_path = compiled_source(&dir, "floor", &floor_source());
     let same_precondition =
         "    precondition:\n      claim: explanation.supported\n      is: true\n";
