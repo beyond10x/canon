@@ -530,6 +530,29 @@ pub fn evaluate_with(
     evidence: &[EvidenceRecord],
     supplied: Supplied<'_>,
 ) -> Result<Decision, Refusal> {
+    decide(ir, case, evidence, supplied, true)
+}
+
+/// [`evaluate_with`] without the explanation (`explanation` is `None`): every other section, and
+/// every refusal, as it gives them. What `canon check` reads, the statuses of the actions and
+/// outcomes, needs no explanation (story:check-evaluates-statuses-only).
+pub(crate) fn evaluate_unexplained(
+    ir: &Ir,
+    case: &Case,
+    evidence: &[EvidenceRecord],
+    supplied: Supplied<'_>,
+) -> Result<Decision, Refusal> {
+    decide(ir, case, evidence, supplied, false)
+}
+
+/// [`evaluate_with`], building the explanation only when `explaining`.
+fn decide(
+    ir: &Ir,
+    case: &Case,
+    evidence: &[EvidenceRecord],
+    supplied: Supplied<'_>,
+    explaining: bool,
+) -> Result<Decision, Refusal> {
     depth::check(ir)?;
     case::check(ir, case)?;
     let distinct = evidence::check(ir, evidence)?;
@@ -636,6 +659,9 @@ pub fn evaluate_with(
             missing_evidence,
             pending_decisions,
         };
+        if !explaining {
+            return Ok(decision);
+        }
         #[cfg(test)]
         explained(ir);
         let inputs = crate::explain::Inputs {

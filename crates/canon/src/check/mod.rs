@@ -2,9 +2,10 @@
 //!
 //! [`check`] covers every state of a protocol: it enumerates the states of the dimensions each
 //! action, outcome and property reads (its slice, "Slices" below), evaluates each with Canon's own
-//! evaluator ([`crate::eval::evaluate_with`]) and reports what no single evaluation shows. It is a
-//! pure function of the compiled protocol and the `canon-properties/1` properties: no clock,
-//! network or filesystem, and the same inputs give the same [`Report`], byte for byte.
+//! evaluator ([`crate::eval::evaluate_with`], less the explanation, which it does not read) and
+//! reports what no single evaluation shows. It is a pure function of the compiled protocol and the
+//! `canon-properties/1` properties: no clock, network or filesystem, and the same inputs give the
+//! same [`Report`], byte for byte.
 //!
 //! # The state space
 //!
@@ -1038,7 +1039,8 @@ fn enumerate<'s, 'a>(ir: &Ir, space: &'s Space<'a>) -> Result<Enumerated<'s, 'a>
     })
 }
 
-/// Evaluates one state with the evaluator and keeps each action's and outcome's status.
+/// Evaluates one state with the evaluator and keeps each action's and outcome's status, building
+/// no explanation ([`eval::evaluate_unexplained`]; story:check-evaluates-statuses-only).
 pub(crate) fn evaluate(ir: &Ir, space: &Space<'_>, state: &State) -> Result<Evaluated, Refusal> {
     evaluate_records(ir, space, state, space.evidence(state))
 }
@@ -1052,7 +1054,7 @@ pub(crate) fn evaluate_records(
     state: &State,
     evidence: Vec<crate::model::EvidenceRecord>,
 ) -> Result<Evaluated, Refusal> {
-    evaluate_records_by(ir, space, state, evidence, eval::evaluate_with)
+    evaluate_records_by(ir, space, state, evidence, eval::evaluate_unexplained)
 }
 
 /// How a state's case is decided: [`eval::evaluate_with`], or a path that gives the same statuses.
