@@ -191,7 +191,13 @@ pub enum Command {
     /// before upstream a moved`), which its invalidation rules keep from their claims. A state
     /// holds no revision number, and the case revision never moves: capability and taken
     /// decisions stay, so a denial lasts. The records of a kind no match names an artifact for
-    /// are taken to be about the first artifact no match of the kind names. An action without
+    /// are taken to be about the first artifact no match of the kind names, except the
+    /// `case_outcome` records of children that actions about several artifacts open
+    /// (`case_open`): each is about its action's `case_open` subject (written `evidence
+    /// `case_outcome` about b`), so a revision of an artifact sets aside only the child outcomes
+    /// about it. A child that has not ended when its subject is revised may end against the
+    /// earlier revision: its outcome then arrives as an earlier record (a step written `… earlier`)
+    /// as well as a current one. An action without
     /// `revises` has no revise step. A state is open when action (record and revise), supplied,
     /// child-outcome, expiry and authority steps lead from it to a legitimate outcome; decisions
     /// do not count. A state that is not open is a stuck state when no action is admissible or

@@ -341,7 +341,12 @@ fn simulate_sets_aside_child_outcomes_of_the_revised_subject() {
 
     let report = |case: &str| text(&simulate(case).stdout);
     let current = report("revise-child-current");
-    let findings = |report: &str| report.lines().filter(|line| !line.starts_with("simulated:")).count();
+    let findings = |report: &str| {
+        report
+            .lines()
+            .filter(|line| !line.starts_with("simulated:"))
+            .count()
+    };
     if findings(&current) != 0 {
         failures.push(format!("revise-child-current: findings in {current:?}"));
     }
@@ -352,11 +357,20 @@ fn simulate_sets_aside_child_outcomes_of_the_revised_subject() {
         ));
     }
     let two = report("revise-child-two-subjects");
-    let printed: Vec<&str> = two.lines().filter(|line| line.contains("state {")).collect();
+    let printed: Vec<&str> = two
+        .lines()
+        .filter(|line| line.contains("state {"))
+        .collect();
+    // A failed child's record is the one without a result.
     let about = |subject: &str| {
+        let failed = format!("evidence `case_outcome` about `{subject}`");
         printed
             .iter()
-            .filter(|line| line.contains(&format!("`case_outcome` about `{subject}` result")))
+            .filter(|line| {
+                let state = line.split_once("state {").map_or("", |(_, rest)| rest);
+                let state = state.split_once("}:").map_or(state, |(state, _)| state);
+                state.split(", ").any(|item| item == failed)
+            })
             .count()
     };
     if about("b") != 0 || about("a") != 1 {

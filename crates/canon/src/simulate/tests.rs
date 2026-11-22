@@ -897,3 +897,17 @@ fn a_walk_with_revise_steps_stays_within_the_check_product() {
         );
     }
 }
+
+/// story:child-outcome-recovery, § Outcome 5: an action whose `case_open` subject is the artifact
+/// the space's `case_outcome` dimension is about (here `a`, the least id) is walked as before: no
+/// record is written about an artifact, and a revision of `b` leaves the failed outcome current.
+#[test]
+fn the_spaces_own_subject_is_not_split() {
+    let source = include_str!(
+        "../../../../fixtures/investigation/simulate/revise-child-current/protocol.yaml"
+    )
+    .replace("      subject: b\n", "      subject: a\n");
+    let text = report(&source);
+    assert!(text.contains("state {evidence `case_outcome`}"), "{text}");
+    assert!(!text.contains(" about "), "{text}");
+}
