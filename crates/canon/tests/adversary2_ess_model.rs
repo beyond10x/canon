@@ -49,19 +49,27 @@ fn unit_binary() -> &'static Path {
         let package = base().join("probe");
         fs::create_dir_all(package.join("src")).expect("probe src");
         fs::create_dir_all(package.join("tests")).expect("probe tests");
-        fs::write(package.join("src/lib.rs"), "").expect("probe lib");
-        fs::write(
+        // Under cargo-nextest each test of this file is its own process and builds the probe at
+        // the same time as the others (cargo's lock serializes the builds): every file is written
+        // to a name of this process and renamed, so no build reads a file another process is
+        // writing.
+        let write = |path: PathBuf, bytes: &[u8]| {
+            let partial = path.with_extension(format!("partial-{}", std::process::id()));
+            fs::write(&partial, bytes).expect("probe file written");
+            fs::rename(&partial, &path).expect("probe file in place");
+        };
+        let read = |path: PathBuf| fs::read(&path).expect("repository file reads");
+        write(package.join("src/lib.rs"), b"");
+        write(
             package.join("Cargo.toml"),
-            "[package]\nname = \"adversary2-ess-probe\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\
+            b"[package]\nname = \"adversary2-ess-probe\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\
              publish = false\n\n[dev-dependencies]\nserde_yaml_ng = \"0.10\"\n\n[workspace]\n",
-        )
-        .expect("probe manifest");
-        fs::copy(root.join("Cargo.lock"), package.join("Cargo.lock")).expect("lockfile");
-        fs::copy(
-            root.join("crates/canon/tests/ess_model_matches.rs"),
+        );
+        write(package.join("Cargo.lock"), &read(root.join("Cargo.lock")));
+        write(
             package.join("tests/ess_model_matches.rs"),
-        )
-        .expect("the unit's test copied unchanged");
+            &read(root.join("crates/canon/tests/ess_model_matches.rs")),
+        );
 
         let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
         let output = Command::new(cargo)
