@@ -1,0 +1,363 @@
+format: canon-conformance/1
+id: CANON-ORDER-005
+covers: [CANON-ORDER-005]
+fixture: fixtures/investigation/revision-ordering.yaml
+# The fixture declares one artifact, the change, and one evidence kind, test_result, each record
+# naming the test it ran as its `item`. Claim red.then.green, action merge's precondition and,
+# through the claim, outcome done read one `descended` form: a failed test_result on a revision
+# the change's current revision descends from, and a passed one on the current revision, with the
+# same item. The case snapshot lists, under the change's `descends_from`, every revision its
+# current one descends from. The form reads the history, so the failed record, bound to an earlier
+# revision, counts though revision binding keeps it from every evidence match; it does not read
+# `observed_at`.
+steps:
+  # The form compiles to `{"descended": {...}}`, written as authored: `first` and `then` each a map
+  # of kind and result, a subject only when named.
+  - id: compile
+    compile: {}
+    expect:
+      canon-ir: |
+        {
+          "actions": {
+            "merge": {
+              "description": "Merge the change once a test that failed on an earlier revision of it passes on the current one.",
+              "effect": null,
+              "may_produce": [],
+              "precondition": {
+                "descended": {
+                  "first": {
+                    "kind": "test_result",
+                    "result": "failed"
+                  },
+                  "subject": "change",
+                  "then": {
+                    "kind": "test_result",
+                    "result": "passed"
+                  }
+                }
+              },
+              "requires": []
+            }
+          },
+          "artifacts": {
+            "change": {
+              "description": "The change under review; its case snapshot lists every revision its current revision descends from."
+            }
+          },
+          "claims": {
+            "red.then.green": {
+              "description": "A test that failed on a revision the change's current revision descends from passes on the current revision.",
+              "true_when": {
+                "descended": {
+                  "first": {
+                    "kind": "test_result",
+                    "result": "failed"
+                  },
+                  "subject": "change",
+                  "then": {
+                    "kind": "test_result",
+                    "result": "passed"
+                  }
+                }
+              }
+            }
+          },
+          "evidence_kinds": {
+            "test_result": {
+              "description": "A run of one test, named by the record's item, against a revision of an artifact; its result is failed or passed."
+            }
+          },
+          "format": "canon-ir/1",
+          "obligations": {},
+          "outcomes": {
+            "done": {
+              "description": "A test was seen failing before the change and passing with it.",
+              "requires": {
+                "claim": {
+                  "id": "red.then.green",
+                  "is": "true"
+                }
+              }
+            }
+          },
+          "protocol": {
+            "description": "Decide whether a test failed on an earlier revision of the change and passes on its current revision, which descends from that one.",
+            "id": "red-then-green",
+            "revision": 1
+          }
+        }
+
+  # Expectation 1. Test T failed on R1 and passed on R2, the current revision, which descends from
+  # R1: TRUE.
+  - id: failed-on-an-ancestor-passes-now
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-then-green
+        artifacts:
+          change: {revision: R2, descends_from: [R1]}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: R1
+          item: T
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: R2
+          item: T
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "status": "admissible"
+            }
+          },
+          "claims": {
+            "red.then.green": {
+              "value": "true"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # Expectation 2. Test T failed on R1 and passed on R3, the current revision, which descends from
+  # R0 only: R1 and R3 are on two branches from R0. Not descended: FALSE. The blocked action names
+  # the form with its subject and value.
+  - id: failed-on-a-revision-not-descended-from
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-then-green
+        artifacts:
+          change: {revision: R3, descends_from: [R0]}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: R1
+          item: T
+        - format: canon-evidence/1
+          id: t3
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: R3
+          item: T
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "descended": "test_result",
+                  "first_result": "failed",
+                  "subject": "change",
+                  "then": "test_result",
+                  "then_result": "passed",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "red.then.green": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.then.green",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 3. Test T failed on R1 and test U passed on R2, which descends from R1: a failure
+  # and a pass under different items are no pair. FALSE.
+  - id: failed-and-passed-under-different-items
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-then-green
+        artifacts:
+          change: {revision: R2, descends_from: [R1]}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: R1
+          item: T
+        - format: canon-evidence/1
+          id: u2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: R2
+          item: U
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "descended": "test_result",
+                  "first_result": "failed",
+                  "subject": "change",
+                  "then": "test_result",
+                  "then_result": "passed",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "red.then.green": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.then.green",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 4. No record: UNKNOWN, not FALSE.
+  - id: no-record
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-then-green
+        artifacts:
+          change: {revision: R2, descends_from: [R1]}
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "descended": "test_result",
+                  "first_result": "failed",
+                  "subject": "change",
+                  "then": "test_result",
+                  "then_result": "passed",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "red.then.green": {
+              "value": "unknown"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.then.green",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 5. As expectation 1, with no `descends_from`: the snapshot does not say what R2
+  # descends from, so whether T failed on an ancestor is not established. UNKNOWN, not FALSE.
+  - id: descent-not-given
+    evaluate:
+      case:
+        format: canon-case/1
+        id: TF-1
+        protocol: red-then-green
+        artifacts:
+          change: {revision: R2}
+      evidence:
+        - format: canon-evidence/1
+          id: t1
+          kind: test_result
+          result: failed
+          subject: change
+          subject_revision: R1
+          item: T
+        - format: canon-evidence/1
+          id: t2
+          kind: test_result
+          result: passed
+          subject: change
+          subject_revision: R2
+          item: T
+    expect:
+      decision: |
+        {
+          "actions": {
+            "merge": {
+              "reasons": [
+                {
+                  "descended": "test_result",
+                  "first_result": "failed",
+                  "subject": "change",
+                  "then": "test_result",
+                  "then_result": "passed",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "red.then.green": {
+              "value": "unknown"
+            }
+          },
+          "outcomes": {
+            "done": {
+              "reasons": [
+                {
+                  "claim": "red.then.green",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }

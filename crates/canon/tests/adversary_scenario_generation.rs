@@ -151,9 +151,40 @@ fn every_generated_witness_passes_and_is_minimal_over_every_investigation_protoc
     sources.push(("after.yaml".to_owned(), AFTER.to_owned()));
     sources.push(("since.yaml".to_owned(), SINCE.to_owned()));
 
+    // Each protocol is generated and run on its own, on four threads (`threads-required` in the
+    // `slow` lane of `.config/nextest.toml`); the failures are listed in protocol order.
+    let per_protocol = std::thread::scope(|scope| {
+        let chunk = sources.len().div_ceil(4).max(1);
+        let workers: Vec<_> = sources
+            .chunks(chunk)
+            .map(|part| scope.spawn(move || part.iter().map(witnessed).collect::<Vec<_>>()))
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|worker| {
+                worker
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+            })
+            .collect::<Vec<_>>()
+    });
     let mut failures = Vec::new();
     let (mut scenarios_run, mut removals_run) = (0, 0);
-    for (fixture, source) in &sources {
+    for (protocol_failures, scenarios, removals) in per_protocol {
+        failures.extend(protocol_failures);
+        scenarios_run += scenarios;
+        removals_run += removals;
+    }
+    assert!(scenarios_run > 20, "{scenarios_run} scenarios ran");
+    assert!(removals_run > 10, "{removals_run} removals ran");
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The failures of one protocol's generated witnesses, and how many scenarios and removals ran.
+fn witnessed((fixture, source): &(String, String)) -> (Vec<String>, usize, usize) {
+    let mut failures = Vec::new();
+    let (mut scenarios_run, mut removals_run) = (0, 0);
+    {
         let scenarios = match generated(source, fixture) {
             Ok(scenarios) => scenarios,
             Err(why) => {
@@ -187,7 +218,7 @@ fn every_generated_witness_passes_and_is_minimal_over_every_investigation_protoc
                 if !expected {
                     failures.push(format!("{fixture}: refused: {why}"));
                 }
-                continue;
+                return (failures, scenarios_run, removals_run);
             }
         };
         for scenario in &scenarios {
@@ -210,9 +241,7 @@ fn every_generated_witness_passes_and_is_minimal_over_every_investigation_protoc
             }
         }
     }
-    assert!(scenarios_run > 20, "{scenarios_run} scenarios ran");
-    assert!(removals_run > 10, "{removals_run} removals ran");
-    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    (failures, scenarios_run, removals_run)
 }
 
 /// The file names `files` would leave on a filesystem that folds letter case and composes `e`

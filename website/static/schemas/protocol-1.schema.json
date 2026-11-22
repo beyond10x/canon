@@ -521,6 +521,19 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "descended": {
+              "description": "Whether an item that had a result on a revision the current revision of its subject descends from has a result on the current revision (story:revision-ordering).",
+              "$ref": "#/$defs/EvidenceDescended"
+            }
+          },
+          "required": [
+            "descended"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
             "children": {
               "description": "Whether every child case of the case ended with one of the outcomes listed, over its `case_outcome` records (story:case-composition).",
               "$ref": "#/$defs/ChildOutcomes"
@@ -775,6 +788,29 @@
         "then"
       ]
     },
+    "EvidenceDescended": {
+      "description": "An order form over revisions (story:revision-ordering): whether an item that had `first.result` in a record of `first.kind`, on a revision the case snapshot lists in its subject's `descends_from`, has `then.result` in a record of `then.kind` about the current revision of that subject, all about `subject` when it names one. It reads every record of the two kinds the evidence check accepted, excluded or not, and pairs records only on equal `item`. `first` and `then` may name one kind. One item is enough for `true`. An item with `first.result` on a revision its subject descends from, `then.result` on the current revision and `first.result` on the current revision too is `true`: the form asks for a record of `then.result` on the current revision and does not ask that no record of `first.result` is there. A protocol that must exclude it adds a second predicate beside the form, such as a second `descended` form from `first.result` to `first.result` read through a claim: `resolved` is `false` when an item has `failed` on a revision its subject descends from and `failed` again on the current revision, and the form's value otherwise.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "first": {
+          "description": "The earlier record: its kind and its result.",
+          "$ref": "#/$defs/LaterRecord"
+        },
+        "then": {
+          "description": "The later record, about the current revision: its kind and its result.",
+          "$ref": "#/$defs/LaterRecord"
+        },
+        "subject": {
+          "description": "The declared artifact the records of both kinds are about; without it, records about any artifact.",
+          "$ref": "#/$defs/Identifier"
+        }
+      },
+      "required": [
+        "first",
+        "then"
+      ]
+    },
     "ChildOutcomes": {
       "description": "The form over the case's child cases, written `{children: {in: [<outcome>, ...]}}`: whether every child case ended with one of the outcomes listed. It reads every `case_outcome` record the evidence check accepted, as the order forms read the history, or with `revision: current` only those about the current revision of their subject, and with `subject` only those about that artifact: `unknown` with no record read, `false` when a record's outcome is neither listed nor `open` (a child that ended outside the set), otherwise `unknown` when a child is still `open` and `true` when every child ended with a listed outcome. It counts only the records it is given. Canon does not write them; the runner that opens a child case does, with two duties: a record's `subject` is the `case_open` subject of the action that opened the child, and the runner writes a record with the outcome `open` when it opens the child.",
       "type": "object",
@@ -816,7 +852,7 @@
       ]
     },
     "LaterRecord": {
-      "description": "What an `after` form reads later than the first record of its `first` kind, and a `since` form later than the latest record of its `last` kind: a record of `kind` with `result`.",
+      "description": "What an `after` form reads later than the first record of its `first` kind, and a `since` form later than the latest record of its `last` kind: a record of `kind` with `result`. A `descended` form names each of the two records it pairs by one.",
       "type": "object",
       "additionalProperties": false,
       "properties": {

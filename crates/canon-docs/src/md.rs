@@ -81,12 +81,20 @@ pub fn prose(line: &str) -> String {
     convert(line, &mut None, true)
 }
 
-/// A doc comment as one line of plain text, intra-doc links unwrapped and nothing escaped.
+/// A doc comment as one line of plain text, intra-doc links unwrapped and nothing escaped. Fenced
+/// code is left out: joined onto one line it would no longer read as what it shows.
 pub fn plain(doc: &str) -> String {
+    let mut in_fence = false;
     let joined = doc
         .lines()
         .map(str::trim)
-        .filter(|line| !line.is_empty())
+        .filter(|line| {
+            if line.starts_with("```") {
+                in_fence = !in_fence;
+                return false;
+            }
+            !in_fence && !line.is_empty()
+        })
         .collect::<Vec<_>>()
         .join(" ");
     convert(&joined, &mut None, false)
@@ -184,6 +192,15 @@ mod tests {
             prose("`{\"all\": []}` is {true} for <n>"),
             "`{\"all\": []}` is \\{true\\} for &lt;n&gt;"
         );
+    }
+
+    #[test]
+    fn plain_text_leaves_fenced_code_out() {
+        assert_eq!(
+            plain("Before `x`:\n\n```yaml\nclaims:\n  c: {}\n```\n\nafter."),
+            "Before `x`: after."
+        );
+        assert_eq!(plain("no fence\nhere"), "no fence here");
     }
 
     #[test]

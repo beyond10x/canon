@@ -11,8 +11,17 @@
 //! the root `canon` or on `canon conform` cannot be added from outside `crates/canon-cli/src`.
 
 #[path = "ess_commands_match.rs"]
-#[allow(dead_code)]
+#[allow(dead_code, clippy::duplicate_mod)]
 mod parity;
+
+/// The parity test as the test harness names it: its path below the crate root of this binary.
+fn parity_test() -> String {
+    let test = "parity::every_canon_subcommand_is_declared_in_ess";
+    match module_path!().split_once("::") {
+        Some((_, module)) => format!("{module}::{test}"),
+        None => test.to_owned(),
+    }
+}
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -71,7 +80,7 @@ fn parity_on(case: &str, edit: impl FnOnce(&mut Vec<Value>)) -> (bool, String) {
 
     let output = Command::new(std::env::current_exe().expect("this test binary"))
         .args([
-            "parity::every_canon_subcommand_is_declared_in_ess",
+            parity_test().as_str(),
             "--exact",
             "--nocapture",
             "--test-threads=1",

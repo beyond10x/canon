@@ -252,3 +252,8 @@ items:
     story: story:canon-mutate
     detail: "canon mutate --path <protocol> --scenarios <dir> measures how strong a scenario set is: five operators (drop a member of an all, all to any, remove a precondition, remove a capability requirement, change an evidence result to another the protocol names for that kind) make each mutant from the parsed model, written with model::write; each runs against the scenarios that name the protocol file and is classified with the semantic diff. A mutant some scenario fails is killed, one none fails survived, and a survivor whose diff holds a RELAXATION is a weak point; a mutant the compiler refuses is invalid with its codes. Exit 1 when a weak point is reported, 0 otherwise; a set in which no scenario names the protocol file, or that fails on the protocol itself, is refused. Mutants come in a fixed order, so two runs give the same bytes."
     href: /docs/reference/cli#canon-mutate
+  - label: An item's result across descended revisions
+    area: Language
+    story: story:revision-ordering
+    detail: The descended order form tests whether an item that had one result on a revision the current revision of its subject descends from has another on the current revision, pairing evidence records on their item and reading descent from the case snapshot's descends_from of each artifact; scenario CANON-ORDER-005.
+    href: /docs/reference/protocol

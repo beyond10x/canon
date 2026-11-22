@@ -100,17 +100,22 @@ fn an_ir_with_a_claim_cycle_is_refused_not_a_stack_overflow() {
         println!("child outcome: {outcome:?}");
         return;
     }
+    let test = "an_ir_with_a_claim_cycle_is_refused_not_a_stack_overflow";
+    let name = match module_path!().split_once("::") {
+        Some((_, module)) => format!("{module}::{test}"),
+        None => test.to_owned(),
+    };
     let child = std::process::Command::new(std::env::current_exe().expect("test binary"))
-        .args([
-            "an_ir_with_a_claim_cycle_is_refused_not_a_stack_overflow",
-            "--exact",
-            "--nocapture",
-            "--test-threads=1",
-        ])
+        .args([name.as_str(), "--exact", "--nocapture", "--test-threads=1"])
         .env(CHILD, "1")
         .output()
         .expect("child runs");
+    let stdout = String::from_utf8_lossy(&child.stdout);
     let stderr = String::from_utf8_lossy(&child.stderr);
+    assert!(
+        stdout.contains("running 1 test"),
+        "the child process ran no test named {name}:\n{stdout}"
+    );
     assert!(
         child.status.success(),
         "evaluating a cyclic IR crashed the process ({}): {}",

@@ -151,6 +151,11 @@ identifier!(
     EvidenceId
 );
 identifier!(
+    /// What an evidence record is about within its kind (story:revision-ordering): opaque text,
+    /// compared for equality only, with no meaning to Canon.
+    ItemId
+);
+identifier!(
     /// Identifies a kind of evidence a protocol declares.
     EvidenceKindId
 );
