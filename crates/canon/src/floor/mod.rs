@@ -18,10 +18,13 @@
 //! case an action opens, is `BREAKING`, so below the floor, though it may tighten.
 //!
 //! One rule is the floor's own (decision D124, story:floor-guards-added-actions): an added action
-//! is an `EXPANSION`, but one that repeats an action the floor guards with a capability, with the
-//! same precondition and at least what it may produce and revise, and that does not require that
-//! capability (at that scope), is a `RELAXATION`: it decides the floor's finding without the
-//! capability. An added action with another precondition is not the floor's finding and passes.
+//! is an `EXPANSION`, but one that repeats an action the floor guards with a capability, and that
+//! does not require that capability (at that scope), is a `RELAXATION`: it decides the floor's
+//! finding without the capability. It repeats the action when its precondition is implied by the
+//! action's (the same after unwrapping a one-member `all`, or the always-true one, or one whose
+//! conjuncts are some of the action's) and it may produce and revise at least what the action
+//! does; an action that produces and revises nothing is repeated only by one that does neither. An
+//! added action that needs more than the floor's action, or does something else, passes.
 //!
 //! The protocol does not name its floor; the caller supplies it. Passing a compiled import as the
 //! floor checks that a refinement only tightens what it imports.
@@ -103,15 +106,64 @@ pub fn check(floor: &Ir, protocol: &Ir) -> Result<Verdict, Refusal> {
     Ok(verdict)
 }
 
+/// The members of `predicate` read as a conjunction, simplified: a one-member `all` or `any` is its
+/// member, an `all` inside an `all` is flattened, and each member is kept once. The always-true
+/// precondition has none.
+fn conjuncts(predicate: &Predicate) -> Vec<Predicate> {
+    fn simplified(predicate: &Predicate) -> Predicate {
+        match predicate {
+            Predicate::All(members) => {
+                let mut flat: Vec<Predicate> = Vec::new();
+                for member in members {
+                    match simplified(member) {
+                        Predicate::All(inner) => inner.into_iter().for_each(|m| keep(&mut flat, m)),
+                        other => keep(&mut flat, other),
+                    }
+                }
+                if flat.len() == 1 {
+                    flat.remove(0)
+                } else {
+                    Predicate::All(flat)
+                }
+            }
+            Predicate::Any(members) => {
+                let mut flat: Vec<Predicate> = Vec::new();
+                members
+                    .iter()
+                    .map(simplified)
+                    .for_each(|m| keep(&mut flat, m));
+                if flat.len() == 1 {
+                    flat.remove(0)
+                } else {
+                    Predicate::Any(flat)
+                }
+            }
+            Predicate::Not(inner) => Predicate::Not(Box::new(simplified(inner))),
+            other => other.clone(),
+        }
+    }
+    fn keep(members: &mut Vec<Predicate>, member: Predicate) {
+        if !members.contains(&member) {
+            members.push(member);
+        }
+    }
+    match simplified(predicate) {
+        Predicate::All(members) => members,
+        other => vec![other],
+    }
+}
+
 /// The capability requirements the floor makes of the action `guarded` that the added action
-/// `added` does not make, one `RELAXATION` for each, when `added` does what `guarded` does: it has
-/// the same precondition and may produce and revise everything `guarded` may. The floor's finding
-/// is what such an action decides, so one that lacks a capability the floor requires of it lets the
-/// finding be published, or the artifact revised, by a principal the floor excludes. An action of
-/// the floor that no requirement guards, or that declares nothing which could be matched (the
-/// always-true precondition, nothing produced, nothing revised), has no finding to repeat.
+/// `added` does not make, one `RELAXATION` for each, when `added` does at least what `guarded`
+/// does, in at least the states it does it: its precondition is implied by `guarded`'s (the same
+/// after simplifying, or the always-true one, or one whose conjuncts are some of `guarded`'s), and
+/// it may produce and revise everything `guarded` may; an action that produces and revises nothing
+/// is repeated only by one that produces and revises nothing. The floor's finding is what such an
+/// action decides, so one that lacks a capability the floor requires of it lets the finding be
+/// published, or the artifact revised, by a principal the floor excludes. An action of the floor
+/// that no requirement guards, or that declares nothing which could be matched (the always-true
+/// precondition, nothing produced, nothing revised), has no finding to repeat.
 fn unguarded_added_actions(floor: &Ir, protocol: &Ir) -> Vec<Change> {
-    let always = Predicate::All(Vec::new());
     let mut changes = Vec::new();
     for (id, added) in &protocol.actions {
         if floor.actions.contains_key(id) {
@@ -119,19 +171,25 @@ fn unguarded_added_actions(floor: &Ir, protocol: &Ir) -> Vec<Change> {
         }
         let held: Vec<_> = added.requirements().collect();
         for (guarded_id, guarded) in &floor.actions {
-            let identifies = guarded.precondition != always
-                || !guarded.may_produce.is_empty()
-                || !guarded.revises.is_empty();
-            let repeats = identifies
-                && added.precondition == guarded.precondition
-                && guarded
+            let guarded_conditions = conjuncts(&guarded.precondition);
+            let does_nothing = guarded.may_produce.is_empty() && guarded.revises.is_empty();
+            let identifies = !guarded_conditions.is_empty() || !does_nothing;
+            let at_least_as_often = conjuncts(&added.precondition)
+                .iter()
+                .all(|condition| guarded_conditions.contains(condition));
+            let at_least_as_much = if does_nothing {
+                added.may_produce.is_empty() && added.revises.is_empty()
+            } else {
+                guarded
                     .may_produce
                     .iter()
                     .all(|kind| added.may_produce.contains(kind))
-                && guarded
-                    .revises
-                    .iter()
-                    .all(|artifact| added.revises.contains(artifact));
+                    && guarded
+                        .revises
+                        .iter()
+                        .all(|artifact| added.revises.contains(artifact))
+            };
+            let repeats = identifies && at_least_as_often && at_least_as_much;
             if !repeats {
                 continue;
             }
