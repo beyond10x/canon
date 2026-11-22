@@ -98,6 +98,7 @@ mod invalidation_evaluation_cost;
 mod judgement_marking;
 mod missing_keys;
 mod pending_decisions;
+mod planning_only_classifier;
 mod protocol_write;
 mod review_depth_beyond_bound;
 mod review_outcome_reasons_docs;
