@@ -90,7 +90,7 @@
 //!
 //! # Order forms
 //!
-//! A protocol with no order form (`first`, `before`, `after`, `since`) has exactly the dimensions
+//! A protocol with no order form (`first`, `before`, `after`, `since`, `descended`) has exactly the dimensions
 //! above, and its records carry no observation instant: it checks as it did before order forms
 //! existed.
 //! An order form reads every record of its kind the evidence check accepts, including those the
@@ -960,6 +960,7 @@ pub(crate) fn evaluate_records(
                 .map(|id| {
                     let current = CaseArtifact {
                         revision: revision.clone(),
+                        descends_from: space.descends_from(),
                     };
                     (id.clone(), current)
                 })

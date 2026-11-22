@@ -111,6 +111,7 @@ fn own(predicate: &Predicate) -> Option<Own<'_>> {
             | Predicate::Before(_)
             | Predicate::After(_)
             | Predicate::Since(_)
+            | Predicate::Descended(_)
             | Predicate::Children(_) => {}
         }
     }
