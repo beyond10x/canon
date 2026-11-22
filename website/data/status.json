@@ -377,6 +377,13 @@
       "detail": "An outcome that requires an explicit decision may carry an optional when predicate, requires: {decision: withdraw, when: {claim: publication.refused}}. The decision counts toward the outcome only while when is true at the evaluation, whenever the decision was taken: while when is false or unknown the outcome is blocked by the reasons a precondition that is not true gives, a decision supplied is neither counted nor refused (computed_from.decisions still lists it), and no pending decision is listed; while it is true the outcome is as before, legitimate with decided_by or blocked naming the decision. when holds claims and case inputs only, as applicable_when does: canon validate refuses an evidence match, an order form or a children form in it as evidence-in-decision-condition, naming the outcome. canon-ir/1 writes when only when it is present, so every protocol written without it compiles to the same bytes; canon diff reports adding, removing or changing it as BREAKING, and canon check decides the outcome over the decision's dimension and what when reads. The condition is not an order: Canon cannot tell a decision taken before when turned true from one taken after.",
       "href": "/docs/reference/protocol#outcome",
       "area": "Language"
+    },
+    {
+      "label": "Artifacts revised by another protocol",
+      "status": "planned",
+      "detail": "An artifact of protocol/1 can name the protocol whose cases revise it with revised_by, one protocol id; canon validate refuses the protocol's own id as self-revised-artifact and any other id is valid and resolved by nothing. canon-ir/1 writes revised_by after the artifact's description only when it is set, so the IR and digest of every protocol without it stay as they were, and the IR read-back refuses a non-string and the own id. canon evaluate, canon check and canon generate give the same bytes with or without it, and canon diff reports adding, removing or replacing it as NO SEMANTIC CHANGE. canon simulate offers a revise step for the artifact in every state, printed as protocol q revises a, after the supplied steps and before the expiry steps; a state only that step can open counts as waiting and is no finding, and the summary of a protocol with such an artifact says waiting on supplied evidence, expiry or a revision by another protocol. Canon revises nothing and nothing checks that the named protocol revises the artifact.",
+      "href": "/docs/reference/cli#canon-simulate",
+      "area": "Analysis"
     }
   ]
 }
