@@ -1552,9 +1552,18 @@ mod tests {
         });
         let (caller, outer, inner, deeper) = threads;
         assert_eq!(sum, 21);
-        assert_ne!(outer, caller, "the outer call runs on the worker, not the caller");
-        assert_eq!(inner, outer, "the nested call runs on the outer call's thread");
-        assert_eq!(deeper, outer, "a call nested twice runs on the outer call's thread");
+        assert_ne!(
+            outer, caller,
+            "the outer call runs on the worker, not the caller"
+        );
+        assert_eq!(
+            inner, outer,
+            "the nested call runs on the outer call's thread"
+        );
+        assert_eq!(
+            deeper, outer,
+            "a call nested twice runs on the outer call's thread"
+        );
         assert_eq!(spawned, 1);
     }
 

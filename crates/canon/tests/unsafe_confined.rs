@@ -139,7 +139,9 @@ fn unsafe_is_confined_to_the_eval_worker() {
         elsewhere.join("\n")
     );
     assert!(
-        in_worker.iter().any(|line| line.contains("allow(unsafe_code)")),
+        in_worker
+            .iter()
+            .any(|line| line.contains("allow(unsafe_code)")),
         "src/{ALLOWED} does not allow `unsafe_code` or is not there; the scan has nothing to confine"
     );
     assert!(
@@ -148,7 +150,8 @@ fn unsafe_is_confined_to_the_eval_worker() {
     );
     let lib = fs::read_to_string(src.join("lib.rs")).expect("lib.rs reads");
     assert!(
-        lib.lines().any(|line| line.trim() == "#![deny(unsafe_code)]"),
+        lib.lines()
+            .any(|line| line.trim() == "#![deny(unsafe_code)]"),
         "src/lib.rs does not deny `unsafe_code` for the crate"
     );
 }

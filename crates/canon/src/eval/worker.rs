@@ -70,7 +70,10 @@ pub(super) fn run<T: Send>(work: impl FnOnce() -> T + Send) -> T {
 /// it, and that worker's thread does not exist here).
 fn submit(slot: &mut Option<(u32, Sender<Job>)>, mut job: Job) {
     let this_process = std::process::id();
-    if slot.as_ref().is_some_and(|(owner, _)| *owner != this_process) {
+    if slot
+        .as_ref()
+        .is_some_and(|(owner, _)| *owner != this_process)
+    {
         // Never used, and never dropped either: dropping a sender touches the channel's lock-free
         // state and wakes its receiver, state that another thread of the parent may have been in
         // the middle of changing at the moment of the fork.
