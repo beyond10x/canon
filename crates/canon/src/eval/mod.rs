@@ -530,12 +530,30 @@ pub fn evaluate_with(
     evidence: &[EvidenceRecord],
     supplied: Supplied<'_>,
 ) -> Result<Decision, Refusal> {
+    evaluate_with_freshness(ir, case, evidence, supplied, None)
+}
+
+/// [`evaluate_with`], in the strict freshness mode when `strict_freshness` gives the clock skew
+/// allowed, written as a `max_age` is (`0s`, `30s`, `5m`; `canon evaluate --strict`).
+/// The mode refuses, where the default accepts, an undated record of a kind with a `max_age`
+/// (`undated-evidence`), one observed later than the instant by more than the skew
+/// (`future-evidence`) and no instant for a protocol with such a kind (`missing-instant`), and a
+/// skew it cannot read (`invalid-skew`); `freshness.rs` gives the order. Where it refuses nothing,
+/// the decision is [`evaluate_with`]'s; `None` is [`evaluate_with`].
+pub fn evaluate_with_freshness(
+    ir: &Ir,
+    case: &Case,
+    evidence: &[EvidenceRecord],
+    supplied: Supplied<'_>,
+    strict_freshness: Option<&str>,
+) -> Result<Decision, Refusal> {
     depth::check(ir)?;
     case::check(ir, case)?;
     let distinct = evidence::check(ir, evidence)?;
     let evidence = distinct.as_slice();
     let authority = authority::read(supplied.authority)?;
     let at = freshness::instant(supplied.at)?;
+    let strict = freshness::strict(strict_freshness, supplied.at)?;
     let decisions = decisions::read(supplied.decisions)?;
     grounds::declared(ir, authority.as_ref(), decisions.as_ref())?;
     on_deep_stack(|| {
@@ -549,6 +567,7 @@ pub fn evaluate_with(
         let stage = binding::exclude(ir, case, &applicable)?;
         set_aside(&mut applicable, &mut excluded, stage);
         let stage = freshness::exclude(ir, case, &applicable, at.as_ref())?;
+        freshness::refuse_untrusted(ir, &applicable, at.as_ref(), strict.as_ref())?;
         set_aside(&mut applicable, &mut excluded, stage);
         let invalidated = invalidation::exclude(ir, case, &applicable)?;
 
