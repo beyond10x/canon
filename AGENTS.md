@@ -165,9 +165,12 @@ expectations unchanged.
 what the new compiler's `cargo fmt --all --check` and `cargo clippy --workspace --all-targets
 --locked -- -D warnings` report. `task check` finds the `ess` release of `ess/ess-inputs.yaml` in
 `~/.cache/ess/toolchains/<version>` itself, or stops with one line naming it. `task ci-watch --
-<pull request or branch>` (`scripts/ci-watch`) waits until no check is pending, prints each with its
-result and link, and exits non-zero when a check failed, was cancelled or was still pending at the
-timeout; wait for CI with it and never by a script that ignores results.
+<pull request or branch>` (`scripts/ci-watch`) watches a pull request, or a branch that has one (for a
+pushed commit with none, `gh run list --branch <branch>`; the script exits 2 at once), waits until no
+check is pending, prints each with its result and link, and exits non-zero when a check failed, was
+cancelled or was still pending at the timeout, or when a required check never reported (`--require
+<name>`, repeatable, or `CI_WATCH_REQUIRE`; the default is `canon / task check`, the job of
+`check.yml`); wait for CI with it and never by a script that ignores results.
 Land the bot-authored preparation on main with `task check` and CI green, then create an annotated
 bot tag on that exact commit and its GitHub Release through `b10x-gates`. Merge the pull request
 as the bot with a merge commit through the API: `b10x-gates api --method PUT --path

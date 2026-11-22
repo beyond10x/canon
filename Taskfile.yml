@@ -119,7 +119,7 @@ tasks:
       - npm --prefix website run build
 
   ci-watch:
-    desc: Wait for the checks of a pull request or branch (task ci-watch -- <pull request or branch>); non-zero unless all passed.
+    desc: "Wait for the checks of a pull request, or of a branch that has one (task ci-watch -- <pull request or branch>); non-zero unless all passed and canon / task check reported. A pushed commit with no pull request: gh run list --branch <branch>."
     cmds:
       - sh scripts/ci-watch {{.CLI_ARGS}}
 
