@@ -427,3 +427,18 @@ fn generate_witnesses_a_conditioned_decision_with_the_evidence_its_condition_nee
 fn compiled_source(source: &str) -> Ir {
     ir::compile(&model::parse(source).expect("parses")).expect("compiles")
 }
+
+/// `canon check` names an outcome whose decision's condition reads evidence no action may
+/// produce, as it names an outcome whose predicate does (E3 of the wave 9 review).
+#[test]
+fn check_names_a_decision_outcome_whose_condition_reads_unproduced_evidence() {
+    let report = crate::check::check(&compiled(WITH_WHEN), None).expect("checks");
+    let findings: Vec<String> = report.findings.iter().map(ToString::to_string).collect();
+    assert!(
+        findings.contains(
+            &"unproduced-evidence: outcome `withdrawn` reads evidence kind `k`, which no action may produce"
+                .to_owned()
+        ),
+        "{findings:?}"
+    );
+}

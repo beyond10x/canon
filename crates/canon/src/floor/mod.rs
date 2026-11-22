@@ -17,11 +17,11 @@
 //! protocol that adds an artifact, a case input or an order form under an `all`, or changes the
 //! case an action opens, is `BREAKING`, so below the floor, though it may tighten.
 //!
-//! A limit of that classification (decision D124, a floor rule for added actions is a design
-//! change beyond story:protocol-floor): an added action is an `EXPANSION`, and every `EXPANSION`
-//! passes. The floor guards only what the protocol that declares an action requires, so a new
-//! action that produces a finding the floor guards, without the capability the floor requires of
-//! it, is not caught.
+//! One rule is the floor's own (decision D124, story:floor-guards-added-actions): an added action
+//! is an `EXPANSION`, but one that repeats an action the floor guards with a capability, with the
+//! same precondition and at least what it may produce and revise, and that does not require that
+//! capability (at that scope), is a `RELAXATION`: it decides the floor's finding without the
+//! capability. An added action with another precondition is not the floor's finding and passes.
 //!
 //! The protocol does not name its floor; the caller supplies it. Passing a compiled import as the
 //! floor checks that a refinement only tightens what it imports.
@@ -29,7 +29,8 @@
 use std::fmt;
 
 use crate::diff::{self, Category, Change, Refusal};
-use crate::ir::Ir;
+use crate::ir::{Ir, Scope};
+use crate::model::{CapabilityId, Predicate};
 
 /// The floor's answer for one protocol: how many changes of each admitted category it makes, and
 /// each change that puts it below the floor.
@@ -96,5 +97,70 @@ pub fn check(floor: &Ir, protocol: &Ir) -> Result<Verdict, Refusal> {
             Category::Relaxation | Category::Breaking => verdict.below.push(change),
         }
     }
+    verdict
+        .below
+        .extend(unguarded_added_actions(floor, &protocol));
     Ok(verdict)
+}
+
+/// The capability requirements the floor makes of the action `guarded` that the added action
+/// `added` does not make, one `RELAXATION` for each, when `added` does what `guarded` does: it has
+/// the same precondition and may produce and revise everything `guarded` may. The floor's finding
+/// is what such an action decides, so one that lacks a capability the floor requires of it lets the
+/// finding be published, or the artifact revised, by a principal the floor excludes. An action of
+/// the floor that no requirement guards, or that declares nothing which could be matched (the
+/// always-true precondition, nothing produced, nothing revised), has no finding to repeat.
+fn unguarded_added_actions(floor: &Ir, protocol: &Ir) -> Vec<Change> {
+    let always = Predicate::All(Vec::new());
+    let mut changes = Vec::new();
+    for (id, added) in &protocol.actions {
+        if floor.actions.contains_key(id) {
+            continue;
+        }
+        let held: Vec<_> = added.requirements().collect();
+        for (guarded_id, guarded) in &floor.actions {
+            let identifies = guarded.precondition != always
+                || !guarded.may_produce.is_empty()
+                || !guarded.revises.is_empty();
+            let repeats = identifies
+                && added.precondition == guarded.precondition
+                && guarded
+                    .may_produce
+                    .iter()
+                    .all(|kind| added.may_produce.contains(kind))
+                && guarded
+                    .revises
+                    .iter()
+                    .all(|artifact| added.revises.contains(artifact));
+            if !repeats {
+                continue;
+            }
+            for requirement in guarded.requirements().filter(|r| !held.contains(r)) {
+                changes.push(Change {
+                    category: Category::Relaxation,
+                    section: "action",
+                    id: id.as_str().to_owned(),
+                    what: format!(
+                        "added without capability `{}`, which the floor requires of `{}`",
+                        requirement_name(requirement),
+                        guarded_id.as_str()
+                    ),
+                });
+            }
+        }
+    }
+    changes
+}
+
+/// A requirement as the classifier names it: the capability, then its scope when it has one,
+/// `metrics.read{cluster: prod-eu, namespace: foo}`.
+fn requirement_name((capability, scope): (&CapabilityId, &Scope)) -> String {
+    if scope.is_empty() {
+        return capability.as_str().to_owned();
+    }
+    let members: Vec<String> = scope
+        .iter()
+        .map(|(key, value)| format!("{}: {}", key.as_str(), value.as_str()))
+        .collect();
+    format!("{}{{{}}}", capability.as_str(), members.join(", "))
 }

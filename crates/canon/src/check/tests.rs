@@ -754,20 +754,193 @@ fn every_value_of_descended_is_reached_jointly_with_the_evidence_matches() {
     assert_eq!(forms.len(), 3, "{reached:?}");
 }
 
+/// A protocol whose `first` reads the kind its `descended` form reads, with an evidence match on
+/// each result. Its claims, in order: `fails`, `first_pass`, `passes`, `red_then_green`.
+const DESCENDED_FIRST_OF_ITS_KIND: &str = "format: protocol/1\n\
+    protocol: {id: p, revision: 1}\n\
+    artifacts: {a: {}}\n\
+    evidence_kinds: {k: {}}\n\
+    claims:\n\
+    \x20\x20red_then_green: {true_when: {descended: {first: {kind: k, result: failed}, \
+    then: {kind: k, result: passed}}}}\n\
+    \x20\x20passes: {true_when: {evidence: {kind: k, result: passed}}}\n\
+    \x20\x20fails: {true_when: {evidence: {kind: k, result: failed}}}\n\
+    \x20\x20first_pass: {true_when: {first: {kind: k, result: passed}}}\n\
+    actions: {run: {may_produce: [{evidence: k}]}}\n\
+    outcomes: {done: {requires: {all: [{claim: red_then_green}, {claim: passes}]}}}\n";
+
 /// The same soundness for a protocol whose `first` reads the kind the `descended` form reads (the
 /// review of wave 2026-11-21): each value of `descended`, `unknown` included, is reached with the
-/// `first` form true, false and unknown (nine pairs), and every pair of those two claims records
-/// of the one kind give is a pair of some state. The pairs are not read together with `passes`
-/// and `fails`: a `descended` `true` beside a `first` that is a current `passed` observed before a
-/// current `failed`, with both current, needs earlier records of two results at two instants,
-/// which no state has (finding of this unit, left to the backlog).
+/// `first` form true, false and unknown (nine pairs), and every combination of all four claims
+/// that records of the one kind give is the combination of some state, `passes` and `fails`
+/// included: a `descended` `true` beside a `first` that is a current `passed` observed before a
+/// current `failed`, with both current, needs earlier records of two results at two instants
+/// (story:check-descended-two-result-history).
 #[test]
 fn every_value_of_descended_is_reached_jointly_with_a_first_of_its_kind() {
+    let reached = every_descended_history_is_reached(
+        DESCENDED_FIRST_OF_ITS_KIND,
+        &["k"],
+        0x5EC0_4D5A_F7E2_0006,
+        None,
+    );
+    let pairs: BTreeSet<_> = reached
+        .iter()
+        .map(|values| (values[1], values[3]))
+        .collect();
+    assert_eq!(pairs.len(), 9, "first_pass, red_then_green: {pairs:?}");
+}
+
+/// A record of `kind` about `a` for the tests of `descended` beside a `first` of its kind: `result`
+/// about `revision`, naming the space's item, observed `second` seconds past a fixed minute, or
+/// at no instant.
+fn item_record(
+    id: &str,
+    kind: &str,
+    result: &str,
+    revision: &str,
+    second: Option<u32>,
+) -> crate::model::EvidenceRecord {
+    crate::model::EvidenceRecord {
+        format: crate::model::EVIDENCE_FORMAT.to_owned(),
+        producer: None,
+        id: crate::model::EvidenceId::new(id),
+        kind: EvidenceKindId::new(kind),
+        result: Some(result.to_owned()),
+        subject: crate::model::ArtifactId::new("a"),
+        subject_revision: Revision::new(revision),
+        observed_at: second
+            .map(|second| crate::model::Instant::new(format!("2026-10-01T09:00:{second:02}Z"))),
+        upstream_revisions: Declarations::default(),
+        child_case: None,
+        item: Some(crate::model::ItemId::new("item")),
+    }
+}
+
+/// The records of a `descended` `true` beside a `first` `true` (finding E1 of
+/// `review-result:review-wave-9-eval`, left to the backlog by its fix): earlier records of
+/// `passed` and `failed` about `r0`, the one `passed_first` names observed 2 seconds before the
+/// other, from second `base`; then the current records `current` names (`passed`, `failed`),
+/// observed after both. Every record is of `kind`.
+fn two_earlier_results(
+    kind: &str,
+    base: u32,
+    passed_first: bool,
+    current: [bool; 2],
+) -> Vec<crate::model::EvidenceRecord> {
+    let (first, second) = if passed_first {
+        ("passed", "failed")
+    } else {
+        ("failed", "passed")
+    };
+    let mut records = vec![
+        item_record("e0", kind, first, "r0", Some(base)),
+        item_record("e1", kind, second, "r0", Some(base + 2)),
+    ];
+    for (result, present) in ["passed", "failed"].into_iter().zip(current) {
+        if present {
+            records.push(item_record(
+                &format!("e{}", records.len()),
+                kind,
+                result,
+                REVISION,
+                Some(base + 4),
+            ));
+        }
+    }
+    records
+}
+
+/// The claim values of every state of the space of `ir` that `keep` keeps, whose case says every
+/// artifact descends from `r0`.
+fn claims_of_the_states(
+    ir: &Ir,
+    keep: impl Fn(&State) -> bool,
+) -> BTreeSet<Vec<crate::model::Truth>> {
+    let space = Space::new(ir);
+    assert_eq!(space.descends_from(), Some(vec![Revision::new("r0")]));
+    (0..space.size().expect("fits"))
+        .map(|index| space.state(index))
+        .filter(|state| keep(state))
+        .map(|state| {
+            let evidence = space.evidence(&state);
+            claim_values_descending(ir, &evidence, space.descends_from())
+        })
+        .collect()
+}
+
+/// The finding of story:check-descended-two-result-history: a `descended` `true` beside a `first`
+/// `true` over its own kind, with an evidence match on each result, needs earlier records of two
+/// results at two instants (the result the `first` names observed before the other) and the
+/// current records after both: with a current `passed` and a current `failed`, which leave both
+/// evidence matches `unknown`, `first_pass` and `red_then_green` are `true`. Both orders of the
+/// two earlier results, with each set of current records that has a `passed` one, are the
+/// combination of some state; `fails`, `first_pass`, `passes` and `red_then_green` are read
+/// together.
+#[test]
+fn descended_true_beside_a_first_true_with_earlier_records_of_two_results_is_reached() {
+    use crate::model::Truth::{True, Unknown};
+    let ir = compiled(DESCENDED_FIRST_OF_ITS_KIND);
+    let reached = claims_of_the_states(&ir, |_| true);
+    assert!(
+        reached.contains(&vec![Unknown, True, Unknown, True]),
+        "fails and passes unknown, first_pass and red_then_green true: {reached:?}"
+    );
+    let ancestors = Some(vec![Revision::new("r0")]);
+    let mut unreached = Vec::new();
+    for passed_first in [true, false] {
+        for current in [[true, false], [true, true]] {
+            let records = two_earlier_results("k", 0, passed_first, current);
+            let values = claim_values_descending(&ir, &records, ancestors.clone());
+            assert_eq!(values[3], True, "{records:?} give red_then_green true");
+            if !reached.contains(&values) {
+                unreached.push((passed_first, current, values));
+            }
+        }
+    }
+    assert!(
+        unreached.is_empty(),
+        "no state gives (passed first, current passed and failed, claims): {unreached:?}"
+    );
+}
+
+/// What the history modes of `descended` cost, measured for story:check-descended-two-result-
+/// history: a dimension that a `descended` form and another order form read has five modes of
+/// every history value, so the protocol of the review (one kind, a `first` over it) goes from 216
+/// states (three modes, after finding E1, 72 before it) to 360, and the same protocol with an
+/// `after` and a `since` over the kind from 23328 to 38880. A protocol without the mix keeps its
+/// states: `descended` over `k` and a `first` over `m` stays at 4320.
+#[test]
+fn the_history_modes_of_descended_have_the_state_counts_measured() {
+    let size = |source: &str| Space::new(&compiled(source)).size();
+    assert_eq!(size(DESCENDED_FIRST_OF_ITS_KIND), Some(360));
+    assert_eq!(size(DESCENDED), Some(4320));
+    let after_since = DESCENDED_FIRST_OF_ITS_KIND.replace(
+        "\x20\x20first_pass:",
+        "\x20\x20after_k: {true_when: {after: {first: k, then: {kind: k, result: failed}}}}\n\
+         \x20\x20since_k: {true_when: {since: {last: k, then: {kind: k, result: failed}}}}\n\
+         \x20\x20first_pass:",
+    );
+    assert_ne!(after_since, DESCENDED_FIRST_OF_ITS_KIND);
+    assert_eq!(size(&after_since), Some(38880));
+}
+
+/// An `after` and a `since` over the kind of a `descended` form read the instants the history
+/// modes spread the earlier records over, so they are run beside each mode: the two earlier
+/// results of `k` in either order, with each set of current records that has a `passed` one,
+/// give a combination of `after_k`, `since_k`, `fails`, `first_pass`, `passes` and
+/// `red_then_green` that some state gives, and those records give `after_k` both `true` and
+/// `false`, so the test reads the instants it is about.
+#[test]
+fn after_and_since_beside_the_two_result_history_of_descended_are_reached() {
+    use crate::model::Truth::{False, True};
     let source = "format: protocol/1\n\
         protocol: {id: p, revision: 1}\n\
         artifacts: {a: {}}\n\
         evidence_kinds: {k: {}}\n\
         claims:\n\
+        \x20\x20after_k: {true_when: {after: {first: k, then: {kind: k, result: failed}}}}\n\
+        \x20\x20since_k: {true_when: {since: {last: k, then: {kind: k, result: failed}}}}\n\
         \x20\x20red_then_green: {true_when: {descended: {first: {kind: k, result: failed}, \
         then: {kind: k, result: passed}}}}\n\
         \x20\x20passes: {true_when: {evidence: {kind: k, result: passed}}}\n\
@@ -775,9 +948,47 @@ fn every_value_of_descended_is_reached_jointly_with_a_first_of_its_kind() {
         \x20\x20first_pass: {true_when: {first: {kind: k, result: passed}}}\n\
         actions: {run: {may_produce: [{evidence: k}]}}\n\
         outcomes: {done: {requires: {all: [{claim: red_then_green}, {claim: passes}]}}}\n";
-    let reached =
-        every_descended_history_is_reached(source, &["k"], 0x5EC0_4D5A_F7E2_0006, Some(&[1, 3]));
-    assert_eq!(reached.len(), 9, "first_pass, red_then_green: {reached:?}");
+    let ir = compiled(source);
+    let claims: Vec<&str> = ir.claims.keys().map(|claim| claim.as_str()).collect();
+    assert_eq!(
+        claims,
+        [
+            "after_k",
+            "fails",
+            "first_pass",
+            "passes",
+            "red_then_green",
+            "since_k"
+        ]
+    );
+    // The dimensions: `k`, its history, the later `failed` records, the last records, the order.
+    // The states without a later or a last record, which none of the records below is, stand for
+    // the whole space at a 36th of its cost, which is minutes of evaluation.
+    let reached = claims_of_the_states(&ir, |state| {
+        assert_eq!(state.len(), 5, "{state:?}");
+        state[2] == 0 && state[3] == 0
+    });
+    let ancestors = Some(vec![Revision::new("r0")]);
+    let mut unreached = Vec::new();
+    let mut afters = BTreeSet::new();
+    for passed_first in [true, false] {
+        for current in [[true, false], [true, true]] {
+            let records = two_earlier_results("k", 20, passed_first, current);
+            let values = claim_values_descending(&ir, &records, ancestors.clone());
+            afters.insert(values[0]);
+            if !reached.contains(&values) {
+                unreached.push((passed_first, current, values));
+            }
+        }
+    }
+    assert!(
+        unreached.is_empty(),
+        "no state gives (passed first, current passed and failed, claims): {unreached:?}"
+    );
+    assert!(
+        afters.contains(&True) && afters.contains(&False),
+        "the records give after_k both true and false: {afters:?}"
+    );
 }
 
 /// Every combination of claim values that records of `kinds`, with any result, at the current

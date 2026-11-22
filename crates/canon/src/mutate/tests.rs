@@ -333,6 +333,39 @@ fn refusals_name_their_cause() {
     assert_eq!(code(run(invalid, &[named])), "undeclared-claim");
 }
 
+/// An outcome that requires a decision, its condition included, is walked past by every operator
+/// (F2 of the wave 9 review); the report says so, a line for each, before the summary.
+#[test]
+fn a_decision_outcome_is_reported_as_skipped() {
+    let body = "claims: {c: {true_when: {claim: d}}, d: {true_when: {evidence: {kind: k}}}}\n\
+        evidence_kinds: {k: {}}\n\
+        outcomes:\n  keep: {requires: {claim: c}}\n  withdrawn:\n    requires:\n      \
+        decision: withdraw\n      when: {all: [{claim: c}, {claim: d}]}\n  \
+        zeta:\n    requires: {decision: sign}\n";
+    let skipped = skipped_sites(&protocol(body));
+    assert_eq!(
+        skipped,
+        [
+            "outcome `withdrawn` requires decision `withdraw`",
+            "outcome `zeta` requires decision `sign`"
+        ]
+    );
+    let report = Report {
+        mutants: Vec::new(),
+        skipped,
+    };
+    assert_eq!(
+        report.render(),
+        "skipped: outcome `withdrawn` requires decision `withdraw`; no operator mutates a decision or its condition\n\
+         skipped: outcome `zeta` requires decision `sign`; no operator mutates a decision or its condition\n\
+         mutate: 0 mutants, 0 killed, 0 survived (0 weak points), 0 invalid\n"
+    );
+    let plain = protocol(
+        "outcomes:\n  keep: {requires: {claim: c}}\nclaims: {c: {true_when: {claim: c}}}\n",
+    );
+    assert!(skipped_sites(&plain).is_empty());
+}
+
 #[test]
 fn two_runs_give_one_report() {
     let files = [scenario(
