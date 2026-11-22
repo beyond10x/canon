@@ -65,13 +65,11 @@ not (
     | test(=child_outcome_subject::check_reads_each_forms_own_subject_in_one_predicate)
     | test(=child_outcome_subject::check_reads_the_dimension_about_the_forms_subject)
     | test(=invalidation_evaluation_cost::a_chain_at_the_depth_bound_evaluates_within_budget)
-    | test(=invalidation_evaluation_cost::claims_kept_apart_by_invalidation_rules_are_evaluated_in_time_linear_in_the_chain)
     | test(=missing_keys::every_left_out_key_of_a_protocol_or_a_scenario_is_named)
     | test(=review_properties::generated_evaluations_keep_every_documented_invariant)
   ))
   | (binary_id(canon-cli::main) & (
-    test(=adversary2_review_hardening::check_refuses_a_long_chain_of_claims_without_aborting)
-    | test(=adversary_check_slices_cli::check_help_does_not_refuse_every_space_above_the_bound)
+    test(=adversary_check_slices_cli::check_help_does_not_refuse_every_space_above_the_bound)
     | test(=canon_check::a_sliced_summary_gives_the_whole_product)
     | test(=canon_check::canon_check_reports_investigation_defects)
   ))
@@ -86,10 +84,6 @@ global-timeout = "1200s"
 
 [profile.slow.junit]
 path = "junit.xml"
-
-[[profile.slow.overrides]]
-filter = "test(=invalidation_evaluation_cost::claims_kept_apart_by_invalidation_rules_are_evaluated_in_time_linear_in_the_chain)"
-threads-required = "num-test-threads"
 
 [[profile.slow.overrides]]
 filter = """
