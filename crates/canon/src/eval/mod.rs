@@ -636,6 +636,8 @@ pub fn evaluate_with(
             missing_evidence,
             pending_decisions,
         };
+        #[cfg(test)]
+        explained(ir);
         let inputs = crate::explain::Inputs {
             authority: authority.as_ref(),
             decisions: decisions.as_ref(),
@@ -652,6 +654,24 @@ pub fn evaluate_with(
         );
         Ok(decision)
     })
+}
+
+/// The explanations built, by protocol id, since the process began (test builds only,
+/// story:check-evaluates-statuses-only). Keyed by protocol so a test that gives its protocol an id
+/// of its own reads its count beside tests that run at the same time.
+#[cfg(test)]
+pub(crate) static EXPLAINED: std::sync::Mutex<BTreeMap<String, usize>> =
+    std::sync::Mutex::new(BTreeMap::new());
+
+/// Counts one explanation built under `ir` in [`EXPLAINED`].
+#[cfg(test)]
+fn explained(ir: &Ir) {
+    let mut explained = EXPLAINED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    *explained
+        .entry(ir.protocol.id.as_str().to_owned())
+        .or_default() += 1;
 }
 
 /// The reasons `predicate` is not `true` over the claim `values`, the case's `inputs` and the

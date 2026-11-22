@@ -400,6 +400,8 @@ mod properties;
 mod space;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod unexplained;
 
 // The enumerations alive now on this thread, and the most alive at once since the last check
 // began (test builds only; E4 of the wave 9 review, F8 of the wave 11 review). Each enumeration
@@ -1050,6 +1052,25 @@ pub(crate) fn evaluate_records(
     state: &State,
     evidence: Vec<crate::model::EvidenceRecord>,
 ) -> Result<Evaluated, Refusal> {
+    evaluate_records_by(ir, space, state, evidence, eval::evaluate_with)
+}
+
+/// How a state's case is decided: [`eval::evaluate_with`], or a path that gives the same statuses.
+type Evaluator = fn(
+    &Ir,
+    &Case,
+    &[crate::model::EvidenceRecord],
+    Supplied<'_>,
+) -> Result<crate::model::Decision, eval::Refusal>;
+
+/// [`evaluate_records`], the case decided by `evaluator`.
+fn evaluate_records_by(
+    ir: &Ir,
+    space: &Space<'_>,
+    state: &State,
+    evidence: Vec<crate::model::EvidenceRecord>,
+    evaluator: Evaluator,
+) -> Result<Evaluated, Refusal> {
     let revision = Revision::new(space::REVISION);
     let case = Case {
         format: CASE_FORMAT.to_owned(),
@@ -1079,7 +1100,7 @@ pub(crate) fn evaluate_records(
         at: None,
         decisions: Some(&decisions),
     };
-    let decision = eval::evaluate_with(ir, &case, &evidence, supplied)
+    let decision = evaluator(ir, &case, &evidence, supplied)
         .map_err(|refusal| Refusal::new(refusal.code(), refusal.to_string()))?;
     let status = |section: &Option<crate::model::Json>, id: &str| {
         section
