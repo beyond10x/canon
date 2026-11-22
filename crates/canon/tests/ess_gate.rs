@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 /// The ESS release `ess/ess-inputs.yaml` pins and CI installs.
-const PINNED: &str = "0.97.3";
+const PINNED: &str = "0.97.4";
 
 /// The marker of an open question, written as two halves so this file does not carry it whole.
 const OPEN_QUESTION: &str = concat!("UNMAPPED", ":");
@@ -109,7 +109,7 @@ thread_local! {
 /// `ess-inputs.yaml` at or above the working directory; with `ESS_TOOLCHAIN` set it runs as that
 /// release, whatever the file's `requires:` says, warns about an older `requires:` and fails it
 /// under `--strict-requires`, which is the negative control for the flag. Without the variable
-/// `ess` since 0.97.3 refuses a `requires:` that differs from its own release when no toolchain of
+/// `ess` since 0.97.4 refuses a `requires:` that differs from its own release when no toolchain of
 /// that release is at hand.
 fn as_the_pinned_release<T>(body: impl FnOnce() -> T) -> T {
     AS_PINNED_RELEASE.with(|flag| flag.set(true));

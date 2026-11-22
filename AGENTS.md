@@ -14,7 +14,10 @@ it must know. The cross-repository architecture is Atlas ADRs 0066–0075 and At
 - Canon owns generic protocol semantics: case, artifact and revision, fact, claim, predicate,
   evidence, obligation, action, authority requirement, outcome, invalidation and recovery, and
   evaluation with explanation (Atlas ADR 0067).
-- Canon contains no engineering vocabulary. Engineering protocols belong in `beyond10x/els`.
+- Canon contains no engineering vocabulary. Engineering protocols belong in `beyond10x/els`. A
+  fixture or test may use an engineering word (`test_result`, `merge`) as the plain identifier of
+  an evidence kind, action or artifact, as a protocol author would name it; Canon's own code, rules
+  and types may not.
 - Canon does not know AEP, Commission, Loom or any model provider. Nothing here depends on them.
 
 ## Rules
@@ -85,7 +88,7 @@ checks every field, field type and variant against the Rust model, with mutation
 Native checked types deliberately continue Canon's parity-backed model convention; ESS structural
 Rust generation is available, and is not represented as a missing capability.
 `task ess-gate` runs both model parity guards and the command parity test with its two adversary
-files. CI and the manifest select ESS 0.97.3.
+files. CI and the manifest select ESS 0.97.4.
 
 Keep the Logos lexer and Pratt parser, checker/planner, exact-number implementation and pure
 evaluator separate. Catalog recipes and observation providers extend names, never parser
@@ -140,10 +143,7 @@ run first and are counted, not run again), plus the `adversary_action_arguments`
 b10x-canon`, the feature set the CLI ships. It prints `nproc`, the ten slowest tests and the summed
 test time, and fails when its test runs take over 120 s (`global-timeout` cuts a run there). The
 `slow` lane is `task test-slow`, run by CI after `task check` and before a release: the tests the
-default profile's `default-filter` leaves out, each measured over 5 s. Its CI step is
-`continue-on-error: true` (Timo, 2026-11-22 10:35 CET, via `host-operator`: "A: slow lane may fail,
-story"): a test over 60 s in it is reported and does not fail the job, until the story that brings
-those tests under 60 s is done (`story:slow-lane-under-bound`). A test that takes more than
+default profile's `default-filter` leaves out, each measured over 5 s. A test that takes more than
 5 s is named in that list, and one that runs its cases on threads gets `threads-required`. Each
 crate has one integration-test binary, `tests/main.rs` (`autotests = false`), with every
 `tests/<name>.rs` a module, so a test is named `<name>::<test>`;

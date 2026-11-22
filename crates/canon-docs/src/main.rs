@@ -341,6 +341,47 @@ mod tests {
         pages::all(&repository_root()).expect("the repository generates")
     }
 
+    /// Every `src/<name>.rs` beside this file is declared above as `mod <name>;`, and no
+    /// directory under `src/` or `tests/` holds a file the crate does not compile: a file that is
+    /// not declared never builds and never runs (G6 of the wave 9 review).
+    #[test]
+    fn every_source_file_is_a_module_of_this_binary() {
+        let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let declared: std::collections::BTreeSet<&str> = include_str!("main.rs")
+            .lines()
+            .filter_map(|line| line.strip_prefix("mod ")?.strip_suffix(';'))
+            .collect();
+        let mut undeclared = Vec::new();
+        for dir in ["src", "tests"] {
+            let Ok(entries) = fs::read_dir(crate_dir.join(dir)) else {
+                continue;
+            };
+            for entry in entries {
+                let path = entry.expect("an entry is readable").path();
+                let name = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .expect("a UTF-8 file name")
+                    .to_owned();
+                if path.is_dir() {
+                    if !(dir == "src" && declared.contains(name.as_str())) {
+                        undeclared.push(format!("{dir}/{name}/"));
+                    }
+                } else if let Some(module) = name.strip_suffix(".rs")
+                    && !(dir == "src" && (module == "main" || declared.contains(module)))
+                {
+                    undeclared.push(format!("{dir}/{name}"));
+                }
+            }
+        }
+        undeclared.sort();
+        assert!(
+            undeclared.is_empty(),
+            "these paths of canon-docs are not modules of its binary and never run; declare each \
+             in src/main.rs or remove it: {undeclared:?}"
+        );
+    }
+
     #[test]
     fn every_generated_file_carries_the_marker_near_its_top() {
         for (path, text) in generated() {

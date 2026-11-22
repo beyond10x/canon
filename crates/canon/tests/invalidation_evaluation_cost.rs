@@ -10,27 +10,15 @@
 //!
 //! The record moved by `r_i` is invalidated for `c_0` to `c_i`, so the excluded evidence the
 //! decision lists has `n (n + 1) / 2` entries: the output alone is quadratic, which is the bound
-//! asserted. The two chain timing tests hold the evaluator to it; a diamond of the same rules holds
-//! it to reusing a claim's value within a walk; the pinned decision holds every output byte for
-//! byte while the cost changes.
-
-use std::sync::Mutex;
-use std::sync::mpsc;
-use std::thread;
-use std::time::{Duration, Instant};
+//! the evaluator is held to. It is held as a count of claim evaluations and marks, not as time (a
+//! timing ratio failed 2 runs of 6 at a load of 118): `eval/invalidation_cost.rs`, a unit test
+//! of the crate, since a counter behind `cfg(test)` is not seen from here. This file holds what
+//! the decision lists: a chain at the depth bound, a diamond of the same rules, and the pinned
+//! decision, byte for byte while the cost changes.
 
 use b10x_canon::eval;
 use b10x_canon::ir::{self, Ir};
 use b10x_canon::model::{self, EvidenceRecord, Truth};
-
-/// The timing tests run one at a time, so neither measures the other's work.
-static TIMED: Mutex<()> = Mutex::new(());
-
-fn timed_alone() -> std::sync::MutexGuard<'static, ()> {
-    TIMED
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
 
 fn claim(at: usize) -> String {
     format!("c{at:05}")
@@ -125,125 +113,27 @@ impl Chain {
     fn evaluate(&self) -> model::Decision {
         eval::evaluate(&self.ir, &self.case, &self.evidence).expect("decides")
     }
-
-    /// One evaluation's wall-clock time. The decision is dropped after the clock stops.
-    fn time(&self) -> Duration {
-        let started = Instant::now();
-        let decision = self.evaluate();
-        let took = started.elapsed();
-        drop(decision);
-        took
-    }
 }
 
-/// Builds the chain of `claims` on a worker thread, which then evaluates it `runs` times and sends
-/// each time. Every time must arrive within `deadline` of the one before (of the build, for the
-/// first), so a red run ends at the deadline; the worker is left to the end of the process.
-fn timed_on_worker(claims: usize, runs: usize, deadline: Duration) -> Result<Duration, String> {
-    let (built, built_rx) = mpsc::channel();
-    let (sent, times) = mpsc::channel();
-    thread::Builder::new()
-        .name(format!("chain-of-{claims}"))
-        .spawn(move || {
-            let chain = invalidated_chain(claims);
-            if built.send(()).is_err() {
-                return;
-            }
-            for _ in 0..runs {
-                if sent.send(chain.time()).is_err() {
-                    return;
-                }
-            }
-        })
-        .expect("a worker thread starts");
-    built_rx.recv().expect("the chain builds");
-    let mut fastest = Duration::MAX;
-    for run in 1..=runs {
-        match times.recv_timeout(deadline) {
-            Ok(took) => fastest = fastest.min(took),
-            Err(_) => {
-                return Err(format!(
-                    "run {run} of {runs} on a chain of {claims} claims took more than {deadline:?}"
-                ));
-            }
-        }
-    }
-    Ok(fastest)
-}
-
-/// The name is the adversary's and is kept so it can be traced; the bound is quadratic. Each size
-/// is timed as the minimum of 3 runs; the long chain runs on a worker thread with a deadline of 64
-/// times the short time plus 2 s, so a red run ends in seconds.
-#[test]
-fn claims_kept_apart_by_invalidation_rules_are_evaluated_in_time_linear_in_the_chain() {
-    let _alone = timed_alone();
-    let short_chain = invalidated_chain(50);
-    let short = (0..3)
-        .map(|_| short_chain.time())
-        .min()
-        .expect("three runs");
-    let deadline = short * 64 + Duration::from_secs(2);
-    let long = match timed_on_worker(400, 3, deadline) {
-        Ok(long) => long,
-        Err(why) => panic!(
-            "a chain eight times as long did not finish: {why}, against {short:?} for 50 claims: \
-             more than quadratic growth"
-        ),
-    };
-    eprintln!("invalidated chain: 50 claims {short:?}, 400 claims {long:?}");
-    assert!(
-        long <= short * 64,
-        "a chain eight times as long took {long:?}, against {short:?}: more than quadratic growth"
-    );
-}
-
-/// The depth bound admits a chain of about 4000 claims (4096 levels, `eval/depth.rs`). A 4000-claim
-/// chain evaluates in under 10 s in a release build; a debug build runs the same chain against 120
-/// s. The chain is evaluated once, on a worker thread with the budget as its deadline.
+/// The depth bound admits a chain of about 4000 claims (4096 levels, `eval/depth.rs`). The chain
+/// is evaluated once and the decision holds every claim `true`, with each moved record listed under
+/// each claim built on its claim. No time is asserted: how much work the walk does is held as a
+/// count in `eval/invalidation_cost.rs`, and a test over 60 s is killed by the runner.
 #[test]
 fn a_chain_at_the_depth_bound_evaluates_within_budget() {
-    let _alone = timed_alone();
-    let budget = if cfg!(debug_assertions) {
-        Duration::from_secs(120)
-    } else {
-        Duration::from_secs(10)
-    };
     let claims = 4000;
-    let (sent, received) = mpsc::channel();
-    let (built, built_rx) = mpsc::channel();
-    thread::Builder::new()
-        .name("chain-at-the-bound".to_owned())
-        .spawn(move || {
-            let chain = invalidated_chain(claims);
-            if built.send(()).is_err() {
-                return;
-            }
-            let started = Instant::now();
-            let decision = chain.evaluate();
-            let took = started.elapsed();
-            let decided = decision.claims.iter().count();
-            let all_true = decision
-                .claims
-                .iter()
-                .all(|(_, entry)| entry.value == Truth::True);
-            let listed: usize = decision
-                .claims
-                .iter()
-                .map(|(_, entry)| entry.excluded_evidence.len())
-                .sum();
-            // Freed before the result is sent, so while this test holds `TIMED`: freeing the
-            // 8 million listed exclusions after it let go slowed the other timing test's 400-claim
-            // chain about threefold.
-            drop(decision);
-            drop(chain);
-            let _ = sent.send((took, decided, all_true, listed));
-        })
-        .expect("a worker thread starts");
-    built_rx.recv().expect("the chain builds");
-    let (took, decided, all_true, listed) = received.recv_timeout(budget).unwrap_or_else(|_| {
-        panic!("a chain of {claims} claims took more than {budget:?} to evaluate")
-    });
-    eprintln!("invalidated chain: {claims} claims {took:?}");
+    let chain = invalidated_chain(claims);
+    let decision = chain.evaluate();
+    let decided = decision.claims.iter().count();
+    let all_true = decision
+        .claims
+        .iter()
+        .all(|(_, entry)| entry.value == Truth::True);
+    let listed: usize = decision
+        .claims
+        .iter()
+        .map(|(_, entry)| entry.excluded_evidence.len())
+        .sum();
     assert_eq!(decided, claims);
     assert!(
         all_true,
@@ -254,75 +144,40 @@ fn a_chain_at_the_depth_bound_evaluates_within_budget() {
         claims * (claims + 1) / 2,
         "each moved record is listed under each claim built on its claim"
     );
-    assert!(
-        took < budget,
-        "a chain of {claims} claims took {took:?}, over {budget:?}"
-    );
 }
 
 /// A diamond of 500 claims, each with a rule of its own, so that every walk has a context of its
-/// own and reuses values only through its per-walk memo. Reused, the work is quadratic and takes well
-/// under a second in a debug build; not reused, the last claims are reached a Fibonacci number of
-/// times (about 10^104 for 500 claims) and the walk never ends. The budget is 30 s in a debug build
-/// and 5 s in a release build, on a worker thread with the budget as its deadline. Every claim is
-/// `true` and lists exactly the records moved by its own rule and the rules of the claims below it.
+/// own and reuses values only through its per-walk memo. Reused, the work is quadratic; not reused,
+/// the last claims are reached a Fibonacci number of times (about 10^104 for 500 claims) and the
+/// walk never ends. No time is asserted: that the walk reuses a value is held as a count of claim
+/// evaluations, with a limit that ends a walk that does not, in `eval/invalidation_cost.rs`. Every
+/// claim is `true` and lists exactly the records moved by its own rule and the rules of the claims
+/// below it.
 #[test]
 fn a_diamond_of_claims_kept_apart_by_invalidation_rules_evaluates_within_budget() {
-    let _alone = timed_alone();
-    let budget = if cfg!(debug_assertions) {
-        Duration::from_secs(30)
-    } else {
-        Duration::from_secs(5)
-    };
     let claims = 500;
-    let (sent, received) = mpsc::channel();
-    let (built, built_rx) = mpsc::channel();
-    thread::Builder::new()
-        .name("invalidated-diamond".to_owned())
-        .spawn(move || {
-            let diamond = invalidated_diamond(claims);
-            if built.send(()).is_err() {
-                return;
-            }
-            let started = Instant::now();
-            let decision = diamond.evaluate();
-            let took = started.elapsed();
-            let mut decided = 0;
-            let mut wrong = Vec::new();
-            for (at, (id, entry)) in decision.claims.iter().enumerate() {
-                decided += 1;
-                let listed: Vec<String> = entry
-                    .excluded_evidence
-                    .iter()
-                    .map(|exclusion| {
-                        assert_eq!(exclusion.reason, model::ExclusionReason::Invalidated);
-                        exclusion.evidence.as_str().to_owned()
-                    })
-                    .collect();
-                let expected: Vec<String> =
-                    (at..claims).map(|moved| format!("e{moved:05}")).collect();
-                if id.as_str() != claim(at) || entry.value != Truth::True || listed != expected {
-                    wrong.push(format!("{id}: {:?}, {} listed", entry.value, listed.len()));
-                }
-            }
-            drop(decision);
-            drop(diamond);
-            let _ = sent.send((took, decided, wrong));
-        })
-        .expect("a worker thread starts");
-    built_rx.recv().expect("the diamond builds");
-    let (took, decided, wrong) = received.recv_timeout(budget).unwrap_or_else(|_| {
-        panic!("a diamond of {claims} claims took more than {budget:?} to evaluate")
-    });
-    eprintln!("invalidated diamond: {claims} claims {took:?}");
+    let diamond = invalidated_diamond(claims);
+    let decision = diamond.evaluate();
+    let mut decided = 0;
+    let mut wrong = Vec::new();
+    for (at, (id, entry)) in decision.claims.iter().enumerate() {
+        decided += 1;
+        let listed: Vec<String> = entry
+            .excluded_evidence
+            .iter()
+            .map(|exclusion| {
+                assert_eq!(exclusion.reason, model::ExclusionReason::Invalidated);
+                exclusion.evidence.as_str().to_owned()
+            })
+            .collect();
+        let expected: Vec<String> = (at..claims).map(|moved| format!("e{moved:05}")).collect();
+        if id.as_str() != claim(at) || entry.value != Truth::True || listed != expected {
+            wrong.push(format!("{id}: {:?}, {} listed", entry.value, listed.len()));
+        }
+    }
     assert_eq!(decided, claims);
     assert!(wrong.is_empty(), "claims decided otherwise: {wrong:?}");
-    assert!(
-        took < budget,
-        "a diamond of {claims} claims took {took:?}, over {budget:?}"
-    );
 }
-
 /// The decision for a 5-claim invalidated chain, byte for byte: what the evaluator gave before its
 /// cost changed.
 #[test]
