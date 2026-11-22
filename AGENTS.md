@@ -14,7 +14,10 @@ it must know. The cross-repository architecture is Atlas ADRs 0066–0075 and At
 - Canon owns generic protocol semantics: case, artifact and revision, fact, claim, predicate,
   evidence, obligation, action, authority requirement, outcome, invalidation and recovery, and
   evaluation with explanation (Atlas ADR 0067).
-- Canon contains no engineering vocabulary. Engineering protocols belong in `beyond10x/els`.
+- Canon contains no engineering vocabulary. Engineering protocols belong in `beyond10x/els`. A
+  fixture or test may use an engineering word (`test_result`, `merge`) as the plain identifier of
+  an evidence kind, action or artifact, as a protocol author would name it; Canon's own code, rules
+  and types may not.
 - Canon does not know AEP, Commission, Loom or any model provider. Nothing here depends on them.
 
 ## Rules
