@@ -26,6 +26,13 @@ const PRINCIPAL: &str = "canon-check";
 /// moved: an earlier one than [`REVISION`], the case's current revision of every artifact.
 const EARLIER: &str = "r0";
 
+/// The item the records of a checked state name in a protocol with a `descended` form
+/// (story:revision-ordering): one item, so a current record of the form's `then` and an earlier
+/// record of its `first` are a pair. The records of a dimension whose history is [`UNPLACED`]
+/// name none, so a current record the form does not read is in the space too: it leaves the
+/// form `unknown` as a snapshot that gives no `descends_from` does.
+const ITEM: &str = "item";
+
 /// How the producer of a record in a checked state is named: this, a dash and the producer's
 /// position among the space's producers, from 1.
 const PRODUCER: &str = "producer";
@@ -356,6 +363,10 @@ pub(crate) struct Space<'a> {
     /// observed, as [`UNPLACED`] and [`Space::evidence`] say. A slice keeps the whole space's,
     /// whether or not it holds a later-record dimension.
     after: bool,
+    /// Whether the protocol has a `descended` form (story:revision-ordering): every record then
+    /// names [`ITEM`], and the case snapshot says every artifact's current revision
+    /// descends from [`EARLIER`] ([`Space::descends_from`]). A slice keeps the whole space's.
+    descended: bool,
     /// For each case input, whether it holds one value in this space: an input a slice's subject
     /// does not read holds the value a witness of the whole product would hold, and the bound
     /// refusal does not name it. Every input of the whole space takes every value it declares.
@@ -454,6 +465,7 @@ impl<'a> Space<'a> {
                         observed_at: None,
                         upstream_revisions: Declarations::default(),
                         child_case: None,
+                        item: None,
                     }),
                     bound,
                     classes: Vec::new(),
@@ -598,8 +610,14 @@ impl<'a> Space<'a> {
             .iter()
             .flat_map(|kind| kind.profiles.iter().filter(|p| !p.is_empty()).cloned())
             .collect();
+        let descended = readers(ir).any(|(_, predicate)| {
+            let mut found = false;
+            predicate.visit(&mut |node| found |= matches!(node, Predicate::Descended(_)));
+            found
+        });
         let mut space = Space {
             after: !later.is_empty(),
+            descended,
             fixed: vec![false; ir.inputs.len()],
             producers: producers.into_iter().collect(),
             kinds,
@@ -834,12 +852,21 @@ impl<'a> Space<'a> {
             producers: self.producers.clone(),
             unlisted: self.unlisted.clone(),
             after: self.after,
+            descended: self.descended,
             fixed,
         };
         if orders.is_some() && space.size().is_some_and(|size| size <= super::STATE_BOUND) {
             space.rankings = rankings(space.placeable());
         }
         space
+    }
+
+    /// What the case snapshot of a checked state lists as the revisions every artifact's current
+    /// revision, [`REVISION`], descends from: [`EARLIER`] in a protocol with a `descended` form,
+    /// so an earlier record is about an ancestor, and nothing otherwise, as before the form
+    /// existed (story:revision-ordering).
+    pub(crate) fn descends_from(&self) -> Option<Vec<Revision>> {
+        self.descended.then(|| vec![Revision::new(EARLIER)])
     }
 
     /// The evidence dimensions with a history dimension, in the order of their history
@@ -1710,7 +1737,21 @@ impl<'a> Space<'a> {
                 ..record.clone()
             });
         }
+        // The dimensions whose records name no item: those an order form reads whose history is
+        // `UNPLACED`, each its kind and artifact.
+        let unnamed: Vec<(&EvidenceKindId, &ArtifactId)> = self
+            .ordered
+            .iter()
+            .filter(|at| self.history(state, **at) == Some(UNPLACED))
+            .filter_map(|at| {
+                let record = self.kinds[*at].record.as_ref()?;
+                Some((&record.kind, &record.subject))
+            })
+            .collect();
         for record in &mut records {
+            if self.descended && !unnamed.contains(&(&record.kind, &record.subject)) {
+                record.item = Some(crate::model::ItemId::new(ITEM));
+            }
             if record.kind.as_str() == CASE_OUTCOME {
                 record.child_case = Some(CaseId::new(record.id.as_str()));
                 if record.result.is_none() {
@@ -2155,6 +2196,10 @@ fn unlisted(ir: &Ir) -> String {
             Predicate::Since(form) => {
                 named.insert(form.then.result.as_str());
             }
+            Predicate::Descended(form) => {
+                named.insert(form.first.result.as_str());
+                named.insert(form.then.result.as_str());
+            }
             Predicate::Children(form) => named.extend(form.r#in.iter().map(String::as_str)),
             _ => {}
         });
@@ -2229,6 +2274,20 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
             ordered: true,
             history: false,
         }),
+        // Each record it pairs, as `first` reads its kind and result: an earlier record is an
+        // earlier record of the class (story:revision-ordering).
+        Predicate::Descended(form) => {
+            for read in [&form.first, &form.then] {
+                found.push(Read {
+                    kind: &read.kind,
+                    subject: form.subject.as_ref(),
+                    result: Some(read.result.as_str()),
+                    independent_on: None,
+                    ordered: true,
+                    history: false,
+                });
+            }
+        }
         Predicate::Before(_) | Predicate::After(_) | Predicate::Since(_) => {
             for (kind, subject) in node.order_reads() {
                 found.push(Read {
@@ -2287,7 +2346,8 @@ fn evidence_reached<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Reached<'a>
             Predicate::First(_)
             | Predicate::Before(_)
             | Predicate::After(_)
-            | Predicate::Since(_) => {
+            | Predicate::Since(_)
+            | Predicate::Descended(_) => {
                 reached.extend(node.order_reads());
             }
             Predicate::Children(form) => {
@@ -2342,7 +2402,8 @@ pub(super) fn positive_reads<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Re
             Predicate::First(_)
             | Predicate::Before(_)
             | Predicate::After(_)
-            | Predicate::Since(_) => {
+            | Predicate::Since(_)
+            | Predicate::Descended(_) => {
                 matches.extend(next.order_reads());
             }
             Predicate::Children(form) => {

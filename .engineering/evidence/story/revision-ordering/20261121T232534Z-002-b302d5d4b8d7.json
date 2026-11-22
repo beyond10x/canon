@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T23:25:34Z",
+  "actor": "human:timo",
+  "artifact": "story:revision-ordering",
+  "kind": "story",
+  "revision": 34,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "finding 3, crates/canon/src/eval/order.rs:296, mutant: ignoring the result of first, of then, or both left the unit's tests green; the adversary case at adversary_descended.rs:158 fails on all three mutants; the code was right",
+    "reference": "39adcf2c",
+    "review": "review-result:adversary-revision-ordering-pass-1",
+    "outcome": "fixed"
+  }
+}

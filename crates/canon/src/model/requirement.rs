@@ -28,8 +28,8 @@ use serde::Deserialize;
 
 use super::ids::{ClaimId, DecisionName, InputId, InputValue};
 use super::predicate::{
-    ChildOutcomes, EvidenceAfter, EvidenceMatch, EvidenceOrder, EvidenceSince, FirstResult,
-    Predicate, Truth, WrittenPredicate,
+    ChildOutcomes, EvidenceAfter, EvidenceDescended, EvidenceMatch, EvidenceOrder, EvidenceSince,
+    FirstResult, Predicate, Truth, WrittenPredicate,
 };
 
 /// What an outcome requires.
@@ -129,6 +129,8 @@ struct WrittenRequirement {
     #[serde(default, deserialize_with = "super::present::form")]
     since: Option<EvidenceSince>,
     #[serde(default, deserialize_with = "super::present::form")]
+    descended: Option<Box<EvidenceDescended>>,
+    #[serde(default, deserialize_with = "super::present::form")]
     children: Option<ChildOutcomes>,
     #[serde(default, deserialize_with = "super::present::form")]
     when: Option<Predicate>,
@@ -152,6 +154,7 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             before,
             after,
             since,
+            descended,
             children,
             when,
         } = written;
@@ -168,6 +171,7 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             before,
             after,
             since,
+            descended,
             children,
         };
         let Some(decision) = decision else {
@@ -188,12 +192,14 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
                 before: None,
                 after: None,
                 since: None,
+                descended: None,
                 children: None,
             } = predicate
             {
                 return Err(
                     "a requirement has exactly one of `all`, `any`, `not`, `evidence`, \
-                     `claim`, `input`, `first`, `before`, `after`, `since`, `children` or `decision`, \
+                     `claim`, `input`, `first`, `before`, `after`, `since`, `descended`, `children` or \
+                     `decision`, \
                      found 0"
                         .to_owned(),
                 );
@@ -213,6 +219,7 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             before: None,
             after: None,
             since: None,
+            descended: None,
             children: None,
         } = predicate
         else {

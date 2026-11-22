@@ -84,6 +84,7 @@ mod tests {
             observed_at: None,
             upstream_revisions: crate::model::Declarations::default(),
             child_case: None,
+            item: None,
         }
     }
 

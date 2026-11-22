@@ -120,7 +120,7 @@ pub enum Command {
     /// supplied record alone makes legitimate is reported as a bypass. A state is a set of evidence records,
     /// authority decisions and explicit decisions; a record an invalidation rule can keep from a
     /// claim is there in any combination of observed before and after each upstream artifact
-    /// moved, one record each. Evidence an order form reads (`first`, `before`, `after`, `since`)
+    /// moved, one record each. Evidence an order form reads (`first`, `before`, `after`, `since`, `descended`)
     /// is also there with earlier records at a superseded revision, or with no known instant, in
     /// every order of first observations; evidence an `after` or a `since` compares with its result
     /// also with a later record of that result, placed anywhere in that order or at no known
@@ -205,7 +205,8 @@ pub enum Command {
     /// returns the state is counted as waiting. The summary
     /// counts the reachable states, per outcome those in which it is legitimate, the waiting
     /// states, the findings and the stuck and cycle states they stand for. A protocol with an
-    /// order form (`first`, `before`, `after`, `since`) is refused (`ordered-evidence`), and so is
+    /// order form (`first`, `before`, `after`, `since`, `descended`) is refused (`ordered-evidence`),
+    /// and so is
     /// a walk that would visit more than 65536 states (`reachable-state-bound`), which reports
     /// nothing of what it saw.
     Simulate {

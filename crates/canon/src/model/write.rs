@@ -128,10 +128,10 @@ use serde_json::{Number, Value};
 
 use super::{
     Action, Artifact, Author, CapabilityRequirement, CaseInput, CaseOpening, CaseSection,
-    ChildOutcomes, Claim, ClaimTest, Declarations, EvidenceAfter, EvidenceKind, EvidenceMatch,
-    EvidenceOrder, EvidenceProduction, EvidenceSince, FirstResult, Import, IndependenceDimension,
-    InputTest, InvalidationRule, LaterRecord, Obligation, Outcome, OutcomeRequirement, Predicate,
-    Protocol, ProtocolHeader, RecordGroup,
+    ChildOutcomes, Claim, ClaimTest, Declarations, EvidenceAfter, EvidenceDescended, EvidenceKind,
+    EvidenceMatch, EvidenceOrder, EvidenceProduction, EvidenceSince, FirstResult, Import,
+    IndependenceDimension, InputTest, InvalidationRule, LaterRecord, Obligation, Outcome,
+    OutcomeRequirement, Predicate, Protocol, ProtocolHeader, RecordGroup,
 };
 
 /// The members of one object, each value already written one level deeper than its key.
@@ -730,6 +730,22 @@ fn predicate(depth: usize, predicate: &Predicate) -> String {
                 subject.as_ref().map(|id| quote(id.as_str())),
             );
             put(&mut members, "since", object(depth + 1, body));
+        }
+        Predicate::Descended(form) => {
+            let EvidenceDescended {
+                first,
+                then,
+                subject,
+            } = form.as_ref();
+            let mut body = Members::new();
+            put(&mut body, "first", later_record(depth + 2, first));
+            put(&mut body, "then", later_record(depth + 2, then));
+            put_some(
+                &mut body,
+                "subject",
+                subject.as_ref().map(|id| quote(id.as_str())),
+            );
+            put(&mut members, "descended", object(depth + 1, body));
         }
         Predicate::Children(form) => {
             let ChildOutcomes {

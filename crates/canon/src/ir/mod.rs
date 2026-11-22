@@ -43,7 +43,9 @@
 //!   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
 //!   authored: `{"first": {"kind": …, "result": …}}`, `{"before": {"first": …, "then": …}}`,
 //!   `{"after": {"first": …, "then": {"kind": …, "result": …}}}` and
-//!   `{"since": {"last": …, "then": {"kind": …, "result": …}}}`.
+//!   `{"since": {"last": …, "then": {"kind": …, "result": …}}}`, and the order form over
+//!   revisions `{"descended": {"first": {"kind": …, "result": …}, "then": {"kind": …,
+//!   "result": …}}}` (story:revision-ordering). Each adds `"subject": …` when it names one.
 //!   The form over the child cases is `{"children": {"in": [...]}}`, or `{"children": {"in":
 //!   [...], "revision": "current"}}` when it reads only the records about the current revision of
 //!   their subject (story:child-outcome-revision): `revision: any` reads what no key reads and is
@@ -121,10 +123,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::model::{
     self, ActionId, Age, ArtifactId, Author, CapabilityId, CaseOpening, ChildOutcomes, ClaimId,
-    ClaimTest, DecisionRequirement, EffectClass, EvidenceAfter, EvidenceKindId, EvidenceMatch,
-    EvidenceOrder, EvidenceSince, FirstResult, IndependenceDimensionId, InputId, InputTest,
-    InputValue, InvalidationRuleId, ObligationId, OutcomeId, OutcomeRequirement, Predicate,
-    Protocol, ProtocolId, ScopeKey, ScopeValue, Truth,
+    ClaimTest, DecisionRequirement, EffectClass, EvidenceAfter, EvidenceDescended, EvidenceKindId,
+    EvidenceMatch, EvidenceOrder, EvidenceSince, FirstResult, IndependenceDimensionId, InputId,
+    InputTest, InputValue, InvalidationRuleId, ObligationId, OutcomeId, OutcomeRequirement,
+    Predicate, Protocol, ProtocolId, ScopeKey, ScopeValue, Truth,
 };
 use crate::validate::{self, Problem};
 
@@ -433,7 +435,8 @@ pub(crate) fn normalize(predicate: &Predicate) -> Predicate {
         | Predicate::First(_)
         | Predicate::Before(_)
         | Predicate::After(_)
-        | Predicate::Since(_) => predicate.clone(),
+        | Predicate::Since(_)
+        | Predicate::Descended(_) => predicate.clone(),
     }
 }
 
@@ -479,7 +482,7 @@ fn scopes(requires: &[model::CapabilityRequirement]) -> BTreeMap<CapabilityId, V
 /// in `canon-ir/1`. Text (identifiers and results) compares by Unicode code point.
 ///
 /// 1. Different forms compare by form, in the order `after`, `all`, `any`, `before`, `children`,
-///    `claim`, `evidence`, `first`, `input`, `not`, `since`.
+///    `claim`, `descended`, `evidence`, `first`, `input`, `not`, `since`.
 /// 2. Two `all`s, or two `any`s, compare their members pairwise in order; the first pair that
 ///    differs decides, and when one list runs out first, the shorter list comes first.
 /// 3. Two `not`s compare what they negate.
@@ -495,7 +498,9 @@ fn scopes(requires: &[model::CapabilityRequirement]) -> BTreeMap<CapabilityId, V
 /// 7. Two `first` forms compare by kind, then result, then subject; two `before` forms by `first`,
 ///    then `then`, then subject; two `after` forms by `first`, then the later kind, then the later
 ///    result, then subject; two `since` forms by `last`, then the later kind, then the later
-///    result, then subject; no subject comes before any subject.
+///    result, then subject; two `descended` forms by the earlier kind, then the earlier
+///    result, then the later kind, then the later result, then subject; no subject comes
+///    before any subject.
 /// 8. Two `children` forms compare the outcomes they list, in their own (code-point) order,
 ///    pairwise as text; when one list runs out first, the shorter list comes first; then by
 ///    `revision`, none before `current`; then by `subject`, none before any, two as text. Two
@@ -509,11 +514,12 @@ fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
             Predicate::Before(_) => 3,
             Predicate::Children(_) => 4,
             Predicate::Claim(_) => 5,
-            Predicate::Evidence(_) => 6,
-            Predicate::First(_) => 7,
-            Predicate::Input(_) => 8,
-            Predicate::Not(_) => 9,
-            Predicate::Since(_) => 10,
+            Predicate::Descended(_) => 6,
+            Predicate::Evidence(_) => 7,
+            Predicate::First(_) => 8,
+            Predicate::Input(_) => 9,
+            Predicate::Not(_) => 10,
+            Predicate::Since(_) => 11,
         }
     }
     fn tested(value: Truth) -> u8 {
@@ -621,6 +627,18 @@ fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
         }
         (Predicate::Since(left), Predicate::Since(right)) => {
             text(left.last.as_str(), right.last.as_str())
+                .then_with(|| text(left.then.kind.as_str(), right.then.kind.as_str()))
+                .then_with(|| text(&left.then.result, &right.then.result))
+                .then_with(|| {
+                    optional(
+                        left.subject.as_ref().map(|subject| subject.as_str()),
+                        right.subject.as_ref().map(|subject| subject.as_str()),
+                    )
+                })
+        }
+        (Predicate::Descended(left), Predicate::Descended(right)) => {
+            text(left.first.kind.as_str(), right.first.kind.as_str())
+                .then_with(|| text(&left.first.result, &right.first.result))
                 .then_with(|| text(left.then.kind.as_str(), right.then.kind.as_str()))
                 .then_with(|| text(&left.then.result, &right.then.result))
                 .then_with(|| {
@@ -1019,6 +1037,25 @@ fn predicate_value(predicate: &Predicate) -> Value {
                 ]),
             ));
             Value::object([("since", Value::object(fields))])
+        }
+        Predicate::Descended(form) => {
+            let EvidenceDescended {
+                first,
+                then,
+                subject,
+            } = form.as_ref();
+            let record = |read: &model::LaterRecord| {
+                Value::object([
+                    ("kind", Value::string(read.kind.as_str())),
+                    ("result", Value::string(&read.result)),
+                ])
+            };
+            let mut fields = vec![("first", record(first))];
+            if let Some(subject) = subject {
+                fields.push(("subject", Value::string(subject.as_str())));
+            }
+            fields.push(("then", record(then)));
+            Value::object([("descended", Value::object(fields))])
         }
         Predicate::Claim(ClaimTest { claim, is }) => Value::object([(
             "claim",
