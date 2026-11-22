@@ -178,6 +178,13 @@ pub struct Import {
 pub struct Artifact {
     #[serde(default, deserialize_with = "present::optional")]
     pub description: Option<String>,
+    /// The protocol whose cases revise this artifact (story:artifact-revised-by): any protocol
+    /// but this one, named and never resolved. `canon evaluate`, `canon check` and `canon
+    /// generate` read nothing from it; `canon simulate` offers a revise step for the artifact in
+    /// every state. Absent: no protocol is said to revise it, or the protocol's own actions do,
+    /// through `revises`.
+    #[serde(default, deserialize_with = "present::optional")]
+    pub revised_by: Option<ProtocolId>,
 }
 
 /// A kind of evidence the protocol admits.

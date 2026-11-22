@@ -90,6 +90,17 @@ types:
       # read from: crates/canon/src/model/mod.rs:64
       - name: description
         type: Optional<String>
+      # The protocol whose cases revise this artifact (story:artifact-revised-by): any protocol
+      # but this one. It is a name, like EvidenceKind.supplied_by: nothing resolves it, and canon
+      # evaluate, canon check and canon generate read nothing from it. canon validate refuses the
+      # protocol's own id (self-revised-artifact), naming the artifact: an artifact the protocol
+      # revises itself is named by an action's revises. canon simulate offers a revise step for
+      # the artifact in every state. Absent, no key is compiled, so the canon-ir/1 of a protocol
+      # without it is unchanged.
+      # read from: .engineering/planning/story/artifact-revised-by.md, section "Outcome", 1 and 2
+      # read from: crates/canon/src/model/mod.rs:66
+      - name: revised_by
+        type: Optional<canon.protocol.ProtocolId>
 
   # read from: crates/canon/src/model/mod.rs:179-198
   - name: canon.protocol.EvidenceKind

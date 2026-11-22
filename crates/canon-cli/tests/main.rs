@@ -51,6 +51,7 @@ mod floor;
 mod imports;
 mod invalidation_rules;
 mod review_cli_contract;
+mod revised_by;
 mod scenario_generation;
 mod semantic_diff;
 mod simulate_child_outcome;

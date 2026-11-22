@@ -46,7 +46,9 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   them is the IR it was before they existed. A production's `decided_by` is resolved: the
   action's `author` when the production declares none (story:judgement-marking), so
   `author: program` and a `decided_by` equal to the action's `author` compile to no key. An evidence kind's `supplied_by` is the protocol id as
-  declared, a name nothing resolves (story:supplied-evidence). A capability requirement is `{"capability": …}`, or `{"capability": …, "scope": {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
+  declared, a name nothing resolves (story:supplied-evidence). An artifact's `revised_by` is
+  one more such key: written after its `description` only when the protocol declares it
+  (story:artifact-revised-by). A capability requirement is `{"capability": …}`, or `{"capability": …, "scope": {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
   section is `{<id>: {"description": …}}`. The `case` section is
   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
   authored: `{"first": {"kind": …, "result": …}}`, `{"before": {"first": …, "then": …}}`,

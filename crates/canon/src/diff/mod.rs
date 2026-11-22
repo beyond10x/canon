@@ -24,6 +24,7 @@
 //! | supplier (`supplied_by`) introduced (a record of the kind may then name upstream artifacts the protocol does not declare) | `EXPANSION` |
 //! | supplier removed (such a record is refused again) | `BREAKING` |
 //! | supplier changed to another protocol (a name the runner acts on and nothing resolves, as a changed `case_open` protocol) | `BREAKING` |
+//! | an artifact's `revised_by` introduced, removed or replaced (nothing evaluated reads it; story:artifact-revised-by) | `NO SEMANTIC CHANGE` |
 //! | claim added | `EXPANSION` |
 //! | claim removed | `BREAKING` |
 //! | claim's predicate changed | by implication, in the direction the protocol reads the claim (below) |
@@ -146,8 +147,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 
 use crate::ir::{
-    Action, CaseInput, Claim, Described, EvidenceKind, Header, InvalidationRule, Ir, Obligation,
-    Outcome,
+    Action, Artifact, CaseInput, Claim, Described, EvidenceKind, Header, InvalidationRule, Ir,
+    Obligation, Outcome,
 };
 use crate::model::{
     Age, ArtifactId, Author, CaseOpening, ClaimId, EvidenceKindId, EvidenceMatch,
@@ -762,10 +763,17 @@ fn changes(from: &Ir, to: &Ir) -> Vec<Change> {
         to_artifacts,
         Breaking,
         Breaking,
-        |changes, id, from: &Described, to: &Described| {
-            let Described { description: from } = from;
-            let Described { description: to } = to;
+        |changes, id, from: &Artifact, to: &Artifact| {
+            let Artifact {
+                description: from,
+                revised_by: from_reviser,
+            } = from;
+            let Artifact {
+                description: to,
+                revised_by: to_reviser,
+            } = to;
             changes.description("artifact", id, from, to);
+            reviser(changes, id, from_reviser, to_reviser);
         },
     );
     changes.section(
@@ -949,6 +957,27 @@ fn supplier(changes: &mut Changes, id: &str, from: &Option<ProtocolId>, to: &Opt
         ),
     };
     changes.push(category, SECTION, id, what);
+}
+
+/// An artifact's reviser (story:artifact-revised-by). Nothing evaluated reads it: `canon
+/// evaluate`, `canon check` and `canon generate` give the same bytes with or without it, and a
+/// runner takes no action from it, so introducing, removing and replacing it are each
+/// `NO SEMANTIC CHANGE`.
+fn reviser(changes: &mut Changes, id: &str, from: &Option<ProtocolId>, to: &Option<ProtocolId>) {
+    const SECTION: &str = "artifact";
+    let shown = |reviser: &ProtocolId| one_line(reviser.as_str());
+    let what = match (from, to) {
+        (None, None) => return,
+        (None, Some(to)) => format!("revised_by introduced: protocol `{}`", shown(to)),
+        (Some(from), None) => format!("revised_by removed: was protocol `{}`", shown(from)),
+        (Some(from), Some(to)) if from == to => return,
+        (Some(from), Some(to)) => format!(
+            "revised_by changed from protocol `{}` to protocol `{}`",
+            shown(from),
+            shown(to)
+        ),
+    };
+    changes.push(Category::NoSemanticChange, SECTION, id, what);
 }
 
 /// An obligation's discharge predicate is compared by implication. Its applicability predicate is
@@ -1406,6 +1435,35 @@ mod tests {
         assert_eq!(category(&hour, &minutes), Category::NoSemanticChange);
         assert_eq!(category(&hour, &day), Category::Relaxation);
         assert_eq!(category(&day, &hour), Category::Tightening);
+    }
+
+    /// A reviser introduced, removed or replaced changes nothing an evaluation reads: each is
+    /// `NO SEMANTIC CHANGE`, after the artifact's description.
+    #[test]
+    fn a_reviser_introduced_removed_or_replaced_is_no_semantic_change() {
+        let none = ir("artifacts: {a: {description: x}}\n");
+        let owner = ir("artifacts: {a: {description: y, revised_by: owner}}\n");
+        let other = ir("artifacts: {a: {description: y, revised_by: other}}\n");
+        assert_eq!(
+            lines(&none, &owner),
+            [
+                "NO SEMANTIC CHANGE: artifact `a` description changed",
+                "NO SEMANTIC CHANGE: artifact `a` revised_by introduced: protocol `owner`",
+            ]
+        );
+        assert_eq!(
+            lines(&owner, &none),
+            [
+                "NO SEMANTIC CHANGE: artifact `a` description changed",
+                "NO SEMANTIC CHANGE: artifact `a` revised_by removed: was protocol `owner`",
+            ]
+        );
+        assert_eq!(
+            lines(&owner, &other),
+            [
+                "NO SEMANTIC CHANGE: artifact `a` revised_by changed from protocol `owner` to protocol `other`"
+            ]
+        );
     }
 
     /// A supplier introduced admits records once refused and changes no other decision

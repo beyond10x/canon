@@ -17,7 +17,8 @@
 //!    dimensions, in that section order, then the capabilities actions name, each followed by the
 //!    keys and values of its scope in the order written, the effect classes actions name and the
 //!    protocol each action's `case_open` names, in action order, then the protocol each evidence
-//!    kind's `supplied_by` names, in evidence kind order, then the decisions outcomes require, in
+//!    kind's `supplied_by` names, in evidence kind order, then the protocol each artifact's
+//!    `revised_by` names, in artifact order, then the decisions outcomes require, in
 //!    outcome order, then the values case inputs declare, in input order;
 //! 4. duplicate identifiers, in the same section order;
 //! 5. capability requirements whose scope names a key more than once (`duplicate-scope-key`,
@@ -28,7 +29,9 @@
 //!    evidence kinds whose `supplied_by` names the protocol's own id (`self-supplied-evidence`,
 //!    naming the kind; story:supplied-evidence), each kind's in that order, in the order the
 //!    evidence kinds are written. Any other protocol may supply a kind, and nothing resolves the
-//!    name;
+//!    name; then artifacts whose `revised_by` names the protocol's own id
+//!    (`self-revised-artifact`, naming the artifact; story:artifact-revised-by), in the order the
+//!    artifacts are written, and any other protocol may revise an artifact;
 //! 7. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
 //!    more than once (`duplicate-input-value`, naming the input and the value, once for every
 //!    listing after its first), in the order the inputs are written;
@@ -329,6 +332,13 @@ pub enum Problem {
         kind: EvidenceKindId,
         protocol: ProtocolId,
     },
+    /// An artifact names the protocol's own id as the protocol whose cases revise it
+    /// (story:artifact-revised-by): the protocol's own actions revise through `revises`, and a
+    /// self-name would hide the dead end a revising action that no state admits leaves.
+    SelfRevisedArtifact {
+        artifact: ArtifactId,
+        protocol: ProtocolId,
+    },
     /// Claims whose predicates test each other in a cycle; the first claim is repeated at the end.
     ClaimCycle { claims: Vec<ClaimId> },
     /// An action's argument schema is outside the argument-schema dialect: `pointer` is the JSON
@@ -433,6 +443,7 @@ impl Problem {
             Problem::SelfOpenedCase { .. } => "self-opened-case",
             Problem::InvalidRecordGroup { .. } => "invalid-record-group",
             Problem::SelfSuppliedEvidence { .. } => "self-supplied-evidence",
+            Problem::SelfRevisedArtifact { .. } => "self-revised-artifact",
             Problem::ClaimCycle { .. } => "claim-cycle",
             Problem::ActionArguments { .. } => "action-arguments",
             Problem::InvalidImportDigest { .. } => "invalid-import-digest",
@@ -662,6 +673,12 @@ impl fmt::Display for Problem {
                 one_line(kind.as_str()),
                 one_line(protocol.as_str())
             ),
+            Problem::SelfRevisedArtifact { artifact, protocol } => write!(
+                f,
+                "artifact `{}` is revised by protocol `{}`, the protocol's own id",
+                one_line(artifact.as_str()),
+                one_line(protocol.as_str())
+            ),
             Problem::ClaimCycle { claims } => {
                 let path: Vec<String> = claims.iter().map(|id| one_line(id.as_str())).collect();
                 write!(
@@ -885,6 +902,11 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
             named.push((Section::Protocol, supplier.as_str()));
         }
     }
+    for (_, artifact) in protocol.artifacts.iter() {
+        if let Some(reviser) = &artifact.revised_by {
+            named.push((Section::Protocol, reviser.as_str()));
+        }
+    }
     for (_, outcome) in protocol.outcomes.iter() {
         if let Some(decision) = outcome.requires.decision() {
             named.push((Section::Decision, decision.as_str()));
@@ -940,6 +962,14 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         if kind.supplied_by.as_ref() == Some(&protocol.protocol.id) {
             problems.push(Problem::SelfSuppliedEvidence {
                 kind: id.clone(),
+                protocol: protocol.protocol.id.clone(),
+            });
+        }
+    }
+    for (id, artifact) in protocol.artifacts.iter() {
+        if artifact.revised_by.as_ref() == Some(&protocol.protocol.id) {
+            problems.push(Problem::SelfRevisedArtifact {
+                artifact: id.clone(),
                 protocol: protocol.protocol.id.clone(),
             });
         }
@@ -1820,6 +1850,36 @@ mod tests {
                 "format: protocol/1\nprotocol: {id: p.child, revision: 1}\n\
                  evidence_kinds: {up: {supplied_by: p}, down: {supplied_by: p.child.grandchild}, \
                  side: {supplied_by: p.sibling}, nowhere: {supplied_by: never.declared}}\n"
+            ),
+            Vec::<String>::new()
+        );
+    }
+
+    /// A reviser is a protocol identifier, checked after every supplier; the protocol's own id is
+    /// refused as `self-revised-artifact`, naming the artifact, after the suppliers' own check.
+    /// Any other id is valid, resolved by nothing, and an artifact an action also lists in
+    /// `revises` is valid.
+    #[test]
+    fn a_reviser_is_another_protocol_named_by_an_identifier() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            artifacts: {z: {revised_by: p}, a: {revised_by: 'q q'}, k: {revised_by: p}}\n\
+            evidence_kinds: {e: {supplied_by: 'r r'}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "invalid-identifier: protocol identifier `r r` is empty or contains whitespace or a control character",
+                "invalid-identifier: protocol identifier `q q` is empty or contains whitespace or a control character",
+                "self-revised-artifact: artifact `z` is revised by protocol `p`, the protocol's own id",
+                "self-revised-artifact: artifact `k` is revised by protocol `p`, the protocol's own id",
+            ]
+        );
+        assert_eq!(
+            problems(
+                "format: protocol/1\nprotocol: {id: p.child, revision: 1}\n\
+                 artifacts: {up: {revised_by: p}, down: {revised_by: p.child.grandchild}, \
+                 side: {revised_by: p.sibling}, nowhere: {revised_by: never.declared}, \
+                 own: {revised_by: other}}\n\
+                 actions: {act: {revises: [own]}}\n"
             ),
             Vec::<String>::new()
         );

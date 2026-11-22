@@ -1,0 +1,39 @@
+format: protocol/1
+
+protocol:
+  id: revised.by.example
+  revision: 1
+  description: Publish a document once its test passed; the document is revised by cases of another protocol.
+
+artifacts:
+  doc:
+    description: The document under test.
+    revised_by: revised.by.successor
+
+evidence_kinds:
+  test:
+    description: A test of the document; its result is pass or another.
+
+claims:
+  doc.passed:
+    description: A test of the current revision of the document passed.
+    true_when:
+      evidence:
+        kind: test
+        subject: doc
+        result: pass
+
+actions:
+  check:
+    description: Test the document, while it has no test result.
+    precondition:
+      claim: doc.passed
+      is: unknown
+    may_produce:
+      - evidence: test
+
+outcomes:
+  passed:
+    description: The document passed its test.
+    requires:
+      claim: doc.passed

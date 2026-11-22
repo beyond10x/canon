@@ -47,6 +47,7 @@ A thing whose revisions evidence is bound to.
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `description` | text | optional | — |
+| `revised_by` | [identifier](#identifiers) (`ProtocolId`) | optional | The protocol whose cases revise this artifact (story:artifact-revised-by): any protocol but this one, named and never resolved. `canon evaluate`, `canon check` and `canon generate` read nothing from it; `canon simulate` offers a revise step for the artifact in every state. Absent: no protocol is said to revise it, or the protocol's own actions do, through `revises`. |
 
 ## `EvidenceKind`
 
