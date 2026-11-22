@@ -4,7 +4,9 @@
 use serde::Deserialize;
 
 use super::Declarations;
-use super::ids::{ArtifactId, CaseId, EvidenceId, EvidenceKindId, Instant, Principal, Revision};
+use super::ids::{
+    ArtifactId, CaseId, EvidenceId, EvidenceKindId, Instant, ItemId, Principal, Revision,
+};
 
 /// The evidence record format this model reads.
 pub const EVIDENCE_FORMAT: &str = "canon-evidence/1";
@@ -50,4 +52,10 @@ pub struct EvidenceRecord {
     /// `case_outcome` record, which must name its child and give an outcome.
     #[serde(default, deserialize_with = "super::present::optional")]
     pub child_case: Option<CaseId>,
+    /// What the observation is about within its subject, such as the one check it ran
+    /// (story:revision-ordering): opaque text without whitespace or a control character, compared
+    /// for equality only, which a `descended` form pairs an earlier and a later record on. A
+    /// record without it takes no part in that form.
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub item: Option<ItemId>,
 }

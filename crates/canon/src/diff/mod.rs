@@ -483,6 +483,7 @@ fn demands(predicate: &Predicate) -> BTreeSet<Demand<'_>> {
             | Predicate::Before(_)
             | Predicate::After(_)
             | Predicate::Since(_)
+            | Predicate::Descended(_)
             | Predicate::Children(_) => {}
         }
     }
@@ -666,6 +667,7 @@ fn reads(predicate: &Predicate, reading: Reading, found: &mut Vec<(ClaimId, Read
         | Predicate::Before(_)
         | Predicate::After(_)
         | Predicate::Since(_)
+        | Predicate::Descended(_)
         | Predicate::Children(_) => {}
     }
 }
@@ -1331,6 +1333,7 @@ impl Implication {
             (Predicate::Before(left), Predicate::Before(right)) => left == right,
             (Predicate::After(left), Predicate::After(right)) => left == right,
             (Predicate::Since(left), Predicate::Since(right)) => left == right,
+            (Predicate::Descended(left), Predicate::Descended(right)) => left == right,
             (Predicate::Children(left), Predicate::Children(right)) => left == right,
             // Two different kinds of leaf, or an `all`, `any` or `not` the rules above leave
             // undecided: not shown, so not implied.

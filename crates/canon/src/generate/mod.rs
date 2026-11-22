@@ -43,7 +43,9 @@
 //!   record of a kind an evidence match demanding independence reads with its `producer`,
 //!   `producer-n`, when its profile is not the empty one; and a `case_outcome` record with its
 //!   `child_case`, the record's own id, and an outcome no predicate names in place of no result
-//!   (`crate::check`, "Child cases");
+//!   (`crate::check`, "Child cases"); and, for a protocol with a `descended` form, every record
+//!   with the one `item` the state space gives it, and every artifact of the case with the
+//!   `descends_from` it gives (`[r0]`, story:revision-ordering);
 //! - `authority`, each decided capability, when the witness decides one;
 //! - `decisions`, each taken decision for every outcome that requires it, by the principal
 //!   `canon-generate` at case revision `r`, when the witness takes one;
@@ -334,6 +336,7 @@ fn scenario(
                 .map(|artifact| {
                     let current = CaseArtifact {
                         revision: revision.clone(),
+                        descends_from: space.descends_from(),
                     };
                     (artifact.clone(), current)
                 })
@@ -376,9 +379,20 @@ fn scenario(
         line(8, "artifacts: {}");
     } else {
         line(8, "artifacts:");
+        let ancestors = case
+            .artifacts
+            .iter()
+            .find_map(|(_, current)| current.descends_from.as_ref());
         for artifact in ir.artifacts.keys() {
             line(10, &format!("{}:", quote(artifact.as_str())));
             line(12, &format!("revision: {}", quote(REVISION)));
+            if let Some(ancestors) = ancestors {
+                let listed: Vec<String> = ancestors
+                    .iter()
+                    .map(|revision| quote(revision.as_str()))
+                    .collect();
+                line(12, &format!("descends_from: [{}]", listed.join(", ")));
+            }
         }
     }
     if !case.inputs.is_empty() {
@@ -430,6 +444,9 @@ fn scenario(
             }
             if let Some(child) = &record.child_case {
                 line(10, &format!("child_case: {}", quote(child.as_str())));
+            }
+            if let Some(item) = &record.item {
+                line(10, &format!("item: {}", quote(item.as_str())));
             }
             if !record.upstream_revisions.is_empty() {
                 line(10, "upstream_revisions:");

@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T23:25:35Z",
+  "actor": "human:timo",
+  "artifact": "story:revision-ordering",
+  "kind": "story",
+  "revision": 34,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "finding 6, fixtures/investigation/revision-ordering.yaml:13, judgement: the fixture names test_result, merge and red.then.green; kept, it follows the existing order fixtures; the question whether fixtures need a stated exception from the boundary rule goes to the backlog at the wave's close",
+    "reference": "e9b99e2e",
+    "review": "review-result:adversary-revision-ordering-pass-1",
+    "outcome": "no-op"
+  }
+}

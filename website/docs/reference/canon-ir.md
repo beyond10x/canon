@@ -53,7 +53,8 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
   authored: `{"first": {"kind": …, "result": …}}`, `{"before": {"first": …, "then": …}}`,
   `{"after": {"first": …, "then": {"kind": …, "result": …}}}` and
-  `{"since": {"last": …, "then": {"kind": …, "result": …}}}`.
+  `{"since": {"last": …, "then": {"kind": …, "result": …}}}`, and the order form over
+  revisions `{"descended": {"first": {"kind": …, "result": …}, "then": {"kind": …, "result": …}}}` (story:revision-ordering). Each adds `"subject": …` when it names one.
   The form over the child cases is `{"children": {"in": [...]}}`, or `{"children": {"in": [...], "revision": "current"}}` when it reads only the records about the current revision of
   their subject (story:child-outcome-revision): `revision: any` reads what no key reads and is
   written as no key. A form that reads only the records about one artifact adds `"subject": …`, as declared (story:child-outcome-subject). An action's `case_open` is `{"protocol": …, "subject": …}`, as declared (story:case-composition).

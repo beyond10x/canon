@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T23:25:34Z",
+  "actor": "human:timo",
+  "artifact": "story:revision-ordering",
+  "kind": "story",
+  "revision": 34,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "finding 2, website/static/schemas/evidence-1.schema.json:71, contract-drift: item was published as plain text while the evaluator refuses an empty item or one with whitespace; item is now canon.protocol.ItemId (specification at 37a8e0e4, model at a16d719d), the schema holds the identifier rule, and the adversary case the_published_schema_of_item_holds_the_identifier_rule_the_evaluator_applies passes",
+    "reference": "a16d719d",
+    "review": "review-result:adversary-revision-ordering-pass-1",
+    "outcome": "fixed"
+  }
+}

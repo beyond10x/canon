@@ -1181,6 +1181,12 @@ fn evidence_at(root: &str, predicate: &Predicate) -> Vec<(EvidenceKindId, String
                     found.push((form.then.kind.clone(), format!("{path}.since")));
                 }
             }
+            Predicate::Descended(form) => {
+                found.push((form.first.kind.clone(), format!("{path}.descended")));
+                if form.then.kind != form.first.kind {
+                    found.push((form.then.kind.clone(), format!("{path}.descended")));
+                }
+            }
             Predicate::Children(_) => {
                 found.push((
                     EvidenceKindId::new(CASE_OUTCOME),
@@ -1314,7 +1320,11 @@ fn references(
                 }
             }
         }
-        Predicate::First(_) | Predicate::Before(_) | Predicate::After(_) | Predicate::Since(_) => {
+        Predicate::First(_)
+        | Predicate::Before(_)
+        | Predicate::After(_)
+        | Predicate::Since(_)
+        | Predicate::Descended(_) => {
             let reads = node.order_reads();
             let mut kinds: Vec<&EvidenceKindId> = Vec::new();
             for (kind, _) in &reads {
@@ -2011,6 +2021,81 @@ mod tests {
                 "evidence-in-discharge: obligation `o` tests evidence kind `m` at `discharged_when.since`; a discharge predicate tests only claim values",
                 "evidence-in-applicability: obligation `o` tests evidence kind `m` at `applicable_when.not.since`; an applicability predicate tests only claim values and case inputs",
             ]
+        );
+    }
+
+    /// A `descended` resolves its earlier kind, then its later kind, each once, then its subject,
+    /// as a `since` does (story:revision-ordering); one kind as both is valid, and in a discharge
+    /// or applicability predicate it is refused with its path, each kind once.
+    #[test]
+    fn a_descended_form_resolves_its_kinds_and_subject() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            artifacts: {a: {}}\nevidence_kinds: {k: {}, m: {}}\n\
+            claims: {c: {true_when: {any: [\
+            {descended: {first: {kind: y, result: f}, then: {kind: z, result: p}, subject: w}}, \
+            {descended: {first: {kind: z, result: f}, then: {kind: z, result: p}}}, \
+            {descended: {first: {kind: k, result: f}, then: {kind: k, result: p}, subject: a}}]}}}\n\
+            obligations: {o: {discharged_when: {descended: {first: {kind: k, result: f}, then: {kind: m, result: p}}}, \
+            applicable_when: {not: {descended: {first: {kind: m, result: f}, then: {kind: m, result: p}}}}}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "undeclared-evidence-kind: claim `c` references evidence kind `y`, which is not declared",
+                "undeclared-evidence-kind: claim `c` references evidence kind `z`, which is not declared",
+                "undeclared-artifact: claim `c` references artifact `w`, which is not declared",
+                "undeclared-evidence-kind: claim `c` references evidence kind `z`, which is not declared",
+                "evidence-in-discharge: obligation `o` tests evidence kind `k` at `discharged_when.descended`; a discharge predicate tests only claim values",
+                "evidence-in-discharge: obligation `o` tests evidence kind `m` at `discharged_when.descended`; a discharge predicate tests only claim values",
+                "evidence-in-applicability: obligation `o` tests evidence kind `m` at `applicable_when.not.descended`; an applicability predicate tests only claim values and case inputs",
+            ]
+        );
+    }
+
+    /// `descended` is a map with required keys `first` and `then`, each a map with required keys
+    /// `kind` and `result`; an unknown key, a null and a second form beside it do not parse, in a
+    /// claim and in an outcome's requirement.
+    #[test]
+    fn a_descended_form_is_written_with_its_required_keys() {
+        for written in [
+            "{descended: {first: {kind: k, result: f}}}",
+            "{descended: {then: {kind: k, result: p}}}",
+            "{descended: {first: k, then: {kind: k, result: p}}}",
+            "{descended: {first: {kind: k}, then: {kind: k, result: p}}}",
+            "{descended: {first: {kind: k, result: f}, then: {result: p}}}",
+            "{descended: {first: {kind: k, result: f}, then: {kind: k, result: p}, item: t}}",
+            "{descended: {first: {kind: k, result: f}, then: {kind: k, result: p}, subject: ~}}",
+            "{descended: ~}",
+            "{descended: {first: {kind: k, result: f}, then: {kind: k, result: p}}, first: {kind: k, result: f}}",
+        ] {
+            let source = format!(
+                "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nevidence_kinds: {{k: {{}}}}\nclaims: {{c: {{true_when: {written}}}}}\n"
+            );
+            assert!(crate::model::parse(&source).is_err(), "{written} parses");
+            let source = format!(
+                "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nevidence_kinds: {{k: {{}}}}\noutcomes: {{o: {{requires: {written}}}}}\n"
+            );
+            assert!(
+                crate::model::parse(&source).is_err(),
+                "{written} parses as a requirement"
+            );
+        }
+        let parsed = crate::model::parse(
+            "format: protocol/1\nprotocol: {id: p, revision: 1}\nevidence_kinds: {k: {}}\n\
+             outcomes: {o: {requires: {descended: {first: {kind: k, result: f}, then: {kind: k, result: p}}}}}\n",
+        )
+        .expect("parses");
+        let (_, outcome) = parsed.outcomes.iter().next().expect("o");
+        let record = |result: &str| crate::model::LaterRecord {
+            kind: EvidenceKindId::new("k"),
+            result: result.to_owned(),
+        };
+        assert_eq!(
+            outcome.requires,
+            Predicate::Descended(Box::new(crate::model::EvidenceDescended {
+                first: record("f"),
+                then: record("p"),
+                subject: None,
+            }))
         );
     }
 

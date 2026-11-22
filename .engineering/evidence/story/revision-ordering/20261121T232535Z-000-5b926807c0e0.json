@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T23:25:35Z",
+  "actor": "human:timo",
+  "artifact": "story:revision-ordering",
+  "kind": "story",
+  "revision": 34,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "finding 5, crates/canon/src/eval/order.rs:313, judgement: descended was quadratic in the history; earlier records are indexed once by subject and item; 4000 items on two revisions take 0.63 s where they took 8.48 s, debug build, best of three",
+    "reference": "0a1efe34",
+    "review": "review-result:adversary-revision-ordering-pass-1",
+    "outcome": "fixed"
+  }
+}

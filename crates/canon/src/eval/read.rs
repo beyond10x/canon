@@ -25,11 +25,11 @@ use crate::ir::{self, Ir};
 use crate::model::{
     self, Action, Age, Artifact, ArtifactId, Author, CapabilityId, CapabilityRequirement,
     CaseInput, CaseOpening, CaseSection, ChildOutcomes, Claim, ClaimId, ClaimTest, Declarations,
-    EffectClass, EvidenceAfter, EvidenceKind, EvidenceKindId, EvidenceMatch, EvidenceOrder,
-    EvidenceProduction, EvidenceSince, FirstResult, IndependenceDimension, IndependenceDimensionId,
-    InputId, InputTest, InputValue, LaterRecord, Obligation, Outcome, OutcomeRequirement,
-    Predicate, Protocol, ProtocolHeader, ProtocolId, RecordGroup, ScopeKey, ScopeValue, Truth,
-    one_line,
+    EffectClass, EvidenceAfter, EvidenceDescended, EvidenceKind, EvidenceKindId, EvidenceMatch,
+    EvidenceOrder, EvidenceProduction, EvidenceSince, FirstResult, IndependenceDimension,
+    IndependenceDimensionId, InputId, InputTest, InputValue, LaterRecord, Obligation, Outcome,
+    OutcomeRequirement, Predicate, Protocol, ProtocolHeader, ProtocolId, RecordGroup, ScopeKey,
+    ScopeValue, Truth, one_line,
 };
 
 /// A `malformed-input` refusal: `what` is not a document of its format, and why.
@@ -530,6 +530,20 @@ fn predicate(value: &Json) -> Shape<Predicate> {
                 subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
             }))
         }
+        "descended" => {
+            let record = |key: &str| -> Shape<LaterRecord> {
+                let read = required(inner, key)?;
+                Ok(LaterRecord {
+                    kind: EvidenceKindId::new(text(read, "kind")?),
+                    result: text(read, "result")?,
+                })
+            };
+            Ok(Predicate::Descended(Box::new(EvidenceDescended {
+                first: record("first")?,
+                then: record("then")?,
+                subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
+            })))
+        }
         // `"revision"` is written only as `current`; an `any` read here compiles to no key, so
         // the bytes differ and the text is refused. `"subject"` is written only when the form
         // names one, as a string, as an evidence match's is.
@@ -544,7 +558,7 @@ fn predicate(value: &Json) -> Shape<Predicate> {
             subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
         })),
         _ => Err(
-            "a predicate is not one of all, any, not, evidence, claim, input, first, before, after, since or children"
+            "a predicate is not one of all, any, not, evidence, claim, input, first, before, after, since, descended or children"
                 .to_owned(),
         ),
     }
