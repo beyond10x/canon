@@ -748,19 +748,70 @@ fn claim_values_descending(
 /// the form takes each of its three values in some state.
 #[test]
 fn every_value_of_descended_is_reached_jointly_with_the_evidence_matches() {
-    let ir = compiled(DESCENDED);
+    let reached =
+        every_descended_history_is_reached(DESCENDED, &["k", "m"], 0x5EC0_4D5A_F7E2_0005, None);
+    let forms: BTreeSet<crate::model::Truth> = reached.iter().map(|values| values[3]).collect();
+    assert_eq!(forms.len(), 3, "{reached:?}");
+}
+
+/// The same soundness for a protocol whose `first` reads the kind the `descended` form reads (the
+/// review of wave 2026-11-21): each value of `descended`, `unknown` included, is reached with the
+/// `first` form true, false and unknown (nine pairs), and every pair of those two claims records
+/// of the one kind give is a pair of some state. The pairs are not read together with `passes`
+/// and `fails`: a `descended` `true` beside a `first` that is a current `passed` observed before a
+/// current `failed`, with both current, needs earlier records of two results at two instants,
+/// which no state has (finding of this unit, left to the backlog).
+#[test]
+fn every_value_of_descended_is_reached_jointly_with_a_first_of_its_kind() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {k: {}}\n\
+        claims:\n\
+        \x20\x20red_then_green: {true_when: {descended: {first: {kind: k, result: failed}, \
+        then: {kind: k, result: passed}}}}\n\
+        \x20\x20passes: {true_when: {evidence: {kind: k, result: passed}}}\n\
+        \x20\x20fails: {true_when: {evidence: {kind: k, result: failed}}}\n\
+        \x20\x20first_pass: {true_when: {first: {kind: k, result: passed}}}\n\
+        actions: {run: {may_produce: [{evidence: k}]}}\n\
+        outcomes: {done: {requires: {all: [{claim: red_then_green}, {claim: passes}]}}}\n";
+    let reached =
+        every_descended_history_is_reached(source, &["k"], 0x5EC0_4D5A_F7E2_0006, Some(&[1, 3]));
+    assert_eq!(reached.len(), 9, "first_pass, red_then_green: {reached:?}");
+}
+
+/// Every combination of claim values that records of `kinds`, with any result, at the current
+/// revision, at `r0` or at `r1`, naming the space's item, another or none, at one of two instants
+/// or none, under a `descends_from` absent, empty, `[r0]` or `[r1, r0]`, give is the combination
+/// of some state of the space of `source`, read at the claims at `read` (every claim when
+/// `None`). Returns the combinations the states reach.
+fn every_descended_history_is_reached(
+    source: &str,
+    kinds: &[&str],
+    seed: u64,
+    read: Option<&[usize]>,
+) -> BTreeSet<Vec<crate::model::Truth>> {
+    let ir = compiled(source);
     let space = Space::new(&ir);
     assert_eq!(space.descends_from(), Some(vec![Revision::new("r0")]));
     let size = space.size().expect("fits");
+    let project = |values: &Vec<crate::model::Truth>| -> Vec<crate::model::Truth> {
+        read.map_or_else(
+            || values.clone(),
+            |read| read.iter().map(|at| values[*at]).collect(),
+        )
+    };
     let reached: BTreeSet<Vec<crate::model::Truth>> = (0..size)
         .map(|index| {
             let evidence = space.evidence(&space.state(index));
-            claim_values_descending(&ir, &evidence, space.descends_from())
+            project(&claim_values_descending(
+                &ir,
+                &evidence,
+                space.descends_from(),
+            ))
         })
         .collect();
-    let forms: BTreeSet<crate::model::Truth> = reached.iter().map(|values| values[3]).collect();
-    assert_eq!(forms.len(), 3, "{reached:?}");
-    let mut rng = Rng(0x5EC0_4D5A_F7E2_0005);
+    let mut rng = Rng(seed);
     let instants = [
         Some("2026-10-01T09:00:00Z"),
         Some("2026-10-01T09:00:01Z"),
@@ -772,7 +823,7 @@ fn every_value_of_descended_is_reached_jointly_with_the_evidence_matches() {
                 format: crate::model::EVIDENCE_FORMAT.to_owned(),
                 producer: None,
                 id: crate::model::EvidenceId::new(format!("h{n}")),
-                kind: EvidenceKindId::new(["k", "m"][rng.below(2)]),
+                kind: EvidenceKindId::new(kinds[rng.below(kinds.len())]),
                 result: [Some("passed"), Some("failed"), None][rng.below(3)].map(str::to_owned),
                 subject: crate::model::ArtifactId::new("a"),
                 subject_revision: Revision::new(["r", "r0", "r1"][rng.below(3)]),
@@ -791,11 +842,13 @@ fn every_value_of_descended_is_reached_jointly_with_the_evidence_matches() {
         ][rng.below(4)]
         .clone();
         let values = claim_values_descending(&ir, &records, ancestors.clone());
+        let values = project(&values);
         assert!(
             reached.contains(&values),
             "no state gives {values:?}, which {records:?} under {ancestors:?} gives"
         );
     }
+    reached
 }
 
 /// `canon check` of a protocol with a `descended` form reaches the outcome that needs it: a
