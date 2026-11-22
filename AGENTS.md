@@ -133,6 +133,21 @@ runs `task docs-site-check`, which is `task docs-check` plus the tests that read
 `code` (everything else, `AGENTS.md`, a push to `main`, an empty list, any failure) runs `task
 check`. `crates/canon/tests/planning_only_classifier.rs` holds both sides of the list.
 
+Tests run under cargo-nextest in two lanes; `.config/nextest.toml` holds the runner's limits. A
+test is killed at 60 s and counts as failed in both lanes (`slow-timeout`). The gate lane is `task
+test`, part of `task check`: every test outside the `slow` list, once (the `task ess-gate` tests
+run first and are counted, not run again), plus the `adversary_action_arguments` probes with `-p
+b10x-canon`, the feature set the CLI ships. It prints `nproc`, the ten slowest tests and the summed
+test time, and fails when its test runs take over 120 s (`global-timeout` cuts a run there). The
+`slow` lane is `task test-slow`, run by CI after `task check` and before a release: the tests the
+default profile's `default-filter` leaves out, each measured over 5 s; a test that takes more than
+5 s is named in that list, and one that runs its cases on threads gets `threads-required`. Each
+crate has one integration-test binary, `tests/main.rs` (`autotests = false`), with every
+`tests/<name>.rs` a module, so a test is named `<name>::<test>`;
+`every_test_file_is_a_module_of_this_binary` fails on a file left out. `.cargo/config.toml`
+builds tests without debug info and with `b10x-canon` and the dependencies optimized; it wins over
+`~/.cargo/config.toml`, so the workstation and CI build alike.
+
 ## Releases
 
 Releases are source releases at bare-version tags, starting with `0.1.0`. Update the workspace

@@ -75,21 +75,35 @@ fn case() -> model::Case {
         .expect("case reads")
 }
 
+/// `test` as the test harness names it: its path below the crate root of this test binary.
+fn harness_name(test: &str) -> String {
+    match module_path!().split_once("::") {
+        Some((_, module)) => format!("{module}::{test}"),
+        None => test.to_owned(),
+    }
+}
+
 fn run_child(test: &str) -> (std::process::ExitStatus, String, String) {
+    let name = harness_name(test);
     let child = Command::new(std::env::current_exe().expect("test binary path"))
         .args([
             "--ignored",
             "--exact",
-            test,
+            name.as_str(),
             "--nocapture",
             "--test-threads=1",
         ])
         .env(CHILD_ENV, "1")
         .output()
         .expect("child test process runs");
+    let stdout = String::from_utf8_lossy(&child.stdout).into_owned();
+    assert!(
+        stdout.contains("running 1 test"),
+        "the child process ran no test named {name}:\n{stdout}"
+    );
     (
         child.status,
-        String::from_utf8_lossy(&child.stdout).into_owned(),
+        stdout,
         String::from_utf8_lossy(&child.stderr)
             .lines()
             .take(4)

@@ -6,8 +6,17 @@
 //! points the child at the copy). A case goes green when the parity test does what it states.
 
 #[path = "ess_commands_match.rs"]
-#[allow(dead_code)]
+#[allow(dead_code, clippy::duplicate_mod)]
 mod parity;
+
+/// The parity test as the test harness names it: its path below the crate root of this binary.
+fn parity_test() -> String {
+    let test = "parity::every_canon_subcommand_is_declared_in_ess";
+    match module_path!().split_once("::") {
+        Some((_, module)) => format!("{module}::{test}"),
+        None => test.to_owned(),
+    }
+}
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -77,7 +86,7 @@ fn parity_with_type(case: &str, command: &str, input: &str, ty: &str) -> (bool, 
 
     let output = Command::new(std::env::current_exe().expect("this test binary"))
         .args([
-            "parity::every_canon_subcommand_is_declared_in_ess",
+            parity_test().as_str(),
             "--exact",
             "--nocapture",
             "--test-threads=1",
