@@ -54,6 +54,7 @@ mod adversary_decisions_docs;
 mod adversary_decisions_eval;
 mod adversary_descended;
 mod adversary_ess_model_mutants;
+mod adversary_eval_worker;
 mod adversary_evidence_order;
 mod adversary_evidence_order_after;
 mod adversary_evidence_order_since;
@@ -108,6 +109,7 @@ mod review_outcome_reasons_docs;
 mod review_properties;
 mod review_refusal_naming;
 mod source_model;
+mod unsafe_confined;
 
 /// Helpers shared by the modules above, holding no test of their own.
 mod support {

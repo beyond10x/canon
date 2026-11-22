@@ -175,7 +175,12 @@ the outcome and its status (CANON-OUTCOME-001).
 `read_ir` refuses an IR whose arrays and objects nest deeper than `MAX_IR_DEPTH`
 (4096) before parsing it. Reading and claim evaluation recurse along the nesting of the
 predicates, so they run on a thread of their own with a stack sized for that bound
-(`DEEP_STACK`): an IR at the bound reads and evaluates from any caller's thread.
+(`DEEP_STACK`): an IR at the bound reads and evaluates from any caller's thread. That thread is
+a worker which each calling thread starts with its first call and keeps until it ends, so many
+small calls from one thread share one worker; callers on different threads have a worker each
+and run at the same time; and work that evaluates again runs the inner call on the worker
+itself, never waiting for it. A panic in the work reaches the caller and the worker serves the
+next call. The worker is the one `unsafe` of the crate (`worker.rs`).
 
 Claim evaluation also recurses through each claim test into the predicate of the claim it
 tests, so the bound applies to a claim's effective depth: a predicate is one level and each

@@ -100,19 +100,21 @@ fn spec_copy(case: &str) -> PathBuf {
 }
 
 thread_local! {
-    /// Whether `ess` calls of this test thread run as the toolchain, not as the dispatcher.
-    static UNDISPATCHED: Cell<bool> = const { Cell::new(false) };
+    /// Whether `ess` calls of this test thread name the pinned release with `ESS_TOOLCHAIN`.
+    static AS_PINNED_RELEASE: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Runs `body` with every `ess` call of this thread marked `ESS_TOOLCHAIN_DELEGATED=1`, the mark
-/// the dispatcher puts on the release it delegates to. Since ess 0.97.3 the dispatcher refuses a
-/// `requires:` that differs from its own release when no toolchain of that release is at hand
-/// ("did not switch to it"); marked, `ess` is the toolchain and only warns about an older pin,
-/// which is the behaviour of the negative control for `--strict-requires`.
-fn undispatched<T>(body: impl FnOnce() -> T) -> T {
-    UNDISPATCHED.with(|flag| flag.set(true));
+/// Runs `body` with every `ess` call of this thread under `ESS_TOOLCHAIN=<PINNED>`, the documented
+/// choice of release. `ess` picks its release before it reads any argument, from the nearest
+/// `ess-inputs.yaml` at or above the working directory; with `ESS_TOOLCHAIN` set it runs as that
+/// release, whatever the file's `requires:` says, warns about an older `requires:` and fails it
+/// under `--strict-requires`, which is the negative control for the flag. Without the variable
+/// `ess` since 0.97.3 refuses a `requires:` that differs from its own release when no toolchain of
+/// that release is at hand.
+fn as_the_pinned_release<T>(body: impl FnOnce() -> T) -> T {
+    AS_PINNED_RELEASE.with(|flag| flag.set(true));
     let result = body();
-    UNDISPATCHED.with(|flag| flag.set(false));
+    AS_PINNED_RELEASE.with(|flag| flag.set(false));
     result
 }
 
@@ -120,8 +122,8 @@ fn undispatched<T>(body: impl FnOnce() -> T) -> T {
 fn ess(dir: &Path, args: &[&str]) -> Output {
     let mut command = Command::new("ess");
     command.args(args).current_dir(dir);
-    if UNDISPATCHED.with(Cell::get) {
-        command.env("ESS_TOOLCHAIN_DELEGATED", "1");
+    if AS_PINNED_RELEASE.with(Cell::get) {
+        command.env("ESS_TOOLCHAIN", PINNED);
     }
     match command.output() {
         Ok(output) => output,
@@ -380,8 +382,8 @@ fn a_refusal_with_exit_0_fails_step_3() {
     expect_failure_at(&copy, "step 3", &["1 refusal(s)", "ESS-SYNTH-003"]);
 }
 
-/// Negative control for step 1: a `requires:` older than the `ess` on `PATH` passes validation
-/// without `--strict-requires` and fails the gate with it.
+/// Negative control for step 1: a `requires:` older than the pinned release, which `ess` runs as
+/// under `ESS_TOOLCHAIN`, passes validation without `--strict-requires` and fails the gate with it.
 #[test]
 fn an_older_requires_fails_step_1() {
     let copy = spec_copy("older-requires");
@@ -391,7 +393,7 @@ fn an_older_requires_fails_step_1() {
         "requires: ess 0.51.0",
     );
 
-    undispatched(|| {
+    as_the_pinned_release(|| {
         ess_on(&copy, &["specify", "validate"], &[]).expect(
             "without --strict-requires the older pin only warns, so the flag is what fails it",
         );
