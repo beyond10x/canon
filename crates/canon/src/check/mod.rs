@@ -395,8 +395,8 @@ mod space;
 #[cfg(test)]
 mod tests;
 
-/// The most enumerations held at once by the last check this thread ran: the one being decided
-/// and every one kept before it (test builds only; E4 of the wave 9 review).
+// The most enumerations held at once by the last check this thread ran: the one being decided
+// and every one kept before it (test builds only; E4 of the wave 9 review).
 #[cfg(test)]
 thread_local! {
     pub(crate) static ENUMERATIONS_HELD: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
