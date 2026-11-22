@@ -1445,8 +1445,6 @@ mod tests {
         }
     }
 
-    /// A copy that differs from the first is refused as `duplicate-identifier`, naming and citing
-    /// the record, whichever copy comes first.
     /// Many small calls from a thread with a small stack start at most one thread for the deep
     /// stack, however many calls there are (story:evaluate-without-thread-per-call).
     #[test]
@@ -1587,3 +1585,5 @@ mod tests {
         }
     }
 }
+    /// A copy that differs from the first is refused as `duplicate-identifier`, naming and citing
+    /// the record, whichever copy comes first.
