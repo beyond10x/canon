@@ -1602,6 +1602,29 @@ mod tests {
         assert_eq!(compiles, 2, "a registry of two scenarios, 22 and 3 steps");
     }
 
+    /// The scenario of the review that found the repeated compile, `CANON-GROUND-001`: 22 steps.
+    #[test]
+    fn the_decision_grounds_scenario_compiles_its_fixture_once() {
+        let files = [ScenarioFile {
+            path: "conformance/scenarios/decision-grounds.yaml".to_owned(),
+            text: Ok(
+                include_str!("../../../../conformance/scenarios/decision-grounds.yaml").to_owned(),
+            ),
+        }];
+        let fixture = include_str!("../../../../fixtures/investigation/decision-grounds.yaml");
+        let (report, compiles) = compiles_during(|| {
+            run_registry(&files, |path| {
+                assert_eq!(path, "fixtures/investigation/decision-grounds.yaml");
+                Ok(fixture.to_owned())
+            })
+        });
+        assert_eq!(
+            report.render(),
+            "passed: scenario `CANON-GROUND-001`\nconform: 1 passed, 0 failed, 0 unreadable\n"
+        );
+        assert_eq!(compiles, 1, "CANON-GROUND-001 in a registry");
+    }
+
     #[test]
     fn first_difference_counts_lines_from_one_and_sees_a_trailing_newline() {
         assert_eq!(first_difference("a\nb\n", "a\nb\n"), None);
