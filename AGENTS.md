@@ -140,7 +140,10 @@ run first and are counted, not run again), plus the `adversary_action_arguments`
 b10x-canon`, the feature set the CLI ships. It prints `nproc`, the ten slowest tests and the summed
 test time, and fails when its test runs take over 120 s (`global-timeout` cuts a run there). The
 `slow` lane is `task test-slow`, run by CI after `task check` and before a release: the tests the
-default profile's `default-filter` leaves out, each measured over 5 s; a test that takes more than
+default profile's `default-filter` leaves out, each measured over 5 s. Its CI step is
+`continue-on-error: true` (Timo, 2026-11-22 10:35 CET, via `host-operator`: "A: slow lane may fail,
+story"): a test over 60 s in it is reported and does not fail the job, until the story that brings
+those tests under 60 s is done (`story:slow-lane-under-bound`). A test that takes more than
 5 s is named in that list, and one that runs its cases on threads gets `threads-required`. Each
 crate has one integration-test binary, `tests/main.rs` (`autotests = false`), with every
 `tests/<name>.rs` a module, so a test is named `<name>::<test>`;
