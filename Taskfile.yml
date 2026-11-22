@@ -4,9 +4,7 @@ vars:
   ESS_VERSION:
     sh: "sed -n 's/^requires: ess //p' ess/ess-inputs.yaml"
   ESS_DIR: '{{env "HOME"}}/.cache/ess/toolchains/{{.ESS_VERSION}}'
-
-env:
-  PATH: '{{.ESS_DIR}}:{{env "PATH"}}'
+  ESS_ENV: 'PATH="{{.ESS_DIR}}:$PATH"'
 
 tasks:
   default:
@@ -18,7 +16,7 @@ tasks:
       - task: ess-gate
       - cargo fmt --all --check
       - cargo clippy --workspace --all-targets --locked -- -D warnings
-      - cargo test --workspace --locked
+      - "{{.ESS_ENV}} cargo test --workspace --locked"
       - cargo run --locked -q -p canon-cli -- conform run --requirements conformance/requirements.yaml
       - cargo test -p b10x-canon --locked --test adversary_action_arguments
       - task: docs-check
@@ -29,10 +27,10 @@ tasks:
       - sh: PATH="{{.ESS_DIR}}:$PATH"; test "$(ess --version 2>/dev/null)" = "ess {{.ESS_VERSION}}"
         msg: 'ess {{.ESS_VERSION}} (ess/ess-inputs.yaml) is not first on PATH: unpack https://github.com/beyond10x/ess/releases/download/{{.ESS_VERSION}}/ess-{{.ESS_VERSION}}-x86_64-unknown-linux-gnu.tar.gz into ~/.cache/ess/toolchains/{{.ESS_VERSION}}/ so that ess is there'
     cmds:
-      - cargo test -p b10x-canon --test ess_gate --test ess_model_matches --locked
-      - cargo test -p b10x-canon-expr --test model_matches --locked
-      - cargo test -p canon-cli --test ess_commands_match --locked
-      - cargo test -p canon-cli --test adversary_ess_commands --test adversary2_ess_commands --locked
+      - "{{.ESS_ENV}} cargo test -p b10x-canon --test ess_gate --test ess_model_matches --locked"
+      - "{{.ESS_ENV}} cargo test -p b10x-canon-expr --test model_matches --locked"
+      - "{{.ESS_ENV}} cargo test -p canon-cli --test ess_commands_match --locked"
+      - "{{.ESS_ENV}} cargo test -p canon-cli --test adversary_ess_commands --test adversary2_ess_commands --locked"
 
   docs-generate:
     desc: Regenerate the derived documentation pages and landing data under website/, recording real canon runs.
