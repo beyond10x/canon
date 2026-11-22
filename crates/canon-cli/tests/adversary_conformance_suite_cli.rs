@@ -91,7 +91,7 @@ fn the_real_registry_with_the_flag_is_the_plain_report_and_one_line() {
     assert_eq!(
         out(&checked),
         format!(
-            "{}requirements: 30 implemented, 30 covered, 0 planned\n",
+            "{}requirements: 31 implemented, 31 covered, 0 planned\n",
             out(&plain)
         )
     );
@@ -124,7 +124,7 @@ fn without_the_flag_no_check_runs() {
 /// story:protocol-imports; CANON-AUTHORITY-002, story:authority-revision-binding;
 /// CANON-SUPPLY-001, story:supplied-evidence; CANON-COMPOSE-002, story:child-outcome-revision;
 /// CANON-FRONTIER-001, story:missing-evidence; CANON-PENDING-001, story:pending-decisions;
-/// CANON-ORDER-005, story:revision-ordering), all
+/// CANON-ORDER-005, story:revision-ordering; CANON-OUTCOME-003, story:decision-condition), all
 /// implemented, and every one is covered by a scenario of the registry.
 #[test]
 fn the_real_catalogue_is_the_requirements_the_stories_name() {
@@ -154,6 +154,7 @@ fn the_real_catalogue_is_the_requirements_the_stories_name() {
         "CANON-INDEPENDENCE-001",
         "CANON-OUTCOME-001",
         "CANON-OUTCOME-002",
+        "CANON-OUTCOME-003",
         "CANON-INVALIDATION-001",
         "CANON-DETERMINISM-001",
         "CANON-FRONTIER-001",
