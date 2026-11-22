@@ -4,6 +4,125 @@ slow-timeout = { period = "60s", terminate-after = 1 }
 global-timeout = "120s"
 fail-fast = false
 final-status-level = "slow"
+default-filter = """
+not (
+  (binary_id(b10x-canon) & (
+    test(=check::tests::after_is_checked_over_later_records_and_counts_for_authority_bypass)
+    | test(=check::tests::a_rule_dimension_counts_toward_the_bound_and_is_named)
+    | test(=check::tests::a_slice_holds_what_its_last_records_are_placed_against)
+    | test(=check::tests::erasing_from_a_since_state_keeps_every_claim_value)
+    | test(=check::tests::every_combination_of_demands_met_is_reached_by_a_state)
+    | test(=check::tests::every_fixture_protocol_checks_alike_sliced_and_whole)
+    | test(=check::tests::every_value_of_after_is_reached_jointly_with_the_other_forms)
+    | test(=check::tests::every_value_of_after_is_reached_when_its_result_is_no_class)
+    | test(=check::tests::every_value_of_an_after_naming_a_subject_is_reached)
+    | test(=check::tests::every_value_of_a_one_kind_since_is_reached_jointly_with_the_other_forms)
+    | test(=check::tests::every_value_of_a_since_naming_a_subject_is_reached)
+    | test(=check::tests::every_value_of_descended_is_reached_jointly_with_the_evidence_matches)
+    | test(=check::tests::every_value_of_every_order_form_is_reached_jointly_with_the_evidence_matches)
+    | test(=check::tests::every_value_of_since_is_reached_jointly_with_after_and_matches)
+    | test(=check::tests::every_value_of_since_is_reached_jointly_with_the_other_forms)
+    | test(=check::tests::every_value_of_since_is_reached_when_its_result_is_no_class)
+    | test(=check::tests::every_value_of_since_is_reached_with_evidence_matches)
+    | test(=check::tests::generated_protocols_check_alike_sliced_and_whole_0)
+    | test(=check::tests::generated_protocols_check_alike_sliced_and_whole_1)
+    | test(=check::tests::generated_protocols_check_alike_sliced_and_whole_2)
+    | test(=check::tests::generated_protocols_check_alike_sliced_and_whole_3)
+    | test(=check::tests::order_forms_are_checked_over_the_history_and_order_dimensions)
+    | test(=check::tests::since_is_checked_over_last_records_and_counts_for_authority_bypass)
+    | test(=eval::depth::tests::the_bound_holds_for_the_effective_depth_along_claim_references)
+  ))
+  | (binary_id(b10x-canon::main) & (
+    test(=adversary2_invalidation::check_and_evaluate_reach_the_same_claim_combinations_across_a_family)
+    | test(=adversary2_invalidation::excluded_evidence_and_the_explanation_agree_under_every_claim)
+    | test(=adversary2_invalidation::the_bound_refusal_names_many_upstream_artifacts)
+    | test(=adversary2_invalidation::the_family_has_the_state_counts_the_formula_gives)
+    | test(=adversary_case_composition::check_reaches_children_jointly_with_subject_bound_matches)
+    | test(=adversary_check_slices::probe_after)
+    | test(=adversary_check_slices::probe_before)
+    | test(=adversary_check_slices::probe_chain)
+    | test(=adversary_check_slices::probe_order)
+    | test(=adversary_check_slices::probe_unchanged_reports_as_the_whole_product)
+    | test(=adversary_check_space::a_space_of_exactly_the_bound_is_checked_and_one_past_it_refused)
+    | test(=adversary_ess_model_mutants::a_changed_identifier_representation_is_caught)
+    | test(=adversary_ess_model_mutants::a_changed_union_payload_is_caught)
+    | test(=adversary_ess_model_mutants::a_field_added_beside_a_same_named_fixture_is_caught)
+    | test(=adversary_ess_model_mutants::a_multiline_attributed_type_change_in_a_union_payload_is_caught)
+    | test(=adversary_ess_model_mutants::a_renamed_struct_is_caught)
+    | test(=adversary_ess_model_mutants::control_the_unmutated_copy_passes)
+    | test(=adversary_evidence_order_since::check_reaches_a_failed_run_about_an_older_revision_observed_after_the_last_change)
+    | test(=adversary_evidence_order_since::check_reaches_a_failed_run_between_two_changes_at_one_superseded_revision)
+    | test(=adversary_evidence_order_since::check_reaches_every_combination_of_one_kind_and_two_kind_since)
+    | test(=adversary_evidence_order_since::check_reaches_every_combination_of_since_over_two_subjects)
+    | test(=adversary_evidence_order_since::check_reaches_every_combination_of_since_with_after_and_matches)
+    | test(=adversary_evidence_order_subsecond::check_reaches_what_mixed_precision_evidence_makes_legitimate)
+    | test(=adversary_scenario_generation::every_generated_witness_passes_and_is_minimal_over_every_investigation_protocol)
+    | test(=argument_validation::check_arguments_agrees_with_the_oracle_on_random_schemas)
+    | test(=case_composition::check_reaches_every_combination_of_children_forms_and_matches)
+    | test(=case_composition::check_reaches_every_combination_of_current_and_any_forms)
+    | test(=child_outcome_subject::check_and_compile_keep_the_subject_of_a_form_under_not)
+    | test(=child_outcome_subject::check_reads_each_forms_own_subject_in_one_predicate)
+    | test(=child_outcome_subject::check_reads_the_dimension_about_the_forms_subject)
+    | test(=invalidation_evaluation_cost::a_chain_at_the_depth_bound_evaluates_within_budget)
+    | test(=invalidation_evaluation_cost::claims_kept_apart_by_invalidation_rules_are_evaluated_in_time_linear_in_the_chain)
+    | test(=missing_keys::every_left_out_key_of_a_protocol_or_a_scenario_is_named)
+    | test(=review_properties::generated_evaluations_keep_every_documented_invariant)
+  ))
+  | (binary_id(canon-cli::main) & (
+    test(=adversary2_review_hardening::check_refuses_a_long_chain_of_claims_without_aborting)
+    | test(=adversary_check_slices_cli::check_help_does_not_refuse_every_space_above_the_bound)
+    | test(=canon_check::a_sliced_summary_gives_the_whole_product)
+    | test(=canon_check::canon_check_reports_investigation_defects)
+  ))
+)
+"""
 
 [profile.default.junit]
 path = "junit.xml"
+
+[profile.slow]
+global-timeout = "1200s"
+
+[profile.slow.junit]
+path = "junit.xml"
+
+[[profile.slow.overrides]]
+filter = "test(=invalidation_evaluation_cost::claims_kept_apart_by_invalidation_rules_are_evaluated_in_time_linear_in_the_chain)"
+threads-required = "num-test-threads"
+
+[[profile.slow.overrides]]
+filter = """
+  (binary_id(b10x-canon) & (
+    test(=check::tests::after_is_checked_over_later_records_and_counts_for_authority_bypass)
+    | test(=check::tests::a_rule_dimension_counts_toward_the_bound_and_is_named)
+    | test(=check::tests::a_slice_holds_what_its_last_records_are_placed_against)
+    | test(=check::tests::erasing_from_a_since_state_keeps_every_claim_value)
+    | test(=check::tests::every_combination_of_demands_met_is_reached_by_a_state)
+    | test(=check::tests::every_fixture_protocol_checks_alike_sliced_and_whole)
+    | test(=check::tests::every_value_of_after_is_reached_jointly_with_the_other_forms)
+    | test(=check::tests::every_value_of_after_is_reached_when_its_result_is_no_class)
+    | test(=check::tests::every_value_of_an_after_naming_a_subject_is_reached)
+    | test(=check::tests::every_value_of_a_one_kind_since_is_reached_jointly_with_the_other_forms)
+    | test(=check::tests::every_value_of_a_since_naming_a_subject_is_reached)
+    | test(=check::tests::every_value_of_descended_is_reached_jointly_with_the_evidence_matches)
+    | test(=check::tests::every_value_of_every_order_form_is_reached_jointly_with_the_evidence_matches)
+    | test(=check::tests::every_value_of_since_is_reached_jointly_with_after_and_matches)
+    | test(=check::tests::every_value_of_since_is_reached_jointly_with_the_other_forms)
+    | test(=check::tests::every_value_of_since_is_reached_when_its_result_is_no_class)
+    | test(=check::tests::every_value_of_since_is_reached_with_evidence_matches)
+    | test(=check::tests::generated_protocols_check_alike_sliced_and_whole_0)
+    | test(=check::tests::generated_protocols_check_alike_sliced_and_whole_1)
+    | test(=check::tests::generated_protocols_check_alike_sliced_and_whole_2)
+    | test(=check::tests::generated_protocols_check_alike_sliced_and_whole_3)
+    | test(=check::tests::order_forms_are_checked_over_the_history_and_order_dimensions)
+    | test(=check::tests::since_is_checked_over_last_records_and_counts_for_authority_bypass)
+    | test(=eval::depth::tests::the_bound_holds_for_the_effective_depth_along_claim_references)
+  ))
+  | (binary_id(b10x-canon::main) & (
+    test(=adversary_evidence_order_since::check_reaches_every_combination_of_one_kind_and_two_kind_since)
+    | test(=adversary_evidence_order_since::check_reaches_every_combination_of_since_over_two_subjects)
+    | test(=adversary_evidence_order_since::check_reaches_every_combination_of_since_with_after_and_matches)
+    | test(=adversary_scenario_generation::every_generated_witness_passes_and_is_minimal_over_every_investigation_protocol)
+  ))
+"""
+threads-required = 4

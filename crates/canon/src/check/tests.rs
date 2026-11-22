@@ -590,6 +590,33 @@ fn claim_values_with(
         .collect()
 }
 
+/// The threads [`par_map`] runs on: the `threads-required` that `.config/nextest.toml` gives the
+/// tests of the `slow` lane that use it (story:fast-test-step).
+const WORKERS: usize = 4;
+
+/// `f` of every index below `n`, in index order, computed on [`WORKERS`] threads: the same cases
+/// and the same assertions as a sequential map, in less wall time. A panic in `f` is the caller's.
+fn par_map<R: Send>(n: usize, f: impl Fn(usize) -> R + Sync) -> Vec<R> {
+    let chunk = n.div_ceil(WORKERS).max(1);
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..n)
+            .step_by(chunk)
+            .map(|start| {
+                let f = &f;
+                scope.spawn(move || (start..(start + chunk).min(n)).map(f).collect::<Vec<R>>())
+            })
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|worker| {
+                worker
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+            })
+            .collect()
+    })
+}
+
 /// xorshift64*, a fixed seed: the same histories on every run.
 struct Rng(u64);
 
@@ -612,9 +639,11 @@ fn every_value_of_every_order_form_is_reached_jointly_with_the_evidence_matches(
     let space = Space::new(&ir);
     let size = space.size().expect("fits");
     assert_eq!(size, 31200, "{}", space.dimensions());
-    let reached: BTreeSet<Vec<crate::model::Truth>> = (0..size)
-        .map(|index| claim_values(&ir, &space.evidence(&space.state(index))))
-        .collect();
+    let reached: BTreeSet<Vec<crate::model::Truth>> = par_map(size as usize, |index| {
+        claim_values(&ir, &space.evidence(&space.state(index as u128)))
+    })
+    .into_iter()
+    .collect();
     let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
     let instants = [
         Some("2026-10-01T09:00:00Z"),
@@ -622,7 +651,7 @@ fn every_value_of_every_order_form_is_reached_jointly_with_the_evidence_matches(
         Some("2026-10-01T09:00:02Z"),
         None,
     ];
-    let mut histories = 0;
+    let mut histories = Vec::new();
     for _ in 0..20_000 {
         let records: Vec<crate::model::EvidenceRecord> = (0..rng.below(6))
             .map(|n| {
@@ -644,14 +673,17 @@ fn every_value_of_every_order_form_is_reached_jointly_with_the_evidence_matches(
                 }
             })
             .collect();
-        let values = claim_values(&ir, &records);
+        histories.push(records);
+    }
+    let checked = par_map(histories.len(), |at| {
+        let records = &histories[at];
+        let values = claim_values(&ir, records);
         assert!(
             reached.contains(&values),
             "no state gives {values:?}, which {records:?} gives"
         );
-        histories += 1;
-    }
-    assert_eq!(histories, 20_000);
+    });
+    assert_eq!(checked.len(), 20_000);
     // The space is not trivially everything: `first_k_a` true and `first_k` false needs `b`'s
     // first record before `a`'s, so both orders are reached.
     assert!(reached.len() > 100, "{}", reached.len());
@@ -1141,10 +1173,12 @@ fn unreached_histories(
     let space = Space::new(&ir);
     let size = space.size().expect("fits");
     assert!(size <= STATE_BOUND, "{size} states: {}", space.dimensions());
-    let reached: BTreeSet<Vec<crate::model::Truth>> = (0..size)
-        .map(|index| claim_values(&ir, &space.evidence(&space.state(index))))
-        .collect();
-    let mut unreached = Vec::new();
+    let reached: BTreeSet<Vec<crate::model::Truth>> = par_map(size as usize, |index| {
+        claim_values(&ir, &space.evidence(&space.state(index as u128)))
+    })
+    .into_iter()
+    .collect();
+    let mut histories = Vec::new();
     let mut rng = Rng(seed);
     let instants = [
         Some("2026-10-01T09:00:00Z"),
@@ -1168,11 +1202,14 @@ fn unreached_histories(
                 item: None,
             })
             .collect();
-        let values = claim_values(&ir, &records);
-        if !reached.contains(&values) {
-            unreached.push((values, records));
-        }
+        histories.push(records);
     }
+    let values = par_map(histories.len(), |at| claim_values(&ir, &histories[at]));
+    let unreached = values
+        .into_iter()
+        .zip(histories)
+        .filter(|(values, _)| !reached.contains(values))
+        .collect();
     (reached, unreached)
 }
 
@@ -1832,7 +1869,16 @@ fn since_is_checked_over_last_records_and_counts_for_authority_bypass() {
         \x20\x20both: {requires: {all: [{claim: red_since}, {claim: not_red}]}}\n\
         \x20\x20red: {requires: {claim: red_since}}\n\
         \x20\x20clean: {requires: {claim: not_red}}\n";
-    let report = check(&compiled(source), None).expect("checked");
+    let ir = compiled(source);
+    // The report and the slices (below) are computed side by side.
+    let report = std::thread::scope(|scope| {
+        let report = scope.spawn(|| check(&ir, None).expect("checked"));
+        // Over slices too: `test`'s capability is in no outcome's slice (story:check-subject-slices).
+        assert_slices_agree(&ir, None, source);
+        report
+            .join()
+            .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+    });
     assert_eq!(
         report.to_string(),
         "unreachable-outcome: outcome `both` is legitimate in no state\n\
@@ -1840,8 +1886,6 @@ fn since_is_checked_over_last_records_and_counts_for_authority_bypass() {
          {evidence `change` earlier, observed at no known instant}\n\
          checked: protocol `p` revision 1: 21060 states, 0 properties, 2 findings\n"
     );
-    // Over slices too: `test`'s capability is in no outcome's slice (story:check-subject-slices).
-    assert_slices_agree(&compiled(source), None, source);
 }
 
 /// The refusal names the first subject in finding order whose slice is above the bound: outcomes,
@@ -1965,11 +2009,38 @@ fn a_slice_holds_what_its_last_records_are_placed_against() {
 /// The three strategies give one result: each subject over its own slice, each over the widest
 /// slice holding its own (or the whole product) as `canon check` does, and the whole product as
 /// before slices existed. Returns how many states the slices of `ir` hold at most, against the
-/// whole product's.
+/// whole product's. The three run side by side.
 fn assert_slices_agree(ir: &Ir, properties: Option<&Properties>, source: &str) -> (u128, u128) {
-    let whole = check_by(ir, properties, Strategy::Whole);
-    let own = check_by(ir, properties, Strategy::Own);
-    let chosen = check(ir, properties);
+    slices_agree(ir, properties, source, true)
+}
+
+/// [`assert_slices_agree`], the three strategies one after another when `side_by_side` is false:
+/// for a caller that already runs protocols on [`WORKERS`] threads.
+fn slices_agree(
+    ir: &Ir,
+    properties: Option<&Properties>,
+    source: &str,
+    side_by_side: bool,
+) -> (u128, u128) {
+    let (whole, own, chosen) = if side_by_side {
+        std::thread::scope(|scope| {
+            let own = scope.spawn(|| check_by(ir, properties, Strategy::Own));
+            let chosen = scope.spawn(|| check(ir, properties));
+            let whole = check_by(ir, properties, Strategy::Whole);
+            let joined = |worker: std::thread::ScopedJoinHandle<'_, _>| {
+                worker
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+            };
+            (whole, joined(own), joined(chosen))
+        })
+    } else {
+        (
+            check_by(ir, properties, Strategy::Whole),
+            check_by(ir, properties, Strategy::Own),
+            check(ir, properties),
+        )
+    };
     assert_eq!(
         own, whole,
         "own slices differ from the whole product:\n{source}"
@@ -2252,8 +2323,8 @@ const GENERATED_STATES: u128 = 2048;
 /// whole product.
 fn generated_protocols_agree(seed: u64, wanted: usize) -> (usize, usize) {
     let mut rng = Rng(seed);
-    let (mut compared, mut sliced, mut attempts) = (0, 0, 0);
-    let mut features: BTreeMap<&str, usize> = BTreeMap::new();
+    let (mut compared, mut attempts) = (0, 0);
+    let mut chosen = Vec::new();
     while compared < wanted {
         attempts += 1;
         assert!(
@@ -2282,13 +2353,25 @@ fn generated_protocols_agree(seed: u64, wanted: usize) -> (usize, usize) {
         {
             continue;
         }
-        let (widest, whole) = assert_slices_agree(&ir, properties.as_ref(), &source);
         compared += 1;
-        if widest < whole {
+        chosen.push((ir, properties, source));
+    }
+    // The protocols are chosen above in generation order; each is then compared on its own.
+    let results = par_map(chosen.len(), |at| {
+        let (ir, properties, source) = &chosen[at];
+        let (widest, whole) = slices_agree(ir, properties.as_ref(), source, false);
+        let report = check(ir, properties.as_ref()).map(|report| report.to_string());
+        (
+            widest < whole,
+            report.unwrap_or_else(|_| "refused".to_owned()),
+        )
+    });
+    let mut sliced = 0;
+    let mut features: BTreeMap<&str, usize> = BTreeMap::new();
+    for ((_, _, source), (narrower, text)) in chosen.iter().zip(&results) {
+        if *narrower {
             sliced += 1;
         }
-        let report = check(&ir, properties.as_ref()).map(|report| report.to_string());
-        let text = report.as_deref().unwrap_or("refused");
         for feature in GENERATED_FEATURES {
             if source.contains(feature) || text.contains(feature) {
                 *features.entry(feature).or_default() += 1;
@@ -2363,25 +2446,26 @@ const FIXTURE_STATES: u128 = 8192;
 /// `properties.yaml` when it has one.
 #[test]
 fn every_fixture_protocol_checks_alike_sliced_and_whole() {
-    let (mut compared, mut sliced) = (0, 0);
-    for (path, ir) in fixture_protocols() {
-        if Space::new(&ir)
-            .size()
-            .is_none_or(|size| size > FIXTURE_STATES)
-        {
-            continue;
-        }
+    let fixtures: Vec<_> = fixture_protocols()
+        .into_iter()
+        .filter(|(_, ir)| {
+            Space::new(ir)
+                .size()
+                .is_some_and(|size| size <= FIXTURE_STATES)
+        })
+        .collect();
+    let narrower = par_map(fixtures.len(), |at| {
+        let (path, ir) = &fixtures[at];
         let declared = path.with_file_name("properties.yaml");
         let properties = declared
             .exists()
             .then(|| properties(&std::fs::read_to_string(&declared).expect("readable")));
         let (widest, whole) =
-            assert_slices_agree(&ir, properties.as_ref(), &path.display().to_string());
-        compared += 1;
-        if widest < whole {
-            sliced += 1;
-        }
-    }
+            slices_agree(ir, properties.as_ref(), &path.display().to_string(), false);
+        widest < whole
+    });
+    let compared = narrower.len();
+    let sliced = narrower.iter().filter(|narrower| **narrower).count();
     eprintln!("{compared} fixture protocols compared, {sliced} sliced");
     assert!(
         compared >= 20 && sliced >= 10,
