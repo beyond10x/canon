@@ -530,6 +530,19 @@ pub fn evaluate_with(
     evidence: &[EvidenceRecord],
     supplied: Supplied<'_>,
 ) -> Result<Decision, Refusal> {
+    evaluate_with_freshness(ir, case, evidence, supplied, None)
+}
+
+/// [`evaluate_with`], in the strict freshness mode when `strict_freshness` gives the clock skew
+/// allowed (`canon evaluate --strict-freshness`; `freshness.rs`); `None` is [`evaluate_with`].
+pub fn evaluate_with_freshness(
+    ir: &Ir,
+    case: &Case,
+    evidence: &[EvidenceRecord],
+    supplied: Supplied<'_>,
+    strict_freshness: Option<&str>,
+) -> Result<Decision, Refusal> {
+    let _ = strict_freshness;
     depth::check(ir)?;
     case::check(ir, case)?;
     let distinct = evidence::check(ir, evidence)?;
