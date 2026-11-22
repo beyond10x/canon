@@ -110,6 +110,7 @@ mod review_properties;
 mod review_refusal_naming;
 mod source_model;
 mod unsafe_confined;
+mod approvals_cite_evidence_by_id;
 
 /// Helpers shared by the modules above, holding no test of their own.
 mod support {
