@@ -816,7 +816,9 @@ thread_local! {
 /// would pay for, since they call from several threads).
 ///
 /// Reentrancy: `work` that evaluates again runs the inner call where it is, on the worker's deep
-/// stack, since the worker is blocked on the outer call and could not take another.
+/// stack. Nothing would deadlock otherwise (the inner call would start another worker for the
+/// worker thread); this keeps the nested call on the stack the worker has and the thread count
+/// down.
 fn on_deep_stack<T: Send>(work: impl FnOnce() -> T + Send) -> T {
     worker::run(work)
 }
@@ -1529,16 +1531,30 @@ mod tests {
         assert_eq!(spawned, 1, "the worker survived the panic");
     }
 
-    /// Work that calls evaluation again runs it where it is: the worker is blocked on the outer
-    /// call and cannot take another.
+    /// Work that calls evaluation again runs it where it is, on the thread of the outer call: the
+    /// nested call keeps the deep stack the worker already has and starts no second worker. The
+    /// threads are compared, since the sum and the count of started threads (a second worker would
+    /// be counted on the worker's own thread, not the caller's) come out the same without it.
     #[test]
-    fn work_that_evaluates_again_does_not_wait_for_its_own_worker() {
-        let (sum, spawned) = on_a_small_thread(|| {
-            let sum =
-                on_deep_stack(|| on_deep_stack(|| 20) + on_deep_stack(|| on_deep_stack(|| 1)));
-            (sum, SPAWNED.with(|spawned| spawned.get()))
+    fn work_that_evaluates_again_runs_on_the_thread_of_the_outer_call() {
+        let (sum, threads, spawned) = on_a_small_thread(|| {
+            let caller = std::thread::current().id();
+            let (sum, threads) = on_deep_stack(|| {
+                let outer = std::thread::current().id();
+                let inner = on_deep_stack(|| std::thread::current().id());
+                let deeper = on_deep_stack(|| on_deep_stack(|| std::thread::current().id()));
+                (
+                    on_deep_stack(|| 20) + on_deep_stack(|| on_deep_stack(|| 1)),
+                    (caller, outer, inner, deeper),
+                )
+            });
+            (sum, threads, SPAWNED.with(|spawned| spawned.get()))
         });
+        let (caller, outer, inner, deeper) = threads;
         assert_eq!(sum, 21);
+        assert_ne!(outer, caller, "the outer call runs on the worker, not the caller");
+        assert_eq!(inner, outer, "the nested call runs on the outer call's thread");
+        assert_eq!(deeper, outer, "a call nested twice runs on the outer call's thread");
         assert_eq!(spawned, 1);
     }
 
@@ -1571,6 +1587,8 @@ mod tests {
         );
     }
 
+    /// A copy that differs from the first is refused as `duplicate-identifier`, naming and citing
+    /// the record, whichever copy comes first.
     #[test]
     fn a_differing_copy_of_a_record_is_refused() {
         let (pass, fail) = (record("e1", "pass"), record("e1", "fail"));
@@ -1585,5 +1603,3 @@ mod tests {
         }
     }
 }
-    /// A copy that differs from the first is refused as `duplicate-identifier`, naming and citing
-    /// the record, whichever copy comes first.

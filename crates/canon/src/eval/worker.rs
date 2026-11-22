@@ -27,10 +27,12 @@ thread_local! {
 
 /// Runs `work` on this thread's worker and returns its result, or resumes its panic here.
 ///
-/// Called on the worker itself (`work` that calls back into evaluation), it runs `work` inline:
-/// the worker is blocked on this very call and could not take another job. Called while this
-/// thread's own locals are being destroyed, when the worker handle is gone, it runs `work` on a
-/// thread of its own, as every call did before the worker existed.
+/// Called on the worker itself (`work` that calls back into evaluation), it runs `work` inline,
+/// on the deep stack the worker already has. Without this the nested call would not wait on
+/// anything: it would start a second worker for the worker thread, one more thread with a deep
+/// stack of its own. Called while this thread's own locals are being destroyed, when the worker
+/// handle is gone, it runs `work` on a thread of its own, as every call did before the worker
+/// existed.
 pub(super) fn run<T: Send>(work: impl FnOnce() -> T + Send) -> T {
     if ON_WORKER.with(Cell::get) {
         return work();
