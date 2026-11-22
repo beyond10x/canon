@@ -126,7 +126,11 @@ impl Authority {
     pub(super) fn decide(&self, capability: &CapabilityId, scope: &Scope) -> Option<Grant> {
         self.decisions
             .iter()
-            .filter(|((decided, covered, _, _), _)| decided == capability && covers(covered, scope))
+            .filter(|((decided, covered, _, _), _)| {
+                #[cfg(test)]
+                compared();
+                decided == capability && covers(covered, scope)
+            })
             .map(|(_, entry)| entry.grant)
             .max_by_key(|grant| grant.precedence())
     }
@@ -141,7 +145,11 @@ impl Authority {
     ) -> BTreeSet<Failed> {
         self.lapsed
             .iter()
-            .filter(|(decided, covered, _)| decided == capability && covers(covered, scope))
+            .filter(|(decided, covered, _)| {
+                #[cfg(test)]
+                compared();
+                decided == capability && covers(covered, scope)
+            })
             .flat_map(|(_, _, failed)| failed.iter().cloned())
             .collect()
     }
@@ -161,6 +169,19 @@ impl Authority {
             },
         )
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The entries [`Authority::decide`] and [`Authority::stale_grounds`] compared with a
+    /// requirement's capability and scope on this thread, for the comparison-count test.
+    static COMPARED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Counts one entry compared with a requirement's capability and scope.
+#[cfg(test)]
+fn compared() {
+    COMPARED.with(|count| count.set(count.get() + 1));
 }
 
 /// Whether a decision at scope `decision` covers a requirement at scope `requirement`: the
@@ -639,5 +660,166 @@ mod tests {
                 && refused.contains("duplicate entry with key \"cluster\""),
             "{refused}"
         );
+    }
+
+    /// What `run` returns, and how many entries it compared with a requirement's capability and
+    /// scope (`COMPARED`).
+    fn counted<T>(run: impl FnOnce() -> T) -> (T, usize) {
+        COMPARED.with(|count| count.set(0));
+        let value = run();
+        (value, COMPARED.with(std::cell::Cell::get))
+    }
+
+    fn applied(text: &str) -> Authority {
+        read(Some(text))
+            .expect("reads")
+            .expect("given")
+            .applying_at(None, &Standing::default())
+    }
+
+    /// story:authority-lookup-by-capability: 192 actions, each requiring its own one of 192
+    /// capabilities granted once, compare each requirement with the entries of its capability
+    /// alone, not with all 192 (36,864 comparisons on 0.12.0). The bound: at most 4 x the grants
+    /// x the grants on each capability (1).
+    #[test]
+    fn a_lookup_compares_only_the_entries_of_its_capability() {
+        let text: String = (0..192)
+            .map(|i| format!("- {{capability: cap{i:04}, decision: granted}}\n"))
+            .collect();
+        let authority = applied(&text);
+        let none = Scope::new();
+        let (grants, compared) = counted(|| {
+            (0..192)
+                .map(|i| authority.decide(&CapabilityId::new(format!("cap{i:04}")), &none))
+                .collect::<Vec<_>>()
+        });
+        assert!(grants.iter().all(|grant| *grant == Some(Grant::Granted)));
+        assert!(
+            compared <= 4 * 192,
+            "192 lookups on 192 grants compared {compared} entries, more than 4 x 192"
+        );
+    }
+
+    /// 192 grants on one capability, at 192 scopes, beside 192 grants on other capabilities that
+    /// sort before and after it: each lookup of it compares its own 192 entries and at most the
+    /// one that ends them, so the count is linear in that capability's grants.
+    #[test]
+    fn a_lookup_on_one_capability_stays_linear_in_its_grants() {
+        let mut text = String::new();
+        for i in 0..96 {
+            text.push_str(&format!("- {{capability: a{i:03}, decision: denied}}\n"));
+            text.push_str(&format!("- {{capability: z{i:03}, decision: denied}}\n"));
+        }
+        for i in 0..192 {
+            text.push_str(&format!(
+                "- {{capability: m, scope: {{n: v{i:03}}}, decision: granted}}\n"
+            ));
+        }
+        let authority = applied(&text);
+        let (grants, compared) = counted(|| {
+            (0..192)
+                .map(|i| authority.decide(&"m".into(), &scope(&[("n", &format!("v{i:03}"))])))
+                .collect::<Vec<_>>()
+        });
+        assert!(grants.iter().all(|grant| *grant == Some(Grant::Granted)));
+        assert!(
+            compared <= 192 * (192 + 1),
+            "192 lookups of a capability with 192 grants compared {compared} entries, more than \
+             192 x (192 + 1)"
+        );
+        assert_eq!(
+            authority.decide(&"m".into(), &scope(&[("n", "other")])),
+            None
+        );
+    }
+
+    /// The stale-grounds lookup reads by capability too: 192 capabilities, each decided once on a
+    /// ground that does not hold, so every entry is set aside, and each requirement names the
+    /// failed ground of its own capability's entry, comparing at most 4 x 192 entries in all.
+    #[test]
+    fn a_stale_grounds_lookup_compares_only_the_entries_of_its_capability() {
+        let text: String = (0..192)
+            .map(|i| {
+                format!("- {{capability: cap{i:04}, decision: granted, ground_evidence: [e{i}]}}\n")
+            })
+            .collect();
+        let authority = applied(&text);
+        let none = Scope::new();
+        let (stale, compared) = counted(|| {
+            (0..192)
+                .map(|i| {
+                    let capability = CapabilityId::new(format!("cap{i:04}"));
+                    assert_eq!(authority.decide(&capability, &none), None);
+                    authority.stale_grounds(&capability, &none)
+                })
+                .collect::<Vec<_>>()
+        });
+        for (i, failed) in stale.iter().enumerate() {
+            let expected =
+                BTreeSet::from([Failed::Evidence(format!("e{i}").as_str().into(), None)]);
+            assert_eq!(failed, &expected, "cap{i:04}");
+        }
+        assert!(
+            compared <= 4 * 192,
+            "192 stale-grounds lookups on 192 set-aside entries compared {compared} entries, more \
+             than 4 x 192"
+        );
+    }
+
+    /// Reading by capability decides as a scan of every entry does: the same grant (so the same
+    /// precedence and coverage) and the same stale grounds, for capabilities that are decided and
+    /// that are not, at every scope, at each case revision.
+    #[test]
+    fn a_lookup_by_capability_decides_as_a_scan_of_every_entry() {
+        let authority = read(Some(
+            "- {capability: a, decision: granted}\n\
+             - {capability: m, decision: granted}\n\
+             - {capability: m, scope: {cluster: x}, decision: require_approval}\n\
+             - {capability: m, scope: {cluster: x, ns: f}, decision: denied, case_revision: c1}\n\
+             - {capability: m, scope: {cluster: y}, decision: denied, ground_evidence: [e1]}\n\
+             - {capability: m, scope: {ns: f}, decision: granted, principal: p, ground_evidence: [e2]}\n\
+             - {capability: m, scope: {cluster: x}, decision: granted, case_revision: c2}\n\
+             - {capability: mm, decision: denied}\n\
+             - {capability: n, scope: {cluster: x}, decision: granted, ground_evidence: [e3, e1]}\n\
+             - {capability: n, decision: require_approval, case_revision: c1, ground_evidence: [e4]}\n\
+             - {capability: z, scope: {cluster: y}, decision: require_approval}\n",
+        ))
+        .expect("reads")
+        .expect("given");
+        let scopes = [
+            Scope::new(),
+            scope(&[("cluster", "x")]),
+            scope(&[("cluster", "x"), ("ns", "f")]),
+            scope(&[("cluster", "y")]),
+            scope(&[("ns", "f")]),
+        ];
+        let standing = Standing::default();
+        for current in [None, Some(Revision::new("c1")), Some(Revision::new("c2"))] {
+            let applying = authority.applying_at(current.as_ref(), &standing);
+            for capability in ["", "a", "b", "m", "ma", "mm", "n", "z", "zz"] {
+                let capability = CapabilityId::new(capability);
+                for scope in &scopes {
+                    let scanned = applying
+                        .decisions
+                        .iter()
+                        .filter(|((decided, covered, _, _), _)| {
+                            decided == &capability && covers(covered, scope)
+                        })
+                        .map(|(_, entry)| entry.grant)
+                        .max_by_key(|grant| grant.precedence());
+                    let stale: BTreeSet<Failed> = applying
+                        .lapsed
+                        .iter()
+                        .filter(|(decided, covered, _)| {
+                            decided == &capability && covers(covered, scope)
+                        })
+                        .flat_map(|(_, _, failed)| failed.iter().cloned())
+                        .collect();
+                    let at = format!("{capability:?} at {scope:?} at {current:?}");
+                    assert_eq!(applying.decide(&capability, scope), scanned, "{at}");
+                    assert_eq!(applying.stale_grounds(&capability, scope), stale, "{at}");
+                }
+            }
+        }
     }
 }
