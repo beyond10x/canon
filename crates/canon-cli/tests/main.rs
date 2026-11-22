@@ -46,6 +46,7 @@ mod conform_run;
 mod decision_condition;
 mod decision_outcomes;
 mod ess_commands_match;
+mod evaluate_help_evidence_ids;
 mod evaluator_skeleton;
 mod evidence_file_named;
 mod evidence_freshness;
@@ -65,7 +66,6 @@ mod supplied_evidence;
 mod three_valued_claims;
 mod usage_exit;
 mod validate;
-mod evaluate_help_evidence_ids;
 
 /// Every `tests/<name>.rs` beside this file is declared above as `mod <name>;`, and no directory
 /// under `tests/` holds a `main.rs` of its own.

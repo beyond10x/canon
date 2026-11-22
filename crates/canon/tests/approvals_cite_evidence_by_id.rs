@@ -30,7 +30,8 @@ fn fixture() -> ir::Ir {
 const CASE: &str = "format: canon-case/1\nid: G-1\nprotocol: grounds\nrevision: c2\n\
                     artifacts: {spec: {revision: r2}, up: {revision: u2}}\n";
 
-const AUTHORITY: &str = "- {capability: x, decision: granted, principal: p, ground_evidence: [e1]}\n";
+const AUTHORITY: &str =
+    "- {capability: x, decision: granted, principal: p, ground_evidence: [e1]}\n";
 
 const DECISIONS: &str =
     "- {decision: d, outcome: o, principal: q, case_revision: c2, ground_evidence: [e1]}\n";
@@ -72,7 +73,10 @@ fn record(text: &str) -> EvidenceRecord {
 fn an_approval_holds_when_the_contents_under_its_evidence_id_are_replaced() {
     let original = record(ORIGINAL);
     let replaced = record(REPLACED);
-    assert_ne!(original, replaced, "the two records differ in their contents");
+    assert_ne!(
+        original, replaced,
+        "the two records differ in their contents"
+    );
     assert_eq!(original.id, replaced.id, "and share their id");
 
     let before = decide(std::slice::from_ref(&original));
@@ -117,7 +121,11 @@ fn doc_text(relative: &str) -> String {
                 .map(str::to_lowercase)
         })
         .collect();
-    words.join(" ").split_whitespace().collect::<Vec<_>>().join(" ")
+    words
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// The module docs of the grounds (both approval documents) and of the explicit decisions state
