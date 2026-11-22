@@ -2,9 +2,10 @@
 //!
 //! [`check`] covers every state of a protocol: it enumerates the states of the dimensions each
 //! action, outcome and property reads (its slice, "Slices" below), evaluates each with Canon's own
-//! evaluator ([`crate::eval::evaluate_with`]) and reports what no single evaluation shows. It is a
-//! pure function of the compiled protocol and the `canon-properties/1` properties: no clock,
-//! network or filesystem, and the same inputs give the same [`Report`], byte for byte.
+//! evaluator ([`crate::eval::evaluate_with`], less the explanation, which it does not read) and
+//! reports what no single evaluation shows. It is a pure function of the compiled protocol and the
+//! `canon-properties/1` properties: no clock, network or filesystem, and the same inputs give the
+//! same [`Report`], byte for byte.
 //!
 //! # The state space
 //!
@@ -400,6 +401,8 @@ mod properties;
 mod space;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod unexplained;
 
 // The enumerations alive now on this thread, and the most alive at once since the last check
 // began (test builds only; E4 of the wave 9 review, F8 of the wave 11 review). Each enumeration
@@ -1036,7 +1039,8 @@ fn enumerate<'s, 'a>(ir: &Ir, space: &'s Space<'a>) -> Result<Enumerated<'s, 'a>
     })
 }
 
-/// Evaluates one state with the evaluator and keeps each action's and outcome's status.
+/// Evaluates one state with the evaluator and keeps each action's and outcome's status, building
+/// no explanation ([`eval::evaluate_unexplained`]; story:check-evaluates-statuses-only).
 pub(crate) fn evaluate(ir: &Ir, space: &Space<'_>, state: &State) -> Result<Evaluated, Refusal> {
     evaluate_records(ir, space, state, space.evidence(state))
 }
@@ -1049,6 +1053,25 @@ pub(crate) fn evaluate_records(
     space: &Space<'_>,
     state: &State,
     evidence: Vec<crate::model::EvidenceRecord>,
+) -> Result<Evaluated, Refusal> {
+    evaluate_records_by(ir, space, state, evidence, eval::evaluate_unexplained)
+}
+
+/// How a state's case is decided: [`eval::evaluate_with`], or a path that gives the same statuses.
+type Evaluator = fn(
+    &Ir,
+    &Case,
+    &[crate::model::EvidenceRecord],
+    Supplied<'_>,
+) -> Result<crate::model::Decision, eval::Refusal>;
+
+/// [`evaluate_records`], the case decided by `evaluator`.
+fn evaluate_records_by(
+    ir: &Ir,
+    space: &Space<'_>,
+    state: &State,
+    evidence: Vec<crate::model::EvidenceRecord>,
+    evaluator: Evaluator,
 ) -> Result<Evaluated, Refusal> {
     let revision = Revision::new(space::REVISION);
     let case = Case {
@@ -1079,7 +1102,7 @@ pub(crate) fn evaluate_records(
         at: None,
         decisions: Some(&decisions),
     };
-    let decision = eval::evaluate_with(ir, &case, &evidence, supplied)
+    let decision = evaluator(ir, &case, &evidence, supplied)
         .map_err(|refusal| Refusal::new(refusal.code(), refusal.to_string()))?;
     let status = |section: &Option<crate::model::Json>, id: &str| {
         section

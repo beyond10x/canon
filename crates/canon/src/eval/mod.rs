@@ -530,6 +530,7 @@ pub fn evaluate_with(
     evidence: &[EvidenceRecord],
     supplied: Supplied<'_>,
 ) -> Result<Decision, Refusal> {
+<<<<<<< HEAD
     evaluate_with_freshness(ir, case, evidence, supplied, None)
 }
 
@@ -541,11 +542,34 @@ pub fn evaluate_with(
 /// skew it cannot read (`invalid-skew`); `freshness.rs` gives the order. Where it refuses nothing,
 /// the decision is [`evaluate_with`]'s; `None` is [`evaluate_with`].
 pub fn evaluate_with_freshness(
+=======
+    decide(ir, case, evidence, supplied, true)
+}
+
+/// [`evaluate_with`] without the explanation (`explanation` is `None`): every other section, and
+/// every refusal, as it gives them. What `canon check` reads, the statuses of the actions and
+/// outcomes, needs no explanation (story:check-evaluates-statuses-only).
+pub(crate) fn evaluate_unexplained(
+>>>>>>> 2b7de49cf2bff8154864cb124ed1721911b021af
     ir: &Ir,
     case: &Case,
     evidence: &[EvidenceRecord],
     supplied: Supplied<'_>,
+<<<<<<< HEAD
     strict_freshness: Option<&str>,
+=======
+) -> Result<Decision, Refusal> {
+    decide(ir, case, evidence, supplied, false)
+}
+
+/// [`evaluate_with`], building the explanation only when `explaining`.
+fn decide(
+    ir: &Ir,
+    case: &Case,
+    evidence: &[EvidenceRecord],
+    supplied: Supplied<'_>,
+    explaining: bool,
+>>>>>>> 2b7de49cf2bff8154864cb124ed1721911b021af
 ) -> Result<Decision, Refusal> {
     depth::check(ir)?;
     case::check(ir, case)?;
@@ -655,6 +679,11 @@ pub fn evaluate_with_freshness(
             missing_evidence,
             pending_decisions,
         };
+        if !explaining {
+            return Ok(decision);
+        }
+        #[cfg(test)]
+        explained(ir);
         let inputs = crate::explain::Inputs {
             authority: authority.as_ref(),
             decisions: decisions.as_ref(),
@@ -671,6 +700,24 @@ pub fn evaluate_with_freshness(
         );
         Ok(decision)
     })
+}
+
+/// The explanations built, by protocol id, since the process began (test builds only,
+/// story:check-evaluates-statuses-only). Keyed by protocol so a test that gives its protocol an id
+/// of its own reads its count beside tests that run at the same time.
+#[cfg(test)]
+pub(crate) static EXPLAINED: std::sync::Mutex<BTreeMap<String, usize>> =
+    std::sync::Mutex::new(BTreeMap::new());
+
+/// Counts one explanation built under `ir` in [`EXPLAINED`].
+#[cfg(test)]
+fn explained(ir: &Ir) {
+    let mut explained = EXPLAINED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    *explained
+        .entry(ir.protocol.id.as_str().to_owned())
+        .or_default() += 1;
 }
 
 /// The reasons `predicate` is not `true` over the claim `values`, the case's `inputs` and the
