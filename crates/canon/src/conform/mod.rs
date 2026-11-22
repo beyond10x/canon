@@ -525,14 +525,17 @@ pub fn run_with_imports(
     fixture: Result<&str, &str>,
     imports: &[Result<String, String>],
 ) -> Verdict {
+    run_compiled(scenario, &compiled_fixture(scenario, fixture, imports))
+}
+
+/// Runs a scenario's steps against its fixture compiled once, or against why it did not compile.
+/// Every step of a scenario reads the same fixture and imports, so one compile serves them all and
+/// each step sees what a compile of its own would give.
+fn run_compiled(scenario: &Scenario, compiled: &Result<ir::Ir, String>) -> Verdict {
     for step in &scenario.steps {
         let failure = match &step.kind {
-            StepKind::Compile { expected_ir } => {
-                compile_step(scenario, fixture, imports, expected_ir)
-            }
-            StepKind::Evaluate { inputs, expected } => {
-                evaluate_step(scenario, fixture, imports, inputs, expected)
-            }
+            StepKind::Compile { expected_ir } => compile_step(compiled, expected_ir),
+            StepKind::Evaluate { inputs, expected } => evaluate_step(compiled, inputs, expected),
         };
         if let Some(reason) = failure {
             return Verdict::Failed {
@@ -592,32 +595,25 @@ fn compiled_fixture(
         })
 }
 
-fn compile_step(
-    scenario: &Scenario,
-    fixture: Result<&str, &str>,
-    imports: &[Result<String, String>],
-    expected_ir: &str,
-) -> Option<String> {
-    let compiled = match compiled_fixture(scenario, fixture, imports) {
+fn compile_step(compiled: &Result<ir::Ir, String>, expected_ir: &str) -> Option<String> {
+    let compiled = match compiled {
         Ok(compiled) => compiled.canonical_json(),
-        Err(why) => return Some(why),
+        Err(why) => return Some(why.clone()),
     };
     first_difference(&compiled, expected_ir)
         .map(|line| format!("canon-ir/1 differs from the expectation at line {line}"))
 }
 
 fn evaluate_step(
-    scenario: &Scenario,
-    fixture: Result<&str, &str>,
-    imports: &[Result<String, String>],
+    compiled: &Result<ir::Ir, String>,
     inputs: &EvaluateInputs,
     expected: &EvaluateExpectation,
 ) -> Option<String> {
-    let compiled = match compiled_fixture(scenario, fixture, imports) {
+    let compiled = match compiled {
         Ok(compiled) => compiled,
-        Err(why) => return Some(why),
+        Err(why) => return Some(why.clone()),
     };
-    let evaluation = match evaluation(&compiled, inputs) {
+    let evaluation = match evaluation(compiled, inputs) {
         Ok(evaluation) => evaluation,
         Err(why) => return Some(why),
     };
@@ -1030,16 +1026,13 @@ where
             }
         }
         let fixture = fixture.as_deref().map_err(String::as_str);
-        let verdict = run_with_imports(&scenario, fixture, &imports);
-        let compiled = match fixture {
-            Ok(text) => compiled_fixture(&scenario, Ok(text), &imports).ok(),
-            Err(_) => None,
-        };
+        let compiled = compiled_fixture(&scenario, fixture, &imports);
+        let verdict = run_compiled(&scenario, &compiled);
         report.scenario(&scenario.id, &verdict);
         ran.push(requirements::Ran {
             passed: verdict == Verdict::Passed,
             scenario,
-            compiled,
+            compiled: compiled.ok(),
         });
     }
     (report, ran)
