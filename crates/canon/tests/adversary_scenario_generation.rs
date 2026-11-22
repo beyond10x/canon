@@ -478,7 +478,7 @@ fn problems(entries: &[Entry], sources: &[(String, String)]) -> (Vec<String>, us
             match status {
                 Some((given, wanted)) if given == wanted => {}
                 Some((given, wanted)) => failures.push(format!(
-                    "{fixture} {file}: expects the status {given} of its subject, a witness has `{wanted}`"
+                    "{fixture} {file}: expects the status {given} of its subject, a witness must have `{wanted}`"
                 )),
                 None => failures.push(format!(
                     "{fixture} {file}: expects no status of its subject"
