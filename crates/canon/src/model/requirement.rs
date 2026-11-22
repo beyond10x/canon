@@ -10,6 +10,17 @@
 //!       decision: explicitly_inconclusive
 //! ```
 //!
+//! An explicit decision may carry a condition, `when`, a predicate: the decision counts toward the
+//! outcome only while `when` is `true` (story:decision-condition).
+//!
+//! ```yaml
+//! outcomes:
+//!   withdrawn:
+//!     requires:
+//!       decision: withdraw
+//!       when: {claim: publication.refused}
+//! ```
+//!
 //! A decision is not a predicate form: it can be written only as the whole of an outcome's
 //! `requires`, never inside `all`, `any` or `not`, and never in a claim, obligation or action.
 
@@ -28,8 +39,19 @@ pub enum OutcomeRequirement {
     /// The outcome is legitimate when the predicate is `true`.
     Predicate(Predicate),
     /// The outcome is legitimate only with an explicit decision of this name, for the outcome,
-    /// taken at the case snapshot's current revision.
-    Decision(DecisionName),
+    /// taken at the case snapshot's current revision, and, when it has a condition, only while
+    /// that is `true`.
+    Decision(DecisionRequirement),
+}
+
+/// An explicit decision an outcome requires, with its optional condition
+/// (story:decision-condition).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecisionRequirement {
+    /// The decision's name.
+    pub decision: DecisionName,
+    /// The decision counts only while this is `true`; absent, it counts whenever it applies.
+    pub when: Option<Predicate>,
 }
 
 impl OutcomeRequirement {
@@ -45,7 +67,15 @@ impl OutcomeRequirement {
     pub fn decision(&self) -> Option<&DecisionName> {
         match self {
             OutcomeRequirement::Predicate(_) => None,
-            OutcomeRequirement::Decision(name) => Some(name),
+            OutcomeRequirement::Decision(requirement) => Some(&requirement.decision),
+        }
+    }
+
+    /// The decision's condition, when the requirement is a decision with one.
+    pub fn when(&self) -> Option<&Predicate> {
+        match self {
+            OutcomeRequirement::Predicate(_) => None,
+            OutcomeRequirement::Decision(requirement) => requirement.when.as_ref(),
         }
     }
 }
@@ -95,6 +125,8 @@ struct WrittenRequirement {
     since: Option<EvidenceSince>,
     #[serde(default, deserialize_with = "super::present::form")]
     children: Option<ChildOutcomes>,
+    #[serde(default, deserialize_with = "super::present::form")]
+    when: Option<Predicate>,
 }
 
 impl TryFrom<WrittenRequirement> for OutcomeRequirement {
@@ -116,6 +148,7 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             after,
             since,
             children,
+            when,
         } = written;
         let predicate = WrittenPredicate {
             all,
@@ -133,6 +166,9 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
             children,
         };
         let Some(decision) = decision else {
+            if when.is_some() {
+                return Err("`when` is written only beside `decision`".to_owned());
+            }
             // With no key at all, name `decision` among what a requirement may be written as.
             if let WrittenPredicate {
                 all: None,
@@ -179,6 +215,9 @@ impl TryFrom<WrittenRequirement> for OutcomeRequirement {
                 "a requirement is either `decision` alone or a predicate, not both".to_owned(),
             );
         };
-        Ok(OutcomeRequirement::Decision(decision))
+        Ok(OutcomeRequirement::Decision(DecisionRequirement {
+            decision,
+            when,
+        }))
     }
 }

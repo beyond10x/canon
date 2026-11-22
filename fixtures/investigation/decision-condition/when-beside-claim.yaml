@@ -46,7 +46,7 @@ outcomes:
       claim: accepted
 
   withdrawn:
-    description: The submission is withdrawn by an explicit decision.
+    description: The submission is withdrawn by an explicit decision, once the publication was refused.
     requires:
       claim: refused
       when:

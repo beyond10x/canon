@@ -444,15 +444,16 @@ fn scope(item: &Json) -> Shape<Declarations<ScopeKey, ScopeValue>> {
     Ok(Declarations::new(entries))
 }
 
-/// An outcome's requirement: `{"decision": <name>}`, or a predicate.
+/// An outcome's requirement: `{"decision": <name>}` with an optional `"when"`, or a predicate.
 fn requirement(value: &Json) -> Shape<OutcomeRequirement> {
     if let Some(map) = value.as_object()
-        && map.len() == 1
         && map.contains_key("decision")
+        && map.keys().all(|key| key == "decision" || key == "when")
     {
-        return Ok(OutcomeRequirement::Decision(model::DecisionName::new(
-            text(value, "decision")?,
-        )));
+        return Ok(OutcomeRequirement::Decision(model::DecisionRequirement {
+            decision: model::DecisionName::new(text(value, "decision")?),
+            when: map.get("when").map(predicate).transpose()?,
+        }));
     }
     predicate(value).map(OutcomeRequirement::Predicate)
 }

@@ -65,7 +65,7 @@ pub use predicate::{
 pub use properties::{
     PROPERTIES_FORMAT, Properties, Property, PropertyDependency, PropertyId, PropertySubject,
 };
-pub use requirement::OutcomeRequirement;
+pub use requirement::{DecisionRequirement, OutcomeRequirement};
 pub use write::write;
 
 /// A `protocol/1` source document as written.

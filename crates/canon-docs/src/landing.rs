@@ -311,8 +311,22 @@ pub fn graph(compiled: &Ir, source: &str) -> Json {
                     ));
                 }
             }
-            OutcomeRequirement::Decision(name) => {
-                members.push(("decision".to_owned(), json::str(name.as_str())));
+            OutcomeRequirement::Decision(requirement) => {
+                members.push((
+                    "decision".to_owned(),
+                    json::str(requirement.decision.as_str()),
+                ));
+                if let Some(when) = &requirement.when {
+                    members.push(("when".to_owned(), predicate(when)));
+                    for (claim, value) in leaves(when).1 {
+                        edge((
+                            "requires",
+                            format!("claim:{claim}"),
+                            format!("outcome:{id}"),
+                            qualifier(value),
+                        ));
+                    }
+                }
             }
         }
         nodes.push(Node {

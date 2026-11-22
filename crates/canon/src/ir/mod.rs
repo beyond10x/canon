@@ -54,8 +54,9 @@
 //!   sorted like every object's (story:action-arguments).
 //! - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
 //!   it was written, and an input test `{"input": {"id": …, "in": [...]}}`. An outcome that
-//!   requires an explicit decision has the requirement `{"decision": <name>}`, as written; any
-//!   other requirement is its predicate.
+//!   requires an explicit decision has the requirement `{"decision": <name>}`, as written, with
+//!   `"when": <predicate>`, normalized like every predicate, only when the decision has a condition
+//!   (story:decision-condition); any other requirement is its predicate.
 //! - **Resolved references.** Only a document the validator accepts compiles, so every claim and
 //!   evidence kind the IR references is declared in it (`case_outcome` wherever a `children` form
 //!   reads it), and so is every artifact an evidence match, an order form or a `children` form
@@ -120,10 +121,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::model::{
     self, ActionId, Age, ArtifactId, Author, CapabilityId, CaseOpening, ChildOutcomes, ClaimId,
-    ClaimTest, EffectClass, EvidenceAfter, EvidenceKindId, EvidenceMatch, EvidenceOrder,
-    EvidenceSince, FirstResult, IndependenceDimensionId, InputId, InputTest, InputValue,
-    InvalidationRuleId, ObligationId, OutcomeId, OutcomeRequirement, Predicate, Protocol,
-    ProtocolId, ScopeKey, ScopeValue, Truth,
+    ClaimTest, DecisionRequirement, EffectClass, EvidenceAfter, EvidenceKindId, EvidenceMatch,
+    EvidenceOrder, EvidenceSince, FirstResult, IndependenceDimensionId, InputId, InputTest,
+    InputValue, InvalidationRuleId, ObligationId, OutcomeId, OutcomeRequirement, Predicate,
+    Protocol, ProtocolId, ScopeKey, ScopeValue, Truth,
 };
 use crate::validate::{self, Problem};
 
@@ -366,7 +367,12 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
                 OutcomeRequirement::Predicate(predicate) => {
                     OutcomeRequirement::Predicate(normalize(predicate))
                 }
-                OutcomeRequirement::Decision(name) => OutcomeRequirement::Decision(name.clone()),
+                OutcomeRequirement::Decision(requirement) => {
+                    OutcomeRequirement::Decision(DecisionRequirement {
+                        decision: requirement.decision.clone(),
+                        when: requirement.when.as_ref().map(normalize),
+                    })
+                }
             },
         }),
         invalidation: keyed(&protocol.invalidation, |rule| InvalidationRule {
@@ -898,12 +904,17 @@ fn description(text: &Option<String>) -> Value {
     Value::optional(text.as_deref())
 }
 
-/// A predicate requirement as its predicate; a decision requirement as `{"decision": <name>}`.
+/// A predicate requirement as its predicate; a decision requirement as `{"decision": <name>}`,
+/// with `"when": <predicate>` only when it has a condition.
 fn requirement_value(requirement: &OutcomeRequirement) -> Value {
     match requirement {
         OutcomeRequirement::Predicate(predicate) => predicate_value(predicate),
-        OutcomeRequirement::Decision(name) => {
-            Value::object([("decision", Value::string(name.as_str()))])
+        OutcomeRequirement::Decision(requirement) => {
+            let mut members = vec![("decision", Value::string(requirement.decision.as_str()))];
+            if let Some(when) = &requirement.when {
+                members.push(("when", predicate_value(when)));
+            }
+            Value::object(members)
         }
     }
 }

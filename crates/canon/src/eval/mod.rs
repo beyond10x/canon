@@ -293,7 +293,15 @@
 //!   [...]}}`, every principal whose decision applied, sorted by Unicode code point; otherwise it
 //!   is blocked with the one reason `{"decision": <name>, "present": false}` (CANON-OUTCOME-002),
 //!   which adds `"stale_grounds": [...]` when a decision taken at that revision was set aside by
-//!   its grounds, as "Explicit decisions" below says (CANON-GROUND-001). The case snapshot's
+//!   its grounds, as "Explicit decisions" below says (CANON-GROUND-001). A decision requirement
+//!   may carry a condition (`requires: {decision: <name>, when: <predicate>}`,
+//!   story:decision-condition, CANON-OUTCOME-003): a decision counts when `when` is `true` at
+//!   this evaluation, whenever it was taken. While `when` is `false` or `unknown` the outcome is
+//!   `blocked` by the reasons a precondition that is not `true` gives, such as `{"claim": <id>,
+//!   "value": "false"}`; a decision given is neither counted nor refused, so the same decisions
+//!   document counts at a later evaluation once `when` is `true`; no `decision` reason and no
+//!   `stale_grounds` is written, and `pending_decisions` lists nothing for it. `when` is
+//!   decided over the claim values and case inputs, as `requires` is. The case snapshot's
 //!   `termination` is checked against it, as the refusals above say (CANON-OUTCOME-001).
 //! - `explanation` is written for every decision: what the decision was computed from (design
 //!   § 37), and why each claim that is not `true`, each open obligation, each action that is not
@@ -393,6 +401,8 @@ mod case;
 mod claims;
 mod composition;
 mod decision;
+#[cfg(test)]
+mod decision_condition;
 mod decisions;
 mod depth;
 mod evidence;

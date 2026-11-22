@@ -300,7 +300,7 @@ fn a_decision_counts_only_while_its_condition_is_true() {
     refused(
         "when-beside-claim.yaml",
         "error[parse]: ",
-        "a requirement is either `decision` alone or a predicate, not both",
+        "`when` is written only beside `decision`",
     );
     refused(
         "decision-inside-when.yaml",
@@ -333,7 +333,7 @@ fn a_decision_counts_only_while_its_condition_is_true() {
         text(&ir.stdout).contains(
             "\"requires\": {\n        \"decision\": \"withdraw\",\n        \"when\": {\n          \
              \"claim\": {\n            \"id\": \"refused\","
-        ) || text(&ir.stdout).contains("\"when\""),
+        ),
         "the IR writes `when`:\n{}",
         text(&ir.stdout)
     );

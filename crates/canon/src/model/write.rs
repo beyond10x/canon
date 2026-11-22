@@ -543,9 +543,21 @@ fn outcome(depth: usize, outcome: &Outcome) -> String {
         "requires",
         match requires {
             OutcomeRequirement::Predicate(requirement) => predicate(depth + 1, requirement),
-            OutcomeRequirement::Decision(name) => {
+            OutcomeRequirement::Decision(requirement) => {
                 let mut decision = Members::new();
-                put(&mut decision, "decision", quote(name.as_str()));
+                put(
+                    &mut decision,
+                    "decision",
+                    quote(requirement.decision.as_str()),
+                );
+                put_some(
+                    &mut decision,
+                    "when",
+                    requirement
+                        .when
+                        .as_ref()
+                        .map(|when| predicate(depth + 2, when)),
+                );
                 object(depth + 1, decision)
             }
         },

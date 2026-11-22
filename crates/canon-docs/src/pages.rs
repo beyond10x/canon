@@ -1475,8 +1475,15 @@ fn declarations(protocol: &Protocol) -> String {
                     code(id.as_str()),
                     match &outcome.requires {
                         OutcomeRequirement::Predicate(requires) => words(requires),
-                        OutcomeRequirement::Decision(name) => {
-                            format!("the explicit decision {}", code(name.as_str()))
+                        OutcomeRequirement::Decision(requirement) => {
+                            let decision = format!(
+                                "the explicit decision {}",
+                                code(requirement.decision.as_str())
+                            );
+                            match &requirement.when {
+                                Some(when) => format!("{decision}, while {}", words(when)),
+                                None => decision,
+                            }
                         }
                     },
                     describe(&outcome.description),

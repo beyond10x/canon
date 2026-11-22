@@ -486,8 +486,11 @@ impl<'a> Space<'a> {
             .collect();
         let mut decisions: BTreeMap<&DecisionName, Vec<&OutcomeId>> = BTreeMap::new();
         for (outcome, declared) in &ir.outcomes {
-            if let OutcomeRequirement::Decision(name) = &declared.requires {
-                decisions.entry(name).or_default().push(outcome);
+            if let OutcomeRequirement::Decision(requirement) = &declared.requires {
+                decisions
+                    .entry(&requirement.decision)
+                    .or_default()
+                    .push(outcome);
             }
         }
         for rule in ir.invalidation.values() {
@@ -667,19 +670,26 @@ impl<'a> Space<'a> {
         slice
     }
 
-    /// The slice of an outcome: what its requirement reads, or its one decision dimension.
+    /// The slice of an outcome: what its requirement reads, or its one decision dimension and what
+    /// its decision's condition reads (story:decision-condition).
     pub(crate) fn outcome_slice(&self, ir: &Ir, outcome: &crate::ir::Outcome) -> Slice {
         match &outcome.requires {
-            OutcomeRequirement::Decision(name) => Slice {
-                decisions: self
-                    .decisions
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, (decision, _))| *decision == name)
-                    .map(|(at, _)| at)
-                    .collect(),
-                ..Slice::default()
-            },
+            OutcomeRequirement::Decision(requirement) => {
+                let decision = Slice {
+                    decisions: self
+                        .decisions
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (decision, _))| *decision == &requirement.decision)
+                        .map(|(at, _)| at)
+                        .collect(),
+                    ..Slice::default()
+                };
+                match &requirement.when {
+                    Some(when) => decision.union(&self.predicate_slice(ir, when)),
+                    None => decision,
+                }
+            }
             OutcomeRequirement::Predicate(predicate) => self.predicate_slice(ir, predicate),
         }
     }

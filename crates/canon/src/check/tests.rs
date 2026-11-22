@@ -2677,7 +2677,10 @@ fn a_capability_or_decision_named_with_a_space_is_refused() {
                 .get_mut(&OutcomeId::new("done"))
                 .expect("declared")
                 .requires =
-                crate::model::OutcomeRequirement::Decision(crate::model::DecisionName::new("d d"));
+                crate::model::OutcomeRequirement::Decision(crate::model::DecisionRequirement {
+                    decision: crate::model::DecisionName::new("d d"),
+                    when: None,
+                });
         },
         "",
         true,
@@ -2695,4 +2698,31 @@ fn a_capability_or_decision_named_with_a_space_is_refused() {
             )
         ]
     );
+}
+
+/// An outcome that requires a decision with a condition (story:decision-condition) is decided
+/// over the decision's dimension and what the condition reads, so a slice that leaves the
+/// condition's evidence out would decide it over states that cannot tell `when` apart. The check
+/// gains no new kind of dimension, and the three strategies agree.
+#[test]
+fn a_decision_outcome_slice_holds_the_dimensions_its_condition_reads() {
+    let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}}\n\
+        evidence_kinds: {k: {}, m: {}}\n\
+        claims:\n\
+        \x20\x20refused: {true_when: {evidence: {kind: k}}}\n\
+        \x20\x20noted: {true_when: {evidence: {kind: m}}}\n\
+        actions: {act: {may_produce: [{evidence: k}, {evidence: m}]}}\n\
+        outcomes:\n\
+        \x20\x20withdrawn: {requires: {decision: d, when: {claim: refused}}}\n\
+        \x20\x20plain: {requires: {decision: e}}\n";
+    let ir = compiled(source);
+    let space = Space::new(&ir);
+    let withdrawn = space.outcome_slice(&ir, &ir.outcomes[&OutcomeId::new("withdrawn")]);
+    let plain = space.outcome_slice(&ir, &ir.outcomes[&OutcomeId::new("plain")]);
+    assert_eq!(
+        space.slice(&withdrawn).dimensions(),
+        "evidence kind `k` 2, decision `d` 2"
+    );
+    assert_eq!(space.slice(&plain).dimensions(), "decision `e` 2");
+    assert_slices_agree(&ir, None, source);
 }
