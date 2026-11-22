@@ -36,6 +36,7 @@ mod canon_mutate;
 mod canon_simulate;
 mod case_composition;
 mod case_inputs;
+mod check_history_modes;
 mod ci_watch;
 mod compile;
 mod conform_registry;

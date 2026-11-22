@@ -905,15 +905,24 @@ fn descended_true_beside_a_first_true_with_earlier_records_of_two_results_is_rea
 }
 
 /// What the history modes of `descended` cost, measured for story:check-descended-two-result-
-/// history: a dimension that a `descended` form and another order form read has five modes of
-/// every history value, so the protocol of the review (one kind, a `first` over it) goes from 216
-/// states (three modes, after finding E1, 72 before it) to 360, and the same protocol with an
-/// `after` and a `since` over the kind from 23328 to 38880. A protocol without the mix keeps its
-/// states: `descended` over `k` and a `first` over `m` stays at 4320.
+/// history and corrected for finding F6 of the review of wave 2026-11-22-w11: a dimension that a
+/// `descended` form and another order form read has its history values in three modes and, in
+/// the two modes that spread the earlier records over two instants, only the earlier sets of two
+/// or more classes, which are the only ones those modes change. A kind of three classes has 27
+/// plus 2 times 4 values, 35, where the first correction counted 45. The protocol of the review
+/// (one kind, a `first` over it) has 280 states (216 before the story, 360 with every value in
+/// five modes), and the same protocol with an `after` and a `since` over the kind 30240 (23328
+/// before, 38880). A protocol without the mix keeps its states: `descended` over `k` and a
+/// `first` over `m` stays at 4320.
 #[test]
 fn the_history_modes_of_descended_have_the_state_counts_measured() {
     let size = |source: &str| Space::new(&compiled(source)).size();
-    assert_eq!(size(DESCENDED_FIRST_OF_ITS_KIND), Some(360));
+    assert_eq!(size(DESCENDED_FIRST_OF_ITS_KIND), Some(280));
+    assert!(
+        Space::new(&compiled(DESCENDED_FIRST_OF_ITS_KIND))
+            .dimensions()
+            .contains("history of evidence kind `k` 35"),
+    );
     assert_eq!(size(DESCENDED), Some(4320));
     let after_since = DESCENDED_FIRST_OF_ITS_KIND.replace(
         "\x20\x20first_pass:",
@@ -922,7 +931,7 @@ fn the_history_modes_of_descended_have_the_state_counts_measured() {
          \x20\x20first_pass:",
     );
     assert_ne!(after_since, DESCENDED_FIRST_OF_ITS_KIND);
-    assert_eq!(size(&after_since), Some(38880));
+    assert_eq!(size(&after_since), Some(30240));
 }
 
 /// An `after` and a `since` over the kind of a `descended` form read the instants the history
