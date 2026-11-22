@@ -30,7 +30,14 @@ const EARLIER: &str = "r0";
 /// (story:revision-ordering): one item, so a current record of the form's `then` and an earlier
 /// record of its `first` are a pair. The records of a dimension whose history is [`UNPLACED`]
 /// name none, so a current record the form does not read is in the space too: it leaves the
-/// form `unknown` as a snapshot that gives no `descends_from` does.
+/// form `unknown` as a snapshot that gives no `descends_from` does. [`UNPLACED`] also takes the
+/// records' instants away, and an earlier record is always observed before the current ones, so
+/// a `descended` form could not be `unknown` beside the instants another order form reads, nor
+/// `true` beside a first observation that is a current record, nor `true` or `false` beside no
+/// instant. A dimension a `descended` form and another order form both read
+/// ([`Kind::itemless`]) has every history value in each of three modes ([`NAMED`], [`NO_ITEM`]
+/// and [`LAST_EARLIER`]) to reach them. A dimension only a `descended` form reads needs no such
+/// values, since nothing else reads its instants.
 const ITEM: &str = "item";
 
 /// How the producer of a record in a checked state is named: this, a dash and the producer's
@@ -64,6 +71,9 @@ struct Read<'a> {
     /// dimension, whose earlier records the form reads and no evidence match does, and no place
     /// in the order, since the form does not read when a record was observed.
     history: bool,
+    /// Whether the read is a `descended` form's: it reads which item a record names, and no
+    /// instant.
+    descended: bool,
 }
 
 /// The history dimension's value that adds no record: the dimension's current records, if any, are
@@ -76,6 +86,18 @@ const CURRENT: u32 = 0;
 /// without an `observed_at` stands in whatever the current records are, and they are observed at
 /// the rank's instant.
 const UNPLACED: u32 = 1;
+
+/// The item mode of a history value: every record names [`ITEM`], and an earlier record is
+/// observed before the dimension's current ones.
+const NAMED: u32 = 0;
+
+/// The item mode of a history value that no record of the dimension names an item in: so a
+/// `descended` form is `unknown` whatever the dimension's instants are.
+const NO_ITEM: u32 = 1;
+
+/// The item mode of a history value whose earlier records are observed after the dimension's
+/// current records, which are its first observations, and name [`ITEM`] like any other.
+const LAST_EARLIER: u32 = 2;
 
 /// A later-record dimension's value that adds no record.
 const NO_LATER: u32 = 0;
@@ -191,6 +213,11 @@ struct Kind<'a> {
     /// Whether a `children` form reads this dimension, which then has a history dimension and,
     /// unless an order form reads it too, no place in the order.
     history: bool,
+    /// Whether a `descended` form and another order form read this dimension, so that its records
+    /// can name no item and still have instants, or an item and no instant, or an earlier record
+    /// after its current ones: its history dimension then has every value in each of three modes,
+    /// as [`Kind::histories`] and [`ITEM`] say.
+    itemless: bool,
     /// The producer profiles of its records, in set order: each distinct demand of the evidence
     /// matches that read it, and the empty profile when a match that demands nothing or an order
     /// form reads it. Only the empty profile when no match that reads it demands independence.
@@ -301,11 +328,26 @@ impl<'a> Kind<'a> {
     }
 
     /// How many values its history dimension has: [`CURRENT`], [`UNPLACED`], and each non-empty
-    /// set of classes observed earlier. `None` when it does not fit.
+    /// set of classes observed earlier; and, for an [`Kind::itemless`] dimension, each of those
+    /// in each of its three [`NAMED`] modes. `None` when it does not fit.
     fn histories(&self) -> Option<u128> {
-        1u128
+        let sets = 1u128
             .checked_shl(u32::try_from(self.classes.len()).ok()?)?
-            .checked_add(1)
+            .checked_add(1)?;
+        sets.checked_mul(if self.itemless { 3 } else { 1 })
+    }
+
+    /// The history a history dimension's `value` stands for, as [`CURRENT`], [`UNPLACED`] or the
+    /// earlier classes it names, and its item mode: [`NAMED`], [`NO_ITEM`] or [`LAST_EARLIER`].
+    /// An [`Kind::itemless`] dimension has one run of values for each mode, in that order; any
+    /// other dimension is [`NO_ITEM`] with [`UNPLACED`] and [`NAMED`] otherwise.
+    fn split_history(&self, value: u32) -> (u32, u32) {
+        if self.itemless {
+            let each = (1u32 << self.classes.len()) + 1;
+            (value % each, value / each)
+        } else {
+            (value, if value == UNPLACED { NO_ITEM } else { NAMED })
+        }
     }
 }
 
@@ -432,6 +474,7 @@ impl<'a> Space<'a> {
                     upstreams: Vec::new(),
                     ordered: false,
                     history: false,
+                    itemless: false,
                     profiles: vec![Profile::new()],
                     values: Some(vec![Vec::new(), vec![0]]),
                 });
@@ -472,6 +515,7 @@ impl<'a> Space<'a> {
                     upstreams: Vec::new(),
                     ordered: false,
                     history: false,
+                    itemless: false,
                     profiles: Vec::new(),
                     values: None,
                 };
@@ -486,6 +530,8 @@ impl<'a> Space<'a> {
                 kind.classes = results.into_iter().map(Some).chain([None]).collect();
                 kind.ordered = reading.iter().any(|matching| matching.ordered);
                 kind.history = reading.iter().any(|matching| matching.history);
+                kind.itemless = reading.iter().any(|m| m.ordered && m.descended)
+                    && reading.iter().any(|m| m.ordered && !m.descended);
                 kind.profiles = profiles(reading.iter().map(|m| m.independent_on));
                 kind.values = down_sets(&kind.profiles);
                 kinds.push(kind);
@@ -1040,8 +1086,14 @@ impl<'a> Space<'a> {
     /// The value of the history dimension of the evidence dimension at `at`, which an order form
     /// or a `children` form reads.
     fn history(&self, state: &State, at: usize) -> Option<u32> {
+        Some(self.history_split(state, at)?.0)
+    }
+
+    /// [`Space::history`] and the item mode of `state` for the dimension at `at`
+    /// ([`Kind::split_history`]).
+    fn history_split(&self, state: &State, at: usize) -> Option<(u32, u32)> {
         let index = self.with_history().position(|with| *with == at)?;
-        Some(state[self.first_history() + index])
+        Some(self.kinds[at].split_history(state[self.first_history() + index]))
     }
 
     /// The rank of each `ordered` dimension and then each `later` record in `state`: all `0` when
@@ -1446,11 +1498,24 @@ impl<'a> Space<'a> {
                         u32::from(at < self.order_at() && *value != NO_LAST)
                     }
                 } else if at >= first_history {
-                    match *value {
-                        CURRENT => 0,
-                        UNPLACED => 1,
-                        earlier => (earlier - UNPLACED).count_ones(),
-                    }
+                    let of = self.with_history().nth(at - first_history);
+                    let (history, mode) = of.map_or((*value, NAMED), |of| {
+                        let (history, mode) = self.kinds[*of].split_history(*value);
+                        (
+                            history,
+                            if self.kinds[*of].itemless {
+                                mode
+                            } else {
+                                NAMED
+                            },
+                        )
+                    });
+                    u32::from(mode != NAMED)
+                        + match history {
+                            CURRENT => 0,
+                            UNPLACED => 1,
+                            earlier => (earlier - UNPLACED).count_ones(),
+                        }
                 } else if at < kinds {
                     self.kinds[at]
                         .records(*value)
@@ -1529,6 +1594,15 @@ impl<'a> Space<'a> {
         for at in self.with_history() {
             let kind = &self.kinds[*at];
             let name = kind.name();
+            match self.history_split(state, *at) {
+                Some((_, NO_ITEM)) if kind.itemless && self.holds(state, *at) => {
+                    items.push(format!("evidence {name} naming no item"));
+                }
+                Some((earlier, LAST_EARLIER)) if earlier > UNPLACED => {
+                    items.push(format!("evidence {name} earlier observed last"));
+                }
+                _ => {}
+            }
             match self.history(state, *at) {
                 Some(UNPLACED) if state[*at] == 0 || self.after() => {
                     items.push(format!(
@@ -1631,12 +1705,15 @@ impl<'a> Space<'a> {
                 .position(|ordered| *ordered == at)
                 .map(|index| ranks[index])
         };
+        let last_earlier =
+            |at: usize| matches!(self.history_split(state, at), Some((_, LAST_EARLIER)));
         let mut records = Vec::new();
         for (at, (kind, value)) in self.kinds.iter().zip(state).enumerate() {
             let observed_at = |class: Option<&str>| match (self.history(state, at), rank_of(at)) {
                 (Some(CURRENT), Some(rank)) => Some(instant(rank)),
                 (Some(UNPLACED), Some(rank)) if after => Some(instant(rank)),
                 (Some(UNPLACED), _) | (None, _) | (_, None) => None,
+                (Some(_), Some(rank)) if last_earlier(at) => Some(instant(rank)),
                 (Some(_), Some(rank)) if after => Some(if self.current_first(state, at, class) {
                     instant(rank)
                 } else {
@@ -1691,7 +1768,11 @@ impl<'a> Space<'a> {
                 }
                 Some(value) => {
                     // A dimension only a `children` form reads has no rank and no instant.
-                    let observed_at = rank_of(*at).map(instant);
+                    let observed_at = rank_of(*at).map(|rank| match (last_earlier(*at), after) {
+                        (false, _) => instant(rank),
+                        (true, true) => half_past(rank),
+                        (true, false) => instant(late),
+                    });
                     for (bit, class) in kind.classes.iter().enumerate() {
                         if (value - UNPLACED) & (1 << bit) == 0 {
                             continue;
@@ -1738,11 +1819,11 @@ impl<'a> Space<'a> {
             });
         }
         // The dimensions whose records name no item: those an order form reads whose history is
-        // `UNPLACED`, each its kind and artifact.
+        // `UNPLACED` or names none, each its kind and artifact.
         let unnamed: Vec<(&EvidenceKindId, &ArtifactId)> = self
             .ordered
             .iter()
-            .filter(|at| self.history(state, **at) == Some(UNPLACED))
+            .filter(|at| matches!(self.history_split(state, **at), Some((_, NO_ITEM))))
             .filter_map(|at| {
                 let record = self.kinds[*at].record.as_ref()?;
                 Some((&record.kind, &record.subject))
@@ -2254,6 +2335,7 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
                         independent_on: None,
                         ordered: false,
                         history: true,
+                        descended: false,
                     });
                 }
             }
@@ -2265,6 +2347,7 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
             independent_on: matching.independent_on.as_deref(),
             ordered: false,
             history: false,
+            descended: false,
         }),
         Predicate::First(form) => found.push(Read {
             kind: &form.kind,
@@ -2273,6 +2356,7 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
             independent_on: None,
             ordered: true,
             history: false,
+            descended: false,
         }),
         // Each record it pairs, as `first` reads its kind and result: an earlier record is an
         // earlier record of the class (story:revision-ordering).
@@ -2285,6 +2369,7 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
                     independent_on: None,
                     ordered: true,
                     history: false,
+                    descended: true,
                 });
             }
         }
@@ -2297,6 +2382,7 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
                     independent_on: None,
                     ordered: true,
                     history: false,
+                    descended: false,
                 });
             }
         }
