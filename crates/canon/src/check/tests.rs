@@ -2942,3 +2942,58 @@ fn a_decision_outcome_slice_holds_the_dimensions_its_condition_reads() {
     assert_eq!(space.slice(&plain).dimensions(), "decision `e` 2");
     assert_slices_agree(&ir, None, source);
 }
+
+/// Adversary, review of wave 2026-11-21 (area `eval`): the check space gives a record no `item`
+/// only in a dimension whose history is `UNPLACED`, which also takes every `observed_at` away. So
+/// a `descended` form that is `unknown` while a current record of its `then` result is present
+/// never stands beside a placed `first` over the same kind. One record (`k` passed, current
+/// revision, an instant, no item; the case gives `descends_from: [r0]`) gives `unknown`, `true`,
+/// `true`, and the outcome needing that is legitimate under `canon evaluate`; `canon check`
+/// reports it `unreachable-outcome`, and `canon generate` refuses the protocol.
+#[test]
+fn adversary_descended_unknown_beside_a_placed_first_of_its_kind_is_reached() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {k: {}}\n\
+        claims:\n\
+        \x20\x20red_then_green: {true_when: {descended: {first: {kind: k, result: failed}, \
+        then: {kind: k, result: passed}}}}\n\
+        \x20\x20passes: {true_when: {evidence: {kind: k, result: passed}}}\n\
+        \x20\x20first_pass: {true_when: {first: {kind: k, result: passed}}}\n\
+        actions: {run: {may_produce: [{evidence: k}]}}\n\
+        outcomes:\n\
+        \x20\x20undecided: {requires: {all: [{claim: red_then_green, is: unknown}, \
+        {claim: passes}, {claim: first_pass}]}}\n";
+    let ir = compiled(source);
+    let record = crate::model::EvidenceRecord {
+        format: crate::model::EVIDENCE_FORMAT.to_owned(),
+        producer: None,
+        id: crate::model::EvidenceId::new("e1"),
+        kind: EvidenceKindId::new("k"),
+        result: Some("passed".to_owned()),
+        subject: crate::model::ArtifactId::new("a"),
+        subject_revision: Revision::new(REVISION),
+        observed_at: Some(crate::model::Instant::new("2026-10-01T09:00:00Z")),
+        upstream_revisions: Declarations::default(),
+        child_case: None,
+        item: None,
+    };
+    let evidence = [record];
+    let ancestors = Some(vec![Revision::new("r0")]);
+    assert_eq!(
+        claim_values_descending(&ir, &evidence, ancestors.clone()),
+        [
+            crate::model::Truth::True,
+            crate::model::Truth::True,
+            crate::model::Truth::Unknown
+        ],
+        "first_pass, passes, red_then_green"
+    );
+    let report = check(&ir, None).expect("checked");
+    assert!(
+        !report.to_string().contains("unreachable-outcome"),
+        "canon evaluate makes `undecided` legitimate with one record about the current \
+         revision without an item, yet canon check reports:\n{report}"
+    );
+}
