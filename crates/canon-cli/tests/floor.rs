@@ -323,6 +323,12 @@ fn floor_with_added_action(name: &str, body: &str) -> String {
 #[test]
 fn floor_refuses_an_added_action_that_publishes_without_the_floors_capability() {
     let dir = scratch("added-action");
+    let help = canon(&["floor", "--help"]);
+    assert!(
+        !text(&help.stdout).contains("is not caught"),
+        "the help no longer states the limit: {}",
+        text(&help.stdout)
+    );
     let floor_path = compiled_source(&dir, "floor", &floor_source());
     let same_precondition =
         "    precondition:\n      claim: explanation.supported\n      is: true\n";

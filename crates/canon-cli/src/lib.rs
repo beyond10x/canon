@@ -268,10 +268,7 @@ pub enum Command {
     /// otherwise prints `floor: breached` and each `RELAXATION` and `BREAKING` change, naming the
     /// identifiers it touches, and exits 1. The floor and the protocol keep their own ids,
     /// revisions and descriptions, which are not compared. The protocol does not name its floor;
-    /// pass a compiled import as the floor to check that a refinement only tightens it. An added
-    /// action is an `EXPANSION`, and every `EXPANSION` passes, so the floor guards only what the
-    /// protocol that declares an action requires: an action added to the protocol that produces
-    /// a finding the floor guards, without the capability the floor requires of it, is not caught.
+    /// pass a compiled import as the floor to check that a refinement only tightens it.
     Floor {
         /// The organization's floor, a `protocol/1` document compiled as `canon compile` prints it.
         #[arg(long)]
