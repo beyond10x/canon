@@ -59,7 +59,7 @@ enum Expected {
 
 /// Every fixture directory, the exit status and where the expected text goes. A walk that finds
 /// nothing exits 0; findings and a refusal exit 1 (`REJECTED`).
-const CASES: [(&str, i32, Expected); 25] = [
+const CASES: [(&str, i32, Expected); 29] = [
     ("clean", 0, Expected::Report),
     ("mutual", 1, Expected::Report),
     ("denied", 1, Expected::Report),
@@ -85,6 +85,18 @@ const CASES: [(&str, i32, Expected); 25] = [
     ("revise-child", 0, Expected::Report),
     ("revised-by", 0, Expected::Report),
     ("revised-by-undeclared", 1, Expected::Report),
+    ("revise-child-current", 0, Expected::Report),
+    ("revise-child-other-subject", 1, Expected::Report),
+    ("revise-child-two-subjects", 1, Expected::Report),
+    ("revise-child-late", 1, Expected::Report),
+];
+
+/// The cases of story:child-outcome-recovery, expectations 1 to 4.
+const RECOVERY: [&str; 4] = [
+    "revise-child-current",
+    "revise-child-other-subject",
+    "revise-child-two-subjects",
+    "revise-child-late",
 ];
 
 /// The cases of story:simulate-revise-step, expectations 1 to 6.
@@ -305,6 +317,86 @@ fn simulate_follows_the_rules_refined_after_pass_2() {
 #[test]
 fn simulate_revises_declared_artifacts() {
     let failures = failures(&REVISE);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// story:child-outcome-recovery: the revise step sets aside only the child outcomes about the
+/// artifact it revises, and a child that ends after its subject was revised may end against the
+/// earlier revision. Every fixture declares `a` and `b`; action `open` opens a child case about
+/// `b`; claim `done.current` is `{children: {in: [done], revision: current}}`; action `fix` is
+/// admissible while it is false; outcome `built` requires it.
+///
+/// 1. `revise-child-current`, `fix` revises `b`: exit 0, the summary line only. The failed child's
+///    outcome, about `b`, becomes an earlier one, the claim is unknown again, and a new child ends
+///    `done`.
+/// 2. `revise-child-other-subject`, `fix` revises `a`: exit 1, one finding, whose state holds the
+///    failed outcome as a current one.
+/// 3. `revise-child-two-subjects`, `open_a` opens a child about `a` too, `fix` revises `b`: a
+///    failed child of `open` is in no printed state, a failed child of `open_a` is in exactly one.
+/// 4. `revise-child-late`: a path holds a child's outcome written `earlier` after
+///    `` action `fix` revises `b` ``.
+///
+/// The text of each is held byte for byte; two runs give the same bytes (`failures`).
+#[test]
+fn simulate_sets_aside_child_outcomes_of_the_revised_subject() {
+    let mut failures = failures(&RECOVERY);
+
+    // `failures` ran each case twice and held its output to `report.txt`; the three properties
+    // below read that file, so the walk of the largest fixture (about 8 s) is not run a third time.
+    let report = |case: &str| read(&format!("{FIXTURES}/{case}/report.txt"));
+    let current = report("revise-child-current");
+    let findings = |report: &str| {
+        report
+            .lines()
+            .filter(|line| !line.starts_with("simulated:"))
+            .count()
+    };
+    if findings(&current) != 0 {
+        failures.push(format!("revise-child-current: findings in {current:?}"));
+    }
+    let other = report("revise-child-other-subject");
+    if findings(&other) != 1 || !other.contains("`case_outcome` about `b`") {
+        failures.push(format!(
+            "revise-child-other-subject: expected one finding holding a current record about b: {other:?}"
+        ));
+    }
+    let two = report("revise-child-two-subjects");
+    let printed: Vec<&str> = two
+        .lines()
+        .filter(|line| line.contains("state {"))
+        .collect();
+    // A failed child's record is the one without a result.
+    let about = |subject: &str| {
+        let failed = format!("evidence `case_outcome` about `{subject}`");
+        printed
+            .iter()
+            .filter(|line| {
+                let state = line.split_once("state {").map_or("", |(_, rest)| rest);
+                let state = state.split_once("}:").map_or(state, |(state, _)| state);
+                state.split(", ").any(|item| item == failed)
+            })
+            .count()
+    };
+    if about("b") != 0 || about("a") != 1 {
+        failures.push(format!(
+            "revise-child-two-subjects: a failed child of open in {} printed states, of open_a in {}: {two:?}",
+            about("b"),
+            about("a")
+        ));
+    }
+    let late = report("revise-child-late");
+    let revise = "action `fix` revises `b`";
+    let path_has_earlier = late.lines().any(|line| {
+        line.split_once("path: ").is_some_and(|(_, path)| {
+            path.find(revise)
+                .is_some_and(|at| path[at..].contains(" earlier"))
+        })
+    });
+    if !path_has_earlier {
+        failures.push(format!(
+            "revise-child-late: no path with an earlier record after `fix`: {late:?}"
+        ));
+    }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 

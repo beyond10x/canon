@@ -955,6 +955,20 @@ fn an_external_revision_is_written_as_protocol_revises() {
     );
 }
 
+/// story:child-outcome-recovery, § Outcome 5: an action whose `case_open` subject is the artifact
+/// the space's `case_outcome` dimension is about (here `a`, the least id) is walked as before: no
+/// record is written about an artifact, and a revision of `b` leaves the failed outcome current.
+#[test]
+fn the_spaces_own_subject_is_not_split() {
+    let source = include_str!(
+        "../../../../fixtures/investigation/simulate/revise-child-current/protocol.yaml"
+    )
+    .replace("      subject: b\n", "      subject: a\n");
+    let text = report(&source);
+    assert!(text.contains("state {evidence `case_outcome`}"), "{text}");
+    assert!(!text.contains(" about "), "{text}");
+}
+
 /// A protocol with a `descended` form (story:revision-ordering) is refused as `ordered-evidence`,
 /// as one with any other order form is, naming the first declaration that has one.
 #[test]
