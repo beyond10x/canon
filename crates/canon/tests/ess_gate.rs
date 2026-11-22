@@ -8,6 +8,7 @@
 //! [`gate`] runs the four steps in order on any specification directory. The cases below run it on
 //! `ess/` and on copies of `ess/` broken so that exactly one step must fail.
 
+use std::cell::Cell;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
@@ -15,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 /// The ESS release `ess/ess-inputs.yaml` pins and CI installs.
-const PINNED: &str = "0.77.0";
+const PINNED: &str = "0.97.3";
 
 /// The marker of an open question, written as two halves so this file does not carry it whole.
 const OPEN_QUESTION: &str = concat!("UNMAPPED", ":");
@@ -98,9 +99,31 @@ fn spec_copy(case: &str) -> PathBuf {
     copy
 }
 
+thread_local! {
+    /// Whether `ess` calls of this test thread run as the toolchain, not as the dispatcher.
+    static UNDISPATCHED: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Runs `body` with every `ess` call of this thread marked `ESS_TOOLCHAIN_DELEGATED=1`, the mark
+/// the dispatcher puts on the release it delegates to. Since ess 0.97.3 the dispatcher refuses a
+/// `requires:` that differs from its own release when no toolchain of that release is at hand
+/// ("did not switch to it"); marked, `ess` is the toolchain and only warns about an older pin,
+/// which is the behaviour of the negative control for `--strict-requires`.
+fn undispatched<T>(body: impl FnOnce() -> T) -> T {
+    UNDISPATCHED.with(|flag| flag.set(true));
+    let result = body();
+    UNDISPATCHED.with(|flag| flag.set(false));
+    result
+}
+
 /// Runs `ess` in `dir`. Fails, rather than skips, when `ess` is not on `PATH`.
 fn ess(dir: &Path, args: &[&str]) -> Output {
-    match Command::new("ess").args(args).current_dir(dir).output() {
+    let mut command = Command::new("ess");
+    command.args(args).current_dir(dir);
+    if UNDISPATCHED.with(Cell::get) {
+        command.env("ESS_TOOLCHAIN_DELEGATED", "1");
+    }
+    match command.output() {
         Ok(output) => output,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => panic!(
             "`ess` is not on PATH: the ESS gate needs ess {PINNED}, the release ess/ess-inputs.yaml pins \
@@ -368,9 +391,12 @@ fn an_older_requires_fails_step_1() {
         "requires: ess 0.51.0",
     );
 
-    ess_on(&copy, &["specify", "validate"], &[])
-        .expect("without --strict-requires the older pin only warns, so the flag is what fails it");
-    expect_failure_at(&copy, "step 1", &["--strict-requires refuses"]);
+    undispatched(|| {
+        ess_on(&copy, &["specify", "validate"], &[]).expect(
+            "without --strict-requires the older pin only warns, so the flag is what fails it",
+        );
+        expect_failure_at(&copy, "step 1", &["--strict-requires refuses"]);
+    });
 }
 
 #[test]
