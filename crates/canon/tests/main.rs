@@ -54,6 +54,7 @@ mod adversary_decisions_docs;
 mod adversary_decisions_eval;
 mod adversary_descended;
 mod adversary_ess_model_mutants;
+mod adversary_eval_worker;
 mod adversary_evidence_order;
 mod adversary_evidence_order_after;
 mod adversary_evidence_order_since;
