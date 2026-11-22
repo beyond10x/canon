@@ -5,12 +5,12 @@ description: Build the canon command line from source, then validate, compile an
 
 # Getting started
 
-Install source release `0.10.0`. You need `rustup`: the repository's
+Install source release `0.11.0`. You need `rustup`: the repository's
 `rust-toolchain.toml` pins the compiler (1.100.0) and rustup installs it on first use;
 the code uses the 2024 edition. The `canon-cli` crate installs a binary named `canon`.
 
 ```bash
-git clone --branch 0.10.0 https://github.com/beyond10x/canon.git
+git clone --branch 0.11.0 https://github.com/beyond10x/canon.git
 cd canon
 cargo install --locked --path crates/canon-cli
 canon --help
