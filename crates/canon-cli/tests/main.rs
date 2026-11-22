@@ -46,6 +46,7 @@ mod conform_run;
 mod decision_condition;
 mod decision_outcomes;
 mod ess_commands_match;
+mod evaluate_help_evidence_ids;
 mod evaluator_skeleton;
 mod evidence_file_named;
 mod evidence_freshness;
