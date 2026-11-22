@@ -30,8 +30,9 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
 - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
   evidence match without a result has `"result": null`; a claim test without `is` has
   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-  true; absent lists and sections are empty. The sixteen exceptions are an evidence kind's
-  `max_age` and its `supplied_by`, the `subject` of an evidence match, an order form or a
+  true; absent lists and sections are empty. The eighteen exceptions are an artifact's
+  `revised_by`, an evidence kind's `max_age` and its `supplied_by`, the `when` of an outcome's
+  decision requirement, the `subject` of an evidence match, an order form or a
   `children` form, an evidence match's `independent_on`, an obligation's `applicable_when`, an
   action's `arguments`, an action's `case_open`, an action's `author` and its `revises`, an
   action's `records_together`, the

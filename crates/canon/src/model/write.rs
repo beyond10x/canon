@@ -7,7 +7,9 @@
 //! beside the model, as the `canon-ir/1` writer is: the model derives no `Serialize`, because a
 //! derived one would write Rust variant tags and `null` for an absent option, which every optional
 //! key refuses on read. Every model struct is destructured with no `..`, so a field added to the
-//! model stops this file compiling until the writer writes it. `write` is infallible and returns
+//! model stops this file compiling until the writer writes it, except `DecisionRequirement`,
+//! which is read field by field (`requirement.decision`, `requirement.when`): a field added to
+//! it is not caught by the compiler. `write` is infallible and returns
 //! for every model whose nesting the calling thread's stack holds (see "Depth"). It writes a model
 //! the validator refuses (a repeated identifier, a dangling reference) like any other, and
 //! `canon validate` stays the only judge of validity.
@@ -40,7 +42,9 @@
 //!
 //! - A claim test is always written with `is`: `{"claim": "c", "is": "true"}`. A truth value is
 //!   always the quoted word `"true"`, `"false"` or `"unknown"`.
-//! - An outcome that requires an explicit decision is `"requires": {"decision": "<name>"}`.
+//! - An outcome that requires an explicit decision is `"requires": {"decision": "<name>"}`, or
+//!   `"requires": {"decision": "<name>", "when": <predicate>}` when the requirement has a
+//!   condition (story:decision-condition); `when` is written only then.
 //! - Every string and every key is quoted, so YAML's implicit typing (`true`, `null`, `~`, `1e3`,
 //!   `<<`) cannot read an identifier as anything else. A case input value `parse` read from a
 //!   boolean or a number (`values: [true, 2]`) is text in the model and is written as text.
