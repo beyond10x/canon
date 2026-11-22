@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:local-gate-equals-ci
 kind: story
-status: active
+status: implemented
 title: The local gate and CI use one pinned compiler and one environment
 relations:
 - decomposes: epic:canon-kernel
@@ -26,10 +26,11 @@ scope:
   path: scripts/ci-watch
 - confidence: inferred
   path: website/docs/getting-started.md
-revision: 12
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T21:46:08Z", actor: "human:timo", revision: 8}
 - {from: "proposed", to: "active", at: "2026-11-21T21:46:08Z", actor: "human:timo", revision: 9}
+- {from: "active", to: "implemented", at: "2026-11-22T11:12:33Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"test_result":1}}, correlation: "wave-2026-11-20-w9"}
 ---
 ## Outcome
 
@@ -151,3 +152,14 @@ the workstation. Each binds the unit in addition to § Acceptance.
   `invalidation_evaluation_cost.rs:207,273`. This unit does not change them; it reports each
   one's time on CI and on the workstation. story:fast-test-step owns their time.
 - `AGENTS.md` § Releases (line 135) is where the pin file and `task ci-watch` are named.
+
+## Scope as built
+
+Written at the close of wave 2026-11-20-w9 from the wave page, the review of the integration branch (`review-result:review-wave-9-gate`) and the merge of `impl/local-gate-equals-ci` (`33cd84d6`: 8 files, +224 −15). It corrects the body where the two differ.
+
+- Changed: `rust-toolchain.toml` (1.100.0, read by both workflows), `.github/workflows/check.yml`, `.github/workflows/pages.yml`, `Taskfile.yml` (`task ci-watch`, the pinned `ess` first on `PATH`), `AGENTS.md` § Releases, `scripts/ci-watch`, `website/docs/getting-started.md`. Outside the typed scope: `crates/canon-cli/tests/ci_watch.rs`. In the typed scope and not changed: `.cargo/config.toml` (story:fast-test-step created it, `eb7c3a4d7`) and `Cargo.toml`.
+- The three workstation settings are carried none: no test reads a `CARGO_*`, `RUST*` or `CI` variable (the unit's reading).
+- After the merge: correction unit 1 (`b166206f1`) makes `scripts/ci-watch` require the job `canon / task check` (`--require`, `CI_WATCH_REQUIRE`) and exit 2 at once for a branch without a pull request (gate G2, G8).
+- Acceptance: `cargo clippy --workspace --all-targets --locked -- -D warnings` exited 0 with rustc 1.100.0 in the gate below, and the `ci_watch` tests passed (8). `AGENTS.md` names `rust-toolchain.toml` and `task ci-watch`. **Not shown:** the rustc version CI prints beside the local one (the pin on the CI runner is unproven); clippy on CI; `task ci-watch` on a red and on a green run with their links (the unit's run against pull request 28 ended pending, exit 2); the times of the four wall-clock-budget tests (`adversary2_tvc_eval.rs:144`, `adversary_conform_steps.rs:118`, `invalidation_evaluation_cost.rs:207,273`) on CI and on the workstation.
+
+**Gate of the close-out**, on `wave/2026-11-21` at `2f3d14b14`, 2026-11-22 10:43 to 11:01 UTC, host load 67 on 20 CPUs, rustc 1.100.0, each step run once by the coordinator's gate script (not `task check` as one command): build exit 0 (125 s); `task ess-gate` 0; `cargo fmt --check` 0; `cargo clippy --workspace --all-targets --locked -- -D warnings` 0; `task test` 0 (1275 tests; the step's own line: `ess-gate 2.2 s + workspace 50.4 s + -p b10x-canon 2.7 s = 55.4 s, bound 120 s`; slowest 16.9 s); `canon conform run` 0 (`30 passed, 0 failed`; `31 implemented, 31 covered`); `task docs-check` 0 (18 generated files current); `task test-slow` exit 201 (63 tests: 53 passed, 10 killed at 60 s; its CI step may fail, D123, story:slow-lane-under-bound). Recorded as `test_result` evidence. The four review results of the wave are `review-result:review-wave-9-eval`, `-simulate`, `-model` and `-gate`.

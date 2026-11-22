@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:fast-test-step
 kind: story
-status: active
+status: implemented
 title: The gate's test step ends within two minutes
 relations:
 - decomposes: epic:canon-kernel
@@ -54,10 +54,11 @@ scope:
   path: crates/canon/tests/invalidation_evaluation_cost.rs
 - confidence: inferred
   path: crates/canon/tests/missing_keys.rs
-revision: 20
+revision: 22
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 8}
 - {from: "proposed", to: "active", at: "2026-11-21T21:04:59Z", actor: "human:timo", revision: 9}
+- {from: "active", to: "implemented", at: "2026-11-22T11:12:32Z", actor: "human:timo", revision: 22, decided_on: {"recorded":{"test_result":1}}, correlation: "wave-2026-11-20-w9"}
 ---
 ## Outcome
 
@@ -298,3 +299,20 @@ repository; sent by the `host-operator` session): `~/.cargo/config.toml` on the 
   `[env]` and the rest and merges after it. The typed scope gains the file.
 - One `cargo clean` after the switch, with the size of `target/` before it and after the next
   full build.
+
+## Scope as built
+
+Written at the close of wave 2026-11-20-w9 from the wave page, the review of the integration branch (`review-result:review-wave-9-gate`) and the merge of `impl/fast-test-step` (`61e724cb6`: 22 files, +812 −85). It corrects the body where the two differ.
+
+- Changed: `.config/nextest.toml` (the 60 s kill, the `slow` lane), `.cargo/config.toml` (no debug information, opt-level 3 for `b10x-canon` and dependencies), `.github/workflows/check.yml`, `AGENTS.md`, `Taskfile.yml` (the 120 s step bound, `test-slow`), `crates/*/Cargo.toml` and `crates/*/tests/main.rs` (one test binary per crate, layout test), `crates/canon/src/check/tests.rs` and ten test files. In the typed scope and not changed: `Cargo.toml` (the profile is in `.cargo/config.toml`) and seven test files the scoper named; the `slow` lane is a list of test names in `.config/nextest.toml` (`default-filter`), so those files needed no edit to move a test.
+- Measured by the unit: before, 972.7 s for 1255 tests and 163 test binaries; after, 8 test binaries, executable 6.5 MB with no `.debug_*` section.
+- After the merge: `4e2bd72d9` lets the `task test-slow` step of CI fail (D123); correction unit 1 adds the `ess-gate` tests to the ten-slowest list and the sum (`428ce4dc5`, gate G5) and runs `canon-docs` tests under nextest (`a27aeab95`, G3); correction unit 2 adds one test to the `slow` lane (`.config/nextest.toml`, `ddc337201`, 29.0 s).
+- Acceptance:
+  - Step under 120 s: the gate below, 55.4 s on the step's own line at load 67; the unit's runs 57.0, 54.8, 59.8 and 109.5 s, and 158.5 and 150.8 s over the bound at load 38 to 61; the first whole-wave gate 151.1 s at load 80 (gate G4, not changed; story:review-notes-wave-9).
+  - Ten slowest listed, none over 60 s: shown, slowest 16.9 s.
+  - A test sleeping 61 s killed: shown by the unit (60.005 s, step exit 201), not committed.
+  - Gate lane plus `slow` lane equal the count before: not recomputed at the close-out.
+  - CI runs the test step and the `slow` lane green: **not shown**. Locally the `slow` lane kills 10 of 63 tests; its CI step may fail until story:slow-lane-under-bound (draft) is done.
+  - `AGENTS.md` names the two lanes, the budget and `.config/nextest.toml`: shown (`AGENTS.md:136-146`).
+
+**Gate of the close-out**, on `wave/2026-11-21` at `2f3d14b14`, 2026-11-22 10:43 to 11:01 UTC, host load 67 on 20 CPUs, rustc 1.100.0, each step run once by the coordinator's gate script (not `task check` as one command): build exit 0 (125 s); `task ess-gate` 0; `cargo fmt --check` 0; `cargo clippy --workspace --all-targets --locked -- -D warnings` 0; `task test` 0 (1275 tests; the step's own line: `ess-gate 2.2 s + workspace 50.4 s + -p b10x-canon 2.7 s = 55.4 s, bound 120 s`; slowest 16.9 s); `canon conform run` 0 (`30 passed, 0 failed`; `31 implemented, 31 covered`); `task docs-check` 0 (18 generated files current); `task test-slow` exit 201 (63 tests: 53 passed, 10 killed at 60 s; its CI step may fail, D123, story:slow-lane-under-bound). Recorded as `test_result` evidence. The four review results of the wave are `review-result:review-wave-9-eval`, `-simulate`, `-model` and `-gate`.

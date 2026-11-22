@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:planning-only-checks
 kind: story
-status: active
+status: implemented
 title: Planning-only pull requests pass the required check without build or test
 relations:
 - decomposes: epic:canon-kernel
@@ -20,10 +20,11 @@ scope:
   path: crates/canon/tests/planning_only_classifier.rs
 - confidence: inferred
   path: scripts/classify-changes.sh
-revision: 9
+revision: 11
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T21:46:06Z", actor: "human:timo", revision: 5}
 - {from: "proposed", to: "active", at: "2026-11-21T21:46:07Z", actor: "human:timo", revision: 6}
+- {from: "active", to: "implemented", at: "2026-11-22T11:12:33Z", actor: "human:timo", revision: 11, decided_on: {"recorded":{"test_result":1}}, correlation: "wave-2026-11-20-w9"}
 ---
 ## Outcome
 
@@ -153,3 +154,15 @@ Test cases added to § Acceptance's five lists: a pull request of only `AGENTS.m
 of only `.engineering/planning/story/x.md` is `docs-site-only`; one of only
 `.engineering/planning/epic/x.md` and `docs/plan/y.md` is `planning-only`; a rename of
 `crates/a.rs` to `docs/a.md` is `code`.
+
+## Scope as built
+
+Written at the close of wave 2026-11-20-w9 from the wave page, the review of the integration branch (`review-result:review-wave-9-gate`) and the merge of `impl/planning-only-checks` (`a382eedc`: 6 files, +306 −3). It corrects the body where the two differ.
+
+- Changed: `.github/workflows/check.yml`, `.github/workflows/pages.yml`, `AGENTS.md`, `Taskfile.yml` (task `docs-site-check`), `crates/canon/tests/planning_only_classifier.rs` and the new `scripts/classify-changes.sh`; the same six paths as the typed scope, none outside it.
+- Path list as built: `AGENTS.md` at any depth is code; story files and `website/` are docs-site; `.engineering/` outside the stories, `docs/` and root `*.md` are planning; any other path with a `/` is code. Decided by the unit: a `*.md` below the root is code; `pages.yml` skips only on `planning-only`; the ess install step runs only on `code`; a push to `main` is `code`.
+- After the merge: correction unit 1 (`a27aeab95`) makes `task docs-site-check` run `cargo nextest run -p canon-docs` under the 60 s kill, and `pages.yml` installs nextest (gate G3). The review noted that a classifier answer outside the three words runs no step (G7, INFEASIBLE today; story:review-notes-wave-9).
+- Acceptance: the classifier test passed in the gate below (11 passed). `git diff a382eedc^1 a382eedc -- .github/workflows/check.yml` changes no `name:` and no trigger line. `AGENTS.md` names `scripts/classify-changes.sh`. **Not shown:** a CI run link where a commit that changes only `docs/plan/` ends `canon / task check` green without `task check`, and one where a `.rs` change runs it. That needs a planning-only pull request after the merge.
+- This close-out commit changes `.engineering/planning/story/`, which the classifier calls docs-site: its CI run checks `website/data/status.json`, which the close-out does not regenerate.
+
+**Gate of the close-out**, on `wave/2026-11-21` at `2f3d14b14`, 2026-11-22 10:43 to 11:01 UTC, host load 67 on 20 CPUs, rustc 1.100.0, each step run once by the coordinator's gate script (not `task check` as one command): build exit 0 (125 s); `task ess-gate` 0; `cargo fmt --check` 0; `cargo clippy --workspace --all-targets --locked -- -D warnings` 0; `task test` 0 (1275 tests; the step's own line: `ess-gate 2.2 s + workspace 50.4 s + -p b10x-canon 2.7 s = 55.4 s, bound 120 s`; slowest 16.9 s); `canon conform run` 0 (`30 passed, 0 failed`; `31 implemented, 31 covered`); `task docs-check` 0 (18 generated files current); `task test-slow` exit 201 (63 tests: 53 passed, 10 killed at 60 s; its CI step may fail, D123, story:slow-lane-under-bound). Recorded as `test_result` evidence. The four review results of the wave are `review-result:review-wave-9-eval`, `-simulate`, `-model` and `-gate`.

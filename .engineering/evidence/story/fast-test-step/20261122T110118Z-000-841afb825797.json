@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-22T11:01:18Z",
+  "actor": "human:timo",
+  "artifact": "story:fast-test-step",
+  "kind": "story",
+  "revision": 21,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "full gate on wave/2026-11-21 2f3d14b14: build, ess-gate, fmt, clippy, test, conform, docs-check exit 0; test-slow exit 201 (continue-on-error, D123)",
+    "reference": ".engineering/planning/story/fast-test-step.md#scope-as-built"
+  }
+}
