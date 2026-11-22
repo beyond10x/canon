@@ -34,10 +34,12 @@ const EARLIER: &str = "r0";
 /// records' instants away, and an earlier record is always observed before the current ones, so
 /// a `descended` form could not be `unknown` beside the instants another order form reads, nor
 /// `true` beside a first observation that is a current record, nor `true` or `false` beside no
-/// instant. A dimension a `descended` form and another order form both read
-/// ([`Kind::itemless`]) has every history value in each of three modes ([`NAMED`], [`NO_ITEM`]
-/// and [`LAST_EARLIER`]) to reach them. A dimension only a `descended` form reads needs no such
-/// values, since nothing else reads its instants.
+/// instant, nor `true` beside a `first` that is `true` over earlier records of two results, which
+/// are then at two instants. A dimension a `descended` form and another order form both read
+/// ([`Kind::itemless`]) has every history value in each of three modes ([`NAMED`], [`NO_ITEM`] and
+/// [`LAST_EARLIER`]) and each earlier set of two or more classes in two more ([`LOW_FIRST`] and
+/// [`HIGH_FIRST`]) to reach them. A dimension only a `descended` form reads needs no such values,
+/// since nothing else reads its instants.
 const ITEM: &str = "item";
 
 /// How the producer of a record in a checked state is named: this, a dash and the producer's
@@ -98,6 +100,28 @@ const NO_ITEM: u32 = 1;
 /// The item mode of a history value whose earlier records are observed after the dimension's
 /// current records, which are its first observations, and name [`ITEM`] like any other.
 const LAST_EARLIER: u32 = 2;
+
+/// The item mode of a history value whose earlier records, when they are of two or more results,
+/// are observed at two instants, before the dimension's current records: the records of the
+/// result of the lowest class alone first, at the rank's instant, and the others
+/// [`QUARTER_PAST`] it. A history of one earlier result is [`NAMED`] in all but name, so it has
+/// no value in this mode.
+const LOW_FIRST: u32 = 3;
+
+/// The item mode of a history value that is [`LOW_FIRST`] with the highest class first.
+const HIGH_FIRST: u32 = 4;
+
+/// How many item modes hold every history value of an [`Kind::itemless`] dimension: [`NAMED`],
+/// [`NO_ITEM`] and [`LAST_EARLIER`]. [`LOW_FIRST`] and [`HIGH_FIRST`] hold only the earlier sets
+/// of two or more classes, the only values they change (finding F6 of the review of wave
+/// 2026-11-22-w11): a history of no earlier class, or of one, holds in them the records of the
+/// [`NAMED`] value, which the space does not repeat.
+const FULL_MODES: u32 = 3;
+
+/// Seconds a [`LOW_FIRST`] or [`HIGH_FIRST`] history observes the earlier records it puts second
+/// after its rank's instant: after the instant, before [`half_past`] it, at which an `after` or a
+/// `since` observes current records, and before the next rank's.
+const QUARTER_PAST: u32 = 15;
 
 /// A later-record dimension's value that adds no record.
 const NO_LATER: u32 = 0;
@@ -215,8 +239,10 @@ struct Kind<'a> {
     history: bool,
     /// Whether a `descended` form and another order form read this dimension, so that its records
     /// can name no item and still have instants, or an item and no instant, or an earlier record
-    /// after its current ones: its history dimension then has every value in each of three modes,
-    /// as [`Kind::histories`] and [`ITEM`] say.
+    /// after its current ones, or earlier records of two results at two instants: its history
+    /// dimension then has every value in each of three modes and each earlier set of two or more
+    /// classes in two more, as [`Kind::histories`] and [`ITEM`]
+    /// say.
     itemless: bool,
     /// The producer profiles of its records, in set order: each distinct demand of the evidence
     /// matches that read it, and the empty profile when a match that demands nothing or an order
@@ -329,25 +355,66 @@ impl<'a> Kind<'a> {
 
     /// How many values its history dimension has: [`CURRENT`], [`UNPLACED`], and each non-empty
     /// set of classes observed earlier; and, for an [`Kind::itemless`] dimension, each of those
-    /// in each of its three [`NAMED`] modes. `None` when it does not fit.
+    /// in each of its [`FULL_MODES`] item modes, and each set of two or more classes in each of
+    /// [`LOW_FIRST`] and [`HIGH_FIRST`]. `None` when it does not fit.
     fn histories(&self) -> Option<u128> {
         let sets = 1u128
             .checked_shl(u32::try_from(self.classes.len()).ok()?)?
             .checked_add(1)?;
-        sets.checked_mul(if self.itemless { 3 } else { 1 })
+        if !self.itemless {
+            return Some(sets);
+        }
+        sets.checked_mul(u128::from(FULL_MODES))?
+            .checked_add(self.spread_sets()?.checked_mul(2)?)
+    }
+
+    /// How many sets of two or more classes the dimension has: `2^classes - 1 - classes`. `None`
+    /// when it does not fit.
+    fn spread_sets(&self) -> Option<u128> {
+        let classes = u32::try_from(self.classes.len()).ok()?;
+        1u128
+            .checked_shl(classes)?
+            .checked_sub(1 + u128::from(classes))
     }
 
     /// The history a history dimension's `value` stands for, as [`CURRENT`], [`UNPLACED`] or the
-    /// earlier classes it names, and its item mode: [`NAMED`], [`NO_ITEM`] or [`LAST_EARLIER`].
-    /// An [`Kind::itemless`] dimension has one run of values for each mode, in that order; any
-    /// other dimension is [`NO_ITEM`] with [`UNPLACED`] and [`NAMED`] otherwise.
+    /// earlier classes it names, and its item mode: [`NAMED`], [`NO_ITEM`], [`LAST_EARLIER`],
+    /// [`LOW_FIRST`] or [`HIGH_FIRST`].
+    /// An [`Kind::itemless`] dimension has one run of values for each of the first
+    /// [`FULL_MODES`] modes, in that order, then one run of the sets of two or more classes, in
+    /// the order of their numbers, for each of the two other modes; any other dimension is
+    /// [`NO_ITEM`] with [`UNPLACED`] and [`NAMED`] otherwise.
     fn split_history(&self, value: u32) -> (u32, u32) {
         if self.itemless {
             let each = (1u32 << self.classes.len()) + 1;
-            (value % each, value / each)
+            let full = each * FULL_MODES;
+            if value < full {
+                return (value % each, value / each);
+            }
+            let sets = (1u32 << self.classes.len()) - 1 - self.classes.len() as u32;
+            let at = value - full;
+            (
+                UNPLACED + set_of_two_or_more(at % sets),
+                FULL_MODES + at / sets,
+            )
         } else {
             (value, if value == UNPLACED { NO_ITEM } else { NAMED })
         }
+    }
+}
+
+/// The set of classes, as the bits of its classes, that is the `index`th (from 0) of the sets of
+/// two or more classes in the order of their numbers: the numbers that are no power of two, 3, 5,
+/// 6, 7, 9 and on. The least number `n` with `n = index + 1 + (bits of n)`, since `n` less the
+/// powers of two up to it, which are `bits of n` of them, is its place from 1.
+pub(super) fn set_of_two_or_more(index: u32) -> u32 {
+    let mut set = index + 1;
+    loop {
+        let next = index + 1 + (u32::BITS - set.leading_zeros());
+        if next == set {
+            return set;
+        }
+        set = next;
     }
 }
 
@@ -967,6 +1034,40 @@ impl<'a> Space<'a> {
                 .records(state[at])
                 .iter()
                 .any(|(held, _, _)| *held == class)
+    }
+
+    /// The class of the earlier records of the evidence dimension at `at` that `state` observes
+    /// first ([`LOW_FIRST`], [`HIGH_FIRST`]), when its earlier records are of two or more classes
+    /// and its history is in one of those modes; `None` otherwise.
+    fn spread_first(&self, state: &State, at: usize) -> Option<Option<&'a str>> {
+        let (earlier, mode) = self.history_split(state, at)?;
+        if !matches!(mode, LOW_FIRST | HIGH_FIRST) || earlier <= UNPLACED {
+            return None;
+        }
+        let present: Vec<Option<&'a str>> = self.kinds[at]
+            .classes
+            .iter()
+            .enumerate()
+            .filter(|(bit, class)| {
+                (earlier - UNPLACED) & (1 << bit) != 0 && !self.stood_in(state, at, **class)
+            })
+            .map(|(_, class)| *class)
+            .collect();
+        if present.len() < 2 {
+            return None;
+        }
+        if mode == LOW_FIRST {
+            present.first().copied()
+        } else {
+            present.last().copied()
+        }
+    }
+
+    /// Whether `state` observes the earlier record of `class` of the evidence dimension at `at`
+    /// at the later of two instants ([`Space::spread_first`] is another class).
+    fn observed_second(&self, state: &State, at: usize, class: Option<&str>) -> bool {
+        self.spread_first(state, at)
+            .is_some_and(|first| first != class)
     }
 
     /// The name of the thing at `item` in the order: an `ordered` dimension, `` `k` ``, a
@@ -1601,6 +1702,21 @@ impl<'a> Space<'a> {
                 Some((earlier, LAST_EARLIER)) if earlier > UNPLACED => {
                     items.push(format!("evidence {name} earlier observed last"));
                 }
+                Some((_, LOW_FIRST | HIGH_FIRST)) => {
+                    if let Some(first) = self.spread_first(state, *at) {
+                        items.push(match first {
+                            Some(result) => format!(
+                                "evidence {name} earlier result `{}` observed before the \
+                                 other earlier records",
+                                one_line(result)
+                            ),
+                            None => format!(
+                                "evidence {name} earlier with no result observed before the \
+                                 other earlier records"
+                            ),
+                        });
+                    }
+                }
                 _ => {}
             }
             match self.history(state, *at) {
@@ -1679,7 +1795,10 @@ impl<'a> Space<'a> {
     /// it from every evidence match, and records no upstream revision. Earlier records come after
     /// the current ones, in dimension and then class order. A dimension only a `children` form
     /// reads has the same history values and no rank: none of its records, current or earlier, has
-    /// an `observed_at`, which the form does not read.
+    /// an `observed_at`, which the form does not read. In the history modes [`LOW_FIRST`] and
+    /// [`HIGH_FIRST`] of a dimension a `descended` form and another order form read, the earlier
+    /// records of one class, the lowest or the highest, are at the rank's instant and those of the
+    /// other classes at [`QUARTER_PAST`] it, the current records after both.
     ///
     /// In a protocol with an `after` or a `since` form (story:evidence-order-after,
     /// story:evidence-order-since), a dimension with earlier records has its current records
@@ -1768,17 +1887,22 @@ impl<'a> Space<'a> {
                 }
                 Some(value) => {
                     // A dimension only a `children` form reads has no rank and no instant.
-                    let observed_at = rank_of(*at).map(|rank| match (last_earlier(*at), after) {
-                        (false, _) => instant(rank),
-                        (true, true) => half_past(rank),
-                        (true, false) => instant(late),
-                    });
+                    let observed_at = |class: Option<&str>| {
+                        rank_of(*at).map(|rank| match (last_earlier(*at), after) {
+                            (false, _) if self.observed_second(state, *at, class) => {
+                                quarter_past(rank)
+                            }
+                            (false, _) => instant(rank),
+                            (true, true) => half_past(rank),
+                            (true, false) => instant(late),
+                        })
+                    };
                     for (bit, class) in kind.classes.iter().enumerate() {
                         if (value - UNPLACED) & (1 << bit) == 0 {
                             continue;
                         }
                         if !self.stood_in(state, *at, *class) {
-                            records.push(earlier(*class, observed_at.clone(), records.len()));
+                            records.push(earlier(*class, observed_at(*class), records.len()));
                         }
                     }
                 }
@@ -2185,6 +2309,15 @@ fn half_past(rank: u32) -> Instant {
     Instant::new(format!("2000-01-01T{:02}:{:02}:30Z", rank / 60, rank % 60))
 }
 
+/// [`QUARTER_PAST`] seconds after the instant of rank `rank`: after it, before [`half_past`] it.
+fn quarter_past(rank: u32) -> Instant {
+    Instant::new(format!(
+        "2000-01-01T{:02}:{:02}:{QUARTER_PAST:02}Z",
+        rank / 60,
+        rank % 60
+    ))
+}
+
 /// The instant `seconds` after `2000-01-01T00:00:00Z`, written without a fraction: [`instant`] of
 /// rank `r` is `r * 60` of them, [`half_past`] it `r * 60 + 30`.
 fn at_seconds(seconds: u32) -> Instant {
@@ -2253,8 +2386,14 @@ pub(super) fn readers(ir: &Ir) -> impl Iterator<Item = (Reader, &Predicate)> {
         .actions
         .iter()
         .map(|(id, action)| (Reader::Action(id.clone()), &action.precondition));
+    // A decision's `when` holds claims and case inputs only (story:decision-condition, D4 B), so
+    // it adds no dimension to the space; its claims' evidence is what it reads, and an outcome
+    // that reads it is named as one whose predicate does.
     let outcomes = ir.outcomes.iter().filter_map(|(id, outcome)| {
-        let requirement = outcome.requires.predicate()?;
+        let requirement = outcome
+            .requires
+            .predicate()
+            .or_else(|| outcome.requires.when())?;
         Some((Reader::Outcome(id.clone()), requirement))
     });
     claims.chain(obligations).chain(actions).chain(outcomes)

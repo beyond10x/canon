@@ -117,14 +117,20 @@
 //!   binding keeps it from every evidence match, as a record observed before a fix moved the
 //!   artifact is kept. In a protocol with a `descended` form (story:revision-ordering) the records
 //!   of the dimensions in value 1 name no item, and every other record names one; a dimension
-//!   that a `descended` form and another order form both read has `3 * (2^classes + 1)` values:
+//!   that a `descended` form and another order form both read has
+//!   `3 * (2^classes + 1) + 2 * (2^classes - 1 - classes)` values:
 //!   the values above, then again with every record naming no item, then again with the earlier
 //!   records observed after the current ones, which are the first observations (value 1 then
-//!   names an item and has no instant in the first run), so a `descended` form can be `unknown`
-//!   beside a `first`, a `before`, an `after` or a `since` that has instants, `true` beside a
-//!   first observation that is a current record, and `true` or `false` beside none. Such a state
-//!   writes `` evidence `k` naming no item `` or `` evidence `k` earlier observed last `` and
-//!   weighs one more;
+//!   names an item and has no instant in the first run), then twice more with the earlier sets of
+//!   two or more classes only, since the records of any other set are the first run's, observed
+//!   at two instants, those of the lowest class, then those of the highest, first, and the others a
+//!   quarter minute after them, so a `descended`
+//!   form can be `unknown` beside a `first`, a `before`, an `after` or a `since` that has
+//!   instants, `true` beside a first observation that is a current record, `true` or `false`
+//!   beside none, and `true` beside a `first` that is `true` over earlier records of two
+//!   results. Such a state writes `` evidence `k` naming no item ``, `` evidence `k` earlier
+//!   observed last `` or `` evidence `k` earlier result `r` observed before the other earlier
+//!   records `` and weighs one more;
 //! - when two or more dimensions have a history dimension, an order dimension last: every weak
 //!   order of those dimensions (their first observations earlier, later or at one instant), in
 //!   lexicographic order of their ranks, as many values as the ordered Bell number of their count
@@ -388,10 +394,43 @@
 //! state with one dimension alone off its least value that can hold a refused record, capability,
 //! decision or case input value, are evaluated first, in the order of the whole product.
 
+#[cfg(test)]
+mod peak;
 mod properties;
 mod space;
 #[cfg(test)]
 mod tests;
+
+// The enumerations alive now on this thread, and the most alive at once since the last check
+// began (test builds only; E4 of the wave 9 review, F8 of the wave 11 review). Each enumeration
+// carries an `Alive` that counts it from its making to its drop, wherever it is held.
+#[cfg(test)]
+thread_local! {
+    static ENUMERATIONS_ALIVE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    pub(crate) static ENUMERATIONS_HELD: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+struct Alive;
+
+#[cfg(test)]
+impl Alive {
+    fn new() -> Self {
+        let alive = ENUMERATIONS_ALIVE.with(|alive| {
+            alive.set(alive.get() + 1);
+            alive.get()
+        });
+        ENUMERATIONS_HELD.with(|held| held.set(held.get().max(alive)));
+        Alive
+    }
+}
+
+#[cfg(test)]
+impl Drop for Alive {
+    fn drop(&mut self) {
+        ENUMERATIONS_ALIVE.with(|alive| alive.set(alive.get() - 1));
+    }
+}
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -668,6 +707,8 @@ struct Enumerated<'s, 'a> {
     space: &'s Space<'a>,
     states: Vec<State>,
     evaluated: Vec<Evaluated>,
+    #[cfg(test)]
+    alive: Alive,
 }
 
 /// [`check`], enumerating the spaces `strategy` says.
@@ -676,7 +717,7 @@ pub(crate) fn check_by(
     properties: Option<&Properties>,
     strategy: Strategy,
 ) -> Result<Report, Refusal> {
-    check_keeping(ir, properties, strategy).map(|(report, _)| report)
+    check_enumerating(ir, properties, strategy, false).map(|(report, _)| report)
 }
 
 /// One space a check enumerated: its slice of `Space::new(ir)` (`None` for the whole product), the
@@ -687,6 +728,9 @@ pub(crate) struct Enumeration {
     pub(crate) members: Vec<usize>,
     pub(crate) states: Vec<State>,
     pub(crate) evaluated: Vec<Evaluated>,
+    #[cfg(test)]
+    #[allow(dead_code)]
+    alive: Alive,
 }
 
 /// [`check_by`], also giving every space it enumerated, so a caller that needs the states and
@@ -695,6 +739,17 @@ pub(crate) fn check_keeping(
     ir: &Ir,
     properties: Option<&Properties>,
     strategy: Strategy,
+) -> Result<(Report, Vec<Enumeration>), Refusal> {
+    check_enumerating(ir, properties, strategy, true)
+}
+
+/// [`check_keeping`] when `keep`; otherwise each space is dropped once its subjects are decided,
+/// so the check holds one space at a time and gives no [`Enumeration`].
+fn check_enumerating(
+    ir: &Ir,
+    properties: Option<&Properties>,
+    strategy: Strategy,
+    keep: bool,
 ) -> Result<(Report, Vec<Enumeration>), Refusal> {
     eval::check_depth(ir).map_err(|refusal| Refusal::new(refusal.code(), refusal.to_string()))?;
     if let Some(properties) = properties {
@@ -795,6 +850,8 @@ pub(crate) fn check_keeping(
 
     let mut decided: Vec<Decided> = subjects.iter().map(|_| Decided::default()).collect();
     let mut kept: Vec<Enumeration> = Vec::new();
+    #[cfg(test)]
+    ENUMERATIONS_HELD.with(|held| held.set(ENUMERATIONS_ALIVE.with(std::cell::Cell::get)));
     for (slice, members) in &plan {
         let sliced;
         let space = match slice {
@@ -829,12 +886,16 @@ pub(crate) fn check_keeping(
                 },
             };
         }
-        kept.push(Enumeration {
-            slice: slice.clone(),
-            members: members.clone(),
-            states: enumerated.states,
-            evaluated: enumerated.evaluated,
-        });
+        if keep {
+            kept.push(Enumeration {
+                slice: slice.clone(),
+                members: members.clone(),
+                states: enumerated.states,
+                evaluated: enumerated.evaluated,
+                #[cfg(test)]
+                alive: enumerated.alive,
+            });
+        }
     }
 
     let mut findings = Vec::new();
@@ -970,6 +1031,8 @@ fn enumerate<'s, 'a>(ir: &Ir, space: &'s Space<'a>) -> Result<Enumerated<'s, 'a>
         space,
         states,
         evaluated,
+        #[cfg(test)]
+        alive: Alive::new(),
     })
 }
 
@@ -1093,6 +1156,7 @@ fn bypass(
         space,
         states,
         evaluated,
+        ..
     } = enumerated;
     let requirement = outcome.requires.predicate()?;
     // The evidence dimensions some action that requires a capability may produce records of, and
@@ -1157,6 +1221,7 @@ fn failed_property(
         space,
         states,
         evaluated,
+        ..
     } = enumerated;
     // The subject as a report writes it, whether it is an action, and its position.
     let (subject, is_action, at) = match &property.subject {

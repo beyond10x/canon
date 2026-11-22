@@ -16,7 +16,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 /// The ESS release `ess/ess-inputs.yaml` pins and CI installs.
-const PINNED: &str = "0.97.3";
+const PINNED: &str = "0.97.4";
+
+/// The SHA-256 of `ess-<PINNED>-x86_64-unknown-linux-gnu.tar.gz`, from that release's
+/// `SHA256SUMS`. CI refuses the archive when `ESS_SHA256` in `check.yml` differs from it.
+const PINNED_SHA256: &str = "235ad6a993c3e81369e3b5439a4ef8d6e2b82df66ad8e4a22809e00557297938";
 
 /// The marker of an open question, written as two halves so this file does not carry it whole.
 const OPEN_QUESTION: &str = concat!("UNMAPPED", ":");
@@ -109,7 +113,7 @@ thread_local! {
 /// `ess-inputs.yaml` at or above the working directory; with `ESS_TOOLCHAIN` set it runs as that
 /// release, whatever the file's `requires:` says, warns about an older `requires:` and fails it
 /// under `--strict-requires`, which is the negative control for the flag. Without the variable
-/// `ess` since 0.97.3 refuses a `requires:` that differs from its own release when no toolchain of
+/// `ess` since 0.97.4 refuses a `requires:` that differs from its own release when no toolchain of
 /// that release is at hand.
 fn as_the_pinned_release<T>(body: impl FnOnce() -> T) -> T {
     AS_PINNED_RELEASE.with(|flag| flag.set(true));
@@ -468,5 +472,16 @@ fn pin_agrees_across_inputs_and_ci() {
         installs,
         [PINNED],
         "ESS_VERSION in .github/workflows/check.yml"
+    );
+    let checksums: Vec<&str> = workflow
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("ESS_SHA256:"))
+        .map(|value| value.trim().trim_matches('"'))
+        .collect();
+    assert_eq!(
+        checksums,
+        [PINNED_SHA256],
+        "ESS_SHA256 in .github/workflows/check.yml is the checksum of the {PINNED} archive: \
+         take it from that release's SHA256SUMS when the pin moves"
     );
 }

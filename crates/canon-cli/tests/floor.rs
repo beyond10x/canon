@@ -274,3 +274,135 @@ fn floor_admits_only_tightening_and_expansion() {
         ),
     );
 }
+
+/// Compiles the protocol `source` to `dir/<name>.json` and returns that path.
+fn compiled_source(dir: &Path, name: &str, source: &str) -> String {
+    let yaml = dir.join(format!("{name}.yaml"));
+    std::fs::write(&yaml, source).expect("the source is written");
+    let output = canon(&["compile", "--path", &yaml.display().to_string()]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{name} compiles: {}",
+        text(&output.stderr)
+    );
+    let path = dir.join(format!("{name}.json"));
+    std::fs::write(&path, &output.stdout).expect("the IR is written");
+    path.display().to_string()
+}
+
+fn floor_source() -> String {
+    std::fs::read_to_string(repository_root().join(DIR).join("floor.yaml"))
+        .expect("the floor fixture reads")
+}
+
+/// The floor under the id `investigation.added`, with `publish_finding` unchanged and a second
+/// action `name` whose declaration after its description is `body`.
+fn floor_with_added_action(name: &str, body: &str) -> String {
+    let anchor = "    requires:\n      - capability: finding.publish\n";
+    let source = floor_source();
+    assert_eq!(
+        source.matches(anchor).count(),
+        1,
+        "the floor names its capability once"
+    );
+    source
+        .replacen("id: floor.investigation", "id: investigation.added", 1)
+        .replacen(
+            anchor,
+            &format!("{anchor}\n  {name}:\n    description: An added action.\n{body}"),
+            1,
+        )
+}
+
+/// Story:floor-guards-added-actions (decision D124). An added action is an `EXPANSION` for the
+/// classifier, but one that has the precondition of an action the floor guards with a capability
+/// publishes the floor's finding without the capability: below the floor, exit 1, and the added
+/// action is named. An added action that requires what the floor requires, or that is not the
+/// floor's finding, stays an `EXPANSION`.
+#[test]
+fn floor_refuses_an_added_action_that_publishes_without_the_floors_capability() {
+    let dir = scratch("added-action");
+    let help = canon(&["floor", "--help"]);
+    assert!(
+        !text(&help.stdout).contains("is not caught"),
+        "the help no longer states the limit: {}",
+        text(&help.stdout)
+    );
+    let flat = text(&help.stdout)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        flat.contains(
+            "repeats an action the floor guards with a capability and lacks that capability"
+        ),
+        "the help names the rule for an added action: {flat}"
+    );
+    let floor_path = compiled_source(&dir, "floor", &floor_source());
+    let same_precondition =
+        "    precondition:\n      claim: explanation.supported\n      is: true\n";
+    let expansion = "floor: holds\n\
+                     TIGHTENING: 0\n\
+                     EXPANSION: 1\n\
+                     NO SEMANTIC CHANGE: 0\n";
+
+    // 1. The same precondition and no capability: breached, naming the action and the capability.
+    let quiet = compiled_source(
+        &dir,
+        "quiet",
+        &floor_with_added_action("publish_finding_quietly", same_precondition),
+    );
+    floor(
+        &floor_path,
+        &quiet,
+        1,
+        Some(
+            "floor: breached\n\
+             RELAXATION: action `publish_finding_quietly` added without capability \
+             `finding.publish`, which the floor requires of `publish_finding`\n",
+        ),
+    );
+
+    // 2. The same precondition and the capability: an expansion, which passes.
+    let capable = compiled_source(
+        &dir,
+        "capable",
+        &floor_with_added_action(
+            "publish_finding_again",
+            &format!("{same_precondition}    requires:\n      - capability: finding.publish\n"),
+        ),
+    );
+    floor(&floor_path, &capable, 0, Some(expansion));
+
+    // 3. A different precondition: not the floor's finding, an expansion, which passes.
+    let other = compiled_source(
+        &dir,
+        "other",
+        &floor_with_added_action(
+            "note_progress",
+            "    precondition:\n      claim: explanation.supported\n      is: false\n",
+        ),
+    );
+    floor(&floor_path, &other, 0, Some(expansion));
+
+    // 4. The same precondition and a capability other than the floor's: still without the floor's.
+    let other_capability = compiled_source(
+        &dir,
+        "other-capability",
+        &floor_with_added_action(
+            "publish_finding_elsewhere",
+            &format!("{same_precondition}    requires:\n      - capability: finding.draft\n"),
+        ),
+    );
+    floor(
+        &floor_path,
+        &other_capability,
+        1,
+        Some(
+            "floor: breached\n\
+             RELAXATION: action `publish_finding_elsewhere` added without capability \
+             `finding.publish`, which the floor requires of `publish_finding`\n",
+        ),
+    );
+}

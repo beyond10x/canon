@@ -842,9 +842,38 @@ pub(crate) fn import_section(protocol: &Protocol) -> Vec<Problem> {
     problems
 }
 
+/// What the protocol declares, found in logarithmic time. `Declarations` finds an identifier by
+/// reading its entries one after another, so a lookup per reference to a claim made validating a
+/// chain of 40 000 claims take a minute. A claim declared twice is read in its first declaration,
+/// as `Declarations::get` reads it; `claim_ids` keeps every declaration, in the order written.
+struct Declared<'a> {
+    claim_ids: Vec<&'a ClaimId>,
+    claims: BTreeMap<&'a ClaimId, &'a crate::model::Claim>,
+    evidence_kinds: BTreeSet<&'a EvidenceKindId>,
+    artifacts: BTreeSet<&'a ArtifactId>,
+    independence_dimensions: BTreeSet<&'a IndependenceDimensionId>,
+}
+
+impl<'a> Declared<'a> {
+    fn new(protocol: &'a Protocol) -> Self {
+        let mut claims = BTreeMap::new();
+        for (id, claim) in protocol.claims.iter() {
+            claims.entry(id).or_insert(claim);
+        }
+        Self {
+            claim_ids: protocol.claims.ids().collect(),
+            claims,
+            evidence_kinds: protocol.evidence_kinds.ids().collect(),
+            artifacts: protocol.artifacts.ids().collect(),
+            independence_dimensions: protocol.independence_dimensions.ids().collect(),
+        }
+    }
+}
+
 /// Validates a parsed protocol. `Ok` when it is valid; otherwise every problem, in a stable order.
 pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
     let mut problems = Vec::new();
+    let index = Declared::new(protocol);
 
     if protocol.format != FORMAT {
         problems.push(Problem::UnsupportedFormat {
@@ -1005,6 +1034,7 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
     for (id, claim) in protocol.claims.iter() {
         references(
             protocol,
+            &index,
             &Referrer::Claim(id.clone()),
             &claim.true_when,
             &mut problems,
@@ -1013,6 +1043,7 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
     for (id, obligation) in protocol.obligations.iter() {
         references(
             protocol,
+            &index,
             &Referrer::Obligation(id.clone()),
             &obligation.discharged_when,
             &mut problems,
@@ -1027,6 +1058,7 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         if let Some(applicable_when) = &obligation.applicable_when {
             references(
                 protocol,
+                &index,
                 &Referrer::Obligation(id.clone()),
                 applicable_when,
                 &mut problems,
@@ -1043,10 +1075,10 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
     for (id, action) in protocol.actions.iter() {
         let referrer = Referrer::Action(id.clone());
         if let Some(precondition) = &action.precondition {
-            references(protocol, &referrer, precondition, &mut problems);
+            references(protocol, &index, &referrer, precondition, &mut problems);
         }
         for production in &action.may_produce {
-            if !protocol.evidence_kinds.contains(&production.evidence) {
+            if !index.evidence_kinds.contains(&production.evidence) {
                 problems.push(Problem::UndeclaredEvidenceKind {
                     referrer: referrer.clone(),
                     kind: production.evidence.clone(),
@@ -1054,7 +1086,7 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
             }
         }
         for artifact in &action.revises {
-            if !protocol.artifacts.contains(artifact) {
+            if !index.artifacts.contains(artifact) {
                 problems.push(Problem::UndeclaredArtifact {
                     referrer: referrer.clone(),
                     artifact: artifact.clone(),
@@ -1062,7 +1094,7 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
             }
         }
         if let Some(opening) = &action.case_open {
-            if !protocol.artifacts.contains(&opening.subject) {
+            if !index.artifacts.contains(&opening.subject) {
                 problems.push(Problem::UndeclaredArtifact {
                     referrer: referrer.clone(),
                     artifact: opening.subject.clone(),
@@ -1081,6 +1113,7 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         if let Some(requires) = outcome.requires.predicate() {
             references(
                 protocol,
+                &index,
                 &Referrer::Outcome(id.clone()),
                 requires,
                 &mut problems,
@@ -1089,6 +1122,7 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         if let Some(when) = outcome.requires.when() {
             references(
                 protocol,
+                &index,
                 &Referrer::Outcome(id.clone()),
                 when,
                 &mut problems,
@@ -1104,14 +1138,14 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
     }
     for (id, rule) in protocol.invalidation.iter() {
         let referrer = Referrer::InvalidationRule(id.clone());
-        if !protocol.artifacts.contains(&rule.upstream) {
+        if !index.artifacts.contains(&rule.upstream) {
             problems.push(Problem::UndeclaredArtifact {
                 referrer: referrer.clone(),
                 artifact: rule.upstream.clone(),
             });
         }
         for claim in &rule.invalidates {
-            if !protocol.claims.contains(claim) {
+            if !index.claims.contains_key(claim) {
                 problems.push(Problem::UndeclaredClaim {
                     referrer: referrer.clone(),
                     claim: claim.clone(),
@@ -1123,7 +1157,7 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
     let reaching = reaching_evidence(protocol);
     for (id, rule) in protocol.invalidation.iter() {
         for claim in &rule.invalidates {
-            if protocol.claims.contains(claim) && !reaching.contains(claim) {
+            if index.claims.contains_key(claim) && !reaching.contains(claim) {
                 problems.push(Problem::InertInvalidation {
                     rule: id.clone(),
                     claim: claim.clone(),
@@ -1132,7 +1166,7 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         }
     }
 
-    claim_cycles(protocol, &mut problems);
+    claim_cycles(&index, &mut problems);
 
     if problems.is_empty() {
         Ok(())
@@ -1301,27 +1335,28 @@ fn duplicates(section: Section, ids: &[&str], problems: &mut Vec<Problem>) {
 /// predicate is written.
 fn references(
     protocol: &Protocol,
+    index: &Declared<'_>,
     referrer: &Referrer,
     predicate: &Predicate,
     problems: &mut Vec<Problem>,
 ) {
     let mut unresolved = Vec::new();
     predicate.visit(&mut |node| match node {
-        Predicate::Claim(test) if !protocol.claims.contains(&test.claim) => {
+        Predicate::Claim(test) if !index.claims.contains_key(&test.claim) => {
             unresolved.push(Problem::UndeclaredClaim {
                 referrer: referrer.clone(),
                 claim: test.claim.clone(),
             });
         }
         Predicate::Evidence(matching) => {
-            if !protocol.evidence_kinds.contains(&matching.kind) {
+            if !index.evidence_kinds.contains(&matching.kind) {
                 unresolved.push(Problem::UndeclaredEvidenceKind {
                     referrer: referrer.clone(),
                     kind: matching.kind.clone(),
                 });
             }
             if let Some(subject) = &matching.subject
-                && !protocol.artifacts.contains(subject)
+                && !index.artifacts.contains(subject)
             {
                 unresolved.push(Problem::UndeclaredArtifact {
                     referrer: referrer.clone(),
@@ -1349,7 +1384,7 @@ fn references(
                     }
                 }
                 for dimension in listed {
-                    if !protocol.independence_dimensions.contains(dimension) {
+                    if !index.independence_dimensions.contains(dimension) {
                         unresolved.push(Problem::UndeclaredDimension {
                             referrer: referrer.clone(),
                             dimension: dimension.clone(),
@@ -1371,7 +1406,7 @@ fn references(
                 }
             }
             for kind in kinds {
-                if !protocol.evidence_kinds.contains(kind) {
+                if !index.evidence_kinds.contains(kind) {
                     unresolved.push(Problem::UndeclaredEvidenceKind {
                         referrer: referrer.clone(),
                         kind: kind.clone(),
@@ -1379,7 +1414,7 @@ fn references(
                 }
             }
             if let Some((_, Some(subject))) = reads.first()
-                && !protocol.artifacts.contains(subject)
+                && !index.artifacts.contains(subject)
             {
                 unresolved.push(Problem::UndeclaredArtifact {
                     referrer: referrer.clone(),
@@ -1462,14 +1497,14 @@ fn references(
                 });
             }
             let kind = EvidenceKindId::new(CASE_OUTCOME);
-            if !protocol.evidence_kinds.contains(&kind) {
+            if !index.evidence_kinds.contains(&kind) {
                 unresolved.push(Problem::UndeclaredEvidenceKind {
                     referrer: referrer.clone(),
                     kind,
                 });
             }
             if let Some(subject) = &form.subject
-                && !protocol.artifacts.contains(subject)
+                && !index.artifacts.contains(subject)
             {
                 unresolved.push(Problem::UndeclaredArtifact {
                     referrer: referrer.clone(),
@@ -1488,7 +1523,7 @@ fn references(
 /// `a -> c -> a`). Claims are visited in declaration order and their references in the order
 /// written, so the cycles reported are the same on every run. The walk keeps its own stack, so a
 /// chain of any length is walked without recursion.
-fn claim_cycles(protocol: &Protocol, problems: &mut Vec<Problem>) {
+fn claim_cycles(index: &Declared<'_>, problems: &mut Vec<Problem>) {
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum Mark {
         OnPath,
@@ -1497,7 +1532,7 @@ fn claim_cycles(protocol: &Protocol, problems: &mut Vec<Problem>) {
 
     // The claims a claim tests, in the order written; none for a claim not declared.
     let references = |claim: &ClaimId| {
-        protocol
+        index
             .claims
             .get(claim)
             .map(|declared| declared.true_when.claim_references())
@@ -1509,7 +1544,7 @@ fn claim_cycles(protocol: &Protocol, problems: &mut Vec<Problem>) {
     // overflow the caller's stack: `path` holds the claims being walked, outermost first, and
     // `pending` the references each of them has still to follow.
     let mut marks: BTreeMap<&ClaimId, Mark> = BTreeMap::new();
-    for root in protocol.claims.ids() {
+    for root in index.claim_ids.iter().copied() {
         if marks.contains_key(root) {
             continue;
         }
@@ -1524,7 +1559,7 @@ fn claim_cycles(protocol: &Protocol, problems: &mut Vec<Problem>) {
                 continue;
             };
             match marks.get(next).copied() {
-                None if protocol.claims.contains(next) => {
+                None if index.claims.contains_key(next) => {
                     marks.insert(next, Mark::OnPath);
                     path.push(next);
                     pending.push(references(next));

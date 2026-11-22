@@ -763,7 +763,11 @@ fn a_revision_of_an_upstream_artifact_keeps_the_record_from_its_claim() {
 /// the three states that hold the child's record, current with an unlisted outcome or earlier,
 /// are `cycle`s, the one with a current record with the revision suffix. The state with `open`
 /// earlier waits on the child's outcome; the one with `open` current does not wait, since its
-/// revise step changes it.
+/// revise step changes it. The child is about `doc`, the artifact the space's dimension is about,
+/// and the form says `revision: current`, so a child that ends after the revision may end against
+/// the earlier one (story:simulate-child-about-own-artifact): the two earlier states are first
+/// reached that way, and the walk holds two states more, the open child after the revision, than
+/// when only a child that ended before it counted (9 before, 11 after; the same three findings).
 #[test]
 fn a_record_a_children_form_reads_becomes_earlier() {
     let source = "format: protocol/1\n\
@@ -792,14 +796,14 @@ fn a_record_a_children_form_reads_becomes_earlier() {
          cycle: state {evidence `case_outcome` about `doc` earlier, evidence `start` about `b`}: \
          no outcome is legitimate, no action is approval-required, and every step of action \
          `fix` returns this state; path: action `open_review` produces evidence `start` about \
-         `b`, then a child of action `open_review` records evidence `case_outcome` about `doc`, \
-         then action `fix` revises `doc`\n\
+         `b`, then action `fix` revises `doc`, then a child of action `open_review` records \
+         evidence `case_outcome` about `doc` earlier\n\
          cycle: state {evidence `case_outcome` about `doc` result `accepted` earlier, evidence \
          `start` about `b`}: no outcome is legitimate, no action is approval-required, and every \
          step of action `fix` returns this state; path: action `open_review` produces evidence \
-         `start` about `b`, then a child of action `open_review` records evidence `case_outcome` \
-         about `doc` result `accepted`, then action `fix` revises `doc`\n\
-         simulated: protocol `p` revision 1: 9 reachable states, 1 terminable (outcome \
+         `start` about `b`, then action `fix` revises `doc`, then a child of action \
+         `open_review` records evidence `case_outcome` about `doc` result `accepted` earlier\n\
+         simulated: protocol `p` revision 1: 11 reachable states, 1 terminable (outcome \
          `accepted` 1), 2 waiting on supplied evidence, a child outcome or expiry, 3 findings (3 \
          stuck or cycle states)\n"
     );

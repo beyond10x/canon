@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:scenario-generation-assertions
 kind: story
-status: draft
+status: active
 title: The scenario-generation test catches a witness in a state that is not legitimate and a refused fixture that generates
 tags:
 - from-finding
@@ -11,12 +11,16 @@ refs:
   reference: D122
 relations:
 - decomposes: epic:canon-kernel
+- serves: vision:governed-autonomy
 scope:
 - confidence: cited
   path: crates/canon/src/generate/mod.rs
 - confidence: cited
   path: crates/canon/tests/adversary_scenario_generation.rs
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-22T17:21:52Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
+- {from: "proposed", to: "active", at: "2026-11-22T17:21:52Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
 ---
 ## Outcome
 

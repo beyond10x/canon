@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slow-lane-under-bound
 kind: story
-status: draft
+status: active
 title: Every test of the slow lane ends within 60 s, so its CI step can fail the job again
 tags:
 - from-finding
@@ -12,6 +12,7 @@ refs:
   reference: D123
 relations:
 - decomposes: epic:canon-kernel
+- serves: vision:governed-autonomy
 scope:
 - confidence: cited
   path: .config/nextest.toml
@@ -19,7 +20,10 @@ scope:
   path: .github/workflows/check.yml
 - confidence: inferred
   path: crates/canon/src/check/mod.rs
-revision: 4
+revision: 6
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-22T17:21:51Z", actor: "human:timo", revision: 5, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
+- {from: "proposed", to: "active", at: "2026-11-22T17:21:51Z", actor: "human:timo", revision: 6, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
 ---
 ## Outcome
 

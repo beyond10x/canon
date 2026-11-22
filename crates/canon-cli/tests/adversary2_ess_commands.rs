@@ -108,7 +108,7 @@ fn parity_with_type(case: &str, command: &str, input: &str, ty: &str) -> (bool, 
 }
 
 /// AGENTS.md § ESS: "a flag clap takes more than once is a `List<…>` input, and a flag it takes
-/// once is not". `--authority` is taken once; ESS 0.97.3 compiles and synthesizes it declared as a
+/// once is not". `--authority` is taken once; ESS 0.97.4 compiles and synthesizes it declared as a
 /// `Map`, a collection of many values, and the gate must name it.
 #[test]
 fn a_single_valued_flag_declared_as_a_map_is_named() {

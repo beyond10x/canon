@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:evaluate-without-thread-per-call
 kind: story
-status: active
+status: implemented
 title: Evaluate many small cases without one operating-system thread per call
 tags:
 - from-request
@@ -17,10 +17,11 @@ scope:
   path: crates/canon/src/eval/mod.rs
 - confidence: inferred
   path: crates/canon/tests/evaluate_many_small_cases.rs
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-22T02:32:31Z", actor: "human:timo", revision: 4}
 - {from: "proposed", to: "active", at: "2026-11-22T02:32:31Z", actor: "human:timo", revision: 5}
+- {from: "active", to: "implemented", at: "2026-11-22T17:21:44Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
 ---
 ## Outcome
 

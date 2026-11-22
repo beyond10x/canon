@@ -17,11 +17,14 @@
 //! protocol that adds an artifact, a case input or an order form under an `all`, or changes the
 //! case an action opens, is `BREAKING`, so below the floor, though it may tighten.
 //!
-//! A limit of that classification (decision D124, a floor rule for added actions is a design
-//! change beyond story:protocol-floor): an added action is an `EXPANSION`, and every `EXPANSION`
-//! passes. The floor guards only what the protocol that declares an action requires, so a new
-//! action that produces a finding the floor guards, without the capability the floor requires of
-//! it, is not caught.
+//! One rule is the floor's own (decision D124, story:floor-guards-added-actions): an added action
+//! is an `EXPANSION`, but one that repeats an action the floor guards with a capability, and that
+//! does not require that capability (at that scope), is a `RELAXATION`: it decides the floor's
+//! finding without the capability. It repeats the action when its precondition is implied by the
+//! action's (the same after unwrapping a one-member `all`, or the always-true one, or one whose
+//! conjuncts are some of the action's) and it may produce and revise at least what the action
+//! does; an action that produces and revises nothing is repeated only by one that does neither. An
+//! added action that needs more than the floor's action, or does something else, passes.
 //!
 //! The protocol does not name its floor; the caller supplies it. Passing a compiled import as the
 //! floor checks that a refinement only tightens what it imports.
@@ -29,7 +32,8 @@
 use std::fmt;
 
 use crate::diff::{self, Category, Change, Refusal};
-use crate::ir::Ir;
+use crate::ir::{Ir, Scope};
+use crate::model::{CapabilityId, Predicate};
 
 /// The floor's answer for one protocol: how many changes of each admitted category it makes, and
 /// each change that puts it below the floor.
@@ -96,5 +100,125 @@ pub fn check(floor: &Ir, protocol: &Ir) -> Result<Verdict, Refusal> {
             Category::Relaxation | Category::Breaking => verdict.below.push(change),
         }
     }
+    verdict
+        .below
+        .extend(unguarded_added_actions(floor, &protocol));
     Ok(verdict)
+}
+
+/// The members of `predicate` read as a conjunction, simplified: a one-member `all` or `any` is its
+/// member, an `all` inside an `all` is flattened, and each member is kept once. The always-true
+/// precondition has none.
+fn conjuncts(predicate: &Predicate) -> Vec<Predicate> {
+    fn simplified(predicate: &Predicate) -> Predicate {
+        match predicate {
+            Predicate::All(members) => {
+                let mut flat: Vec<Predicate> = Vec::new();
+                for member in members {
+                    match simplified(member) {
+                        Predicate::All(inner) => inner.into_iter().for_each(|m| keep(&mut flat, m)),
+                        other => keep(&mut flat, other),
+                    }
+                }
+                if flat.len() == 1 {
+                    flat.remove(0)
+                } else {
+                    Predicate::All(flat)
+                }
+            }
+            Predicate::Any(members) => {
+                let mut flat: Vec<Predicate> = Vec::new();
+                members
+                    .iter()
+                    .map(simplified)
+                    .for_each(|m| keep(&mut flat, m));
+                if flat.len() == 1 {
+                    flat.remove(0)
+                } else {
+                    Predicate::Any(flat)
+                }
+            }
+            Predicate::Not(inner) => Predicate::Not(Box::new(simplified(inner))),
+            other => other.clone(),
+        }
+    }
+    fn keep(members: &mut Vec<Predicate>, member: Predicate) {
+        if !members.contains(&member) {
+            members.push(member);
+        }
+    }
+    match simplified(predicate) {
+        Predicate::All(members) => members,
+        other => vec![other],
+    }
+}
+
+/// The capability requirements the floor makes of the action `guarded` that the added action
+/// `added` does not make, one `RELAXATION` for each, when `added` does at least what `guarded`
+/// does, in at least the states it does it: its precondition is implied by `guarded`'s (the same
+/// after simplifying, or the always-true one, or one whose conjuncts are some of `guarded`'s), and
+/// it may produce and revise everything `guarded` may; an action that produces and revises nothing
+/// is repeated only by one that produces and revises nothing. The floor's finding is what such an
+/// action decides, so one that lacks a capability the floor requires of it lets the finding be
+/// published, or the artifact revised, by a principal the floor excludes. An action of the floor
+/// that no requirement guards, or that declares nothing which could be matched (the always-true
+/// precondition, nothing produced, nothing revised), has no finding to repeat.
+fn unguarded_added_actions(floor: &Ir, protocol: &Ir) -> Vec<Change> {
+    let mut changes = Vec::new();
+    for (id, added) in &protocol.actions {
+        if floor.actions.contains_key(id) {
+            continue;
+        }
+        let held: Vec<_> = added.requirements().collect();
+        for (guarded_id, guarded) in &floor.actions {
+            let guarded_conditions = conjuncts(&guarded.precondition);
+            let does_nothing = guarded.may_produce.is_empty() && guarded.revises.is_empty();
+            let identifies = !guarded_conditions.is_empty() || !does_nothing;
+            let at_least_as_often = conjuncts(&added.precondition)
+                .iter()
+                .all(|condition| guarded_conditions.contains(condition));
+            let at_least_as_much = if does_nothing {
+                added.may_produce.is_empty() && added.revises.is_empty()
+            } else {
+                guarded
+                    .may_produce
+                    .iter()
+                    .all(|kind| added.may_produce.contains(kind))
+                    && guarded
+                        .revises
+                        .iter()
+                        .all(|artifact| added.revises.contains(artifact))
+            };
+            let repeats = identifies && at_least_as_often && at_least_as_much;
+            if !repeats {
+                continue;
+            }
+            for requirement in guarded.requirements().filter(|r| !held.contains(r)) {
+                changes.push(Change {
+                    category: Category::Relaxation,
+                    section: "action",
+                    id: id.as_str().to_owned(),
+                    what: format!(
+                        "added without capability `{}`, which the floor requires of `{}`",
+                        requirement_name(requirement),
+                        guarded_id.as_str()
+                    ),
+                });
+            }
+        }
+    }
+    changes
+}
+
+/// A requirement as the classifier names it: the capability, then its scope when it has one,
+/// `metrics.read{cluster: prod-eu, namespace: foo}`.
+fn requirement_name((capability, scope): (&CapabilityId, &Scope)) -> String {
+    if scope.is_empty() {
+        return capability.as_str().to_owned();
+    }
+    let members: Vec<String> = scope
+        .iter()
+        .map(|(key, value)| format!("{}: {}", key.as_str(), value.as_str()))
+        .collect();
+    format!("{}{{{}}}", capability.as_str(), members.join(", "))
 }

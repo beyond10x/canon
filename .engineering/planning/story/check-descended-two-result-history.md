@@ -2,12 +2,13 @@
 format: aep.planning-md/3
 id: story:check-descended-two-result-history
 kind: story
-status: draft
+status: active
 title: canon check reaches descended beside first with earlier records of two results
 tags:
 - from-finding
 relations:
 - decomposes: epic:canon-kernel
+- serves: vision:governed-autonomy
 scope:
 - confidence: cited
   path: crates/canon-cli/src/lib.rs
@@ -15,7 +16,10 @@ scope:
   path: crates/canon/src/check/space.rs
 - confidence: cited
   path: crates/canon/src/check/tests.rs
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-22T17:21:52Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
+- {from: "proposed", to: "active", at: "2026-11-22T17:21:52Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
 ---
 ## Outcome
 

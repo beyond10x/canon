@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ess-pin-0-97-3
 kind: story
-status: active
+status: implemented
 title: Canon's ESS pin moves from 0.77.0 to 0.97.3 and the gate stays green
 tags:
 - from-request
@@ -23,10 +23,11 @@ scope:
   path: crates/canon/tests/ess_gate.rs
 - confidence: cited
   path: ess/ess-inputs.yaml
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-22T13:19:06Z", actor: "human:timo", revision: 7}
 - {from: "proposed", to: "active", at: "2026-11-22T13:19:06Z", actor: "human:timo", revision: 8}
+- {from: "active", to: "implemented", at: "2026-11-22T17:21:43Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
 ---
 ## Outcome
 
