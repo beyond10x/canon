@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 
 //! Canon: a formal language and deterministic calculus for evidence-governed protocols.
 //!
