@@ -204,7 +204,13 @@ fn check_refuses_an_answer_outside_the_three_words() {
     for class in ["code", "docs-site-only", "planning-only"] {
         assert!(status(class), "the guard lets `{class}` through");
     }
-    for class in ["", "Code", "docs", "code planning-only", "planning-only\ncode"] {
+    for class in [
+        "",
+        "Code",
+        "docs",
+        "code planning-only",
+        "planning-only\ncode",
+    ] {
         assert!(!status(class), "the guard refuses `{class}`");
     }
 }
