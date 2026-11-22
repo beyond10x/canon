@@ -47,7 +47,8 @@ fn scratch(name: &str) -> PathBuf {
 
 /// A protocol canon 0.11.1 checks is checked, over the 53760 states that remain once the two
 /// modes hold only the earlier sets of two or more classes. Red: `error[state-space-bound]`
-/// naming 69120 states.
+/// naming 69120 states. It checks 53760 states, about 16 s in a debug build and 30 s measured
+/// with the pool busy, so it is in the slow lane (`.config/nextest.toml`).
 #[test]
 fn a_protocol_0_11_1_checks_is_not_refused_for_history_values_that_repeat_a_state() {
     let path = scratch("repeated-histories").join("protocol.yaml");
@@ -66,6 +67,7 @@ fn a_protocol_0_11_1_checks_is_not_refused_for_history_values_that_repeat_a_stat
     );
     assert_eq!(
         stdout,
-        "checked: protocol `p` revision 1: 53760 states, 0 properties, 0 findings\n"
+        "checked: protocol `p` revision 1: 53760 states (input `track` 3 values), 0 properties, \
+         0 findings\n"
     );
 }

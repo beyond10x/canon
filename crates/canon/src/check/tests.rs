@@ -934,6 +934,23 @@ fn the_history_modes_of_descended_have_the_state_counts_measured() {
     assert_eq!(size(&after_since), Some(30240));
 }
 
+/// The sets of two or more classes the two spread modes hold are each set once, in the order of
+/// their numbers: the ones with two bits or more among the first 2^12 numbers, none missing.
+#[test]
+fn the_spread_modes_hold_each_set_of_two_or_more_classes_once() {
+    let sets: Vec<u32> = (1u32..1 << 12)
+        .filter(|set| set.count_ones() >= 2)
+        .collect();
+    assert_eq!(sets.len(), (1 << 12) - 1 - 12);
+    for (index, set) in sets.iter().enumerate() {
+        assert_eq!(
+            super::space::set_of_two_or_more(index as u32),
+            *set,
+            "{index}"
+        );
+    }
+}
+
 /// An `after` and a `since` over the kind of a `descended` form read the instants the history
 /// modes spread the earlier records over, so they are run beside each mode: the two earlier
 /// results of `k` in either order, with each set of current records that has a `passed` one,

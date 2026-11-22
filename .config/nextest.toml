@@ -72,6 +72,7 @@ not (
     test(=adversary_check_slices_cli::check_help_does_not_refuse_every_space_above_the_bound)
     | test(=canon_check::a_sliced_summary_gives_the_whole_product)
     | test(=canon_check::canon_check_reports_investigation_defects)
+    | test(=check_history_modes::a_protocol_0_11_1_checks_is_not_refused_for_history_values_that_repeat_a_state)
   ))
 )
 """
