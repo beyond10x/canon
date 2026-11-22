@@ -507,9 +507,10 @@ pub struct Report {
     pub terminable: usize,
     /// Each outcome, in identifier order, with how many reachable states it is legitimate in.
     pub outcomes: Vec<(OutcomeId, usize)>,
-    /// How many reachable states wait on a supplied record, a child's outcome or an expiry;
-    /// `None` when the protocol declares no supplied kind, no expiring kind and no action that
-    /// opens a child case, the only steps that can open such a state.
+    /// How many reachable states wait on a supplied record, a child's outcome, an expiry or a
+    /// revision by another protocol; `None` when the protocol declares no supplied kind, no
+    /// expiring kind, no action that opens a child case and no artifact with `revised_by`, the
+    /// only steps that can open such a state.
     pub waiting: Option<usize>,
     /// Whether some action opens a child case, so a child's outcome may open a waiting state and
     /// the summary names it among what the waiting states wait on.
@@ -1553,8 +1554,8 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         next += 1;
     }
 
-    // Open states: those from which action, supplied, child-outcome, expiry and authority steps
-    // reach a state with a legitimate outcome, found backwards from those states.
+    // Open states: those from which action, supplied, external revise, child-outcome, expiry and
+    // authority steps reach a state with a legitimate outcome, found backwards from those states.
     let mut previous: Vec<Vec<usize>> = vec![Vec::new(); states.len()];
     for (at, state) in visited.iter().enumerate() {
         for to in &state.next {

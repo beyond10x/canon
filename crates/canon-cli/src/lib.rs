@@ -165,8 +165,11 @@ pub enum Command {
     /// new revision, alone or with one such record or group added at the new revision (a revise
     /// step, tried after the action's record steps, subsets in order of their sorted ids,
     /// written `action x revises a` or `action x revises a and produces …`), adds one record of
-    /// a kind that declares `supplied_by` (at any step), adds one child case's
-    /// `case_outcome` record, lets one record class of a kind that declares `max_age` expire,
+    /// a kind that declares `supplied_by` (at any step), moves an artifact that declares
+    /// `revised_by` to a new revision with no record added (the external revise step, written
+    /// `protocol q revises a`, tried after the supplied steps and before the child-outcome and
+    /// expiry steps: a case of the named protocol may revise it between two evaluations; Canon
+    /// checks nothing about that protocol), adds one child case's `case_outcome` record, lets one record class of a kind that declares `max_age` expire,
     /// grants or denies one capability some action requires, or takes one decision some outcome
     /// requires; no action runs. Since a step adds one record outside a group, where an action's
     /// guard closes on its first record the walk never holds two records of one taking together
@@ -195,12 +198,19 @@ pub enum Command {
     /// `case_outcome` records of children that actions about several artifacts open
     /// (`case_open`): each is about its action's `case_open` subject (written `evidence
     /// `case_outcome` about b`), so a revision of an artifact sets aside only the child outcomes
-    /// about it. A child that has not ended when its subject is revised may end against the
+    /// about it. The records are split that way only when some action `revises` an artifact or
+    /// some artifact declares `revised_by`; otherwise no revision can set a child's outcome
+    /// aside, and the protocol is walked and written as without the split.
+    /// A child that has not ended when its subject is revised may end against the
     /// earlier revision: its outcome then arrives as an earlier record (a step written `… earlier`)
-    /// as well as a current one. An action without
+    /// as well as a current one. A child opened about the artifact the space already uses does not
+    /// end against an earlier revision; the walk of such a protocol is unchanged. An action without
     /// `revises` has no revise step. A state is open when action (record and revise), supplied,
-    /// child-outcome, expiry and authority steps lead from it to a legitimate outcome; decisions
-    /// do not count. A state that is not open is a stuck state when no action is admissible or
+    /// external revise, child-outcome, expiry and authority steps lead from it to a legitimate
+    /// outcome; decisions do not count. A state only an external revise step opens waits, and
+    /// when some artifact declares `revised_by` the summary counts the waiting states as waiting
+    /// on supplied evidence, expiry or a revision by another protocol (`supplied evidence, a child
+    /// outcome, expiry or a revision by another protocol` when an action opens a child case). A state that is not open is a stuck state when no action is admissible or
     /// approval-required, and a cycle when no action is approval-required and every record step
     /// of every admissible action returns the same state; when a revise step leads out of a
     /// cycle, it says every record step and ends `every revision by action x leads to a state no
@@ -258,7 +268,10 @@ pub enum Command {
     /// otherwise prints `floor: breached` and each `RELAXATION` and `BREAKING` change, naming the
     /// identifiers it touches, and exits 1. The floor and the protocol keep their own ids,
     /// revisions and descriptions, which are not compared. The protocol does not name its floor;
-    /// pass a compiled import as the floor to check that a refinement only tightens it.
+    /// pass a compiled import as the floor to check that a refinement only tightens it. An added
+    /// action is an `EXPANSION`, and every `EXPANSION` passes, so the floor guards only what the
+    /// protocol that declares an action requires: an action added to the protocol that produces
+    /// a finding the floor guards, without the capability the floor requires of it, is not caught.
     Floor {
         /// The organization's floor, a `protocol/1` document compiled as `canon compile` prints it.
         #[arg(long)]

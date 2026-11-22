@@ -11,6 +11,7 @@ mod adversary2_review_hardening;
 mod adversary2_scenario_generation;
 mod adversary2_skel_conform_cli;
 mod adversary2_tvc_cli;
+mod adversary3_simulate_cli;
 mod adversary2_validate;
 mod adversary_case_composition_cli;
 mod adversary_check_slices_cli;

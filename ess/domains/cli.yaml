@@ -274,10 +274,15 @@ commands:
       # the named protocol may move it between two evaluations. It is no action step, so a state
       # only it opens waits and is no finding; a protocol with such an artifact counts its
       # waiting states as waiting on supplied evidence, expiry or a revision by another protocol.
-      # A protocol whose children forms name no subject has one
+      # A protocol whose children forms name no subject and in which some action revises an
+      # artifact or some artifact declares revised_by has one
       # case_outcome dimension for each case_open subject, and a state names such a record `evidence
-      # case_outcome about b`; a protocol with no case_open, or with one case_open subject that is
-      # also the one standing for the artifacts nothing names, is written as before.
+      # case_outcome about b`; a protocol with no case_open, with no revision of either kind, or with one
+      # case_open subject that is also the one standing for the artifacts nothing names, is
+      # written as before. A child opened about the artifact the space already uses does not end
+      # against an earlier revision. The external revise step is tried after the supplied steps
+      # and before the child-outcome and expiry steps, and a state is open when it leads to a
+      # legitimate outcome through it too.
       # read from: .engineering/planning/story/child-outcome-recovery.md, section "Outcome", 1
       # read from: .engineering/planning/story/canon-simulate.md:67
       # read from: .engineering/planning/story/artifact-revised-by.md, section "Outcome", 5 and 6
