@@ -117,12 +117,16 @@ mod support {
 }
 
 /// The files under `tests` that this binary does not build, given the text of its `main.rs`: a
-/// `tests/<name>.rs` not declared as `mod <name>;`, and a directory that holds a `main.rs` of its
-/// own.
+/// `tests/<name>.rs` not declared as `mod <name>;`, a `.rs` file in a subdirectory not declared as
+/// `pub mod <name>;` in a block of `main.rs`, and a `main.rs` in a subdirectory.
 fn undeclared_files(tests: &std::path::Path, main: &str) -> Vec<String> {
     let declared: std::collections::BTreeSet<&str> = main
         .lines()
         .filter_map(|line| line.strip_prefix("mod ")?.strip_suffix(';'))
+        .collect();
+    let nested: std::collections::BTreeSet<&str> = main
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("pub mod ")?.strip_suffix(';'))
         .collect();
     let mut undeclared = Vec::new();
     for entry in std::fs::read_dir(tests).expect("tests/ is readable") {
@@ -133,8 +137,21 @@ fn undeclared_files(tests: &std::path::Path, main: &str) -> Vec<String> {
             .expect("a UTF-8 file name")
             .to_owned();
         if path.is_dir() {
-            if path.join("main.rs").exists() {
-                undeclared.push(format!("{name}/main.rs"));
+            let mut pending = vec![path];
+            while let Some(directory) = pending.pop() {
+                for inner in std::fs::read_dir(&directory).expect("a subdirectory is readable") {
+                    let inner = inner.expect("an entry is readable").path();
+                    if inner.is_dir() {
+                        pending.push(inner);
+                        continue;
+                    }
+                    let file = inner.file_name().and_then(|file| file.to_str());
+                    let module = file.and_then(|file| file.strip_suffix(".rs"));
+                    if module.is_some_and(|module| module == "main" || !nested.contains(module)) {
+                        let shown = inner.strip_prefix(tests).expect("an entry is under tests/");
+                        undeclared.push(shown.display().to_string());
+                    }
+                }
             }
         } else if let Some(module) = name.strip_suffix(".rs")
             && module != "main"
