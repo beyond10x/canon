@@ -391,7 +391,16 @@
 mod properties;
 mod space;
 #[cfg(test)]
+mod peak;
+#[cfg(test)]
 mod tests;
+
+/// The most enumerations held at once by the last check this thread ran: the one being decided
+/// and every one kept before it (test builds only; E4 of the wave 9 review).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static ENUMERATIONS_HELD: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -795,6 +804,8 @@ pub(crate) fn check_keeping(
 
     let mut decided: Vec<Decided> = subjects.iter().map(|_| Decided::default()).collect();
     let mut kept: Vec<Enumeration> = Vec::new();
+    #[cfg(test)]
+    ENUMERATIONS_HELD.with(|held| held.set(0));
     for (slice, members) in &plan {
         let sliced;
         let space = match slice {
@@ -805,6 +816,8 @@ pub(crate) fn check_keeping(
             None => &whole,
         };
         let enumerated = enumerate(ir, space)?;
+        #[cfg(test)]
+        ENUMERATIONS_HELD.with(|held| held.set(held.get().max(kept.len() + 1)));
         for at in members {
             decided[*at] = match &subjects[*at].0 {
                 Subject::Outcome(position, id, outcome) => Decided {
