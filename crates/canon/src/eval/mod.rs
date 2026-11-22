@@ -530,7 +530,6 @@ pub fn evaluate_with(
     evidence: &[EvidenceRecord],
     supplied: Supplied<'_>,
 ) -> Result<Decision, Refusal> {
-<<<<<<< HEAD
     evaluate_with_freshness(ir, case, evidence, supplied, None)
 }
 
@@ -542,34 +541,35 @@ pub fn evaluate_with(
 /// skew it cannot read (`invalid-skew`); `freshness.rs` gives the order. Where it refuses nothing,
 /// the decision is [`evaluate_with`]'s; `None` is [`evaluate_with`].
 pub fn evaluate_with_freshness(
-=======
-    decide(ir, case, evidence, supplied, true)
+    ir: &Ir,
+    case: &Case,
+    evidence: &[EvidenceRecord],
+    supplied: Supplied<'_>,
+    strict_freshness: Option<&str>,
+) -> Result<Decision, Refusal> {
+    decide(ir, case, evidence, supplied, strict_freshness, true)
 }
 
 /// [`evaluate_with`] without the explanation (`explanation` is `None`): every other section, and
 /// every refusal, as it gives them. What `canon check` reads, the statuses of the actions and
 /// outcomes, needs no explanation (story:check-evaluates-statuses-only).
 pub(crate) fn evaluate_unexplained(
->>>>>>> 2b7de49cf2bff8154864cb124ed1721911b021af
     ir: &Ir,
     case: &Case,
     evidence: &[EvidenceRecord],
     supplied: Supplied<'_>,
-<<<<<<< HEAD
-    strict_freshness: Option<&str>,
-=======
 ) -> Result<Decision, Refusal> {
-    decide(ir, case, evidence, supplied, false)
+    decide(ir, case, evidence, supplied, None, false)
 }
 
-/// [`evaluate_with`], building the explanation only when `explaining`.
+/// [`evaluate_with_freshness`], building the explanation only when `explaining`.
 fn decide(
     ir: &Ir,
     case: &Case,
     evidence: &[EvidenceRecord],
     supplied: Supplied<'_>,
+    strict_freshness: Option<&str>,
     explaining: bool,
->>>>>>> 2b7de49cf2bff8154864cb124ed1721911b021af
 ) -> Result<Decision, Refusal> {
     depth::check(ir)?;
     case::check(ir, case)?;
