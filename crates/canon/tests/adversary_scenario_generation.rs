@@ -200,7 +200,9 @@ fn witnessed((fixture, source): &(String, String)) -> (Vec<String>, usize, usize
                 // fixtures/investigation/imports/ and fixtures/investigation/floor/ that import
                 // others (story:protocol-imports, story:protocol-floor) compile only with the
                 // documents they import, which generation does not take; `canon generate`
-                // refuses them before compiling.
+                // refuses them before compiling. Three fixtures of
+                // fixtures/investigation/decision-condition/ (story:decision-condition) are
+                // written to be refused by the reader or by compile.
                 let expected = ((fixture.ends_with("state-space-bound/protocol.yaml")
                     || fixture.ends_with("check/sliced/protocol.yaml")
                     || fixture.ends_with("check/unread-dimension/protocol.yaml")
@@ -212,6 +214,12 @@ fn witnessed((fixture, source): &(String, String)) -> (Vec<String>, usize, usize
                     || ((fixture.ends_with("subject-bound-evidence-match.yaml")
                         || fixture.ends_with("invalidation-rules.yaml"))
                         && why.starts_with("nothing-to-witness"))
+                    || (fixture.ends_with("decision-condition/decision-inside-when.yaml")
+                        && why.starts_with("parse:"))
+                    || (fixture.ends_with("decision-condition/when-beside-claim.yaml")
+                        && why.starts_with("parse:"))
+                    || (fixture.ends_with("decision-condition/evidence-in-when.yaml")
+                        && why.starts_with("compile: [EvidenceInDecisionCondition"))
                     || ((fixture.starts_with("fixtures/investigation/imports/")
                         || fixture.starts_with("fixtures/investigation/floor/"))
                         && why.starts_with("compile: [MissingImport"));

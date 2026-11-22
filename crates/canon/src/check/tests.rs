@@ -2011,17 +2011,19 @@ fn a_slice_holds_what_its_last_records_are_placed_against() {
 /// before slices existed. Returns how many states the slices of `ir` hold at most, against the
 /// whole product's. The three run side by side.
 fn assert_slices_agree(ir: &Ir, properties: Option<&Properties>, source: &str) -> (u128, u128) {
-    slices_agree(ir, properties, source, true)
+    let (widest, whole, _) = slices_agree(ir, properties, source, true);
+    (widest, whole)
 }
 
 /// [`assert_slices_agree`], the three strategies one after another when `side_by_side` is false:
-/// for a caller that already runs protocols on [`WORKERS`] threads.
+/// for a caller that already runs protocols on [`WORKERS`] threads. Also gives `canon check`'s
+/// report, so a caller that reads it does not check again.
 fn slices_agree(
     ir: &Ir,
     properties: Option<&Properties>,
     source: &str,
     side_by_side: bool,
-) -> (u128, u128) {
+) -> (u128, u128, Result<Report, Refusal>) {
     let (whole, own, chosen) = if side_by_side {
         std::thread::scope(|scope| {
             let own = scope.spawn(|| check_by(ir, properties, Strategy::Own));
@@ -2055,7 +2057,7 @@ fn slices_agree(
         .filter_map(|(_, slice)| space.slice(slice).size())
         .max()
         .unwrap_or(1);
-    (widest, space.size().unwrap_or(u128::MAX))
+    (widest, space.size().unwrap_or(u128::MAX), chosen)
 }
 
 /// The protocols a generator writes: two or three evidence kinds about one or two artifacts, an
@@ -2359,8 +2361,8 @@ fn generated_protocols_agree(seed: u64, wanted: usize) -> (usize, usize) {
     // The protocols are chosen above in generation order; each is then compared on its own.
     let results = par_map(chosen.len(), |at| {
         let (ir, properties, source) = &chosen[at];
-        let (widest, whole) = slices_agree(ir, properties.as_ref(), source, false);
-        let report = check(ir, properties.as_ref()).map(|report| report.to_string());
+        let (widest, whole, chosen) = slices_agree(ir, properties.as_ref(), source, false);
+        let report = chosen.map(|report| report.to_string());
         (
             widest < whole,
             report.unwrap_or_else(|_| "refused".to_owned()),
@@ -2460,7 +2462,7 @@ fn every_fixture_protocol_checks_alike_sliced_and_whole() {
         let properties = declared
             .exists()
             .then(|| properties(&std::fs::read_to_string(&declared).expect("readable")));
-        let (widest, whole) =
+        let (widest, whole, _) =
             slices_agree(ir, properties.as_ref(), &path.display().to_string(), false);
         widest < whole
     });
