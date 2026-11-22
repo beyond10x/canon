@@ -51,3 +51,62 @@ fn a_protocol_that_revises_nothing_walks_child_outcomes_as_before() {
         (34 stuck or cycle states)";
     assert_eq!(report(source).trim_end(), expected);
 }
+
+fn findings(report: &str) -> Vec<&str> {
+    report
+        .lines()
+        .filter(|line| !line.starts_with("simulated:"))
+        .collect()
+}
+
+const LATE: &str =
+    include_str!("../../../fixtures/investigation/simulate/revise-child-late/protocol.yaml");
+
+/// `revise-child-late` with artifact `a` renamed `c`: one child case about `b`, opened once;
+/// `fix` revises `b` while no child has ended. A child that ends `done` against the revision it
+/// was opened at leaves `done.current` unknown and `done.any` true, so neither action is
+/// admissible again and the outcome is never legitimate: a stuck state. The fixture as named
+/// reports it (`… result `done` earlier`); the renamed protocol must report it too, and the same
+/// number of findings.
+#[test]
+fn a_child_about_the_spaces_own_subject_may_end_against_the_earlier_revision() {
+    let renamed = LATE
+        .replace("  a:\n", "  c:\n")
+        .replace("        subject: a\n", "        subject: c\n");
+    assert_ne!(renamed, LATE, "the rename applied");
+    let named = report(LATE);
+    let text = report(&renamed);
+    assert_eq!(
+        findings(&text).len(),
+        findings(&named).len(),
+        "renaming an artifact changed the dead ends reported\nas named:\n{named}\nrenamed:\n{text}"
+    );
+    assert!(
+        findings(&text)
+            .iter()
+            .any(|line| line.contains("result `done` earlier")),
+        "the child that ended `done` against the revision it was opened at is not reported:\n{text}"
+    );
+}
+
+const CHILD: &str =
+    include_str!("../../../fixtures/investigation/simulate/revise-child/protocol.yaml");
+
+/// Decided with story:simulate-child-about-own-artifact: a child about the artifact the space
+/// already uses ends against an earlier revision only where a predicate reads an earlier record
+/// differently from a current one. `revise-child` reads its children with a form without
+/// `revision: current`, which counts both alike, so the walk of the fixture keeps its 9 states;
+/// with `revision: current` added the child's late outcome is walked as well.
+#[test]
+fn a_child_about_the_spaces_own_subject_is_walked_late_only_where_a_claim_tells_the_difference() {
+    let summary = |text: &str| text.lines().last().expect("a summary").to_owned();
+    let any = summary(&report(CHILD));
+    assert!(any.contains(": 9 reachable states"), "{any}");
+    let current = CHILD.replace(
+        "        subject: doc\n",
+        "        subject: doc\n        revision: current\n",
+    );
+    assert_ne!(current, CHILD, "the key was added");
+    let current = summary(&report(&current));
+    assert!(current.contains(": 11 reachable states"), "{current}");
+}
