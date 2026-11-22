@@ -273,10 +273,13 @@
 //! denial is reported, and a denial a runner binds to a case revision is walked as lasting. The
 //! records of a dimension no match names an artifact for are about the first artifact no match
 //! of the kind names, as the space takes them, so a revision of that artifact sets every such
-//! record aside, `case_outcome` records of a protocol that reads them about no artifact by name
-//! included, and a revision of another artifact sets none of them aside. A child that has not
-//! ended keeps recording at the current revision after its subject is revised: a child's outcome
-//! always arrives as a current record.
+//! record aside and a revision of another artifact sets none of them aside; the exception is
+//! the `case_outcome` records of children that actions open about several artifacts, which the
+//! walk keeps about the `case_open` subject of the action (`recovery`,
+//! story:child-outcome-recovery), so a revision sets aside only the child outcomes about its
+//! artifact. A child that has not ended when its subject is revised may end against the earlier
+//! revision or the new one: from the third value of its action's mark its outcome arrives as an
+//! earlier record as well as a current one.
 //!
 //! # Cost
 //!
@@ -301,6 +304,7 @@ use crate::model::{
     Predicate, ProtocolId, one_line,
 };
 
+mod recovery;
 #[cfg(test)]
 mod tests;
 
@@ -607,6 +611,13 @@ enum Step {
         record: Added,
         replacing: Option<Replacing>,
     },
+    /// A child's outcome that arrives as an earlier record, from the third value of the mark of
+    /// `action` (story:child-outcome-recovery).
+    Late {
+        action: usize,
+        record: Added,
+        replacing: Option<Replacing>,
+    },
     Expiry {
         dimension: usize,
         class: usize,
@@ -646,6 +657,9 @@ struct Layout<'d, 'a> {
     /// The position of each action that opens a child case, in action order: mark `i` is
     /// `openers[i]`'s.
     openers: Vec<usize>,
+    /// For each opener, the `case_open` subject when its mark has a third value
+    /// (story:child-outcome-recovery), otherwise `None`; empty before [`Layout::flagging`].
+    flagged: Vec<Option<ArtifactId>>,
 }
 
 impl<'d, 'a> Layout<'d, 'a> {
@@ -704,6 +718,7 @@ impl<'d, 'a> Layout<'d, 'a> {
             moving,
             marks: at,
             openers: Vec::new(),
+            flagged: Vec::new(),
         }
     }
 
@@ -770,12 +785,12 @@ impl<'d, 'a> Layout<'d, 'a> {
                 }
             }
         }
-        walked
+        self.after_revision(walked, artifacts)
     }
 
     /// The whole length of a walk's state.
     fn length(&self) -> usize {
-        self.marks + (2 * self.openers.len()).div_ceil(32)
+        self.marks + (2 * self.openers.len()).div_ceil(32) + self.flag_words()
     }
 
     /// The mark of opener `at` (`openers[at]`) in `state`: 0 for none, 1 for one child that has
@@ -792,6 +807,9 @@ impl<'d, 'a> Layout<'d, 'a> {
         let word = &mut marked[self.marks + 2 * at / 32];
         *word &= !(0b11 << (2 * at % 32));
         *word |= [0b00, 0b01, 0b11][usize::from(mark)] << (2 * at % 32);
+        if mark == 0 {
+            return self.settled(marked, at);
+        }
         marked
     }
 
@@ -1032,7 +1050,7 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
     }
     let limit = usize::try_from(check::STATE_BOUND).expect("the bound fits usize");
 
-    let dimensions = space.walked();
+    let (dimensions, split) = recovery::split(ir, &space, space.walked());
     let initial = space.initial_states();
     let base = initial.first().map_or(0, Vec::len);
     // R2a: an expired `case_outcome` record still counts for a `children` form. With no evidence
@@ -1086,7 +1104,9 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         .map(|(at, _)| at)
         .collect();
     let child_outcomes = !openers.is_empty();
-    let layout = Layout::revising(&dimensions, base, &holds, moving).marking(openers);
+    let layout = Layout::revising(&dimensions, base, &holds, moving)
+        .marking(openers)
+        .flagging(ir, &split);
     // Each action's revise subsets: the non-empty subsets of its `revises`, in order of their
     // sorted ids; none for an action that declares no `revises`.
     let action_subsets: Vec<Vec<Vec<&ArtifactId>>> = ir
@@ -1098,7 +1118,7 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         })
         .collect();
     let of_kinds = |kinds: &BTreeSet<&EvidenceKindId>| -> Vec<usize> {
-        (0..dimensions.len())
+        (0..split.originals)
             .filter(|at| kinds.contains(dimensions[*at].kind))
             .collect()
     };
@@ -1193,6 +1213,7 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
                 .collect()
         })
         .collect();
+    let produced = split.redirect(&layout.openers, produced);
     let child_records: Vec<Vec<Added>> = produced.iter().map(|at| records(at)).collect();
     // For each dimension, the position of its class `open`, which a child that ends replaces.
     let open_class: Vec<Option<usize>> = dimensions
@@ -1225,8 +1246,8 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         .filter(|(_, kind)| kind.max_age.is_some())
         .map(|(id, _)| id)
         .collect();
-    let expiring: Vec<usize> = of_kinds(&expiring_kinds)
-        .into_iter()
+    let expiring: Vec<usize> = (0..dimensions.len())
+        .filter(|at| expiring_kinds.contains(dimensions[*at].kind))
         .filter(|at| matched || !is_case_outcome(&dimensions[*at]))
         .collect();
     let capabilities = space.walked_capabilities().len();
@@ -1257,7 +1278,7 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
             ir,
             &space,
             &state[..base].to_vec(),
-            space.walk_evidence(&held, &layout.expired(&state)),
+            split.evidence(&space, &dimensions, &held, &layout.expired(&state)),
         )
         .map_err(|refusal| Refusal::new(refusal.code(), refusal.to_string()))?;
         let legitimate: Vec<usize> = (0..ir.outcomes.len())
@@ -1418,6 +1439,13 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
                 }
             }
         }
+        successors.extend(recovery::late(
+            &layout,
+            &state,
+            &child_records,
+            &open_class,
+            &open_held,
+        ));
         for dimension in &expiring {
             for class in 0..dimensions[*dimension].classes.len() {
                 if layout.present(&state, *dimension, class) {
@@ -1614,11 +1642,21 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
                 action,
                 record,
                 replacing,
+            }
+            | Step::Late {
+                action,
+                record,
+                replacing,
             } => {
                 let mut text = format!(
-                    "a child of action `{}` records {}",
+                    "a child of action `{}` records {}{}",
                     action_id(*action),
-                    added(record)
+                    added(record),
+                    if matches!(step, Step::Late { .. }) {
+                        " earlier"
+                    } else {
+                        ""
+                    }
                 );
                 let open = format!("result `{OPEN_OUTCOME}`");
                 match replacing {
@@ -1662,7 +1700,9 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
     };
     // A state as the space writes it, then each mark above none in action order.
     let rendered = |at: usize| {
-        let mut text = space.render_walk(
+        let mut text = split.render(
+            &space,
+            &dimensions,
             &states[at][..base].to_vec(),
             &layout.held(&states[at]),
             &layout.expired(&states[at]),
