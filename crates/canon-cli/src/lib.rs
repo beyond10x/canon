@@ -122,7 +122,11 @@ pub enum Command {
     /// claim is there in any combination of observed before and after each upstream artifact
     /// moved, one record each. Evidence an order form reads (`first`, `before`, `after`, `since`, `descended`)
     /// is also there with earlier records at a superseded revision, or with no known instant, in
-    /// every order of first observations; evidence an `after` or a `since` compares with its result
+    /// every order of first observations; evidence a `descended` form and another order form read
+    /// is also there in three more histories: records that name no item and keep their instants,
+    /// earlier records observed after the current ones, and earlier records of two results
+    /// observed at two instants, the lowest or the highest result first; evidence an `after` or a
+    /// `since` compares with its result
     /// also with a later record of that result, placed anywhere in that order or at no known
     /// instant; and evidence a `since` reads as its last kind also with a last record at a
     /// superseded revision, placed in that order on its own, with or just after its own first

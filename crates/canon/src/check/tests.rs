@@ -771,20 +771,24 @@ const DESCENDED_FIRST_OF_ITS_KIND: &str = "format: protocol/1\n\
 
 /// The same soundness for a protocol whose `first` reads the kind the `descended` form reads (the
 /// review of wave 2026-11-21): each value of `descended`, `unknown` included, is reached with the
-/// `first` form true, false and unknown (nine pairs), and every pair of those two claims records
-/// of the one kind give is a pair of some state. The pairs are not read together with `passes`
-/// and `fails`: a `descended` `true` beside a `first` that is a current `passed` observed before a
-/// current `failed`, with both current, needs earlier records of two results at two instants,
-/// which no state has (finding of this unit, left to the backlog).
+/// `first` form true, false and unknown (nine pairs), and every combination of all four claims
+/// that records of the one kind give is the combination of some state, `passes` and `fails`
+/// included: a `descended` `true` beside a `first` that is a current `passed` observed before a
+/// current `failed`, with both current, needs earlier records of two results at two instants
+/// (story:check-descended-two-result-history).
 #[test]
 fn every_value_of_descended_is_reached_jointly_with_a_first_of_its_kind() {
     let reached = every_descended_history_is_reached(
         DESCENDED_FIRST_OF_ITS_KIND,
         &["k"],
         0x5EC0_4D5A_F7E2_0006,
-        Some(&[1, 3]),
+        None,
     );
-    assert_eq!(reached.len(), 9, "first_pass, red_then_green: {reached:?}");
+    let pairs: BTreeSet<_> = reached
+        .iter()
+        .map(|values| (values[1], values[3]))
+        .collect();
+    assert_eq!(pairs.len(), 9, "first_pass, red_then_green: {pairs:?}");
 }
 
 /// A record of `kind` about `a` for the tests of `descended` beside a `first` of its kind: `result`

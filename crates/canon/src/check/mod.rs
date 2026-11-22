@@ -117,14 +117,18 @@
 //!   binding keeps it from every evidence match, as a record observed before a fix moved the
 //!   artifact is kept. In a protocol with a `descended` form (story:revision-ordering) the records
 //!   of the dimensions in value 1 name no item, and every other record names one; a dimension
-//!   that a `descended` form and another order form both read has `3 * (2^classes + 1)` values:
+//!   that a `descended` form and another order form both read has `5 * (2^classes + 1)` values:
 //!   the values above, then again with every record naming no item, then again with the earlier
 //!   records observed after the current ones, which are the first observations (value 1 then
-//!   names an item and has no instant in the first run), so a `descended` form can be `unknown`
-//!   beside a `first`, a `before`, an `after` or a `since` that has instants, `true` beside a
-//!   first observation that is a current record, and `true` or `false` beside none. Such a state
-//!   writes `` evidence `k` naming no item `` or `` evidence `k` earlier observed last `` and
-//!   weighs one more;
+//!   names an item and has no instant in the first run), then twice more with the earlier
+//!   records of two or more classes observed at two instants, those of the lowest class, then
+//!   those of the highest, first, and the others a quarter minute after them, so a `descended`
+//!   form can be `unknown` beside a `first`, a `before`, an `after` or a `since` that has
+//!   instants, `true` beside a first observation that is a current record, `true` or `false`
+//!   beside none, and `true` beside a `first` that is `true` over earlier records of two
+//!   results. Such a state writes `` evidence `k` naming no item ``, `` evidence `k` earlier
+//!   observed last `` or `` evidence `k` earlier result `r` observed before the other earlier
+//!   records `` and weighs one more;
 //! - when two or more dimensions have a history dimension, an order dimension last: every weak
 //!   order of those dimensions (their first observations earlier, later or at one instant), in
 //!   lexicographic order of their ranks, as many values as the ordered Bell number of their count
