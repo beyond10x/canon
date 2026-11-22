@@ -1,5 +1,63 @@
 # Changelog
 
+## [0.11.1] - 2026-11-22
+
+A patch release: evaluation no longer starts a thread for every call, and the ESS pin moves. There
+is no change to the public API, to `protocol/1`, `canon-ir/1`, `canon-case/1` or the
+`canon-decision/1` model, or to the command line. Install the CLI or depend on the libraries from
+Git tag `0.11.1`.
+
+What changes, and for whom (read against the diff since 0.11.0):
+
+- Tooling that compares `canon-decision/1` bytes. `computed_from.semantics.canon` reads `0.11.1`.
+  The conformance expectations that pin the version moved to `0.11.1`; other expected output did
+  not change.
+- Rust consumers: no public type or function changed. `b10x_canon::eval::evaluate`,
+  `evaluate_with` and `read_ir` keep their signatures.
+
+Evaluation.
+
+- `evaluate`, `evaluate_with` and `read_ir` run their recursive steps on a deep-stack thread
+  (`DEEP_STACK`, 64 MiB reserved) so the depth a protocol may nest does not depend on the caller's
+  stack. 0.11.0 started and joined one such thread for each call. Each calling thread now starts
+  one worker thread with its first call and reuses it until the calling thread ends: a unit test
+  holds that 2,000 calls from a thread with a 256 KiB stack start at most one thread
+  (`eval::tests::two_thousand_calls_spawn_at_most_one_thread`), and
+  `crates/canon/tests/evaluate_many_small_cases.rs` holds that many small cases from such a thread
+  give the decisions of the large-stack caller. Results and refusals are unchanged, and a protocol
+  nested to the bound still evaluates from a small stack.
+- Callers on different threads have a worker each and run at the same time. A call made by work
+  already on the worker runs where it is and waits for nothing. A panic in the work reaches the
+  caller with its payload and the worker serves the next call. A call made while the calling
+  thread's locals are destroyed (from a destructor, after the worker handle is gone) runs on a
+  thread of its own, as every call did in 0.11.0. A child of `fork` starts its own worker and never
+  uses the one it copied from its parent.
+- What it costs: a stack of 64 MiB, reserved and not touched, for each thread that ever evaluates,
+  for as long as that thread lives.
+- `unsafe`: the crate's one `unsafe` is a lifetime erasure of the job handed to the worker, in
+  `crates/canon/src/eval/worker.rs`, with the reason it is sound written beside it. `lib.rs` now
+  reads `#![deny(unsafe_code)]` where it read `#![forbid(unsafe_code)]` (a `forbid` cannot be
+  allowed in a module), and `worker.rs` alone allows it. A test (`unsafe_confined`) scans every
+  file under `crates/canon/src` and fails when another file allows or holds `unsafe`.
+  `website/docs/reference/evaluation.md` describes the worker.
+
+ESS.
+
+- The pin moves from 0.77.0 to 0.97.3: `ess/ess-inputs.yaml`, the `ESS_VERSION` and `ESS_SHA256` of
+  `.github/workflows/check.yml`, `AGENTS.md`, and the constants and messages of the tests that name
+  it. The specification (`ess/`) changes only in that `requires:` line.
+
+For contributors.
+
+- New tests: `adversary_eval_worker` (calls evaluated where the thread's worker handle is being
+  destroyed, in each of the three orders; a thousand short-lived callers leave no worker behind; a
+  call in a `fork` child of a thread that evaluated returns), `evaluate_many_small_cases` and
+  `unsafe_confined`, all in `crates/canon/tests/main.rs`, and five unit tests in `eval`.
+- The ESS negative control `an_older_requires_fails_step_1` names its release with
+  `ESS_TOOLCHAIN`: ESS 0.97.3 refuses a `requires:` that differs from its own release when no
+  toolchain of that release is at hand, and under `ESS_TOOLCHAIN` it runs as the pinned release and
+  fails an older `requires:` only under `--strict-requires`.
+
 ## [0.11.0] - 2026-11-22
 
 Protocols order evidence by revision, an outcome's decision can carry a condition, an artifact can
