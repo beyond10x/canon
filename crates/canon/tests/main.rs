@@ -116,17 +116,16 @@ mod support {
     pub mod schemas;
 }
 
-/// Every `tests/<name>.rs` beside this file is declared above as `mod <name>;`, and no directory
-/// under `tests/` holds a `main.rs` of its own.
-#[test]
-fn every_test_file_is_a_module_of_this_binary() {
-    let tests = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
-    let declared: std::collections::BTreeSet<&str> = include_str!("main.rs")
+/// The files under `tests` that this binary does not build, given the text of its `main.rs`: a
+/// `tests/<name>.rs` not declared as `mod <name>;`, and a directory that holds a `main.rs` of its
+/// own.
+fn undeclared_files(tests: &std::path::Path, main: &str) -> Vec<String> {
+    let declared: std::collections::BTreeSet<&str> = main
         .lines()
         .filter_map(|line| line.strip_prefix("mod ")?.strip_suffix(';'))
         .collect();
     let mut undeclared = Vec::new();
-    for entry in std::fs::read_dir(&tests).expect("tests/ is readable") {
+    for entry in std::fs::read_dir(tests).expect("tests/ is readable") {
         let path = entry.expect("an entry of tests/ is readable").path();
         let name = path
             .file_name()
@@ -145,10 +144,42 @@ fn every_test_file_is_a_module_of_this_binary() {
         }
     }
     undeclared.sort();
+    undeclared
+}
+
+/// Every `tests/<name>.rs` beside this file is declared above as `mod <name>;`, and no directory
+/// under `tests/` holds a `main.rs` of its own.
+#[test]
+fn every_test_file_is_a_module_of_this_binary() {
+    let tests = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
+    let undeclared = undeclared_files(&tests, include_str!("main.rs"));
     assert!(
         undeclared.is_empty(),
         "these files under {} are not modules of the test binary `main` and never run; declare \
          each in tests/main.rs: {undeclared:?}",
         tests.display()
+    );
+}
+
+/// A `.rs` file in a subdirectory of `tests/` builds only as a nested module, `pub mod <name>;`
+/// in a block of this file; one that is not declared never builds (G6 of the wave 9 review).
+#[test]
+fn a_file_in_a_subdirectory_is_a_module_too() {
+    let tests = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("layout-fixture");
+    let _ = std::fs::remove_dir_all(&tests);
+    std::fs::create_dir_all(tests.join("support/deep")).expect("the fixture directory is made");
+    for file in [
+        "top.rs",
+        "support/declared.rs",
+        "support/orphan.rs",
+        "support/deep/buried.rs",
+        "support/main.rs",
+    ] {
+        std::fs::write(tests.join(file), "").expect("the fixture file is written");
+    }
+    let main = "mod top;\nmod support {\n    pub mod declared;\n    pub mod buried;\n}\n";
+    assert_eq!(
+        undeclared_files(&tests, main),
+        ["support/main.rs", "support/orphan.rs"]
     );
 }

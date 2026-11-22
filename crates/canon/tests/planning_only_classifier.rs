@@ -175,6 +175,40 @@ fn both_workflows_call_the_one_script() {
     }
 }
 
+/// An answer outside the three words would match no `if:` of check.yml, so no step would run and
+/// the job would pass (G7 of the wave 9 review). The classify step refuses it: this runs its
+/// `case "$class" in` guard, as the workflow writes it, on each word and on some that are not.
+#[test]
+fn check_refuses_an_answer_outside_the_three_words() {
+    let text = fs::read_to_string(root().join(".github/workflows/check.yml")).expect("check.yml");
+    let lines: Vec<&str> = text.lines().collect();
+    let start = lines
+        .iter()
+        .position(|line| line.trim_start().starts_with("case \"$class\" in"))
+        .expect("check.yml guards the classifier's answer with `case \"$class\" in`");
+    let end = start
+        + lines[start..]
+            .iter()
+            .position(|line| line.trim() == "esac")
+            .expect("the guard ends with `esac`");
+    let guard = lines[start..=end].join("\n");
+    let status = |class: &str| {
+        Command::new("sh")
+            .args(["-c", &guard])
+            .env("class", class)
+            .stderr(Stdio::null())
+            .status()
+            .expect("sh runs the guard")
+            .success()
+    };
+    for class in ["code", "docs-site-only", "planning-only"] {
+        assert!(status(class), "the guard lets `{class}` through");
+    }
+    for class in ["", "Code", "docs", "code planning-only", "planning-only\ncode"] {
+        assert!(!status(class), "the guard refuses `{class}`");
+    }
+}
+
 #[test]
 fn job_names_stay() {
     let check = fs::read_to_string(root().join(".github/workflows/check.yml")).expect("check.yml");
