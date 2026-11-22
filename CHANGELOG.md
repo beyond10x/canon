@@ -1,5 +1,90 @@
 # Changelog
 
+## [0.12.0] - 2026-11-22
+
+A minor release: `canon floor` and `canon simulate` give answers they did not give in 0.11.1, and
+`canon check` reaches states it did not reach. There is no change to `protocol/1`, `canon-ir/1`,
+`canon-case/1` or the `canon-decision/1` model. Install the CLI or depend on the libraries from Git
+tag `0.12.0`.
+
+What changes, and for whom (read against the diff since 0.11.1):
+
+- Anyone who runs `canon floor` in CI. It exits 1 and prints `floor: breached` for an added action
+  that repeats a guarded floor action without the floor's capability; in 0.11.1 it printed
+  `floor: holds` and `EXPANSION`.
+- Anyone who runs `canon check` on a protocol with a `descended` form beside a `first` form over one
+  kind. The check reaches a state it missed (earlier records of two results at two instants), so it
+  can report a finding 0.11.1 did not. A protocol of this shape has more states: the reviewer's
+  protocol went from 41,472 to 53,760 (the bound is 65,536).
+- Anyone who runs `canon simulate` on a protocol that opens a child about the space's own
+  artifact. The child can end against the revision it was opened at, where the protocol has a
+  predicate that tells an earlier record from a current one; the walk has more states and can
+  report dead ends it did not. Protocols without such a predicate, and every fixture of the
+  repository, give the same bytes.
+- Anyone who runs `canon mutate` on a protocol with a decision outcome. The report prints a
+  `skipped:` line for each, before its summary line.
+- Tooling that compares `canon-decision/1` bytes. `computed_from.semantics.canon` reads `0.12.0`.
+  The conformance expectations that pin the version moved to `0.12.0`; other expected output did
+  not change.
+- Rust consumers: no public type or function changed.
+
+`canon floor`.
+
+- An added action repeats a guarded floor action when its precondition is implied by the guarded
+  one's (the same after unwrapping a one-member `all` or `any`, the always-true one, or a subset of
+  its conjuncts) and it may produce and revise at least what the guarded one does. A repeat without
+  a capability the guarded action requires is a `RELAXATION`: ``RELAXATION: action `a` added without
+  capability `c`, which the floor requires of `b` ``. A guarded action that produces and revises
+  nothing is repeated only by an added action that does the same. The sentence in the help that
+  documented this as a limit is gone.
+
+`canon check`.
+
+- Two history modes (`LOW_FIRST`, `HIGH_FIRST`) put the earlier records of the lowest, or the
+  highest, result at the rank's instant and the others 15 seconds after, so a `descended` true
+  beside a `first` true over earlier records of two results is reached. They enumerate only the
+  earlier sets of two or more classes (35 history values for three classes, not 45). With three or
+  more results the middle one is not observed alone first (`story:check-descended-three-result-history`).
+  `canon check --help` names the modes.
+- `unproduced-evidence` names a decision outcome whose condition reads evidence nothing produces.
+- `canon check` holds one slice's states at a time; `canon generate` keeps all, as before. Peak
+  memory of a 4-outcome protocol with 32,768 states a slice: 67 MB before, 23.7 MB after.
+
+`canon simulate`.
+
+- The limit sentence of the help is replaced by one clause stating the condition above. One pinned
+  unit test now expects 11 states, not 9.
+
+Validation.
+
+- `validate` looks claim, evidence-kind, artifact and dimension references up in one index. Compile
+  and check of 40,000 chained claims took 60 s of CPU and now take 0.35 s; errors and their order
+  are unchanged.
+
+Tests and gates (not shipped to users).
+
+- ESS moves from 0.97.3 to 0.97.4 (`ess/ess-inputs.yaml`, `check.yml`, with the archive's checksum,
+  which `ess_gate.rs` now compares).
+- The scenarios the generator writes for the investigation fixtures are committed
+  (`crates/canon/tests/generated/investigation-scenarios.txt`, 248 scenarios, SHA-256 digest of the
+  fixtures on its first line). The gate lane reads them and regenerates all fixtures but five that
+  take over 5 s, then compares bytes (3.9 to 6.7 s); the slow lane regenerates all.
+  `task regenerate-scenarios` writes the file. Mutant M3 of the generator now fails the gate lane.
+- The invalidation cost tests count claim evaluations and marks instead of comparing two wall-clock
+  times: 1,275 evaluations for a chain of 50 and 80,200 for 400. They pass 20 runs in a row at host
+  load 95 to 112.
+- The slow lane (`task test-slow`) ended 62 of 62 within the bound at host load about 44, and its CI
+  step no longer has `continue-on-error`.
+- The layout test flags an undeclared `.rs` file in a tests subdirectory, the classifier step of
+  `check.yml` refuses an answer outside its three words, and the `canon-docs` layout test is pinned.
+
+Known limits.
+
+- A change that makes one claim evaluation slower, without evaluating more often, is not seen by the
+  invalidation cost tests (`story:count-tests-see-a-slower-evaluation`).
+- The `Documentation site` workflow can fail on its first run after a release and needs a manual
+  dispatch (`story:pages-deploy-uses-the-artifact-it-uploaded`).
+
 ## [0.11.1] - 2026-11-22
 
 A patch release: evaluation no longer starts a thread for every call, and the ESS pin moves. There
