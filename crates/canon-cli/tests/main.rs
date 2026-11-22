@@ -31,6 +31,7 @@ mod adversary_simulate_revise_cli;
 mod adversary_skel_cli;
 mod adversary_tvc_cli;
 mod adversary_validate;
+mod adversary_w11_floor;
 mod canon_check;
 mod canon_mutate;
 mod canon_simulate;
