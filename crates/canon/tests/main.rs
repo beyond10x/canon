@@ -31,6 +31,7 @@ mod adversary2_skel_validate;
 mod adversary2_source_model;
 mod adversary2_subject_docs;
 mod adversary2_subject_e2e;
+mod adversary3_simulate_recovery;
 mod adversary2_tvc_eval;
 mod adversary_action_arguments;
 mod adversary_admissibility_docs;
