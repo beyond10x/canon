@@ -77,7 +77,8 @@ struct Entry {
 pub(crate) struct Authority {
     decisions: BTreeMap<Key, Entry>,
     /// The entries [`Authority::applying_at`] set aside by their grounds alone, each with its
-    /// capability, its scope and the grounds that failed. Empty in the decisions as read.
+    /// capability, its scope and the grounds that failed, in capability order (the order of
+    /// `decisions`). Empty in the decisions as read.
     lapsed: Vec<(CapabilityId, Scope, BTreeSet<Failed>)>,
 }
 
@@ -121,35 +122,53 @@ impl Authority {
     /// The decision that applies to a requirement of `capability` at `scope` (empty: a requirement
     /// without a scope): of the decisions on `capability` that cover it ([`covers`]), the one
     /// [`Grant::precedence`] ranks highest, so `denied` over `require_approval` over `granted`.
-    /// `None` when none covers it: the requirement is not granted (default deny). It reads every
-    /// decision it holds, so the evaluator asks the decisions [`Authority::applying_at`] keeps.
+    /// `None` when none covers it: the requirement is not granted (default deny). It reads the
+    /// decisions it holds on `capability` alone ([`Authority::on`]), so the evaluator asks the
+    /// decisions [`Authority::applying_at`] keeps.
     pub(super) fn decide(&self, capability: &CapabilityId, scope: &Scope) -> Option<Grant> {
-        self.decisions
-            .iter()
-            .filter(|((decided, covered, _, _), _)| {
-                #[cfg(test)]
-                compared();
-                decided == capability && covers(covered, scope)
-            })
+        self.on(capability)
+            .filter(|((_, covered, _, _), _)| covers(covered, scope))
             .map(|(_, entry)| entry.grant)
             .max_by_key(|grant| grant.precedence())
     }
 
+    /// The decisions held on `capability`, in key order. A key starts with its capability, so
+    /// they are one run of the map, from the least key on it (no scope, no case revision, no
+    /// principal) to the first key on another capability.
+    fn on<'a>(
+        &'a self,
+        capability: &'a CapabilityId,
+    ) -> impl Iterator<Item = (&'a Key, &'a Entry)> + 'a {
+        let least: Key = (capability.clone(), Scope::new(), None, None);
+        self.decisions
+            .range(least..)
+            .take_while(move |((decided, _, _, _), _)| {
+                #[cfg(test)]
+                compared();
+                decided == capability
+            })
+    }
+
     /// The failed grounds of every entry [`Authority::applying_at`] set aside by its grounds that
     /// is on `capability` and covers `scope`, each once, in `stale_grounds` order. Empty for the
-    /// decisions as read.
+    /// decisions as read. The set-aside entries are in capability order (`applying_at` reads the
+    /// decisions in key order), so those on `capability` are one run, found by bisection.
     pub(super) fn stale_grounds(
         &self,
         capability: &CapabilityId,
         scope: &Scope,
     ) -> BTreeSet<Failed> {
-        self.lapsed
+        let first = self
+            .lapsed
+            .partition_point(|(decided, _, _)| decided < capability);
+        self.lapsed[first..]
             .iter()
-            .filter(|(decided, covered, _)| {
+            .take_while(|(decided, _, _)| {
                 #[cfg(test)]
                 compared();
-                decided == capability && covers(covered, scope)
+                decided == capability
             })
+            .filter(|(_, covered, _)| covers(covered, scope))
             .flat_map(|(_, _, failed)| failed.iter().cloned())
             .collect()
     }
