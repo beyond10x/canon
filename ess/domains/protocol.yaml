@@ -404,14 +404,14 @@ types:
   # present, normalized as `requires` is. canon diff: adding, removing or changing `when` is
   # BREAKING, `outcome `o` requirement changed`.
   # read from: .engineering/planning/story/decision-condition.md
-  # read from: crates/canon/src/model/requirement.rs:50-55
+  # read from: crates/canon/src/model/requirement.rs:50-60
   - name: canon.protocol.DecisionRequirement
     kind: struct
     fields:
       # read from: crates/canon/src/model/requirement.rs:52
       - name: decision
         type: canon.protocol.DecisionName
-      # read from: crates/canon/src/model/requirement.rs:54
+      # read from: crates/canon/src/model/requirement.rs:59
       - name: when
         type: Optional<canon.protocol.Predicate>
 

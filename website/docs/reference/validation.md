@@ -82,7 +82,11 @@ does not depend on the order the sections are written in:
    child ends, never with a record of the run that opened it), or else a kind its
    `may_produce` does not list, and then a kind an earlier group of the action names, every
    one naming the action and the group, counted from 1), then those in
-   outcomes, then those in invalidation rules (the upstream
+   outcomes (each outcome's requirement, when it is a predicate; when it is a decision, its
+   condition `when`, followed by every evidence match, order form and `children` form it holds,
+   `evidence-in-decision-condition`, naming the outcome: it tests only claim values and case
+   inputs, as an applicability predicate does; story:decision-condition), then those in
+   invalidation rules (the upstream
    artifact, then each claim the rule invalidates); within a section, in the order its
    declarations are written, and within a declaration, in the order its references are
    written;
@@ -234,6 +238,7 @@ differently in these cases only:
 | `invalid-max-age` | An evidence kind's `max_age` is not a whole number without leading zeros, followed by `s`, `m`, `h` or `d`, or is too long to count in seconds. |
 | `evidence-in-discharge` | A discharge predicate tests evidence; it may test only claim values. `path` locates the evidence match or order form inside the predicate, as `discharged_when.all[1].evidence` or `discharged_when.first`. |
 | `evidence-in-applicability` | An applicability predicate tests evidence; it may test only claim values and case inputs. `path` locates the evidence match or order form inside the predicate, as `applicable_when.not.evidence` or `applicable_when.before`. |
+| `evidence-in-decision-condition` | An outcome's decision condition tests evidence; it may test only claim values and case inputs (story:decision-condition). `path` locates the evidence match or order form inside the predicate, as `when.not.evidence` or `when.before`. |
 | `duplicate-scope-key` | A capability requirement's scope names a key more than once. |
 | `empty-input-values` | A case input declares no value, so no case could give it one. |
 | `duplicate-input-value` | A case input lists a value more than once. |

@@ -50,7 +50,12 @@ pub enum OutcomeRequirement {
 pub struct DecisionRequirement {
     /// The decision's name.
     pub decision: DecisionName,
-    /// The decision counts only while this is `true`; absent, it counts whenever it applies.
+    /// The decision counts when this is `true` at the evaluation, whenever it was taken; absent,
+    /// it counts whenever it applies. A decision given while this is `false` or `unknown` is
+    /// ignored at that evaluation, neither counted nor refused, and the same decision counts at a
+    /// later evaluation once this is `true`: a caller that wants "taken after the condition held"
+    /// enforces that itself. Claims and case inputs only; an evidence match, an order form or a
+    /// `children` form is refused as `evidence-in-decision-condition`.
     pub when: Option<Predicate>,
 }
 
