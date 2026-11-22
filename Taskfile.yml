@@ -39,6 +39,7 @@ tasks:
           {{.ESS_ENV}} cargo nextest run --workspace --locked -E '{{.ESS_GATE_TESTS}}' || status=$?
           mkdir -p target/nextest
           echo $(( ($(date +%s%N) - start) / 1000000 )) > target/nextest/ess-gate.ms
+          cp target/nextest/default/junit.xml target/nextest/ess-gate-junit.xml
           exit $status
 
   test:
@@ -54,9 +55,10 @@ tasks:
           echo "test step: nproc $(nproc), nextest test threads $(nproc) (test-threads = num-cpus), bound {{.LIMIT}} s, a test killed at 60 s"
           ms() { echo $(( ($(date +%s%N) - $1) / 1000000 )); }
           s() { printf '%d.%01d' $(( $1 / 1000 )) $(( $1 % 1000 / 100 )); }
-          gate=0 filter='all()' status=0
+          gate=0 filter='all()' status=0 junits="target/nextest/workspace-junit.xml target/nextest/default/junit.xml"
           if [ "{{.AFTER_ESS_GATE}}" = true ]; then
             gate=$(cat target/nextest/ess-gate.ms) filter='not ({{.ESS_GATE_TESTS}})'
+            junits="$junits target/nextest/ess-gate-junit.xml"
           fi
           start=$(date +%s%N)
           {{.ESS_ENV}} cargo nextest run --workspace --locked -E "$filter" || status=$?
@@ -67,7 +69,7 @@ tasks:
           shipped=$(ms $start)
           total=$(( gate + workspace + shipped ))
           times=$(sed -n 's/.*<testcase name="\([^"]*\)" classname="\([^"]*\)".* time="\([0-9.]*\)".*/\3 \2 \1/p' \
-            target/nextest/workspace-junit.xml target/nextest/default/junit.xml | sort -rn)
+            $junits | sort -rn)
           echo "test step: ten slowest tests (s):"
           echo "$times" | head -10
           echo "test step: $(echo "$times" | awk '{ s += $1 } END { printf "%d tests, %.1f s summed", NR, s }') in this task"
