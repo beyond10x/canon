@@ -388,10 +388,10 @@
 //! state with one dimension alone off its least value that can hold a refused record, capability,
 //! decision or case input value, are evaluated first, in the order of the whole product.
 
-mod properties;
-mod space;
 #[cfg(test)]
 mod peak;
+mod properties;
+mod space;
 #[cfg(test)]
 mod tests;
 
@@ -685,7 +685,7 @@ pub(crate) fn check_by(
     properties: Option<&Properties>,
     strategy: Strategy,
 ) -> Result<Report, Refusal> {
-    check_keeping(ir, properties, strategy).map(|(report, _)| report)
+    check_enumerating(ir, properties, strategy, false).map(|(report, _)| report)
 }
 
 /// One space a check enumerated: its slice of `Space::new(ir)` (`None` for the whole product), the
@@ -704,6 +704,17 @@ pub(crate) fn check_keeping(
     ir: &Ir,
     properties: Option<&Properties>,
     strategy: Strategy,
+) -> Result<(Report, Vec<Enumeration>), Refusal> {
+    check_enumerating(ir, properties, strategy, true)
+}
+
+/// [`check_keeping`] when `keep`; otherwise each space is dropped once its subjects are decided,
+/// so the check holds one space at a time and gives no [`Enumeration`].
+fn check_enumerating(
+    ir: &Ir,
+    properties: Option<&Properties>,
+    strategy: Strategy,
+    keep: bool,
 ) -> Result<(Report, Vec<Enumeration>), Refusal> {
     eval::check_depth(ir).map_err(|refusal| Refusal::new(refusal.code(), refusal.to_string()))?;
     if let Some(properties) = properties {
@@ -842,12 +853,14 @@ pub(crate) fn check_keeping(
                 },
             };
         }
-        kept.push(Enumeration {
-            slice: slice.clone(),
-            members: members.clone(),
-            states: enumerated.states,
-            evaluated: enumerated.evaluated,
-        });
+        if keep {
+            kept.push(Enumeration {
+                slice: slice.clone(),
+                members: members.clone(),
+                states: enumerated.states,
+                evaluated: enumerated.evaluated,
+            });
+        }
     }
 
     let mut findings = Vec::new();
