@@ -81,20 +81,54 @@ use crate::model::{
 
 /// The value of an order form over the `history`, with `artifacts` the case snapshot's artifacts,
 /// which only `descended` reads (none gives no artifact a current revision); `None` for any other
-/// form.
+/// form. A caller that asks about several forms over one history asks a [`Timeline`] of it, which
+/// reads the history's order once.
 pub(crate) fn value(
     predicate: &Predicate,
     history: &[EvidenceRecord],
     artifacts: Option<&Artifacts>,
 ) -> Option<Truth> {
-    let ticks = || ticks(history);
-    match predicate {
-        Predicate::First(form) => Some(first(form, history, &ticks())),
-        Predicate::Before(form) => Some(before(form, history, &ticks())),
-        Predicate::After(form) => Some(after(form, history, &ticks())),
-        Predicate::Since(form) => Some(since(form, history, &ticks())),
-        Predicate::Descended(form) => Some(descended(form, history, artifacts)),
-        _ => None,
+    Timeline::new(history).value(predicate, artifacts)
+}
+
+/// One history and its order (story:order-timeline-built-once): the [`ticks`] of `history`, read
+/// the first time an order form needs them and kept for every form asked after, so an evaluation
+/// whose claims hold many order forms reads each record's `observed_at` once, not once per form.
+///
+/// A timeline is keyed by the history it borrows: it answers only for that slice of records, and
+/// another history (another evaluation, another state of `canon check`) gets a timeline of its
+/// own. One evaluation's order forms all read one history, every record the evidence check
+/// accepted, so one timeline serves all of them.
+pub(crate) struct Timeline<'h> {
+    history: &'h [EvidenceRecord],
+    ticks: std::cell::OnceCell<Vec<Option<i128>>>,
+}
+
+impl<'h> Timeline<'h> {
+    /// The timeline of `history`, its order not read yet.
+    pub(crate) fn new(history: &'h [EvidenceRecord]) -> Self {
+        Self {
+            history,
+            ticks: std::cell::OnceCell::new(),
+        }
+    }
+
+    /// The value of an order form over the timeline's history, as [`value`] gives it.
+    pub(crate) fn value(
+        &self,
+        predicate: &Predicate,
+        artifacts: Option<&Artifacts>,
+    ) -> Option<Truth> {
+        let history = self.history;
+        let ticks = || self.ticks.get_or_init(|| ticks(history)).as_slice();
+        match predicate {
+            Predicate::First(form) => Some(first(form, history, ticks())),
+            Predicate::Before(form) => Some(before(form, history, ticks())),
+            Predicate::After(form) => Some(after(form, history, ticks())),
+            Predicate::Since(form) => Some(since(form, history, ticks())),
+            Predicate::Descended(form) => Some(descended(form, history, artifacts)),
+            _ => None,
+        }
     }
 }
 
@@ -109,25 +143,30 @@ pub(crate) fn value(
 /// intervals that do not overlap. With whole seconds everywhere a tick is a second. The evidence
 /// check has refused an `observed_at` that is not an instant; one in a set a caller builds is
 /// treated as missing and does not set the resolution.
+///
+/// Each `observed_at` is read once, as the interval it names ([`crate::model::Instant::interval`]):
+/// its width is `10^(9 - digits)` nanoseconds, and its tick at a resolution of `digits` is its
+/// start divided by `10^(9 - digits)`, rounded down, which is [`crate::model::Instant::ticks`].
 pub(crate) fn ticks(history: &[EvidenceRecord]) -> Vec<Option<i128>> {
-    let digits = history
-        .iter()
-        .filter_map(|record| {
-            let at = record.observed_at.as_ref()?;
-            #[cfg(test)]
-            timeline_cost::read();
-            at.digits()
-        })
-        .min()
-        .unwrap_or(0);
-    history
+    let read: Vec<Option<(i128, u32)>> = history
         .iter()
         .map(|record| {
             let at = record.observed_at.as_ref()?;
             #[cfg(test)]
             timeline_cost::read();
-            at.ticks(digits)
+            let (start, end) = at.interval()?;
+            Some((start, 9 - (end - start).ilog10()))
         })
+        .collect();
+    let digits = read
+        .iter()
+        .flatten()
+        .map(|(_, digits)| *digits)
+        .min()
+        .unwrap_or(0);
+    let per_tick = 10_i128.pow(9 - digits);
+    read.into_iter()
+        .map(|read| Some(read?.0.div_euclid(per_tick)))
         .collect()
 }
 
@@ -422,10 +461,11 @@ pub(crate) fn reasons<'a>(
         .collect();
     keyed.sort_by(|left, right| left.0.cmp(&right.0));
     keyed.dedup_by(|later, earlier| later.0 == earlier.0);
+    let timeline = Timeline::new(history);
     keyed
         .into_iter()
         .filter_map(|(_, form)| {
-            let truth = value(form, history, artifacts)?.to_string();
+            let truth = timeline.value(form, artifacts)?.to_string();
             let (subject, mut entry) = match form {
                 Predicate::After(form) => (
                     form.subject.as_ref(),
@@ -1522,6 +1562,52 @@ mod tests {
             }
         }
         assert_eq!(seen.len(), 3, "every value is reached: {seen:?}");
+    }
+
+    /// Reading each instant once, as its interval (story:order-timeline-built-once), gives every
+    /// record the tick the resolution and the tick read apart gave it: the coarsest precision of
+    /// the history, each instant as whole ticks of it, before and after 1970, with an
+    /// `observed_at` that is not an instant missing and not setting the resolution.
+    #[test]
+    fn ticks_read_once_are_the_ticks_read_at_the_coarsest_precision() {
+        const SECONDS: [&str; 4] = [
+            "1969-12-31T23:59:59",
+            "1970-01-01T00:00:00",
+            "2026-10-01T09:00:00",
+            "2026-10-01T09:00:01",
+        ];
+        let mut rng = Rng(0x5EC0_4D5A_F7E2_0004);
+        for _ in 0..20_000 {
+            let history: Vec<EvidenceRecord> = (0..rng.below(6))
+                .map(|index| {
+                    let second = SECONDS[rng.below(SECONDS.len())];
+                    let at = match rng.below(12) {
+                        0 => None,
+                        1 => Some(format!("{second}.Z")),
+                        2 | 3 => Some(format!("{second}Z")),
+                        _ => {
+                            let digits: String = (0..1 + rng.below(9))
+                                .map(|_| char::from(b'0' + rng.below(10) as u8))
+                                .collect();
+                            Some(format!("{second}.{digits}Z"))
+                        }
+                    };
+                    let mut record = record(&format!("e{index}"), "k", None, "a", None);
+                    record.observed_at = at.map(Instant::new);
+                    record
+                })
+                .collect();
+            let digits = history
+                .iter()
+                .filter_map(|record| record.observed_at.as_ref()?.digits())
+                .min()
+                .unwrap_or(0);
+            let expected: Vec<Option<i128>> = history
+                .iter()
+                .map(|record| record.observed_at.as_ref()?.ticks(digits))
+                .collect();
+            assert_eq!(ticks(&history), expected, "{history:?}");
+        }
     }
 
     /// Writing more digits only narrows an instant to a part of its interval, so it can settle an
