@@ -370,6 +370,13 @@
       "detail": "canon simulate keeps one case_outcome dimension for each case_open subject when the protocol's children forms name no subject, so a revision of an artifact sets aside only the child outcomes about it, written evidence case_outcome about b; a child outcome about any other artifact stays current. A child that has not ended when its subject is revised may end against the earlier revision: its outcome then arrives as an earlier record, written a child of action x records … earlier, as well as a current one. A parent that revises the artifact a failed child was about and opens new children is therefore walked to the outcome a children form with revision: current reads. A protocol with no case_open, or with one case_open subject that is the artifact the space already uses, walks as before. CANON-COMPOSE-002 gains the step that pins the recovery.",
       "href": "/docs/reference/cli#canon-simulate",
       "area": "Analysis"
+    },
+    {
+      "label": "Conditional decision",
+      "status": "planned",
+      "detail": "An outcome that requires an explicit decision may carry an optional when predicate, requires: {decision: withdraw, when: {claim: publication.refused}}. The decision counts toward the outcome only while when is true at the evaluation, whenever the decision was taken: while when is false or unknown the outcome is blocked by the reasons a precondition that is not true gives, a decision supplied is neither counted nor refused (computed_from.decisions still lists it), and no pending decision is listed; while it is true the outcome is as before, legitimate with decided_by or blocked naming the decision. when holds claims and case inputs only, as applicable_when does: canon validate refuses an evidence match, an order form or a children form in it as evidence-in-decision-condition, naming the outcome. canon-ir/1 writes when only when it is present, so every protocol written without it compiles to the same bytes; canon diff reports adding, removing or changing it as BREAKING, and canon check decides the outcome over the decision's dimension and what when reads. The condition is not an order: Canon cannot tell a decision taken before when turned true from one taken after.",
+      "href": "/docs/reference/protocol#outcome",
+      "area": "Language"
     }
   ]
 }
