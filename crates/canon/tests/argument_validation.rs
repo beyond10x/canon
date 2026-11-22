@@ -13,8 +13,7 @@ use b10x_canon::model;
 use b10x_canon::validate::{self, ArgumentRefusal, ArgumentsRefused, check_arguments};
 use serde_json::{Value, json};
 
-#[path = "support/schemas.rs"]
-mod schemas;
+use crate::support::schemas;
 
 use schemas::{Rng, accepts, document, generate, mutate, object_document};
 

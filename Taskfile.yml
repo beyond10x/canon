@@ -2,10 +2,10 @@ version: '3'
 
 vars:
   ESS_GATE_TESTS: >-
-    binary_id(b10x-canon::ess_gate) | binary_id(b10x-canon::ess_model_matches) |
-    binary_id(b10x-canon-expr::model_matches) | binary_id(canon-cli::ess_commands_match) |
-    binary_id(canon-cli::adversary_ess_commands) | binary_id(canon-cli::adversary2_ess_commands)
-  SHIPPED_FEATURES_TESTS: --test adversary_action_arguments
+    (binary_id(b10x-canon::main) & test(/^(ess_gate|ess_model_matches)::/)) |
+    (binary_id(b10x-canon-expr::main) & test(/^model_matches::/)) |
+    (binary_id(canon-cli::main) & test(/^(ess_commands_match|adversary_ess_commands|adversary2_ess_commands)::/))
+  SHIPPED_FEATURES_TESTS: "--test main -E 'test(/^adversary_action_arguments::/)'"
 
 tasks:
   default:
@@ -41,7 +41,7 @@ tasks:
       AFTER_ESS_GATE: '{{.AFTER_ESS_GATE | default "false"}}'
     cmds:
       - cargo nextest run --workspace --locked --no-run
-      - cargo nextest run -p b10x-canon --locked --no-run {{.SHIPPED_FEATURES_TESTS}}
+      - cargo nextest run -p b10x-canon --locked --no-run --test main
       - silent: true
         cmd: |
           echo "test step: nproc $(nproc), nextest test threads $(nproc) (test-threads = num-cpus), bound {{.LIMIT}} s, a test killed at 60 s"
