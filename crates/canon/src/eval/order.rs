@@ -112,12 +112,22 @@ pub(crate) fn value(
 pub(crate) fn ticks(history: &[EvidenceRecord]) -> Vec<Option<i128>> {
     let digits = history
         .iter()
-        .filter_map(|record| record.observed_at.as_ref()?.digits())
+        .filter_map(|record| {
+            let at = record.observed_at.as_ref()?;
+            #[cfg(test)]
+            timeline_cost::read();
+            at.digits()
+        })
         .min()
         .unwrap_or(0);
     history
         .iter()
-        .map(|record| record.observed_at.as_ref()?.ticks(digits))
+        .map(|record| {
+            let at = record.observed_at.as_ref()?;
+            #[cfg(test)]
+            timeline_cost::read();
+            at.ticks(digits)
+        })
         .collect()
 }
 
@@ -474,6 +484,88 @@ pub(crate) fn reasons<'a>(
             Some(Value::Object(entry))
         })
         .collect()
+}
+
+/// What building the order of a history costs, as a count of instants read
+/// (story:order-timeline-built-once), not as a time: a count does not move with the load of the
+/// machine. The review of 0.10.0 counted 10,240 reads of 160 instants for 32 chronology claims.
+///
+/// The counter is bumped where [`ticks`] reads an `observed_at`, on the thread that evaluates,
+/// which is the worker of `on_deep_stack`, so tests running side by side do not count each
+/// other's reads.
+#[cfg(test)]
+mod timeline_cost {
+    use std::cell::Cell;
+
+    use crate::eval::on_deep_stack;
+    use crate::model::{self, EvidenceRecord, Truth};
+
+    thread_local! {
+        static READS: Cell<usize> = const { Cell::new(0) };
+    }
+
+    /// An `observed_at` is read.
+    pub(super) fn read() {
+        READS.with(|reads| reads.set(reads.get() + 1));
+    }
+
+    /// A protocol of `claims` claims, each `{first: {kind: observation, result: confirmed}}`, and
+    /// `records` records of `observation` with that result, one second apart in milliseconds: the
+    /// review's `order<n>` inputs.
+    fn chronology(
+        claims: usize,
+        records: usize,
+    ) -> (crate::ir::Ir, model::Case, Vec<EvidenceRecord>) {
+        let mut source = String::from(
+            "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {report: {}}\n\
+             evidence_kinds: {observation: {}}\nclaims:\n",
+        );
+        for at in 0..claims {
+            source.push_str(&format!(
+                "  c{at:04}: {{true_when: {{first: {{kind: observation, result: confirmed}}}}}}\n"
+            ));
+        }
+        let ir = crate::ir::compile(&model::parse(&source).expect("parses")).expect("compiles");
+        let case = crate::eval::read_case(
+            "format: canon-case/1\nid: C\nprotocol: p\nartifacts: {report: {revision: r1}}\n",
+        )
+        .expect("case reads");
+        let evidence = (0..records)
+            .map(|at| {
+                crate::eval::read_evidence(&format!(
+                    "format: canon-evidence/1\nid: o{at:03}\nkind: observation\nresult: confirmed\n\
+                     subject: report\nsubject_revision: r1\n\
+                     observed_at: '2026-11-20T12:{:02}:{:02}.123Z'\n",
+                    at / 60,
+                    at % 60
+                ))
+                .expect("evidence reads")
+            })
+            .collect();
+        (ir, case, evidence)
+    }
+
+    /// 32 chronology claims over 160 records read each record's instant at most once in one
+    /// evaluation: the order of the history is built once, not once per claim.
+    #[test]
+    fn an_evaluation_reads_each_instant_once_however_many_claims_order_it() {
+        let (ir, case, evidence) = chronology(32, 160);
+        on_deep_stack(|| READS.with(|reads| reads.set(0)));
+        let decision = crate::eval::evaluate(&ir, &case, &evidence).expect("decides");
+        let reads = on_deep_stack(|| READS.with(Cell::get));
+        assert_eq!(decision.claims.iter().count(), 32);
+        assert!(
+            decision
+                .claims
+                .iter()
+                .all(|(_, claim)| claim.value == Truth::True),
+            "every claim is true"
+        );
+        assert!(
+            reads <= 160,
+            "{reads} reads of an instant for 32 claims over 160 records, at most 160"
+        );
+    }
 }
 
 #[cfg(test)]
