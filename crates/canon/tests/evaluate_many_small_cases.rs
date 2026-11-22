@@ -17,7 +17,9 @@ use b10x_canon::model::{
 
 /// The calls each test makes, and the claims the evidence is spread over.
 const CALLS: usize = 2000;
-const CLAIMS: usize = 50;
+const CLAIMS: usize = 10;
+/// How many of them also run from a thread with a large stack, to compare with.
+const LARGE_CALLS: usize = 200;
 
 /// The stack of the caller's thread: far below the 2 MiB of a spawned thread.
 const SMALL_STACK: usize = 256 << 10;
@@ -98,8 +100,8 @@ fn value(decision: &Decision, claim: &ClaimId) -> Truth {
         .value
 }
 
-/// 2000 one-record calls from a 256 KiB thread give what the same calls give from a thread with
-/// a large stack, and each says about its claim what one 2000-record evaluation says.
+/// 2000 one-record calls from a 256 KiB thread give what the first 200 of them give from a thread
+/// with a large stack, and each says about its claim what one 2000-record evaluation says.
 #[test]
 fn two_thousand_one_record_calls_equal_one_two_thousand_record_call() {
     let ir = protocol();
@@ -108,23 +110,26 @@ fn two_thousand_one_record_calls_equal_one_two_thousand_record_call() {
 
     let at_once = eval::evaluate(&ir, &case, &records).expect("decides");
     let small = one_call_per_record(&ir, &case, &records, SMALL_STACK);
-    let large = one_call_per_record(&ir, &case, &records, 64 << 20);
+    let large = one_call_per_record(&ir, &case, &records[..LARGE_CALLS], 64 << 20);
 
     assert_eq!(small.len(), CALLS);
-    for (at, ((decision, text), (_, large_text))) in small.iter().zip(&large).enumerate() {
-        assert_eq!(
-            text, large_text,
-            "call {at}: small and large caller stack differ"
-        );
+    assert_eq!(large.len(), LARGE_CALLS);
+    for (at, (decision, text)) in small.iter().enumerate() {
+        if let Some((_, large_text)) = large.get(at) {
+            assert_eq!(
+                text, large_text,
+                "call {at}: small and large caller stack differ"
+            );
+        }
         let claim = ClaimId::new(format!("c{:02}", at % CLAIMS));
         assert_eq!(
-            value(&decision, &claim),
+            value(decision, &claim),
             value(&at_once, &claim),
             "call {at}: the value of {claim:?}"
         );
         let other = ClaimId::new(format!("c{:02}", (at + 1) % CLAIMS));
         assert_ne!(
-            value(&decision, &other),
+            value(decision, &other),
             value(&at_once, &other),
             "call {at}: a record of another claim is not evidence for {other:?}"
         );

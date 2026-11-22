@@ -172,7 +172,12 @@
 //! [`read_ir`] refuses an IR whose arrays and objects nest deeper than [`MAX_IR_DEPTH`]
 //! (4096) before parsing it. Reading and claim evaluation recurse along the nesting of the
 //! predicates, so they run on a thread of their own with a stack sized for that bound
-//! (`DEEP_STACK`): an IR at the bound reads and evaluates from any caller's thread.
+//! (`DEEP_STACK`): an IR at the bound reads and evaluates from any caller's thread. That thread is
+//! a worker which each calling thread starts with its first call and keeps until it ends, so many
+//! small calls from one thread share one worker; callers on different threads have a worker each
+//! and run at the same time; and work that evaluates again runs the inner call on the worker
+//! itself, never waiting for it. A panic in the work reaches the caller and the worker serves the
+//! next call. The worker is the one `unsafe` of the crate (`worker.rs`).
 //!
 //! Claim evaluation also recurses through each claim test into the predicate of the claim it
 //! tests, so the bound applies to a claim's effective depth: a predicate is one level and each
@@ -427,6 +432,7 @@ mod order;
 mod outcomes;
 mod pending;
 mod read;
+mod worker;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -799,8 +805,25 @@ thread_local! {
 
 /// Runs `work` on a thread with [`DEEP_STACK`], so how deep a protocol's predicates may nest does
 /// not depend on the caller's stack. The thread reads nothing and the result is the same as on the
-/// caller's thread. A panic in `work` is resumed on the caller's thread.
+/// caller's thread. A panic in `work` is resumed on the caller's thread, and the next call works.
+///
+/// The thread is a worker that each calling thread starts with its first call and keeps until that
+/// thread ends (`worker.rs`): a caller that makes many small calls pays one thread and a channel
+/// round trip per call, not a thread per call. What it costs: a stack of [`DEEP_STACK`] reserved,
+/// not touched, for each thread that ever evaluates, for as long as it lives; and one worker per
+/// calling thread, so callers on different threads run at the same time (a worker shared by
+/// the process would run them one after the other, which `canon check`, `generate` and `simulate`
+/// would pay for, since they call from several threads).
+///
+/// Reentrancy: `work` that evaluates again runs the inner call where it is, on the worker's deep
+/// stack, since the worker is blocked on the outer call and could not take another.
 fn on_deep_stack<T: Send>(work: impl FnOnce() -> T + Send) -> T {
+    worker::run(work)
+}
+
+/// [`on_deep_stack`] with a thread started and joined for this one call: what every call did
+/// before the worker, and what a call made while its thread's locals are destroyed still does.
+fn on_a_thread_of_its_own<T: Send>(work: impl FnOnce() -> T + Send) -> T {
     #[cfg(test)]
     SPAWNED.with(|spawned| spawned.set(spawned.get() + 1));
     std::thread::scope(|scope| {
@@ -1447,6 +1470,106 @@ mod tests {
         assert!(
             spawned <= 1,
             "{CALLS} calls started {spawned} threads for the deep stack"
+        );
+    }
+
+    /// Runs `body` on a fresh thread with a small stack and fails, rather than hangs, when it does
+    /// not end in 20 s.
+    fn on_a_small_thread<T: Send + 'static>(body: impl FnOnce() -> T + Send + 'static) -> T {
+        let (sent, received) = std::sync::mpsc::channel();
+        std::thread::Builder::new()
+            .stack_size(256 << 10)
+            .spawn(move || {
+                let _ = sent.send(body());
+            })
+            .expect("the caller's thread starts");
+        received
+            .recv_timeout(std::time::Duration::from_secs(20))
+            .expect("the call ends in 20 s and does not panic")
+    }
+
+    /// Work that recurses far deeper than the caller's stack holds runs, since it runs on the
+    /// worker's.
+    #[test]
+    fn work_runs_on_the_deep_stack_not_the_callers() {
+        fn descend(levels: usize) -> usize {
+            let frame = std::hint::black_box([1u8; 16 << 10]);
+            if levels == 0 {
+                return frame[0] as usize;
+            }
+            descend(levels - 1) + frame[levels % frame.len()] as usize
+        }
+        // 400 frames of 16 KiB: 6.4 MiB, against the caller's 256 KiB.
+        let (name, depth) = on_a_small_thread(|| {
+            on_deep_stack(move || {
+                (
+                    std::thread::current().name().map(str::to_owned),
+                    descend(400),
+                )
+            })
+        });
+        assert_eq!(name.as_deref(), Some("canon-eval"));
+        assert_eq!(depth, 401);
+    }
+
+    struct Boom(u8);
+
+    /// A panic in the work reaches the caller with its payload, and the next call works.
+    #[test]
+    fn a_panic_in_the_work_reaches_the_caller_and_the_next_call_works() {
+        let (payload, next, spawned) = on_a_small_thread(|| {
+            let caught = std::panic::catch_unwind(|| {
+                on_deep_stack(|| -> u8 { std::panic::panic_any(Boom(7)) })
+            })
+            .expect_err("the panic reaches the caller");
+            let payload = caught.downcast_ref::<Boom>().map(|boom| boom.0);
+            let next = on_deep_stack(|| 5);
+            (payload, next, SPAWNED.with(|spawned| spawned.get()))
+        });
+        assert_eq!(payload, Some(7));
+        assert_eq!(next, 5);
+        assert_eq!(spawned, 1, "the worker survived the panic");
+    }
+
+    /// Work that calls evaluation again runs it where it is: the worker is blocked on the outer
+    /// call and cannot take another.
+    #[test]
+    fn work_that_evaluates_again_does_not_wait_for_its_own_worker() {
+        let (sum, spawned) = on_a_small_thread(|| {
+            let sum =
+                on_deep_stack(|| on_deep_stack(|| 20) + on_deep_stack(|| on_deep_stack(|| 1)));
+            (sum, SPAWNED.with(|spawned| spawned.get()))
+        });
+        assert_eq!(sum, 21);
+        assert_eq!(spawned, 1);
+    }
+
+    /// Callers on different threads do not wait for each other: each work waits, inside, for the
+    /// other's to start, which one shared worker could never give.
+    #[test]
+    fn callers_on_different_threads_run_at_the_same_time() {
+        let (to_first, first_hears) = std::sync::mpsc::channel::<()>();
+        let (to_second, second_hears) = std::sync::mpsc::channel::<()>();
+        let wait = std::time::Duration::from_secs(20);
+        let first = std::thread::spawn(move || {
+            on_deep_stack(move || {
+                to_second.send(()).expect("second is there");
+                first_hears.recv_timeout(wait).is_ok()
+            })
+        });
+        let second = std::thread::spawn(move || {
+            on_deep_stack(move || {
+                to_first.send(()).expect("first is there");
+                second_hears.recv_timeout(wait).is_ok()
+            })
+        });
+        assert!(
+            first.join().expect("first ends"),
+            "first never heard of second"
+        );
+        assert!(
+            second.join().expect("second ends"),
+            "second never heard of first"
         );
     }
 
