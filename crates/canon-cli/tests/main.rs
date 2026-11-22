@@ -39,6 +39,7 @@ mod compile;
 mod conform_registry;
 mod conform_requirements;
 mod conform_run;
+mod decision_condition;
 mod decision_outcomes;
 mod ess_commands_match;
 mod evaluator_skeleton;

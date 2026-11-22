@@ -73,7 +73,11 @@
 //!    child ends, never with a record of the run that opened it), or else a kind its
 //!    `may_produce` does not list, and then a kind an earlier group of the action names, every
 //!    one naming the action and the group, counted from 1), then those in
-//!    outcomes, then those in invalidation rules (the upstream
+//!    outcomes (each outcome's requirement, when it is a predicate; when it is a decision, its
+//!    condition `when`, followed by every evidence match, order form and `children` form it holds,
+//!    `evidence-in-decision-condition`, naming the outcome: it tests only claim values and case
+//!    inputs, as an applicability predicate does; story:decision-condition), then those in
+//!    invalidation rules (the upstream
 //!    artifact, then each claim the rule invalidates); within a section, in the order its
 //!    declarations are written, and within a declaration, in the order its references are
 //!    written;
@@ -242,6 +246,14 @@ pub enum Problem {
         kind: EvidenceKindId,
         path: String,
     },
+    /// An outcome's decision condition tests evidence; it may test only claim values and case
+    /// inputs (story:decision-condition). `path` locates the evidence match or order form inside
+    /// the predicate, as `when.not.evidence` or `when.before`.
+    EvidenceInDecisionCondition {
+        outcome: OutcomeId,
+        kind: EvidenceKindId,
+        path: String,
+    },
     /// A capability requirement's scope names a key more than once.
     DuplicateScopeKey {
         action: ActionId,
@@ -403,6 +415,7 @@ impl Problem {
             Problem::InvalidMaxAge { .. } => "invalid-max-age",
             Problem::EvidenceInDischarge { .. } => "evidence-in-discharge",
             Problem::EvidenceInApplicability { .. } => "evidence-in-applicability",
+            Problem::EvidenceInDecisionCondition { .. } => "evidence-in-decision-condition",
             Problem::DuplicateScopeKey { .. } => "duplicate-scope-key",
             Problem::EmptyInputValues { .. } => "empty-input-values",
             Problem::DuplicateInputValue { .. } => "duplicate-input-value",
@@ -504,6 +517,16 @@ impl fmt::Display for Problem {
                 f,
                 "obligation `{}` tests evidence kind `{}` at `{path}`; an applicability predicate tests only claim values and case inputs",
                 one_line(obligation.as_str()),
+                one_line(kind.as_str())
+            ),
+            Problem::EvidenceInDecisionCondition {
+                outcome,
+                kind,
+                path,
+            } => write!(
+                f,
+                "outcome `{}` tests evidence kind `{}` at `{path}`; a decision's condition tests only claim values and case inputs",
+                one_line(outcome.as_str()),
                 one_line(kind.as_str())
             ),
             Problem::DuplicateScopeKey {
@@ -1032,6 +1055,21 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
                 requires,
                 &mut problems,
             );
+        }
+        if let Some(when) = outcome.requires.when() {
+            references(
+                protocol,
+                &Referrer::Outcome(id.clone()),
+                when,
+                &mut problems,
+            );
+            for (kind, path) in evidence_at("when", when) {
+                problems.push(Problem::EvidenceInDecisionCondition {
+                    outcome: id.clone(),
+                    kind,
+                    path,
+                });
+            }
         }
     }
     for (id, rule) in protocol.invalidation.iter() {

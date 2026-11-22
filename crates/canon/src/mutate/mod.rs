@@ -29,7 +29,8 @@
 //! `not` themselves; claim tests and input tests; an evidence match without a `result`, and the
 //! subject and `independent_on` of every match; the order forms `first`, `before`, `after`,
 //! `since` and `descended`, whose results `change-result` neither changes nor counts; `children`
-//! forms; an outcome that requires an explicit decision (`requires: {decision: …}`). Untouched
+//! forms; an outcome that requires an explicit decision (`requires: {decision: …}`), its `when`
+//! condition included (story:decision-condition). Untouched
 //! altogether: artifacts, evidence kinds (their `max_age` and `supplied_by` included), an action's `effect`, `author`,
 //! `may_produce` (with `decided_by`), `records_together`, `revises`, `arguments` and `case_open`,
 //! invalidation rules, case inputs, independence dimensions, imports, every description, and the

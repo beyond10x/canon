@@ -613,6 +613,11 @@ fn walk(value: &Json, of: &Ty, shapes: &BTreeMap<String, Shape>, written: &mut B
                 Some(Shape::Union(variants)) if name == "OutcomeRequirement" => {
                     if object.contains_key("decision") {
                         written.insert("OutcomeRequirement.decision".to_owned());
+                        let decision = variants
+                            .iter()
+                            .find(|(variant, _)| variant == "decision")
+                            .expect("a decision variant");
+                        walk(value, &decision.1, shapes, written);
                     } else {
                         written.insert("OutcomeRequirement.predicate".to_owned());
                         let predicate = variants

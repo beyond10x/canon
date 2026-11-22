@@ -617,6 +617,9 @@ impl Readers {
             if let Some(requires) = outcome.requires.predicate() {
                 reads(requires, Reading::POSITIVE, &mut read);
             }
+            if let Some(when) = outcome.requires.when() {
+                reads(when, Reading::POSITIVE, &mut read);
+            }
         }
         for (claim, reading) in read {
             let entry = readers.places.entry(claim).or_default();

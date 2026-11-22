@@ -60,8 +60,9 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   sorted like every object's (story:action-arguments).
 - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
   it was written, and an input test `{"input": {"id": …, "in": [...]}}`. An outcome that
-  requires an explicit decision has the requirement `{"decision": <name>}`, as written; any
-  other requirement is its predicate.
+  requires an explicit decision has the requirement `{"decision": <name>}`, as written, with
+  `"when": <predicate>`, normalized like every predicate, only when the decision has a condition
+  (story:decision-condition); any other requirement is its predicate.
 - **Resolved references.** Only a document the validator accepts compiles, so every claim and
   evidence kind the IR references is declared in it (`case_outcome` wherever a `children` form
   reads it), and so is every artifact an evidence match, an order form or a `children` form
