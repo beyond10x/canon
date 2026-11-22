@@ -1967,6 +1967,17 @@ fn a_slice_holds_what_its_last_records_are_placed_against() {
 /// before slices existed. Returns how many states the slices of `ir` hold at most, against the
 /// whole product's.
 fn assert_slices_agree(ir: &Ir, properties: Option<&Properties>, source: &str) -> (u128, u128) {
+    let (widest, whole, _) = assert_slices_agree_report(ir, properties, source);
+    (widest, whole)
+}
+
+/// [`assert_slices_agree`], also giving `canon check`'s report, so a caller that reads it does not
+/// check again.
+fn assert_slices_agree_report(
+    ir: &Ir,
+    properties: Option<&Properties>,
+    source: &str,
+) -> (u128, u128, Result<Report, Refusal>) {
     let whole = check_by(ir, properties, Strategy::Whole);
     let own = check_by(ir, properties, Strategy::Own);
     let chosen = check(ir, properties);
@@ -1984,7 +1995,7 @@ fn assert_slices_agree(ir: &Ir, properties: Option<&Properties>, source: &str) -
         .filter_map(|(_, slice)| space.slice(slice).size())
         .max()
         .unwrap_or(1);
-    (widest, space.size().unwrap_or(u128::MAX))
+    (widest, space.size().unwrap_or(u128::MAX), chosen)
 }
 
 /// The protocols a generator writes: two or three evidence kinds about one or two artifacts, an
@@ -2282,12 +2293,12 @@ fn generated_protocols_agree(seed: u64, wanted: usize) -> (usize, usize) {
         {
             continue;
         }
-        let (widest, whole) = assert_slices_agree(&ir, properties.as_ref(), &source);
+        let (widest, whole, chosen) = assert_slices_agree_report(&ir, properties.as_ref(), &source);
         compared += 1;
         if widest < whole {
             sliced += 1;
         }
-        let report = check(&ir, properties.as_ref()).map(|report| report.to_string());
+        let report = chosen.map(|report| report.to_string());
         let text = report.as_deref().unwrap_or("refused");
         for feature in GENERATED_FEATURES {
             if source.contains(feature) || text.contains(feature) {
