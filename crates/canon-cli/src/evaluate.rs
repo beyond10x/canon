@@ -1,6 +1,6 @@
 //! `canon evaluate`: reads the compiled protocol, the case snapshot, the evidence directory and the
-//! optional `--authority` and `--decisions` files and `--at` instant, and hands them to the library
-//! unparsed.
+//! optional `--authority` and `--decisions` files, `--at` instant and `--strict` skew, and
+//! hands them to the library unparsed.
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -22,7 +22,8 @@ fn is_record_name(name: &std::ffi::OsStr) -> bool {
 /// or `*.json`, read in sorted file-name order. Any other entry — another file, a subdirectory —
 /// is refused as unreadable, naming it, rather than skipped, so no evidence the operator put
 /// there is silently dropped. The `--authority` and `--decisions` files, when given, are read as
-/// text; they and the `--at` instant are passed through unparsed. A file that cannot be read
+/// text; they, the `--at` instant and the `--strict` skew (`0s` when the flag is given
+/// without one) are passed through unparsed. A file that cannot be read
 /// exits 2; a refusal exits 1 naming its code. Every evidence refusal names the file of each record
 /// it cites: an evidence file the library refuses to read as a record (`` error[malformed-input]:
 /// <file>: evidence `e1` is not a canon-evidence/1 document: missing field `subject` ``), and a
@@ -36,6 +37,7 @@ pub(crate) fn run(
     authority_path: Option<&Path>,
     decisions_path: Option<&Path>,
     at: Option<&str>,
+    strict_freshness: Option<&str>,
 ) -> ExitCode {
     let read = |path: &Path| read_text(path).map_err(|error| unreadable(path, error));
     let inputs = (|| {
@@ -84,7 +86,9 @@ pub(crate) fn run(
                 at,
                 decisions: decisions.as_deref(),
             };
-            eval::evaluate_with(&ir, &case, &records, supplied).map_err(|refusal| {
+            let decided =
+                eval::evaluate_with_freshness(&ir, &case, &records, supplied, strict_freshness);
+            decided.map_err(|refusal| {
                 let files = refusal
                     .evidence()
                     .iter()

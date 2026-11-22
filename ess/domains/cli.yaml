@@ -167,6 +167,12 @@ commands:
       # read from: crates/canon-cli/src/lib.rs:102-106
       - name: at
         type: Optional<String>
+      # Strict freshness: refuse undated evidence of a kind with max_age, evidence observed after
+      # at by more than the clock skew given (0s when the flag is given without one), and a run
+      # without at of a protocol with such a kind (story:freshness-needs-trusted-timestamps).
+      # read from: crates/canon-cli/src/lib.rs:112-120
+      - name: strict
+        type: Optional<String>
     response:
       # The canon-decision/1 document.
       # read from: crates/canon-cli/src/evaluate.rs:104

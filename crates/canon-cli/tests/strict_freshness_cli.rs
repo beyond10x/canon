@@ -1,7 +1,7 @@
 //! Acceptance for story:freshness-needs-trusted-timestamps, against `canon evaluate`: without
-//! `--strict-freshness` an undated record of a kind with `max_age`, a record observed after `--at`
+//! `--strict` an undated record of a kind with `max_age`, a record observed after `--at`
 //! and a run without `--at` are accepted as before (pinned here); with it each is refused, naming
-//! its code and the file of the record it cites; `--strict-freshness <SKEW>` allows a record
+//! its code and the file of the record it cites; `--strict <SKEW>` allows a record
 //! observed up to that long after `--at`; `canon evaluate --help` names the mode.
 
 use std::path::{Path, PathBuf};
@@ -118,7 +118,7 @@ fn by_default_undated_future_dated_and_no_instant_are_accepted() {
 fn strict_freshness_refuses_an_undated_record_naming_its_file() {
     let inputs = Inputs::new("strict-undated", None);
     assert_eq!(
-        refused(&inputs.evaluate(&["--at", AT, "--strict-freshness"])),
+        refused(&inputs.evaluate(&["--at", AT, "--strict"])),
         format!(
             "error[undated-evidence]: {}: evidence `e1` gives no observed_at, and its kind \
              `fresh` has max_age `1h`: strict freshness needs the time it was observed\n",
@@ -131,7 +131,7 @@ fn strict_freshness_refuses_an_undated_record_naming_its_file() {
 fn strict_freshness_refuses_a_record_observed_after_the_instant_beyond_the_skew() {
     let inputs = Inputs::new("strict-future", Some("2026-10-04T12:00:30Z"));
     assert_eq!(
-        refused(&inputs.evaluate(&["--strict-freshness", "--at", AT])),
+        refused(&inputs.evaluate(&["--strict", "--at", AT])),
         format!(
             "error[future-evidence]: {}: evidence `e1` observed_at `2026-10-04T12:00:30Z` is \
              later than the evaluation instant `2026-10-04T12:00:00Z` by 30 s, more than the \
@@ -141,14 +141,14 @@ fn strict_freshness_refuses_a_record_observed_after_the_instant_beyond_the_skew(
     );
     let by_default = accepted(&inputs.evaluate(&["--at", AT]));
     let within: [&[&str]; 2] = [
-        &["--strict-freshness", "30s", "--at", AT],
-        &["--at", AT, "--strict-freshness=1m"],
+        &["--strict", "30s", "--at", AT],
+        &["--at", AT, "--strict=1m"],
     ];
     for args in within {
         assert_eq!(accepted(&inputs.evaluate(args)), by_default, "{args:?}");
     }
     assert!(
-        refused(&inputs.evaluate(&["--strict-freshness", "29s", "--at", AT]))
+        refused(&inputs.evaluate(&["--strict", "29s", "--at", AT]))
             .starts_with("error[future-evidence]: "),
     );
 }
@@ -157,12 +157,12 @@ fn strict_freshness_refuses_a_record_observed_after_the_instant_beyond_the_skew(
 fn strict_freshness_refuses_a_run_without_an_instant() {
     let inputs = Inputs::new("strict-no-at", Some("2026-10-04T11:30:00Z"));
     assert_eq!(
-        refused(&inputs.evaluate(&["--strict-freshness"])),
+        refused(&inputs.evaluate(&["--strict"])),
         "error[missing-instant]: strict freshness needs the evaluation instant (`--at`): \
          evidence kind `fresh` has max_age `1h`\n"
     );
     assert_eq!(
-        refused(&inputs.evaluate(&["--strict-freshness", "soon", "--at", AT])),
+        refused(&inputs.evaluate(&["--strict", "soon", "--at", AT])),
         "error[invalid-skew]: the allowed clock skew `soon` is not an age the evaluator can \
          read: a whole number of seconds, minutes, hours or days, written with its unit s, m, h \
          or d\n"
@@ -175,7 +175,7 @@ fn evaluate_help_names_the_strict_freshness_mode() {
     assert_eq!(run.status.code(), Some(0), "{}", text(&run.stderr));
     let help = text(&run.stdout);
     for named in [
-        "--strict-freshness [<SKEW>]",
+        "--strict [<SKEW>]",
         "undated-evidence",
         "future-evidence",
         "missing-instant",

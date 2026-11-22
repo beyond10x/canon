@@ -53,6 +53,7 @@ fn main() -> ExitCode {
             authority,
             decisions,
             at,
+            strict,
         } => evaluate::run(
             &ir,
             &case,
@@ -60,6 +61,7 @@ fn main() -> ExitCode {
             authority.as_deref(),
             decisions.as_deref(),
             at.as_deref(),
+            strict.as_deref(),
         ),
         Command::Diff { from, to } => diff::run(&from, &to),
         Command::Floor { floor, ir } => floor::run(&floor, &ir),

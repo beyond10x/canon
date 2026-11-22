@@ -109,6 +109,15 @@ pub enum Command {
         /// instant, counted in whole seconds, does not apply; without it, no evidence expires.
         #[arg(long)]
         at: Option<String>,
+        /// Strict freshness, for a caller that relies on it: refuse a record of a kind with a
+        /// `max_age` that gives no `observed_at` (`undated-evidence`) or was observed later than
+        /// `--at` by more than SKEW (`future-evidence`), and a run without `--at` of a protocol
+        /// with such a kind (`missing-instant`). SKEW is the clock skew allowed, written as a
+        /// `max_age` is (`30s`, `5m`), `0s` when not given; other text is refused as
+        /// `invalid-skew`. Without this flag, such records apply and nothing expires without
+        /// `--at`.
+        #[arg(long, value_name = "SKEW", num_args = 0..=1, default_missing_value = "0s")]
+        strict: Option<String>,
     },
     /// Check a `protocol/1` document over its whole finite state space: report outcomes no state
     /// reaches, actions whose precondition holds in no state, claims, obligations, preconditions and

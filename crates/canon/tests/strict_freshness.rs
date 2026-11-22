@@ -3,7 +3,7 @@
 //! By default the freshness stage keeps an undated record of a kind with `max_age`, keeps a record
 //! observed after the evaluation instant, and expires nothing without an instant; the tests named
 //! `by_default_*` pin that, byte for byte. In the strict mode (`eval::evaluate_with_freshness`
-//! with an allowed clock skew, `--strict-freshness` on the command line) each of the three is
+//! with an allowed clock skew, `--strict` on the command line) each of the three is
 //! refused, naming the record or the kind: `undated-evidence`, `future-evidence` and
 //! `missing-instant`; a skew that is not an age is refused as `invalid-skew`.
 
