@@ -257,3 +257,8 @@ items:
     story: story:revision-ordering
     detail: The descended order form tests whether an item that had one result on a revision the current revision of its subject descends from has another on the current revision, pairing evidence records on their item and reading descent from the case snapshot's descends_from of each artifact; scenario CANON-ORDER-005.
     href: /docs/reference/protocol
+  - label: canon simulate walks a parent's recovery
+    area: Analysis
+    story: story:child-outcome-recovery
+    detail: "canon simulate keeps one case_outcome dimension for each case_open subject when the protocol's children forms name no subject, so a revision of an artifact sets aside only the child outcomes about it, written evidence case_outcome about b; a child outcome about any other artifact stays current. A child that has not ended when its subject is revised may end against the earlier revision: its outcome then arrives as an earlier record, written a child of action x records … earlier, as well as a current one. A parent that revises the artifact a failed child was about and opens new children is therefore walked to the outcome a children form with revision: current reads. A protocol with no case_open, or with one case_open subject that is the artifact the space already uses, walks as before. CANON-COMPOSE-002 gains the step that pins the recovery."
+    href: /docs/reference/cli#canon-simulate

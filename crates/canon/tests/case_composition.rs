@@ -578,7 +578,7 @@ fn reasons_and_the_explanation_name_the_form_with_its_revision() {
     assert_ne!(fixture, revision_fixture(), "the action was replaced");
     let decision = eval::evaluate(
         &compiled(&fixture),
-        &case("epic", &["spec"], "s2"),
+        &case("epic", &["spec", "epic"], "s2"),
         &[spec_outcome("o1", "STORY-1", "abandoned", "s1")],
     )
     .expect("decides");
