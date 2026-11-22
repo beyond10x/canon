@@ -142,6 +142,14 @@ a test pins it: `conformance/scenarios/explanation.yaml`, `pending-decisions.yam
 `evidence-redelivery.yaml`, and `crates/canon-cli/tests/adversary_skel_cli.rs`; find any newer
 one with `git grep -n '"canon": "' -- conformance crates`. Keep their other exact-output
 expectations unchanged.
+`rust-toolchain.toml` pins the one rustc that the local gate and both workflows (`check.yml`,
+`pages.yml`: `rustup toolchain install`) use. Raise it in one commit that changes the file and fixes
+what the new compiler's `cargo fmt --all --check` and `cargo clippy --workspace --all-targets
+--locked -- -D warnings` report. `task check` finds the `ess` release of `ess/ess-inputs.yaml` in
+`~/.cache/ess/toolchains/<version>` itself, or stops with one line naming it. `task ci-watch --
+<pull request or branch>` (`scripts/ci-watch`) waits until no check is pending, prints each with its
+result and link, and exits non-zero when a check failed, was cancelled or was still pending at the
+timeout; wait for CI with it and never by a script that ignores results.
 Land the bot-authored preparation on main with `task check` and CI green, then create an annotated
 bot tag on that exact commit and its GitHub Release through `b10x-gates`. Merge the pull request
 as the bot with a merge commit through the API: `b10x-gates api --method PUT --path
