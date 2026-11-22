@@ -457,6 +457,34 @@ fn a_protocol_that_opens_child_cases_states_no_limit() {
     );
 }
 
+/// An artifact that declares `revised_by` adds the revision to what the waiting states wait on,
+/// whatever else the summary names, and a protocol without one keeps the phrase it had.
+#[test]
+fn a_revision_by_another_protocol_is_named_in_the_summary() {
+    let summary = |source: &str| report(source).lines().last().expect("a summary").to_owned();
+    let revised = HELD.replace(
+        "findings: {description: The findings.}",
+        "findings: {description: The findings., revised_by: q}",
+    );
+    assert_ne!(revised, HELD);
+    assert!(
+        summary(&revised).contains(
+            " waiting on supplied evidence, a child outcome, expiry or a revision by another \
+             protocol, "
+        ),
+        "{}",
+        summary(&revised)
+    );
+    let without_opening = revised.replace(", case_open: {protocol: q, subject: findings}", "");
+    assert!(
+        summary(&without_opening)
+            .contains(" waiting on supplied evidence, expiry or a revision by another protocol, "),
+        "{}",
+        summary(&without_opening)
+    );
+    assert!(summary(HELD).contains(" waiting on supplied evidence, a child outcome or expiry, "));
+}
+
 /// story:simulate-child-outcome-step: a record of the class `open` held as expired (R2a) is an
 /// open child, and a child that ends replaces it as it replaces a current one. In `HELD`, the
 /// state in which the only child is open and its record expired lets `open_change` open another
@@ -905,11 +933,11 @@ fn a_walk_with_revise_steps_stays_within_the_check_product() {
 #[test]
 fn an_external_revision_is_written_as_protocol_revises() {
     let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
-        artifacts: {a: {revised_by: q}}\n\
+        artifacts: {a: {revised_by: q}, b: {}}\n\
         evidence_kinds: {t: {max_age: 1h}, u: {}, n: {}}\n\
         claims:\n\
         \x20 c: {true_when: {evidence: {kind: t, subject: a}}}\n\
-        \x20 g: {true_when: {any: [{evidence: {kind: t, subject: a}}, {evidence: {kind: u}}]}}\n\
+        \x20 g: {true_when: {any: [{evidence: {kind: t, subject: a}}, {evidence: {kind: u, subject: b}}]}}\n\
         \x20 never: {true_when: {evidence: {kind: n}}}\n\
         actions:\n\
         \x20 produce_t: {precondition: {claim: g, is: unknown}, may_produce: [{evidence: t}]}\n\
@@ -918,9 +946,9 @@ fn an_external_revision_is_written_as_protocol_revises() {
     let text = report(source);
     assert!(
         text.contains(
-            "stuck-state: state {evidence `u`}: no outcome is legitimate and no action is \
+            "stuck-state: state {evidence `u` about `b`}: no outcome is legitimate and no action is \
              admissible or approval-required; path: action `produce_t` produces evidence `t` \
-             about `a`, then action `produce_u` produces evidence `u`, then protocol `q` \
+             about `a`, then action `produce_u` produces evidence `u` about `b`, then protocol `q` \
              revises `a`"
         ),
         "{text}"

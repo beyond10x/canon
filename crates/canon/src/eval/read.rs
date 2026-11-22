@@ -221,6 +221,7 @@ fn protocol(value: &Json) -> Shape<Protocol> {
         artifacts: declarations(value, "artifacts", model::ArtifactId::new, |entry| {
             Ok(Artifact {
                 description: optional_text(entry, "description")?,
+                revised_by: absent_or_text(entry, "revised_by")?.map(ProtocolId::new),
             })
         })?,
         evidence_kinds: declarations(value, "evidence_kinds", EvidenceKindId::new, |entry| {
@@ -675,6 +676,38 @@ mod tests {
         let refusal = read_ir(&text.replace("\"q\"", "\"p\"")).expect_err("self-supplied");
         assert!(
             refusal.to_string().contains("self-supplied-evidence"),
+            "{refusal}"
+        );
+    }
+
+    /// A reviser reads back as written; one that is not a string, or an explicit null the
+    /// compiler never writes, is refused, and so is the protocol's own id, as the validator
+    /// refuses it.
+    #[test]
+    fn a_reviser_reads_back_and_any_other_value_is_refused() {
+        let ir = ir::compile(
+            &model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 artifacts: {a: {revised_by: q}, b: {}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let text = ir.canonical_json();
+        assert!(text.contains("\"revised_by\": \"q\""), "{text}");
+        assert_eq!(read_ir(&text), Ok(ir));
+        for replacement in ["\"revised_by\": 7", "\"revised_by\": null"] {
+            let refusal = read_ir(&text.replace("\"revised_by\": \"q\"", replacement))
+                .expect_err(replacement);
+            assert_eq!(refusal.code(), "malformed-input", "{refusal}");
+            assert_eq!(
+                refusal.to_string(),
+                "not canon-ir/1: `revised_by` is not a string"
+            );
+        }
+        let refusal = read_ir(&text.replace("\"q\"", "\"p\"")).expect_err("self-revised");
+        assert!(
+            refusal.to_string().contains("self-revised-artifact"),
             "{refusal}"
         );
     }

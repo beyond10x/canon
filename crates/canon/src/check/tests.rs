@@ -2498,7 +2498,10 @@ fn a_protocol_artifact_or_input_named_with_a_space_is_refused() {
         |ir| {
             ir.artifacts.insert(
                 crate::model::ArtifactId::new("b b"),
-                crate::ir::Described { description: None },
+                crate::ir::Artifact {
+                    description: None,
+                    revised_by: None,
+                },
             );
         },
         "",

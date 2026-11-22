@@ -148,10 +148,7 @@ fn artifact_revised_by_another_protocol_is_waited_on() {
     let spaced = dir.join("spaced.yaml");
     std::fs::write(
         &spaced,
-        read(&fixture("revised.yaml")).replace(
-            "revised_by: revised.by.owner",
-            "revised_by: 'q q'",
-        ),
+        read(&fixture("revised.yaml")).replace("revised_by: revised.by.owner", "revised_by: 'q q'"),
     )
     .expect("written");
     assert_refused(
@@ -174,10 +171,7 @@ fn artifact_revised_by_another_protocol_is_waited_on() {
     );
     assert!(!plain_ir.contains("revised_by"), "{plain_ir}");
     assert_eq!(
-        revised_ir.replace(
-            ",\n      \"revised_by\": \"revised.by.owner\"\n",
-            "\n"
-        ),
+        revised_ir.replace(",\n      \"revised_by\": \"revised.by.owner\"\n", "\n"),
         plain_ir
     );
     assert_eq!(
@@ -236,8 +230,13 @@ fn artifact_revised_by_another_protocol_is_waited_on() {
     let generated = |name: &str| {
         let out = dir.join(format!("generated-{name}"));
         let output = canon(&["generate", "--path", &fixture(name), "--out", path(&out)]);
-        let stdout = succeeded(&output);
-        (stdout, files(&out))
+        let stdout = succeeded(&output).replace(path(&out), "OUT");
+        // Each scenario names the document it was generated from.
+        let written: Vec<(String, String)> = files(&out)
+            .into_iter()
+            .map(|(file, bytes)| (file, bytes.replace(&fixture(name), "FIXTURE")))
+            .collect();
+        (stdout, written)
     };
     assert_eq!(generated("revised.yaml"), generated("plain.yaml"));
 
@@ -298,11 +297,20 @@ fn artifact_revised_by_another_protocol_is_waited_on() {
         supplied.contains("1 waiting on supplied evidence or expiry, 0 findings"),
         "{supplied}"
     );
-    assert!(!supplied.contains("revision by another protocol"), "{supplied}");
+    assert!(
+        !supplied.contains("revision by another protocol"),
+        "{supplied}"
+    );
 
     // 8. Two runs of each new fixture give identical bytes.
     for case in ["revised-by", "revised-by-undeclared"] {
-        let again = |_| canon(&["simulate", "--path", &format!("{SIMULATE}/{case}/protocol.yaml")]);
+        let again = |_| {
+            canon(&[
+                "simulate",
+                "--path",
+                &format!("{SIMULATE}/{case}/protocol.yaml"),
+            ])
+        };
         let (first, second) = (again(1), again(2));
         assert_eq!(
             (first.status.code(), &first.stdout, &first.stderr),
