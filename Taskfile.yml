@@ -78,6 +78,20 @@ tasks:
           fi
           exit $status
 
+  test-slow:
+    desc: "The slow lane: the tests .config/nextest.toml leaves out of the gate (each measured over 5 s), a test killed at 60 s. CI runs it after task check."
+    cmds:
+      - cargo nextest run --workspace --locked --no-run
+      - silent: true
+        cmd: |
+          echo "slow lane: nproc $(nproc), nextest test threads $(nproc) (test-threads = num-cpus), a test killed at 60 s"
+          status=0
+          {{.ESS_ENV}} cargo nextest run --workspace --locked --profile slow --ignore-default-filter -E 'not default()' || status=$?
+          echo "slow lane: ten slowest tests (s):"
+          sed -n 's/.*<testcase name="\([^"]*\)" classname="\([^"]*\)".* time="\([0-9.]*\)".*/\3 \2 \1/p' \
+            target/nextest/slow/junit.xml | sort -rn | head -10
+          exit $status
+
   docs-generate:
     desc: Regenerate the derived documentation pages and landing data under website/, recording real canon runs.
     cmds:
