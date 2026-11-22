@@ -399,11 +399,35 @@ mod space;
 #[cfg(test)]
 mod tests;
 
-// The most enumerations held at once by the last check this thread ran: the one being decided
-// and every one kept before it (test builds only; E4 of the wave 9 review).
+// The enumerations alive now on this thread, and the most alive at once since the last check
+// began (test builds only; E4 of the wave 9 review, F8 of the wave 11 review). Each enumeration
+// carries an `Alive` that counts it from its making to its drop, wherever it is held.
 #[cfg(test)]
 thread_local! {
+    static ENUMERATIONS_ALIVE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     pub(crate) static ENUMERATIONS_HELD: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+struct Alive;
+
+#[cfg(test)]
+impl Alive {
+    fn new() -> Self {
+        let alive = ENUMERATIONS_ALIVE.with(|alive| {
+            alive.set(alive.get() + 1);
+            alive.get()
+        });
+        ENUMERATIONS_HELD.with(|held| held.set(held.get().max(alive)));
+        Alive
+    }
+}
+
+#[cfg(test)]
+impl Drop for Alive {
+    fn drop(&mut self) {
+        ENUMERATIONS_ALIVE.with(|alive| alive.set(alive.get() - 1));
+    }
 }
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -681,6 +705,8 @@ struct Enumerated<'s, 'a> {
     space: &'s Space<'a>,
     states: Vec<State>,
     evaluated: Vec<Evaluated>,
+    #[cfg(test)]
+    alive: Alive,
 }
 
 /// [`check`], enumerating the spaces `strategy` says.
@@ -700,6 +726,9 @@ pub(crate) struct Enumeration {
     pub(crate) members: Vec<usize>,
     pub(crate) states: Vec<State>,
     pub(crate) evaluated: Vec<Evaluated>,
+    #[cfg(test)]
+    #[allow(dead_code)]
+    alive: Alive,
 }
 
 /// [`check_by`], also giving every space it enumerated, so a caller that needs the states and
@@ -820,7 +849,7 @@ fn check_enumerating(
     let mut decided: Vec<Decided> = subjects.iter().map(|_| Decided::default()).collect();
     let mut kept: Vec<Enumeration> = Vec::new();
     #[cfg(test)]
-    ENUMERATIONS_HELD.with(|held| held.set(0));
+    ENUMERATIONS_HELD.with(|held| held.set(ENUMERATIONS_ALIVE.with(std::cell::Cell::get)));
     for (slice, members) in &plan {
         let sliced;
         let space = match slice {
@@ -831,8 +860,6 @@ fn check_enumerating(
             None => &whole,
         };
         let enumerated = enumerate(ir, space)?;
-        #[cfg(test)]
-        ENUMERATIONS_HELD.with(|held| held.set(held.get().max(kept.len() + 1)));
         for at in members {
             decided[*at] = match &subjects[*at].0 {
                 Subject::Outcome(position, id, outcome) => Decided {
@@ -863,6 +890,8 @@ fn check_enumerating(
                 members: members.clone(),
                 states: enumerated.states,
                 evaluated: enumerated.evaluated,
+                #[cfg(test)]
+                alive: enumerated.alive,
             });
         }
     }
@@ -1000,6 +1029,8 @@ fn enumerate<'s, 'a>(ir: &Ir, space: &'s Space<'a>) -> Result<Enumerated<'s, 'a>
         space,
         states,
         evaluated,
+        #[cfg(test)]
+        alive: Alive::new(),
     })
 }
 
@@ -1123,6 +1154,7 @@ fn bypass(
         space,
         states,
         evaluated,
+        ..
     } = enumerated;
     let requirement = outcome.requires.predicate()?;
     // The evidence dimensions some action that requires a capability may produce records of, and
@@ -1187,6 +1219,7 @@ fn failed_property(
         space,
         states,
         evaluated,
+        ..
     } = enumerated;
     // The subject as a report writes it, whether it is an action, and its position.
     let (subject, is_action, at) = match &property.subject {
