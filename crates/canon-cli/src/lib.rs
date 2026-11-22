@@ -203,9 +203,10 @@ pub enum Command {
     /// aside, and the protocol is walked and written as without the split.
     /// A child that has not ended when its subject is revised may end against the
     /// earlier revision: its outcome then arrives as an earlier record (a step written `… earlier`)
-    /// as well as a current one. A child opened about the artifact the space already uses does not
-    /// end against an earlier revision; the walk of such a protocol is unchanged. An action without
-    /// `revises` has no revise step. A state is open when action (record and revise), supplied,
+    /// as well as a current one, whatever artifact the child was opened about; for the artifact
+    /// the space already uses, only in a protocol whose `children` form says `revision: current`
+    /// or whose evidence match reads `case_outcome`, since no other claim tells the two apart. An
+    /// action without `revises` has no revise step. A state is open when action (record and revise), supplied,
     /// external revise, child-outcome, expiry and authority steps lead from it to a legitimate
     /// outcome; decisions do not count. A state only an external revise step opens waits, and
     /// when some artifact declares `revised_by` the summary counts the waiting states as waiting

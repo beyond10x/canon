@@ -279,8 +279,10 @@ commands:
       # case_outcome dimension for each case_open subject, and a state names such a record `evidence
       # case_outcome about b`; a protocol with no case_open, with no revision of either kind, or with one
       # case_open subject that is also the one standing for the artifacts nothing names, is
-      # written as before. A child opened about the artifact the space already uses does not end
-      # against an earlier revision. The external revise step is tried after the supplied steps
+      # written as before, and its child, like any other, may end against an earlier revision
+      # of its subject (story:simulate-child-about-own-artifact), where a children form with
+      # revision: current or an evidence match of case_outcome tells an earlier record from a
+      # current one. The external revise step is tried after the supplied steps
       # and before the child-outcome and expiry steps, and a state is open when it leads to a
       # legitimate outcome through it too.
       # read from: .engineering/planning/story/child-outcome-recovery.md, section "Outcome", 1

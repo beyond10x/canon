@@ -88,3 +88,25 @@ fn a_child_about_the_spaces_own_subject_may_end_against_the_earlier_revision() {
         "the child that ended `done` against the revision it was opened at is not reported:\n{text}"
     );
 }
+
+const CHILD: &str =
+    include_str!("../../../fixtures/investigation/simulate/revise-child/protocol.yaml");
+
+/// Decided with story:simulate-child-about-own-artifact: a child about the artifact the space
+/// already uses ends against an earlier revision only where a predicate reads an earlier record
+/// differently from a current one. `revise-child` reads its children with a form without
+/// `revision: current`, which counts both alike, so the walk of the fixture keeps its 9 states;
+/// with `revision: current` added the child's late outcome is walked as well.
+#[test]
+fn a_child_about_the_spaces_own_subject_is_walked_late_only_where_a_claim_tells_the_difference() {
+    let summary = |text: &str| text.lines().last().expect("a summary").to_owned();
+    let any = summary(&report(CHILD));
+    assert!(any.contains(": 9 reachable states"), "{any}");
+    let current = CHILD.replace(
+        "        subject: doc\n",
+        "        subject: doc\n        revision: current\n",
+    );
+    assert_ne!(current, CHILD, "the key was added");
+    let current = summary(&report(&current));
+    assert!(current.contains(": 11 reachable states"), "{current}");
+}
