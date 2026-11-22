@@ -1,0 +1,63 @@
+format: protocol/1
+
+protocol:
+  id: simulate.revise.denied
+  revision: 1
+  description: Draft a document and approve it under authority; after a denial the document can be revised and drafted again, which leads back to the same denial.
+
+artifacts:
+  doc:
+    description: The document being drafted and approved.
+
+evidence_kinds:
+  approval:
+    description: An approval of the document.
+  draft:
+    description: A draft of the document.
+
+claims:
+  doc.approved:
+    description: The current revision of the document has been approved.
+    true_when:
+      evidence:
+        kind: approval
+        subject: doc
+
+  doc.drafted:
+    description: The current revision of the document has a draft.
+    true_when:
+      evidence:
+        kind: draft
+        subject: doc
+
+actions:
+  approve:
+    description: Approve the drafted document, under authority.
+    precondition:
+      claim: doc.drafted
+      is: true
+    requires:
+      - capability: sign
+    may_produce:
+      - evidence: approval
+
+  fix:
+    description: Revise the drafted document; it records nothing.
+    precondition:
+      claim: doc.drafted
+      is: true
+    revises: [doc]
+
+  write:
+    description: Draft the document, while it has no draft.
+    precondition:
+      claim: doc.drafted
+      is: unknown
+    may_produce:
+      - evidence: draft
+
+outcomes:
+  approved:
+    description: The document is approved.
+    requires:
+      claim: doc.approved

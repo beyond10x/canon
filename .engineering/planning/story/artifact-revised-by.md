@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:artifact-revised-by
 kind: story
-status: draft
+status: implemented
 title: Declare artifacts revised by another protocol with revised_by, and count a state that waits on that revision as waiting in canon simulate
 tags:
 - from-request
@@ -39,7 +39,11 @@ scope:
   path: fixtures/investigation/revised-by/
 - confidence: inferred
   path: fixtures/investigation/simulate/revised-by/
-revision: 13
+revision: 18
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-21T23:23:18Z", actor: "human:timo", revision: 15}
+- {from: "proposed", to: "active", at: "2026-11-21T23:23:18Z", actor: "human:timo", revision: 16}
+- {from: "active", to: "implemented", at: "2026-11-22T11:12:34Z", actor: "human:timo", revision: 18, decided_on: {"recorded":{"test_result":1}}, correlation: "wave-2026-11-20-w9"}
 ---
 ## Outcome
 
@@ -192,3 +196,35 @@ Recommendation: X. story:simulate-record-groups says `NO SEMANTIC CHANGE` "as it
 - **Canon files read:** `crates/canon/src/{validate,ir,diff,model}/mod.rs`, `ir/imports.rs`, `eval/read.rs`, `ess/domains/protocol.yaml`, and `simulate/mod.rs` at `4b36d52` (tree `canon-w4-canon-simulate`).
 - **SDC files read** (`f364b6b`): the eight protocols; `requests/16/{classification.txt,classify.out,classify.py}`; `w5/sdc-run/*.txt`.
 - **Commands:** `canon-sim validate` and `simulate` on `requests/18/doc.protocol.yaml` and a `supplied_by` variant. 2026-11-21.
+
+## Decided
+
+Accepted on 2026-11-22 on the operator's word in the coordinating session: "accept the main
+story, and then accept all of them, put all of them into a single way" (the plan page's
+§ Replan 16 holds the whole message and the coordinator's reading of it). The line of § Order,
+"not accepted until the `sdc` session has the measurement", is replaced by that word
+(`approval-record:accept-artifact-revised-by-2026-11-22`).
+
+The two choices of § Decision needed, taken by the coordinator as the story recommends:
+
+- **1 A.** The external revise step is offered in every state; a step that returns its state is
+  dropped.
+- **2 X.** `canon diff` reports adding, removing and replacing `revised_by` as
+  `NO SEMANTIC CHANGE`.
+
+The unit builds these and does not reopen them. The `file:line` references of this story were
+read from trees older than the wave branch of 2026-11-22: the unit reads each one again before
+it builds on it. story:simulate-revise-step and story:child-outcome-recovery change the same
+walk; this unit merges after the second.
+
+## Scope as built
+
+Written at the close of wave 2026-11-20-w9 from the wave page, the review of the integration branch (`review-result:review-wave-9-simulate`, `-model`) and the merge of `impl/artifact-revised-by` (`f37a8c0ab`: 29 files, +953 −32). It corrects the body where the two differ.
+
+- Outside the typed scope: `crates/canon/src/model/write.rs`, `crates/canon/src/check/tests.rs`, `crates/canon/src/simulate/tests.rs`, `crates/canon/tests/protocol_write.rs`, `crates/canon-cli/tests/canon_simulate.rs` and `main.rs` (`mod revised_by;`), `fixtures/investigation/invalid/revised-by-self.yaml`, `fixtures/investigation/simulate/revised-by-undeclared/`, and the generated `website/docs/reference/{canon-ir,investigation-example,protocol,validation}.md` and `website/static/schemas/protocol-1.schema.json`. In the typed scope and not changed: `crates/canon/src/ir/imports.rs` (no change expected).
+- Decided by the unit: the summary phrase with a child outcome is "supplied evidence, a child outcome, expiry or a revision by another protocol"; a new `revisions` field on `simulate::Report`; the external step is tried before the child-outcome step.
+- The unit never built this story together with story:decision-condition; the first whole-wave gate (`f7dcbf11a`) and the gate below did.
+- After the merge, correction unit 1: `abb281809` names the external revise step, `revised_by` and the summary phrase in `canon simulate --help` and `cli.md` (simulate F2); `1a83e5af3` pins that the external step is tried after the supplied steps (N1); `8583b4f3b` corrects the writer and IR docs (model F5).
+- Acceptance: `revised_by::artifact_revised_by_another_protocol_is_waited_on` and `simulate::tests::an_external_revision_is_written_as_protocol_revises` passed in the test step of the gate below. Not shown at the close-out: the eight expectations one by one (assertions of those tests).
+
+**Gate of the close-out**, on `wave/2026-11-21` at `2f3d14b14`, 2026-11-22 10:43 to 11:01 UTC, host load 67 on 20 CPUs, rustc 1.100.0, each step run once by the coordinator's gate script (not `task check` as one command): build exit 0 (125 s); `task ess-gate` 0; `cargo fmt --check` 0; `cargo clippy --workspace --all-targets --locked -- -D warnings` 0; `task test` 0 (1275 tests; the step's own line: `ess-gate 2.2 s + workspace 50.4 s + -p b10x-canon 2.7 s = 55.4 s, bound 120 s`; slowest 16.9 s); `canon conform run` 0 (`30 passed, 0 failed`; `31 implemented, 31 covered`); `task docs-check` 0 (18 generated files current); `task test-slow` exit 201 (63 tests: 53 passed, 10 killed at 60 s; its CI step may fail, D123, story:slow-lane-under-bound). Recorded as `test_result` evidence. The four review results of the wave are `review-result:review-wave-9-eval`, `-simulate`, `-model` and `-gate`.

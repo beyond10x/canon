@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-21T16:01:29Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-writer",
+  "kind": "story",
+  "revision": 13,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "full gate on the wave branch, ess 0.77.0 first on PATH, seven steps each exit 0, none skipped: task ess-gate (91 passed), cargo fmt --all --check, cargo clippy --workspace --all-targets --locked -- -D warnings, cargo test --workspace --locked --no-fail-fast (160 summaries, 1226 passed, 0 failed, 3 ignored), canon conform run (28 passed, 0 failed; 29 implemented, 29 covered), cargo test -p b10x-canon --test adversary_action_arguments (12 passed), task docs-check (18 generated files current)",
+    "reference": "c66e9f9f243f675d20f7b1439f640c6718b3e997"
+  }
+}

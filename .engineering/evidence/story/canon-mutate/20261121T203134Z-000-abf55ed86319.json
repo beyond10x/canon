@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T20:31:34Z",
+  "actor": "human:timo",
+  "artifact": "story:canon-mutate",
+  "kind": "story",
+  "revision": 18,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "finding 1, crates/canon/src/mutate/mod.rs:344, contract-drift: the mutant was handed in where a scenario reads the protocol as an import, the digest pin failed every importing scenario and weakening mutants counted as killed; now only scenarios whose fixture is the protocol run and the mutant goes in for the fixture only; the adversary case a_mutant_handed_in_for_a_pinned_import_is_not_killed_by_the_digest passes unchanged",
+    "reference": "4a545374",
+    "review": "review-result:adversary-canon-mutate-pass-1",
+    "outcome": "fixed"
+  }
+}

@@ -62,11 +62,16 @@ fn child_evaluates_a_caller_built_ir_nested_beyond_the_bound() {
 
 #[test]
 fn a_caller_built_ir_nested_beyond_the_bound_does_not_abort() {
+    let test = "child_evaluates_a_caller_built_ir_nested_beyond_the_bound";
+    let name = match module_path!().split_once("::") {
+        Some((_, module)) => format!("{module}::{test}"),
+        None => test.to_owned(),
+    };
     let child = Command::new(std::env::current_exe().expect("test binary path"))
         .args([
             "--ignored",
             "--exact",
-            "child_evaluates_a_caller_built_ir_nested_beyond_the_bound",
+            name.as_str(),
             "--nocapture",
             "--test-threads=1",
         ])
@@ -75,6 +80,10 @@ fn a_caller_built_ir_nested_beyond_the_bound_does_not_abort() {
         .expect("child test process runs");
     let stdout = String::from_utf8_lossy(&child.stdout);
     let stderr = String::from_utf8_lossy(&child.stderr);
+    assert!(
+        stdout.contains("running 1 test"),
+        "the child process ran no test named {name}:\n{stdout}"
+    );
     assert!(
         child.status.success() && stdout.contains("evaluated: "),
         "evaluating a caller-built IR {NOTS} `not`s deep must return a decision or a refusal; \

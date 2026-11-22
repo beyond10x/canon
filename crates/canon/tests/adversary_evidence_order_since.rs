@@ -91,7 +91,7 @@ fn combinations(
         Some("2026-10-01T09:00:02Z"),
         None,
     ];
-    let mut found = BTreeMap::new();
+    let mut drawn = Vec::with_capacity(histories);
     for _ in 0..histories {
         let records: Vec<EvidenceRecord> = (0..rng.below(6))
             .map(|n| {
@@ -106,7 +106,34 @@ fn combinations(
                 )
             })
             .collect();
-        found.entry(values(ir, case, &records)).or_insert(records);
+        drawn.push(records);
+    }
+    // The histories are drawn above in order and evaluated on four threads (`threads-required` in
+    // the `slow` lane of `.config/nextest.toml`); the first history of a combination is kept.
+    let evaluated: Vec<_> = std::thread::scope(|scope| {
+        let chunk = drawn.len().div_ceil(4).max(1);
+        let workers: Vec<_> = drawn
+            .chunks(chunk)
+            .map(|part| {
+                scope.spawn(move || {
+                    part.iter()
+                        .map(|records| values(ir, case, records))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|worker| {
+                worker
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+            })
+            .collect()
+    });
+    let mut found = BTreeMap::new();
+    for (combination, records) in evaluated.into_iter().zip(drawn) {
+        found.entry(combination).or_insert(records);
     }
     found
 }

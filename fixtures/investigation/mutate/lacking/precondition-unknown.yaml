@@ -1,0 +1,40 @@
+format: canon-conformance/1
+id: investigation-precondition-unknown
+covers: []
+fixture: fixtures/investigation/mutate/protocol.yaml
+# No evidence: the precondition of `publish_finding` is UNKNOWN, so the action is blocked although
+# the authority grants `finding.publish`.
+steps:
+  - id: precondition-unknown
+    evaluate:
+      case:
+        format: canon-case/1
+        id: INV-18
+        protocol: investigation
+        artifacts:
+          explanation: {revision: r1}
+      evidence: []
+      authority:
+        - capability: finding.publish
+          decision: granted
+    expect:
+      decision: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "status": "admissible"
+            },
+            "inspect": {
+              "status": "admissible"
+            },
+            "publish_finding": {
+              "reasons": [
+                {
+                  "claim": "explanation.supported",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }

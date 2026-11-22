@@ -1,0 +1,17 @@
+format: protocol/1
+
+protocol:
+  id: consumer
+  revision: 1
+  description: A protocol that imports shared and reads its claim.
+
+imports:
+  shared:
+    revision: 1
+    digest: sha256:6b211ec22b4ad627b44823888fd5403460e03dc2ddc760e1f59960568db7a658
+
+outcomes:
+  accepted:
+    description: The item is accepted.
+    requires:
+      claim: item.ready

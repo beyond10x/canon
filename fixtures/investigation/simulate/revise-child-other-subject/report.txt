@@ -1,0 +1,2 @@
+cycle: state {evidence `case_outcome` about `b`}: no outcome is legitimate, no action is approval-required, and every step of action `fix` returns this state; path: action `open` produces nothing, then a child of action `open` records evidence `case_outcome` about `b`; 9 other cycle states contain it
+simulated: protocol `simulate.revise.child.other` revision 1: 20 reachable states, 3 terminable (outcome `built` 3), 3 waiting on supplied evidence, a child outcome or expiry, 1 finding (10 stuck or cycle states)

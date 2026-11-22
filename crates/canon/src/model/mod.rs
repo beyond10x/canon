@@ -11,7 +11,8 @@
 //! evidence matches may demand, and the protocols it imports, each pinned to a revision and a
 //! digest. Every declaration section is a map keyed by identifier; [`Declarations`] keeps the
 //! entries in source order and keeps repeated keys, so the validator can report a duplicate
-//! identifier instead of the parser silently dropping one.
+//! identifier instead of the parser silently dropping one. [`write`] writes a protocol back out as
+//! canonical JSON text that [`parse`] reads to an equal model.
 
 // `ids` declares the `identifier!` macro, which a module can use only when declared after it.
 #[macro_use]
@@ -29,6 +30,7 @@ mod present;
 mod properties;
 mod requirement;
 mod time;
+mod write;
 
 use std::fmt;
 use std::marker::PhantomData;
@@ -52,18 +54,19 @@ pub use explicit::{DECISIONS_FORMAT, ExplicitDecision};
 pub use ids::{
     ActionId, Age, ArtifactId, CapabilityId, CaseId, ClaimId, DecisionName, EffectClass,
     EvidenceId, EvidenceKindId, IndependenceDimensionId, InputId, InputValue, Instant,
-    InvalidationRuleId, ObligationId, OutcomeId, Principal, ProtocolId, Revision,
+    InvalidationRuleId, ItemId, ObligationId, OutcomeId, Principal, ProtocolId, Revision,
 };
 pub use parse::{FORMAT, ParseError, parse};
 pub use predicate::{
-    CASE_OUTCOME, ChildOutcomes, ChildRevision, ClaimTest, EvidenceAfter, EvidenceMatch,
-    EvidenceOrder, EvidenceSince, FirstResult, InputTest, LaterRecord, OPEN_OUTCOME, Predicate,
-    Truth,
+    CASE_OUTCOME, ChildOutcomes, ChildRevision, ClaimTest, EvidenceAfter, EvidenceDescended,
+    EvidenceMatch, EvidenceOrder, EvidenceSince, FirstResult, InputTest, LaterRecord, OPEN_OUTCOME,
+    Predicate, Truth,
 };
 pub use properties::{
     PROPERTIES_FORMAT, Properties, Property, PropertyDependency, PropertyId, PropertySubject,
 };
-pub use requirement::OutcomeRequirement;
+pub use requirement::{DecisionRequirement, OutcomeRequirement};
+pub use write::write;
 
 /// A `protocol/1` source document as written.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -175,6 +178,13 @@ pub struct Import {
 pub struct Artifact {
     #[serde(default, deserialize_with = "present::optional")]
     pub description: Option<String>,
+    /// The protocol whose cases revise this artifact (story:artifact-revised-by): any protocol
+    /// but this one, named and never resolved. `canon evaluate`, `canon check` and `canon
+    /// generate` read nothing from it; `canon simulate` offers a revise step for the artifact in
+    /// every state. Absent: no protocol is said to revise it, or the protocol's own actions do,
+    /// through `revises`.
+    #[serde(default, deserialize_with = "present::optional")]
+    pub revised_by: Option<ProtocolId>,
 }
 
 /// A kind of evidence the protocol admits.
@@ -236,6 +246,13 @@ pub struct Action {
     pub effect: Option<EffectClass>,
     #[serde(default, deserialize_with = "present::defaulted")]
     pub may_produce: Vec<EvidenceProduction>,
+    /// The kinds one run of the action records together, all of them or none
+    /// (story:simulate-record-groups). Absent: no group. Each group names two or more distinct
+    /// kinds of `may_produce`, and no kind is in two groups of one action. It has no evaluation
+    /// meaning: only `canon simulate` reads it, adding a group's records in one step and never
+    /// one of its kinds alone.
+    #[serde(default, deserialize_with = "present::defaulted")]
+    pub records_together: Vec<RecordGroup>,
     /// The JSON Schema, in Canon's argument-schema dialect, that the action's arguments satisfy.
     /// Absent: the action takes no arguments; a runner accepts only `{}`. Canon evaluates no call:
     /// `canon validate` holds the schema to the dialect (`action-arguments`), and a runner checks
@@ -325,6 +342,16 @@ pub struct EvidenceProduction {
     /// evaluation meaning.
     #[serde(default, deserialize_with = "present::optional")]
     pub decided_by: Option<Author>,
+}
+
+/// Evidence kinds one run of an action records together, all of them or none
+/// (story:simulate-record-groups).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RecordGroup {
+    /// The kinds of the group: two or more distinct kinds the action may produce.
+    #[serde(deserialize_with = "present::required")]
+    pub kinds: Vec<EvidenceKindId>,
 }
 
 /// A legitimate terminal interpretation of a case and what it requires: a predicate, or an explicit

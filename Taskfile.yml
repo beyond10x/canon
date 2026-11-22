@@ -1,5 +1,16 @@
 version: '3'
 
+vars:
+  ESS_GATE_TESTS: >-
+    (binary_id(b10x-canon::main) & test(/^(ess_gate|ess_model_matches)::/)) |
+    (binary_id(b10x-canon-expr::main) & test(/^model_matches::/)) |
+    (binary_id(canon-cli::main) & test(/^(ess_commands_match|adversary_ess_commands|adversary2_ess_commands)::/))
+  ESS_VERSION:
+    sh: "sed -n 's/^requires: ess //p' ess/ess-inputs.yaml"
+  ESS_DIR: '{{env "HOME"}}/.cache/ess/toolchains/{{.ESS_VERSION}}'
+  ESS_ENV: 'PATH="{{.ESS_DIR}}:$PATH"'
+  SHIPPED_FEATURES_TESTS: "--test main -E 'test(/^adversary_action_arguments::/)'"
+
 tasks:
   default:
     cmds: [{task: check}]
@@ -10,18 +21,78 @@ tasks:
       - task: ess-gate
       - cargo fmt --all --check
       - cargo clippy --workspace --all-targets --locked -- -D warnings
-      - cargo test --workspace --locked
+      - task: test
+        vars: {AFTER_ESS_GATE: "true"}
       - cargo run --locked -q -p canon-cli -- conform run --requirements conformance/requirements.yaml
-      - cargo test -p b10x-canon --locked --test adversary_action_arguments
       - task: docs-check
 
   ess-gate:
     desc: Atlas ADR 0076 gate on ess/, and ess/ equal to the Rust model and the canon command line.
+    preconditions:
+      - sh: PATH="{{.ESS_DIR}}:$PATH"; test "$(ess --version 2>/dev/null)" = "ess {{.ESS_VERSION}}"
+        msg: 'ess {{.ESS_VERSION}} (ess/ess-inputs.yaml) is not first on PATH: unpack https://github.com/beyond10x/ess/releases/download/{{.ESS_VERSION}}/ess-{{.ESS_VERSION}}-x86_64-unknown-linux-gnu.tar.gz into ~/.cache/ess/toolchains/{{.ESS_VERSION}}/ so that ess is there'
     cmds:
-      - cargo test -p b10x-canon --test ess_gate --test ess_model_matches --locked
-      - cargo test -p b10x-canon-expr --test model_matches --locked
-      - cargo test -p canon-cli --test ess_commands_match --locked
-      - cargo test -p canon-cli --test adversary_ess_commands --test adversary2_ess_commands --locked
+      - cargo nextest run --workspace --locked --no-run
+      - silent: true
+        cmd: |
+          start=$(date +%s%N) status=0
+          {{.ESS_ENV}} cargo nextest run --workspace --locked -E '{{.ESS_GATE_TESTS}}' || status=$?
+          mkdir -p target/nextest
+          echo $(( ($(date +%s%N) - start) / 1000000 )) > target/nextest/ess-gate.ms
+          cp target/nextest/default/junit.xml target/nextest/ess-gate-junit.xml
+          exit $status
+
+  test:
+    desc: "The gate's test step: every test once under cargo-nextest, a test killed at 60 s (.config/nextest.toml), the step failing over 120 s."
+    vars:
+      LIMIT: '{{.LIMIT | default "120"}}'
+      AFTER_ESS_GATE: '{{.AFTER_ESS_GATE | default "false"}}'
+    cmds:
+      - cargo nextest run --workspace --locked --no-run
+      - cargo nextest run -p b10x-canon --locked --no-run --test main
+      - silent: true
+        cmd: |
+          echo "test step: nproc $(nproc), nextest test threads $(nproc) (test-threads = num-cpus), bound {{.LIMIT}} s, a test killed at 60 s"
+          ms() { echo $(( ($(date +%s%N) - $1) / 1000000 )); }
+          s() { printf '%d.%01d' $(( $1 / 1000 )) $(( $1 % 1000 / 100 )); }
+          gate=0 filter='all()' status=0 junits="target/nextest/workspace-junit.xml target/nextest/default/junit.xml"
+          if [ "{{.AFTER_ESS_GATE}}" = true ]; then
+            gate=$(cat target/nextest/ess-gate.ms) filter='not ({{.ESS_GATE_TESTS}})'
+            junits="$junits target/nextest/ess-gate-junit.xml"
+          fi
+          start=$(date +%s%N)
+          {{.ESS_ENV}} cargo nextest run --workspace --locked -E "$filter" || status=$?
+          workspace=$(ms $start)
+          cp target/nextest/default/junit.xml target/nextest/workspace-junit.xml
+          start=$(date +%s%N)
+          {{.ESS_ENV}} cargo nextest run -p b10x-canon --locked {{.SHIPPED_FEATURES_TESTS}} || status=$?
+          shipped=$(ms $start)
+          total=$(( gate + workspace + shipped ))
+          times=$(sed -n 's/.*<testcase name="\([^"]*\)" classname="\([^"]*\)".* time="\([0-9.]*\)".*/\3 \2 \1/p' \
+            $junits | sort -rn)
+          echo "test step: ten slowest tests (s):"
+          echo "$times" | head -10
+          echo "test step: $(echo "$times" | awk '{ s += $1 } END { printf "%d tests, %.1f s summed", NR, s }') in this task"
+          echo "test step: ess-gate $(s $gate) s + workspace $(s $workspace) s + -p b10x-canon $(s $shipped) s = $(s $total) s, bound {{.LIMIT}} s"
+          if [ $total -gt $(( {{.LIMIT}} * 1000 )) ]; then
+            echo "test step: FAILED, $(s $total) s is over the bound of {{.LIMIT}} s"
+            exit 1
+          fi
+          exit $status
+
+  test-slow:
+    desc: "The slow lane: the tests .config/nextest.toml leaves out of the gate (each measured over 5 s), a test killed at 60 s. CI runs it after task check."
+    cmds:
+      - cargo nextest run --workspace --locked --no-run
+      - silent: true
+        cmd: |
+          echo "slow lane: nproc $(nproc), nextest test threads $(nproc) (test-threads = num-cpus), a test killed at 60 s"
+          status=0
+          {{.ESS_ENV}} cargo nextest run --workspace --locked --profile slow --ignore-default-filter -E 'not default()' || status=$?
+          echo "slow lane: ten slowest tests (s):"
+          sed -n 's/.*<testcase name="\([^"]*\)" classname="\([^"]*\)".* time="\([0-9.]*\)".*/\3 \2 \1/p' \
+            target/nextest/slow/junit.xml | sort -rn | head -10
+          exit $status
 
   docs-generate:
     desc: Regenerate the derived documentation pages and landing data under website/, recording real canon runs.
@@ -35,12 +106,24 @@ tasks:
       - cargo build --locked -p canon-cli
       - cargo run --locked -p canon-docs -- generate --check
 
+  docs-site-check:
+    desc: The checks of a pull request that changes only the documentation site (answer docs-site-only of scripts/classify-changes.sh).
+    cmds:
+      - cargo nextest run -p canon-docs --locked
+      - cargo nextest run -p b10x-canon --locked --test main -E 'test(/^(adversary_binding_docs|adversary_obligations_docs|adversary2_decisions_docs|adversary2_binding_eval)::/)'
+      - task: docs-check
+
   site-build:
     desc: Build the Docusaurus documentation site (Node), after the drift check.
     cmds:
       - task: docs-check
       - npm --prefix website ci
       - npm --prefix website run build
+
+  ci-watch:
+    desc: "Wait for the checks of a pull request, or of a branch that has one (task ci-watch -- <pull request or branch>); non-zero unless all passed and canon / task check reported. A pushed commit with no pull request: gh run list --branch <branch>."
+    cmds:
+      - sh scripts/ci-watch {{.CLI_ARGS}}
 
   plan:
     desc: Validate the AEP planning store.

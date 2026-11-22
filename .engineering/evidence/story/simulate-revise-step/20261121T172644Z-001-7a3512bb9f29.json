@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T17:26:44Z",
+  "actor": "human:timo",
+  "artifact": "story:simulate-revise-step",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "finding 2, fixtures/investigation/judgement-marking.yaml, acceptance: the walk of this fixture changed from a cycle with exit 1 to no finding with exit 0 and no test read it; the adversary case judgement_marking_has_no_finding_once_its_revision_is_walked pins exit 0 and the summary line",
+    "reference": "f159b8ac",
+    "review": "review-result:adversary-simulate-revise-step-pass-1",
+    "outcome": "fixed"
+  }
+}

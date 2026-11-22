@@ -113,13 +113,43 @@ compatibility decisions and keep unreleased capability claims explicit.
   everything they would file, they do it for a reason, and it's basically auto-accepted in that
   sense." ("STC" is read as the `sdc` session.) The grant covers acceptance into the plan and the
   order of work. It does not cover a push, a pull request, a release, or a change to permissions.
-- The `sdc` session orchestrates the session that coordinates Canon's plan: its word decides
-  story acceptance, wave order, design options and which requests are in or out. Operator,
+- The `runbook` session orchestrates the session that coordinates Canon's plan: its word decides
+  story acceptance, wave order, design options and which requests are in or out. It is the
+  session named `sdc` until 2026-11-21, renamed by the operator that day; same session, confirmed
+  by `host-operator` on 2026-11-21. Operator,
   2026-11-21, to the coordinating session: "So just to make it clear, SDC is your orchestrator and
   you do what they say." Read with these limits, which are the coordinator's reading and not his
   sentence: a merge to `main`, a release, a tag, anything else that is hard to reverse, and any
   change to permissions or to an agent's instructions still need the operator's own word; an
-  action the operator's rules or the harness refuse is not done because `sdc` asks for it.
+  action the operator's rules or the harness refuse is not done because `runbook` asks for it.
+
+A pull request whose changed files are all planning or prose skips the build and the tests. The one
+path list is `scripts/classify-changes.sh` (`git diff --no-renames --name-only` of the pull request
+on stdin or `--diff <base>`); `check.yml` and `pages.yml` both run it and keep their job names and
+triggers. Its three answers: `planning-only` (`.engineering/` except `.engineering/planning/story/`,
+`docs/`, and `*.md` in the repository root other than `AGENTS.md`) runs no step after the
+classifier and the job ends green; `docs-site-only` (`website/` and `.engineering/planning/story/`)
+runs `task docs-site-check`, which is `task docs-check` plus the tests that read hand-written pages;
+`code` (everything else, `AGENTS.md`, a push to `main`, an empty list, any failure) runs `task
+check`. `crates/canon/tests/planning_only_classifier.rs` holds both sides of the list.
+
+Tests run under cargo-nextest in two lanes; `.config/nextest.toml` holds the runner's limits. A
+test is killed at 60 s and counts as failed in both lanes (`slow-timeout`). The gate lane is `task
+test`, part of `task check`: every test outside the `slow` list, once (the `task ess-gate` tests
+run first and are counted, not run again), plus the `adversary_action_arguments` probes with `-p
+b10x-canon`, the feature set the CLI ships. It prints `nproc`, the ten slowest tests and the summed
+test time, and fails when its test runs take over 120 s (`global-timeout` cuts a run there). The
+`slow` lane is `task test-slow`, run by CI after `task check` and before a release: the tests the
+default profile's `default-filter` leaves out, each measured over 5 s. Its CI step is
+`continue-on-error: true` (Timo, 2026-11-22 10:35 CET, via `host-operator`: "A: slow lane may fail,
+story"): a test over 60 s in it is reported and does not fail the job, until the story that brings
+those tests under 60 s is done (`story:slow-lane-under-bound`). A test that takes more than
+5 s is named in that list, and one that runs its cases on threads gets `threads-required`. Each
+crate has one integration-test binary, `tests/main.rs` (`autotests = false`), with every
+`tests/<name>.rs` a module, so a test is named `<name>::<test>`;
+`every_test_file_is_a_module_of_this_binary` fails on a file left out. `.cargo/config.toml`
+builds tests without debug info and with `b10x-canon` and the dependencies optimized; it wins over
+`~/.cargo/config.toml`, so the workstation and CI build alike.
 
 ## Releases
 
@@ -130,8 +160,27 @@ a test pins it: `conformance/scenarios/explanation.yaml`, `pending-decisions.yam
 `evidence-redelivery.yaml`, and `crates/canon-cli/tests/adversary_skel_cli.rs`; find any newer
 one with `git grep -n '"canon": "' -- conformance crates`. Keep their other exact-output
 expectations unchanged.
+`rust-toolchain.toml` pins the one rustc that the local gate and both workflows (`check.yml`,
+`pages.yml`: `rustup toolchain install`) use. Raise it in one commit that changes the file and fixes
+what the new compiler's `cargo fmt --all --check` and `cargo clippy --workspace --all-targets
+--locked -- -D warnings` report. `task check` finds the `ess` release of `ess/ess-inputs.yaml` in
+`~/.cache/ess/toolchains/<version>` itself, or stops with one line naming it. `task ci-watch --
+<pull request or branch>` (`scripts/ci-watch`) watches a pull request, or a branch that has one (for a
+pushed commit with none, `gh run list --branch <branch>`; the script exits 2 at once), waits until no
+check is pending, prints each with its result and link, and exits non-zero when a check failed, was
+cancelled or was still pending at the timeout, or when a required check never reported (`--require
+<name>`, repeatable, or `CI_WATCH_REQUIRE`; the default is `canon / task check`, the job of
+`check.yml`); wait for CI with it and never by a script that ignores results.
 Land the bot-authored preparation on main with `task check` and CI green, then create an annotated
-bot tag on that exact commit and its GitHub Release through `b10x-gates`. Verify the peeled tag,
+bot tag on that exact commit and its GitHub Release through `b10x-gates`. Merge the pull request
+as the bot with a merge commit through the API: `b10x-gates api --method PUT --path
+/repos/beyond10x/canon/pulls/<n>/merge --input <file> --output <file>`, the input being
+`{"merge_method": "merge", "sha": "<head>", "commit_title": "Merge #<n>: <what>; release Canon
+<version>", "commit_message": "<the pull request's title>"}`. `gh pr merge` refuses ("the base
+branch policy prohibits the merge"): it reads the merge state without the bot's bypass of the
+ruleset that reserves `main` to the bot. `b10x-gates gh` runs `gh` in the repository's directory
+and refuses an argument that holds a home path: give `gh release download` a relative `--dir`
+and move the archives out of the tree afterwards. Verify the peeled tag,
 required source checks, Release and downloadable source archives. There is no binary packaging
 workflow or crates.io publication. Documentation delivery runs asynchronously; report it pending
 unless its live publication has been verified. A source release does not include Atlas, Website

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:simulate-revise-step
 kind: story
-status: active
+status: implemented
 title: Revise artifacts declared in revises as a step of canon simulate, and keep stuck states and cycles complete when a step sets records aside
 tags:
 - from-request
@@ -19,7 +19,11 @@ scope:
 - confidence: cited
   path: crates/canon-cli/src/lib.rs
 - confidence: cited
+  path: crates/canon-cli/tests/adversary_simulate_revise_cli.rs
+- confidence: cited
   path: crates/canon-cli/tests/canon_simulate.rs
+- confidence: cited
+  path: crates/canon-cli/tests/simulate_child_outcome.rs
 - confidence: cited
   path: crates/canon/src/check/space.rs
 - confidence: cited
@@ -27,13 +31,16 @@ scope:
 - confidence: inferred
   path: crates/canon/src/simulate/tests.rs
 - confidence: cited
+  path: crates/canon/tests/adversary_simulate_revise.rs
+- confidence: cited
   path: ess/domains/cli.yaml
 - confidence: inferred
   path: fixtures/investigation/simulate/
-revision: 11
+revision: 17
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T04:50:38Z", actor: "human:timo", revision: 10, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
 - {from: "proposed", to: "active", at: "2026-11-21T04:50:38Z", actor: "human:timo", revision: 11, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
+- {from: "active", to: "implemented", at: "2026-11-21T17:42:07Z", actor: "human:timo", revision: 17, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w8"}
 ---
 ## Outcome
 
@@ -211,3 +218,33 @@ Corrections to the coordinator's classes:
 - (e) also covers epic 2 and 3. sdc 2 and epic 3 also hold an a2 record.
 Under A, once sdc declares revises as its descriptions say (expected, not run): a1 and c are not reported; a2, a3, d and e are still reported (d as a cycle with the revision suffix).
 ```
+
+## Decided in review, after adversary pass 1
+
+The coordinator of wave 2026-11-20-w8 decided these on 2026-11-21, from the unit's report and from `review-result:adversary-simulate-revise-step-pass-1` (green, three notes, all introduced by the unit).
+
+- **D1. The text of a `cycle` finding.** When a revise step of an admissible action changes the state, the finding says `every record step of action `x` returns this state` and ends `; every revision by action `x` leads to a state no outcome is reachable from`. When no revise step changes the state it says `every step of`, as before this story. § Outcome 4 wrote "every step"; that is false of a state a revise step leaves, so the built text stands. A protocol in which no action declares `revises` prints the bytes it printed before: the adversary compared 147 `protocol/1` files under `fixtures/` and `conformance/` with the binary of the base and found 141 equal and 6 different, each of the 6 declaring `revises`.
+- **D2. Acceptance 3 and 6.** Each asks for exit 0 together with a printed path or rendering. The walk prints a path and a state only with a finding, so no run gives both. The fixtures `revise-upstream` and `revise-child` exit 0 and hold the summary line; the path `then action `fix` revises `a`` and the ` earlier` rendering are pinned in `crates/canon/src/simulate/tests.rs`. The adversary confirmed from the code that no exit-0 run prints a path.
+- **D3. `fixtures/investigation/judgement-marking.yaml`.** Its walk went from one `cycle` and exit 1 to no finding and exit 0, because the action that declares `revises` now leaves the state. The adversary's own enumerator gives the same 19 states and no state that is not open. No test read that walk; the adversary's case `judgement_marking_has_no_finding_once_its_revision_is_walked` pins it (`f159b8ac`).
+- **D4. The record of a revise step is added after the revision.** A mutant that added it before passed every test of the unit; the adversary's case `a_revise_step_adds_its_record_after_the_revision` fails on it (`f159b8ac`). The code was right.
+- **D5. The help text states the whole waiting rule.** `canon simulate --help` left out that a waiting state has no legitimate outcome and no approval-required action; by its text `revise-child` would count 4 waiting states where the walk counts 2. Corrected at `80168ba9`; the module docs and `ess/domains/cli.yaml` were right.
+- **D6. The argument that no state that is not open goes unreported** (§ Outcome 4) is restated in the module docs of `simulate` as a forward argument over record and authority steps, which only add. It uses no revise, child-outcome or expiry step. The adversary's enumerator walked 6,000 random protocols and 8 fixtures and probes, 74,604 states, 393 of them cycles with the revision suffix, and found no disagreement in state count, terminable count, stuck or cycle count, or printed findings.
+- **D7. Left to story:child-outcome-recovery:** an unbound `case_outcome` dimension is about the least artifact id (the unit's known limit W0, stated in the module docs).
+- **D8. The measurement of class a2** on the requesting project's protocols is not part of this unit (§ Decided named it). That project declares no `revises`: its nine protocols give equal bytes before and after, 71 findings in sum. Its session adds the declarations in a story of its own once a release carries the revise step, and measures then.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w8 from the implementor's three reports, the adversary's report (`review-result:adversary-simulate-revise-step-pass-1`, green) and the merge of `impl/simulate-revise-step` (`da6856e4`). It corrects the body where the two differ.
+
+- Option A is built, with no language change: nothing under `crates/canon/src/model/`, `ir/`, `validate/`, `eval/`, `diff/`, `generate/` or `explain/` changed.
+- The walk (`crates/canon/src/simulate/mod.rs`): an admissible action that declares `revises` offers, after its record steps (single kinds, then groups), one revise step per non-empty subset of its `revises`, subsets in order of their sorted ids, each alone, then with each single record, then with each group the action offers. The record is added after the revision. A path prints the step as `action `x` revises `a``, or `action `x` revises `a` and produces …`. An action that is approval-required or blocked gets no revise step.
+- A revision of `a` changes a state in three ways: a current record about `a` leaves; a record of a dimension a `children` form reads becomes an earlier record, printed ` earlier`; a record of a dimension with upstream `a` is printed ` observed before upstream `a` moved`. A state holds no revision number. The case revision does not move: authority decisions and taken decisions stay.
+- A `cycle` asks that every record step of every admissible action return the state. When a revise step changes the state the finding says `every record step of` and ends `; every revision by action `x` leads to a state no outcome is reachable from`; otherwise it says `every step of`, as before (D1). An open state a revise step leaves is neither waiting nor a finding; a waiting state has no legitimate outcome, no approval-required action, and every step of every admissible action returns it (D5).
+- `crates/canon/src/check/space.rs`: `Walked` gains `subject`, `upstreams` and `history`; `walk_evidence` takes the moved upstreams of each held record; `render_walk` takes which records are earlier. Only the walk calls them. `canon check`, `canon compile` and `canon generate` give equal bytes on 147 `protocol/1` files under `fixtures/` and `conformance/` against the binary of the base.
+- Without `revises` nothing changes: `canon simulate` gives equal bytes on 141 of those 147 files; the 6 that differ declare `revises` (the five new fixtures that declare it and `fixtures/investigation/judgement-marking.yaml`, D3).
+- Six fixtures under `fixtures/investigation/simulate/`: `revise`, `revise-undeclared`, `revise-upstream`, `revise-denied`, `revise-mixed`, `revise-child`, each a `protocol.yaml` and a hand-written `report.txt` the binary agreed with. `revise-upstream` and `revise-child` exit 0; the path and the ` earlier` rendering that acceptance 3 and 6 name are pinned in `crates/canon/src/simulate/tests.rs` (D2). The walk's bound test holds reachable states to at most `Space::size()` times 3 to the number of opening actions.
+- The help text of `canon simulate` (`crates/canon-cli/src/lib.rs`) and the summary and response comment of `canon.cli.Simulate` (`ess/domains/cli.yaml`) name the revise step, the restated `cycle` rule and the whole waiting rule; `website/docs/reference/cli.md` is regenerated from them.
+- Added and not in § Scope: `crates/canon-cli/tests/simulate_child_outcome.rs` (its count of fixtures with no opening action, 15 to 20). Added by the adversary: `crates/canon/tests/adversary_simulate_revise.rs` and `crates/canon-cli/tests/adversary_simulate_revise_cli.rs` (one case each, D3 and D4).
+- Known limit, left to story:child-outcome-recovery: an unbound `case_outcome` dimension is about the least artifact id (D7).
+- Not measured here: findings of class a2 on the requesting project's protocols (D8). Its nine protocols give equal bytes before and after.
+- No scenario and no requirement: the walk is not an evaluation.

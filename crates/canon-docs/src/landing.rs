@@ -116,6 +116,20 @@ fn predicate(predicate: &Predicate) -> Json {
             ));
             obj([("since", Json::Obj(members))])
         }
+        Predicate::Descended(form) => {
+            let record = |read: &model::LaterRecord| {
+                Json::Obj(vec![
+                    ("kind".to_owned(), json::str(read.kind.as_str())),
+                    ("result".to_owned(), json::str(read.result.clone())),
+                ])
+            };
+            let mut members = vec![("first".to_owned(), record(&form.first))];
+            if let Some(subject) = &form.subject {
+                members.push(("subject".to_owned(), json::str(subject.as_str())));
+            }
+            members.push(("then".to_owned(), record(&form.then)));
+            obj([("descended", Json::Obj(members))])
+        }
         Predicate::Input(test) => obj([(
             "input",
             Json::Obj(vec![
@@ -148,7 +162,8 @@ fn predicate(predicate: &Predicate) -> Json {
 
 /// The evidence matches (kind, result) and the claim tests (claim, value) inside a predicate; an
 /// order form counts as a match of each kind it reads, `first` and the later kind of `after` and
-/// `since` with their result, and a `children` form as a match of `case_outcome`.
+/// `since` with their result, both kinds of `descended` with theirs, and a `children` form as a
+/// match of `case_outcome`.
 type Leaves = (Vec<(String, Option<String>)>, Vec<(String, Truth)>);
 
 /// Every evidence match, order form, `children` form and claim test inside a predicate.
@@ -180,6 +195,11 @@ fn leaves(predicate: &Predicate) -> Leaves {
                 form.then.kind.as_str().to_owned(),
                 Some(form.then.result.clone()),
             ));
+        }
+        Predicate::Descended(form) => {
+            for read in [&form.first, &form.then] {
+                evidence.push((read.kind.as_str().to_owned(), Some(read.result.clone())));
+            }
         }
         Predicate::Children(_) => evidence.push((model::CASE_OUTCOME.to_owned(), None)),
         _ => {}
@@ -311,8 +331,22 @@ pub fn graph(compiled: &Ir, source: &str) -> Json {
                     ));
                 }
             }
-            OutcomeRequirement::Decision(name) => {
-                members.push(("decision".to_owned(), json::str(name.as_str())));
+            OutcomeRequirement::Decision(requirement) => {
+                members.push((
+                    "decision".to_owned(),
+                    json::str(requirement.decision.as_str()),
+                ));
+                if let Some(when) = &requirement.when {
+                    members.push(("when".to_owned(), predicate(when)));
+                    for (claim, value) in leaves(when).1 {
+                        edge((
+                            "requires",
+                            format!("claim:{claim}"),
+                            format!("outcome:{id}"),
+                            qualifier(value),
+                        ));
+                    }
+                }
             }
         }
         nodes.push(Node {

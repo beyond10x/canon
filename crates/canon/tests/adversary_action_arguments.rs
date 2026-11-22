@@ -11,8 +11,7 @@ use b10x_canon::ir;
 use b10x_canon::model;
 use serde_json::Value;
 
-#[path = "support/schemas.rs"]
-mod schemas;
+use crate::support::schemas;
 
 use schemas::{Rng, accepts, generate, mutate, object_document};
 

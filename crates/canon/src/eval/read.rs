@@ -25,10 +25,11 @@ use crate::ir::{self, Ir};
 use crate::model::{
     self, Action, Age, Artifact, ArtifactId, Author, CapabilityId, CapabilityRequirement,
     CaseInput, CaseOpening, CaseSection, ChildOutcomes, Claim, ClaimId, ClaimTest, Declarations,
-    EffectClass, EvidenceAfter, EvidenceKind, EvidenceKindId, EvidenceMatch, EvidenceOrder,
-    EvidenceProduction, EvidenceSince, FirstResult, IndependenceDimension, IndependenceDimensionId,
-    InputId, InputTest, InputValue, LaterRecord, Obligation, Outcome, OutcomeRequirement,
-    Predicate, Protocol, ProtocolHeader, ProtocolId, ScopeKey, ScopeValue, Truth, one_line,
+    EffectClass, EvidenceAfter, EvidenceDescended, EvidenceKind, EvidenceKindId, EvidenceMatch,
+    EvidenceOrder, EvidenceProduction, EvidenceSince, FirstResult, IndependenceDimension,
+    IndependenceDimensionId, InputId, InputTest, InputValue, LaterRecord, Obligation, Outcome,
+    OutcomeRequirement, Predicate, Protocol, ProtocolHeader, ProtocolId, RecordGroup, ScopeKey,
+    ScopeValue, Truth, one_line,
 };
 
 /// A `malformed-input` refusal: `what` is not a document of its format, and why.
@@ -220,6 +221,7 @@ fn protocol(value: &Json) -> Shape<Protocol> {
         artifacts: declarations(value, "artifacts", model::ArtifactId::new, |entry| {
             Ok(Artifact {
                 description: optional_text(entry, "description")?,
+                revised_by: absent_or_text(entry, "revised_by")?.map(ProtocolId::new),
             })
         })?,
         evidence_kinds: declarations(value, "evidence_kinds", EvidenceKindId::new, |entry| {
@@ -373,12 +375,33 @@ fn action(entry: &Json) -> Shape<Action> {
     } else {
         Vec::new()
     };
+    // Written only when not empty, as `[{"kinds": [...]}, ...]`; an empty, unsorted or repeated
+    // list compiles to other bytes and is refused by the byte comparison.
+    let records_together = if field(entry, "records_together").is_some() {
+        list(entry, "records_together")?
+            .iter()
+            .map(|group| {
+                let kinds = list(group, "kinds")?
+                    .iter()
+                    .map(|kind| {
+                        kind.as_str().map(EvidenceKindId::new).ok_or_else(|| {
+                            "a kind in `records_together` is not a string".to_owned()
+                        })
+                    })
+                    .collect::<Shape<_>>()?;
+                Ok(RecordGroup { kinds })
+            })
+            .collect::<Shape<_>>()?
+    } else {
+        Vec::new()
+    };
     Ok(Action {
         description: optional_text(entry, "description")?,
         precondition: Some(predicate(required(entry, "precondition")?)?),
         requires,
         effect: optional_text(entry, "effect")?.map(EffectClass::new),
         may_produce,
+        records_together,
         // Written only when declared; read as the JSON it is, and held to the dialect by compiling.
         arguments: field(entry, "arguments").cloned(),
         // Written only when declared.
@@ -422,15 +445,16 @@ fn scope(item: &Json) -> Shape<Declarations<ScopeKey, ScopeValue>> {
     Ok(Declarations::new(entries))
 }
 
-/// An outcome's requirement: `{"decision": <name>}`, or a predicate.
+/// An outcome's requirement: `{"decision": <name>}` with an optional `"when"`, or a predicate.
 fn requirement(value: &Json) -> Shape<OutcomeRequirement> {
     if let Some(map) = value.as_object()
-        && map.len() == 1
         && map.contains_key("decision")
+        && map.keys().all(|key| key == "decision" || key == "when")
     {
-        return Ok(OutcomeRequirement::Decision(model::DecisionName::new(
-            text(value, "decision")?,
-        )));
+        return Ok(OutcomeRequirement::Decision(model::DecisionRequirement {
+            decision: model::DecisionName::new(text(value, "decision")?),
+            when: map.get("when").map(predicate).transpose()?,
+        }));
     }
     predicate(value).map(OutcomeRequirement::Predicate)
 }
@@ -507,6 +531,20 @@ fn predicate(value: &Json) -> Shape<Predicate> {
                 subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
             }))
         }
+        "descended" => {
+            let record = |key: &str| -> Shape<LaterRecord> {
+                let read = required(inner, key)?;
+                Ok(LaterRecord {
+                    kind: EvidenceKindId::new(text(read, "kind")?),
+                    result: text(read, "result")?,
+                })
+            };
+            Ok(Predicate::Descended(Box::new(EvidenceDescended {
+                first: record("first")?,
+                then: record("then")?,
+                subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
+            })))
+        }
         // `"revision"` is written only as `current`; an `any` read here compiles to no key, so
         // the bytes differ and the text is refused. `"subject"` is written only when the form
         // names one, as a string, as an evidence match's is.
@@ -521,7 +559,7 @@ fn predicate(value: &Json) -> Shape<Predicate> {
             subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
         })),
         _ => Err(
-            "a predicate is not one of all, any, not, evidence, claim, input, first, before, after, since or children"
+            "a predicate is not one of all, any, not, evidence, claim, input, first, before, after, since, descended or children"
                 .to_owned(),
         ),
     }
@@ -657,6 +695,38 @@ mod tests {
         );
     }
 
+    /// A reviser reads back as written; one that is not a string, or an explicit null the
+    /// compiler never writes, is refused, and so is the protocol's own id, as the validator
+    /// refuses it.
+    #[test]
+    fn a_reviser_reads_back_and_any_other_value_is_refused() {
+        let ir = ir::compile(
+            &model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 artifacts: {a: {revised_by: q}, b: {}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let text = ir.canonical_json();
+        assert!(text.contains("\"revised_by\": \"q\""), "{text}");
+        assert_eq!(read_ir(&text), Ok(ir));
+        for replacement in ["\"revised_by\": 7", "\"revised_by\": null"] {
+            let refusal = read_ir(&text.replace("\"revised_by\": \"q\"", replacement))
+                .expect_err(replacement);
+            assert_eq!(refusal.code(), "malformed-input", "{refusal}");
+            assert_eq!(
+                refusal.to_string(),
+                "not canon-ir/1: `revised_by` is not a string"
+            );
+        }
+        let refusal = read_ir(&text.replace("\"q\"", "\"p\"")).expect_err("self-revised");
+        assert!(
+            refusal.to_string().contains("self-revised-artifact"),
+            "{refusal}"
+        );
+    }
+
     /// The judgement marks (story:judgement-marking) read back as compiled. Every other form is
     /// refused as `malformed-input`: `program` written out, which the compiler never writes; a
     /// value that is neither program nor judgement, or not a string; a `revises` list that is
@@ -768,6 +838,89 @@ mod tests {
                 format!("not canon-ir/1: describes an invalid protocol: {problem}"),
                 "{to}"
             );
+        }
+    }
+
+    /// An action's `records_together` (story:simulate-record-groups) reads back as compiled.
+    /// Every other form is refused as `malformed-input`: an empty list, groups or kinds unsorted, a
+    /// kind repeated, a key the compiler never writes, a kind that is not a string, and a group
+    /// the validator refuses.
+    #[test]
+    fn record_groups_read_back_and_any_other_form_is_refused() {
+        let ir = ir::compile(
+            &model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 evidence_kinds: {a: {}, b: {}, c: {}, d: {}}\n\
+                 actions: {act: {may_produce: [{evidence: a}, {evidence: b}, {evidence: c}, \
+                 {evidence: d}], records_together: [{kinds: [d, c]}, {kinds: [b, a]}]}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let text = ir.canonical_json();
+        let group = |first: &str, second: &str| {
+            format!(
+                "{{\n          \"kinds\": [\n            \"{first}\",\n            \"{second}\"\n          ]\n        }}"
+            )
+        };
+        let groups = format!(
+            "\"records_together\": [\n        {},\n        {}\n      ]",
+            group("a", "b"),
+            group("c", "d")
+        );
+        assert!(text.contains(&groups), "{text}");
+        assert_eq!(read_ir(&text), Ok(ir));
+
+        let canonical = "not canon-ir/1: not the canonical text `canon compile` prints";
+        for (to, why) in [
+            (
+                format!(
+                    "\"records_together\": [\n        {},\n        {}\n      ]",
+                    group("c", "d"),
+                    group("a", "b")
+                ),
+                canonical.to_owned(),
+            ),
+            (
+                format!(
+                    "\"records_together\": [\n        {},\n        {}\n      ]",
+                    group("b", "a"),
+                    group("c", "d")
+                ),
+                canonical.to_owned(),
+            ),
+            (
+                format!(
+                    "\"records_together\": [\n        {},\n        {}\n      ]",
+                    group("a", "b").replace("\"b\"", "\"b\",\n            \"b\""),
+                    group("c", "d")
+                ),
+                canonical.to_owned(),
+            ),
+            ("\"records_together\": []".to_owned(), canonical.to_owned()),
+            (
+                groups.replace(
+                    "\"kinds\": [\n            \"a\"",
+                    "\"also\": 1,\n          \"kinds\": [\n            \"a\"",
+                ),
+                canonical.to_owned(),
+            ),
+            (
+                groups.replace("\"a\",", "1,"),
+                "not canon-ir/1: a kind in `records_together` is not a string".to_owned(),
+            ),
+            (
+                groups.replace("\"b\"\n", "\"a\"\n"),
+                "not canon-ir/1: describes an invalid protocol: invalid-record-group: action \
+                 `act` records_together group 1 names fewer than two distinct evidence kinds"
+                    .to_owned(),
+            ),
+        ] {
+            let changed = text.replace(&groups, &to);
+            assert_ne!(changed, text, "{to}");
+            let refusal = read_ir(&changed).expect_err(&to);
+            assert_eq!(refusal.code(), "malformed-input", "{to}: {refusal}");
+            assert_eq!(refusal.to_string(), why, "{to}");
         }
     }
 

@@ -1,0 +1,46 @@
+format: protocol/1
+
+protocol:
+  id: red-then-green
+  revision: 1
+  description: Decide whether a test failed on an earlier revision of the change and passes on its current revision, which descends from that one.
+
+artifacts:
+  change:
+    description: The change under review; its case snapshot lists every revision its current revision descends from.
+
+evidence_kinds:
+  test_result:
+    description: A run of one test, named by the record's item, against a revision of an artifact; its result is failed or passed.
+
+claims:
+  red.then.green:
+    description: A test that failed on a revision the change's current revision descends from passes on the current revision.
+    true_when:
+      descended:
+        first:
+          kind: test_result
+          result: failed
+        then:
+          kind: test_result
+          result: passed
+        subject: change
+
+actions:
+  merge:
+    description: Merge the change once a test that failed on an earlier revision of it passes on the current one.
+    precondition:
+      descended:
+        first:
+          kind: test_result
+          result: failed
+        then:
+          kind: test_result
+          result: passed
+        subject: change
+
+outcomes:
+  done:
+    description: A test was seen failing before the change and passing with it.
+    requires:
+      claim: red.then.green

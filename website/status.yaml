@@ -227,3 +227,48 @@ items:
     story: story:child-outcome-subject
     detail: "The children predicate takes subject: <artifact>, and then reads only the case_outcome records about that artifact, with revision: current only those at its current revision. A record about another artifact neither establishes nor contradicts it, so children opened about different artifacts no longer mix in one form. canon validate refuses an undeclared subject as undeclared-artifact; without the key every record counts as before and canon-ir/1 is unchanged; scenario CANON-COMPOSE-003."
     href: /docs/reference/protocol#childoutcomes
+  - label: Write a protocol/1 model
+    area: Language
+    story: story:protocol-writer
+    detail: The library function b10x_canon::model::write writes any protocol/1 model as canonical JSON text that model::parse reads back to an equal model, declaration order and repeated identifiers kept, a key left out only when the model holds none; it writes a model the validator refuses, and canon validate stays the only judge of validity. No builder, no canon fmt, no change to canon-ir/1.
+    href: /docs/reference/protocol
+  - label: Kinds recorded together
+    area: Analysis
+    story: story:simulate-record-groups
+    detail: "An action may declare records_together, groups of the kinds one run of it records all together or not at all. canon simulate then adds a group's records in one step, one record of each member kind in every combination of dimension, class and producer profile, printed as one line, and never offers a grouped kind alone. canon validate refuses a group with fewer than two distinct kinds, a kind outside may_produce, a kind in two groups of one action and case_outcome on an action that opens a child case, each as invalid-record-group naming the action. No evaluation reads it: canon evaluate, check and generate give the same bytes, canon diff reports a group as NO SEMANTIC CHANGE, and canon-ir/1 writes the key only when a group is declared."
+    href: /docs/reference/protocol#action
+  - label: canon simulate revise step
+    area: Analysis
+    story: story:simulate-revise-step
+    detail: "canon simulate lets an admissible action move the artifacts it declares in revises to a new revision, one step per non-empty subset, alone or with one record or one group it may produce, printed as action x revises a. A revision removes the current records about the artifact, keeps a child's outcome about it as an earlier record a children form still reads, and turns a record with that artifact upstream into one observed before it moved, which its invalidation rules set aside; the case revision never moves, so a denial lasts. A cycle now asks only that every record step return the state, and one a revision leads out of says so: every revision by action x leads to a state no outcome is reachable from. A protocol without revises walks as before."
+    href: /docs/reference/cli#canon-simulate
+  - label: Protocol floor
+    area: Analysis
+    story: story:protocol-floor
+    detail: canon floor --floor --ir checks that a compiled protocol stays above an organization floor, a protocol/1 document of its own id and revision; it classifies every change from the floor to the protocol as canon diff does, prints floor holds and the counts when each is tightening, expansion or no semantic change, and otherwise prints each relaxation and breaking change and exits 1.
+    href: /docs/reference/cli#canon-floor
+  - label: canon mutate
+    area: Analysis
+    story: story:canon-mutate
+    detail: "canon mutate --path <protocol> --scenarios <dir> measures how strong a scenario set is: five operators (drop a member of an all, all to any, remove a precondition, remove a capability requirement, change an evidence result to another the protocol names for that kind) make each mutant from the parsed model, written with model::write; each runs against the scenarios that name the protocol file and is classified with the semantic diff. A mutant some scenario fails is killed, one none fails survived, and a survivor whose diff holds a RELAXATION is a weak point; a mutant the compiler refuses is invalid with its codes. Exit 1 when a weak point is reported, 0 otherwise; a set in which no scenario names the protocol file, or that fails on the protocol itself, is refused. Mutants come in a fixed order, so two runs give the same bytes."
+    href: /docs/reference/cli#canon-mutate
+  - label: An item's result across descended revisions
+    area: Language
+    story: story:revision-ordering
+    detail: The descended order form tests whether an item that had one result on a revision the current revision of its subject descends from has another on the current revision, pairing evidence records on their item and reading descent from the case snapshot's descends_from of each artifact; scenario CANON-ORDER-005.
+    href: /docs/reference/protocol
+  - label: canon simulate walks a parent's recovery
+    area: Analysis
+    story: story:child-outcome-recovery
+    detail: "canon simulate keeps one case_outcome dimension for each case_open subject when the protocol's children forms name no subject, so a revision of an artifact sets aside only the child outcomes about it, written evidence case_outcome about b; a child outcome about any other artifact stays current. A child that has not ended when its subject is revised may end against the earlier revision: its outcome then arrives as an earlier record, written a child of action x records … earlier, as well as a current one. A parent that revises the artifact a failed child was about and opens new children is therefore walked to the outcome a children form with revision: current reads. A protocol with no case_open, or with one case_open subject that is the artifact the space already uses, walks as before. CANON-COMPOSE-002 gains the step that pins the recovery."
+    href: /docs/reference/cli#canon-simulate
+  - label: Conditional decision
+    area: Language
+    story: story:decision-condition
+    detail: "An outcome that requires an explicit decision may carry an optional when predicate, requires: {decision: withdraw, when: {claim: publication.refused}}. The decision counts toward the outcome only while when is true at the evaluation, whenever the decision was taken: while when is false or unknown the outcome is blocked by the reasons a precondition that is not true gives, a decision supplied is neither counted nor refused (computed_from.decisions still lists it), and no pending decision is listed; while it is true the outcome is as before, legitimate with decided_by or blocked naming the decision. when holds claims and case inputs only, as applicable_when does: canon validate refuses an evidence match, an order form or a children form in it as evidence-in-decision-condition, naming the outcome. canon-ir/1 writes when only when it is present, so every protocol written without it compiles to the same bytes; canon diff reports adding, removing or changing it as BREAKING, and canon check decides the outcome over the decision's dimension and what when reads. The condition is not an order: Canon cannot tell a decision taken before when turned true from one taken after."
+    href: /docs/reference/protocol#outcome
+  - label: Artifacts revised by another protocol
+    area: Analysis
+    story: story:artifact-revised-by
+    detail: "An artifact of protocol/1 can name the protocol whose cases revise it with revised_by, one protocol id; canon validate refuses the protocol's own id as self-revised-artifact and any other id is valid and resolved by nothing. canon-ir/1 writes revised_by after the artifact's description only when it is set, so the IR and digest of every protocol without it stay as they were, and the IR read-back refuses a non-string and the own id. canon evaluate, canon check and canon generate give the same bytes with or without it, and canon diff reports adding, removing or replacing it as NO SEMANTIC CHANGE. canon simulate offers a revise step for the artifact in every state, printed as protocol q revises a, after the supplied steps and before the expiry steps; a state only that step can open counts as waiting and is no finding, and the summary of a protocol with such an artifact says waiting on supplied evidence, expiry or a revision by another protocol. Canon revises nothing and nothing checks that the named protocol revises the artifact."
+    href: /docs/reference/cli#canon-simulate

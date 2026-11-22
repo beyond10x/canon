@@ -17,7 +17,8 @@
 //!    dimensions, in that section order, then the capabilities actions name, each followed by the
 //!    keys and values of its scope in the order written, the effect classes actions name and the
 //!    protocol each action's `case_open` names, in action order, then the protocol each evidence
-//!    kind's `supplied_by` names, in evidence kind order, then the decisions outcomes require, in
+//!    kind's `supplied_by` names, in evidence kind order, then the protocol each artifact's
+//!    `revised_by` names, in artifact order, then the decisions outcomes require, in
 //!    outcome order, then the values case inputs declare, in input order;
 //! 4. duplicate identifiers, in the same section order;
 //! 5. capability requirements whose scope names a key more than once (`duplicate-scope-key`,
@@ -28,7 +29,9 @@
 //!    evidence kinds whose `supplied_by` names the protocol's own id (`self-supplied-evidence`,
 //!    naming the kind; story:supplied-evidence), each kind's in that order, in the order the
 //!    evidence kinds are written. Any other protocol may supply a kind, and nothing resolves the
-//!    name;
+//!    name; then artifacts whose `revised_by` names the protocol's own id
+//!    (`self-revised-artifact`, naming the artifact; story:artifact-revised-by), in the order the
+//!    artifacts are written, and any other protocol may revise an artifact;
 //! 7. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
 //!    more than once (`duplicate-input-value`, naming the input and the value, once for every
 //!    listing after its first), in the order the inputs are written;
@@ -66,8 +69,18 @@
 //!    precondition, then each evidence kind it may produce, then each artifact it `revises`
 //!    (story:judgement-marking), `undeclared-artifact`, once for every listing, in the order
 //!    listed, then the subject of the case it opens, `undeclared-artifact`, then an opening under
-//!    the protocol's own id, `self-opened-case`, every one naming the action), then those in
-//!    outcomes, then those in invalidation rules (the upstream
+//!    the protocol's own id, `self-opened-case`, then each group of its `records_together`
+//!    (story:simulate-record-groups), in the order written, `invalid-record-group`: a group with
+//!    fewer than two distinct kinds, then for each kind it names, once, in the order named:
+//!    `case_outcome` on an action that opens a child case (a child's outcome arrives when the
+//!    child ends, never with a record of the run that opened it), or else a kind its
+//!    `may_produce` does not list, and then a kind an earlier group of the action names, every
+//!    one naming the action and the group, counted from 1), then those in
+//!    outcomes (each outcome's requirement, when it is a predicate; when it is a decision, its
+//!    condition `when`, followed by every evidence match, order form and `children` form it holds,
+//!    `evidence-in-decision-condition`, naming the outcome: it tests only claim values and case
+//!    inputs, as an applicability predicate does; story:decision-condition), then those in
+//!    invalidation rules (the upstream
 //!    artifact, then each claim the rule invalidates); within a section, in the order its
 //!    declarations are written, and within a declaration, in the order its references are
 //!    written;
@@ -169,6 +182,20 @@ impl fmt::Display for Referrer {
     }
 }
 
+/// Why a group of an action's `records_together` is refused (`invalid-record-group`).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RecordGroupFault {
+    /// The group names fewer than two distinct kinds: it groups nothing.
+    FewerThanTwo,
+    /// The group names `case_outcome` on an action that opens a child case: a child's outcome
+    /// arrives when the child ends, never with a record of the run that opened it.
+    ChildOutcome,
+    /// The group names a kind the action's `may_produce` does not list.
+    NotProduced(EvidenceKindId),
+    /// The group names a kind an earlier group of the action names.
+    InEarlierGroup(EvidenceKindId),
+}
+
 /// One reason a protocol document is invalid.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Problem {
@@ -219,6 +246,14 @@ pub enum Problem {
     /// `applicable_when.not.evidence` or `applicable_when.before`.
     EvidenceInApplicability {
         obligation: ObligationId,
+        kind: EvidenceKindId,
+        path: String,
+    },
+    /// An outcome's decision condition tests evidence; it may test only claim values and case
+    /// inputs (story:decision-condition). `path` locates the evidence match or order form inside
+    /// the predicate, as `when.not.evidence` or `when.before`.
+    EvidenceInDecisionCondition {
+        outcome: OutcomeId,
         kind: EvidenceKindId,
         path: String,
     },
@@ -283,11 +318,25 @@ pub enum Problem {
         action: ActionId,
         protocol: ProtocolId,
     },
+    /// A group of an action's `records_together` (story:simulate-record-groups) is not one run's
+    /// records: `group` counts the action's groups from 1, in the order written.
+    InvalidRecordGroup {
+        action: ActionId,
+        group: usize,
+        fault: RecordGroupFault,
+    },
     /// An evidence kind names the protocol's own id as the protocol that supplies its records
     /// (story:supplied-evidence): records of it come from outside the protocol, or from its own
     /// actions, never from a case of the same protocol through `supplied_by`.
     SelfSuppliedEvidence {
         kind: EvidenceKindId,
+        protocol: ProtocolId,
+    },
+    /// An artifact names the protocol's own id as the protocol whose cases revise it
+    /// (story:artifact-revised-by): the protocol's own actions revise through `revises`, and a
+    /// self-name would hide the dead end a revising action that no state admits leaves.
+    SelfRevisedArtifact {
+        artifact: ArtifactId,
         protocol: ProtocolId,
     },
     /// Claims whose predicates test each other in a cycle; the first claim is repeated at the end.
@@ -376,6 +425,7 @@ impl Problem {
             Problem::InvalidMaxAge { .. } => "invalid-max-age",
             Problem::EvidenceInDischarge { .. } => "evidence-in-discharge",
             Problem::EvidenceInApplicability { .. } => "evidence-in-applicability",
+            Problem::EvidenceInDecisionCondition { .. } => "evidence-in-decision-condition",
             Problem::DuplicateScopeKey { .. } => "duplicate-scope-key",
             Problem::EmptyInputValues { .. } => "empty-input-values",
             Problem::DuplicateInputValue { .. } => "duplicate-input-value",
@@ -391,7 +441,9 @@ impl Problem {
             Problem::DuplicateChildOutcome { .. } => "duplicate-child-outcome",
             Problem::OpenChildOutcome { .. } => "open-child-outcome",
             Problem::SelfOpenedCase { .. } => "self-opened-case",
+            Problem::InvalidRecordGroup { .. } => "invalid-record-group",
             Problem::SelfSuppliedEvidence { .. } => "self-supplied-evidence",
+            Problem::SelfRevisedArtifact { .. } => "self-revised-artifact",
             Problem::ClaimCycle { .. } => "claim-cycle",
             Problem::ActionArguments { .. } => "action-arguments",
             Problem::InvalidImportDigest { .. } => "invalid-import-digest",
@@ -476,6 +528,16 @@ impl fmt::Display for Problem {
                 f,
                 "obligation `{}` tests evidence kind `{}` at `{path}`; an applicability predicate tests only claim values and case inputs",
                 one_line(obligation.as_str()),
+                one_line(kind.as_str())
+            ),
+            Problem::EvidenceInDecisionCondition {
+                outcome,
+                kind,
+                path,
+            } => write!(
+                f,
+                "outcome `{}` tests evidence kind `{}` at `{path}`; a decision's condition tests only claim values and case inputs",
+                one_line(outcome.as_str()),
                 one_line(kind.as_str())
             ),
             Problem::DuplicateScopeKey {
@@ -575,10 +637,46 @@ impl fmt::Display for Problem {
                 one_line(action.as_str()),
                 one_line(protocol.as_str())
             ),
+            Problem::InvalidRecordGroup {
+                action,
+                group,
+                fault,
+            } => {
+                write!(
+                    f,
+                    "action `{}` records_together group {group} names ",
+                    one_line(action.as_str())
+                )?;
+                match fault {
+                    RecordGroupFault::FewerThanTwo => {
+                        f.write_str("fewer than two distinct evidence kinds")
+                    }
+                    RecordGroupFault::ChildOutcome => write!(
+                        f,
+                        "evidence kind `{CASE_OUTCOME}`, which a child case the action opens records"
+                    ),
+                    RecordGroupFault::NotProduced(kind) => write!(
+                        f,
+                        "evidence kind `{}`, which its may_produce does not list",
+                        one_line(kind.as_str())
+                    ),
+                    RecordGroupFault::InEarlierGroup(kind) => write!(
+                        f,
+                        "evidence kind `{}`, which an earlier group names",
+                        one_line(kind.as_str())
+                    ),
+                }
+            }
             Problem::SelfSuppliedEvidence { kind, protocol } => write!(
                 f,
                 "evidence kind `{}` is supplied by protocol `{}`, the protocol's own id",
                 one_line(kind.as_str()),
+                one_line(protocol.as_str())
+            ),
+            Problem::SelfRevisedArtifact { artifact, protocol } => write!(
+                f,
+                "artifact `{}` is revised by protocol `{}`, the protocol's own id",
+                one_line(artifact.as_str()),
                 one_line(protocol.as_str())
             ),
             Problem::ClaimCycle { claims } => {
@@ -804,6 +902,11 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
             named.push((Section::Protocol, supplier.as_str()));
         }
     }
+    for (_, artifact) in protocol.artifacts.iter() {
+        if let Some(reviser) = &artifact.revised_by {
+            named.push((Section::Protocol, reviser.as_str()));
+        }
+    }
     for (_, outcome) in protocol.outcomes.iter() {
         if let Some(decision) = outcome.requires.decision() {
             named.push((Section::Decision, decision.as_str()));
@@ -859,6 +962,14 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         if kind.supplied_by.as_ref() == Some(&protocol.protocol.id) {
             problems.push(Problem::SelfSuppliedEvidence {
                 kind: id.clone(),
+                protocol: protocol.protocol.id.clone(),
+            });
+        }
+    }
+    for (id, artifact) in protocol.artifacts.iter() {
+        if artifact.revised_by.as_ref() == Some(&protocol.protocol.id) {
+            problems.push(Problem::SelfRevisedArtifact {
+                artifact: id.clone(),
                 protocol: protocol.protocol.id.clone(),
             });
         }
@@ -964,6 +1075,7 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
                 });
             }
         }
+        record_groups(id, action, &mut problems);
     }
     for (id, outcome) in protocol.outcomes.iter() {
         if let Some(requires) = outcome.requires.predicate() {
@@ -973,6 +1085,21 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
                 requires,
                 &mut problems,
             );
+        }
+        if let Some(when) = outcome.requires.when() {
+            references(
+                protocol,
+                &Referrer::Outcome(id.clone()),
+                when,
+                &mut problems,
+            );
+            for (kind, path) in evidence_at("when", when) {
+                problems.push(Problem::EvidenceInDecisionCondition {
+                    outcome: id.clone(),
+                    kind,
+                    path,
+                });
+            }
         }
     }
     for (id, rule) in protocol.invalidation.iter() {
@@ -1092,6 +1219,12 @@ fn evidence_at(root: &str, predicate: &Predicate) -> Vec<(EvidenceKindId, String
                     found.push((form.then.kind.clone(), format!("{path}.since")));
                 }
             }
+            Predicate::Descended(form) => {
+                found.push((form.first.kind.clone(), format!("{path}.descended")));
+                if form.then.kind != form.first.kind {
+                    found.push((form.then.kind.clone(), format!("{path}.descended")));
+                }
+            }
             Predicate::Children(_) => {
                 found.push((
                     EvidenceKindId::new(CASE_OUTCOME),
@@ -1102,6 +1235,45 @@ fn evidence_at(root: &str, predicate: &Predicate) -> Vec<(EvidenceKindId, String
         }
     }
     found
+}
+
+/// The groups of `action`'s `records_together`, in the order written: one with fewer than two
+/// distinct kinds, then for each kind it names, once, in the order named: `case_outcome` on an
+/// action that opens a child case, or else a kind `may_produce` does not list, and then a kind an
+/// earlier group names.
+fn record_groups(id: &ActionId, action: &crate::model::Action, problems: &mut Vec<Problem>) {
+    let mut grouped: BTreeSet<&EvidenceKindId> = BTreeSet::new();
+    for (at, group) in action.records_together.iter().enumerate() {
+        let refuse = |fault| Problem::InvalidRecordGroup {
+            action: id.clone(),
+            group: at + 1,
+            fault,
+        };
+        let mut named: Vec<&EvidenceKindId> = Vec::new();
+        for kind in &group.kinds {
+            if !named.contains(&kind) {
+                named.push(kind);
+            }
+        }
+        if named.len() < 2 {
+            problems.push(refuse(RecordGroupFault::FewerThanTwo));
+        }
+        for kind in &named {
+            if action.case_open.is_some() && kind.as_str() == CASE_OUTCOME {
+                problems.push(refuse(RecordGroupFault::ChildOutcome));
+            } else if !action
+                .may_produce
+                .iter()
+                .any(|production| production.evidence == **kind)
+            {
+                problems.push(refuse(RecordGroupFault::NotProduced((*kind).clone())));
+            }
+            if grouped.contains(kind) {
+                problems.push(refuse(RecordGroupFault::InEarlierGroup((*kind).clone())));
+            }
+        }
+        grouped.extend(named);
+    }
 }
 
 fn strs<'a, T: AsRef<str> + 'a>(ids: impl Iterator<Item = &'a T>) -> Vec<&'a str> {
@@ -1186,7 +1358,11 @@ fn references(
                 }
             }
         }
-        Predicate::First(_) | Predicate::Before(_) | Predicate::After(_) | Predicate::Since(_) => {
+        Predicate::First(_)
+        | Predicate::Before(_)
+        | Predicate::After(_)
+        | Predicate::Since(_)
+        | Predicate::Descended(_) => {
             let reads = node.order_reads();
             let mut kinds: Vec<&EvidenceKindId> = Vec::new();
             for (kind, _) in &reads {
@@ -1679,6 +1855,36 @@ mod tests {
         );
     }
 
+    /// A reviser is a protocol identifier, checked after every supplier; the protocol's own id is
+    /// refused as `self-revised-artifact`, naming the artifact, after the suppliers' own check.
+    /// Any other id is valid, resolved by nothing, and an artifact an action also lists in
+    /// `revises` is valid.
+    #[test]
+    fn a_reviser_is_another_protocol_named_by_an_identifier() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            artifacts: {z: {revised_by: p}, a: {revised_by: 'q q'}, k: {revised_by: p}}\n\
+            evidence_kinds: {e: {supplied_by: 'r r'}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "invalid-identifier: protocol identifier `r r` is empty or contains whitespace or a control character",
+                "invalid-identifier: protocol identifier `q q` is empty or contains whitespace or a control character",
+                "self-revised-artifact: artifact `z` is revised by protocol `p`, the protocol's own id",
+                "self-revised-artifact: artifact `k` is revised by protocol `p`, the protocol's own id",
+            ]
+        );
+        assert_eq!(
+            problems(
+                "format: protocol/1\nprotocol: {id: p.child, revision: 1}\n\
+                 artifacts: {up: {revised_by: p}, down: {revised_by: p.child.grandchild}, \
+                 side: {revised_by: p.sibling}, nowhere: {revised_by: never.declared}, \
+                 own: {revised_by: other}}\n\
+                 actions: {act: {revises: [own]}}\n"
+            ),
+            Vec::<String>::new()
+        );
+    }
+
     /// A decision an outcome requires is an identifier, reported after every name actions give;
     /// it references nothing, so it is never undeclared. Written beside a predicate form, or inside
     /// one, it does not parse.
@@ -1853,6 +2059,81 @@ mod tests {
                 "evidence-in-discharge: obligation `o` tests evidence kind `m` at `discharged_when.since`; a discharge predicate tests only claim values",
                 "evidence-in-applicability: obligation `o` tests evidence kind `m` at `applicable_when.not.since`; an applicability predicate tests only claim values and case inputs",
             ]
+        );
+    }
+
+    /// A `descended` resolves its earlier kind, then its later kind, each once, then its subject,
+    /// as a `since` does (story:revision-ordering); one kind as both is valid, and in a discharge
+    /// or applicability predicate it is refused with its path, each kind once.
+    #[test]
+    fn a_descended_form_resolves_its_kinds_and_subject() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            artifacts: {a: {}}\nevidence_kinds: {k: {}, m: {}}\n\
+            claims: {c: {true_when: {any: [\
+            {descended: {first: {kind: y, result: f}, then: {kind: z, result: p}, subject: w}}, \
+            {descended: {first: {kind: z, result: f}, then: {kind: z, result: p}}}, \
+            {descended: {first: {kind: k, result: f}, then: {kind: k, result: p}, subject: a}}]}}}\n\
+            obligations: {o: {discharged_when: {descended: {first: {kind: k, result: f}, then: {kind: m, result: p}}}, \
+            applicable_when: {not: {descended: {first: {kind: m, result: f}, then: {kind: m, result: p}}}}}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "undeclared-evidence-kind: claim `c` references evidence kind `y`, which is not declared",
+                "undeclared-evidence-kind: claim `c` references evidence kind `z`, which is not declared",
+                "undeclared-artifact: claim `c` references artifact `w`, which is not declared",
+                "undeclared-evidence-kind: claim `c` references evidence kind `z`, which is not declared",
+                "evidence-in-discharge: obligation `o` tests evidence kind `k` at `discharged_when.descended`; a discharge predicate tests only claim values",
+                "evidence-in-discharge: obligation `o` tests evidence kind `m` at `discharged_when.descended`; a discharge predicate tests only claim values",
+                "evidence-in-applicability: obligation `o` tests evidence kind `m` at `applicable_when.not.descended`; an applicability predicate tests only claim values and case inputs",
+            ]
+        );
+    }
+
+    /// `descended` is a map with required keys `first` and `then`, each a map with required keys
+    /// `kind` and `result`; an unknown key, a null and a second form beside it do not parse, in a
+    /// claim and in an outcome's requirement.
+    #[test]
+    fn a_descended_form_is_written_with_its_required_keys() {
+        for written in [
+            "{descended: {first: {kind: k, result: f}}}",
+            "{descended: {then: {kind: k, result: p}}}",
+            "{descended: {first: k, then: {kind: k, result: p}}}",
+            "{descended: {first: {kind: k}, then: {kind: k, result: p}}}",
+            "{descended: {first: {kind: k, result: f}, then: {result: p}}}",
+            "{descended: {first: {kind: k, result: f}, then: {kind: k, result: p}, item: t}}",
+            "{descended: {first: {kind: k, result: f}, then: {kind: k, result: p}, subject: ~}}",
+            "{descended: ~}",
+            "{descended: {first: {kind: k, result: f}, then: {kind: k, result: p}}, first: {kind: k, result: f}}",
+        ] {
+            let source = format!(
+                "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nevidence_kinds: {{k: {{}}}}\nclaims: {{c: {{true_when: {written}}}}}\n"
+            );
+            assert!(crate::model::parse(&source).is_err(), "{written} parses");
+            let source = format!(
+                "format: protocol/1\nprotocol: {{id: p, revision: 1}}\nevidence_kinds: {{k: {{}}}}\noutcomes: {{o: {{requires: {written}}}}}\n"
+            );
+            assert!(
+                crate::model::parse(&source).is_err(),
+                "{written} parses as a requirement"
+            );
+        }
+        let parsed = crate::model::parse(
+            "format: protocol/1\nprotocol: {id: p, revision: 1}\nevidence_kinds: {k: {}}\n\
+             outcomes: {o: {requires: {descended: {first: {kind: k, result: f}, then: {kind: k, result: p}}}}}\n",
+        )
+        .expect("parses");
+        let (_, outcome) = parsed.outcomes.iter().next().expect("o");
+        let record = |result: &str| crate::model::LaterRecord {
+            kind: EvidenceKindId::new("k"),
+            result: result.to_owned(),
+        };
+        assert_eq!(
+            outcome.requires,
+            Predicate::Descended(Box::new(crate::model::EvidenceDescended {
+                first: record("f"),
+                then: record("p"),
+                subject: None,
+            }))
         );
     }
 
@@ -2222,5 +2503,74 @@ mod tests {
         });
         eprintln!("validated a chain of {claims} claims in {took:?}");
         assert!(valid, "the chain is valid");
+    }
+
+    /// Every refusal of a `records_together` group (story:simulate-record-groups), in the order
+    /// written, after the action's case opening and before the next action's precondition: a
+    /// group of one distinct kind, a kind outside `may_produce`, a kind in an earlier group, and
+    /// `case_outcome` on an action that opens a child case, whether `may_produce` lists it or not.
+    /// An undeclared kind `may_produce` lists is refused once, as `undeclared-evidence-kind`. The
+    /// same kinds grouped on an action that opens no case, or repeated within one group of two
+    /// distinct kinds, are valid.
+    #[test]
+    fn a_record_group_names_two_or_more_kinds_the_action_produces_once() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            artifacts: {doc: {}}\n\
+            evidence_kinds: {a: {}, b: {}, c: {}, case_outcome: {}}\n\
+            actions:\n  \
+              opens:\n    \
+                case_open: {protocol: q, subject: missing}\n    \
+                may_produce: [{evidence: a}, {evidence: b}, {evidence: case_outcome}, {evidence: z}]\n    \
+                records_together:\n      \
+                  - {kinds: [a, a]}\n      \
+                  - {kinds: [case_outcome, a, z, c]}\n      \
+                  - {kinds: [b, case_outcome]}\n  \
+              plain:\n    \
+                precondition: {claim: y}\n    \
+                may_produce: [{evidence: a}, {evidence: b}, {evidence: case_outcome}]\n    \
+                records_together: [{kinds: [b, case_outcome, b]}]\n";
+        assert_eq!(
+            problems(source),
+            [
+                "undeclared-evidence-kind: action `opens` references evidence kind `z`, which is not declared",
+                "undeclared-artifact: action `opens` references artifact `missing`, which is not declared",
+                "invalid-record-group: action `opens` records_together group 1 names fewer than two distinct evidence kinds",
+                "invalid-record-group: action `opens` records_together group 2 names evidence kind `case_outcome`, which a child case the action opens records",
+                "invalid-record-group: action `opens` records_together group 2 names evidence kind `a`, which an earlier group names",
+                "invalid-record-group: action `opens` records_together group 2 names evidence kind `c`, which its may_produce does not list",
+                "invalid-record-group: action `opens` records_together group 3 names evidence kind `case_outcome`, which a child case the action opens records",
+                "invalid-record-group: action `opens` records_together group 3 names evidence kind `case_outcome`, which an earlier group names",
+                "undeclared-claim: action `plain` references claim `y`, which is not declared",
+            ]
+        );
+        let opened = source
+            .replace("      - {kinds: [b, case_outcome]}\n", "")
+            .replace("{evidence: case_outcome}, {evidence: z}", "{evidence: c}")
+            .replace("subject: missing", "subject: doc")
+            .replace("[a, a]", "[a, c]")
+            .replace("[case_outcome, a, z, c]", "[b, case_outcome]")
+            .replace("{claim: y}", "{all: []}");
+        assert_eq!(
+            problems(&opened),
+            [
+                "invalid-record-group: action `opens` records_together group 2 names evidence kind `case_outcome`, which a child case the action opens records"
+            ]
+        );
+        assert_eq!(
+            problems(&opened.replace("[b, case_outcome]", "[b, a]")),
+            [
+                "invalid-record-group: action `opens` records_together group 2 names evidence kind `a`, which an earlier group names"
+            ]
+        );
+        assert_eq!(
+            problems(&opened.replace("[b, case_outcome]}", "[b, b]}")),
+            [
+                "invalid-record-group: action `opens` records_together group 2 names fewer than two distinct evidence kinds"
+            ]
+        );
+        assert_eq!(
+            problems(&opened.replace("    records_together:\n      - {kinds: [a, c]}\n      - {kinds: [b, case_outcome]}\n", "")),
+            Vec::<String>::new()
+        );
     }
 }

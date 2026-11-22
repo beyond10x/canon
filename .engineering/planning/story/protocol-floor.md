@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:protocol-floor
 kind: story
-status: active
+status: implemented
 title: Check that a protocol stays above an organization floor with canon floor
 refs:
 - provider: atlas
@@ -34,10 +34,11 @@ scope:
   path: ess/domains/cli.yaml
 - confidence: cited
   path: fixtures/investigation/floor/
-revision: 28
+revision: 31
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":4}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 - {from: "proposed", to: "active", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":4}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
+- {from: "active", to: "implemented", at: "2026-11-22T11:12:31Z", actor: "human:timo", revision: 31, decided_on: {"recorded":{"test_result":1,"review_outcome":7,"verification":1}}, correlation: "wave-2026-11-20-w9"}
 ---
 ## Outcome
 
@@ -179,3 +180,25 @@ the capability `finding.publish` to publish a finding:
 
 https://github.com/beyond10x/canon/issues/5 (gap 3); Atlas ADR 0086 § Decision 2 and § Open ("The
 `floor` construct"); `docs/design/canon-protocol-calculus-design.md` § 31.
+
+## Decided in review, after adversary pass 1
+
+The coordinator of wave 2026-11-20-w9 decided these on 2026-11-21, from the unit's report on bringing its wave 3 branch up to the wave branch and from `review-result:adversary-protocol-floor-pass-1`.
+
+- **D1. The pass's verdict is red, and no code changes.** The adversary found no case in which `canon floor` says something other than the classifier of `canon diff`: 35 forms compared with exact bytes, all equal, among them the forms the language gained after the unit was built (`records_together`, `revises`, `decided_by`, `supplied_by`, `max_age`, `independent_on`, action arguments, `case_open`, `children`, order forms, case inputs, invalidation rules, capability scope, `applicable_when`). Its three findings are mutants of the floor that the unit's test left green: a floor that refuses a `NO SEMANTIC CHANGE`, one that counts it as an `EXPANSION`, and one that prints the changes below the floor out of the classifier's order. The pass's three cases in `crates/canon-cli/tests/adversary_floor.rs` fail on each (`4df0f19a`). They stay in the repository; that is the fix the findings name.
+- **D2. No second pass.** Nothing changed after the pass but its own test file. The pass ran the unit's five gate steps with its cases in: 164 test summaries, 1240 passed, 0 failed, 3 ignored.
+- **D3. The shared header hides nothing.** The header of `canon-ir/1` holds `id`, `revision` and `description` today, and the classifier ignores the first two, so giving the protocol the floor's header drops no change of meaning. If the header gains a field with meaning, the floor module must compare it; the module docs of `crates/canon/src/floor/mod.rs` name the three.
+- **D4. Three fixtures need an import** (`composed`, `refines-conjunct`, `refines-alternative`). The tests over every investigation fixture read them without it: the generation test expects `MissingImport`, the check's fixture test skips them, and the validator's and the writer's corpus tests parse them. Only `crates/canon-cli/tests/floor.rs` composes them. That is as the unit built it in wave 3.
+- **D5. Not compared by the floor:** decisions and their grounds are records of a case, not declarations of a protocol, so neither `canon diff` nor `canon floor` reads them.
+
+## Scope as built
+
+Written at the close of wave 2026-11-20-w9 from the wave page, the adversary report (`review-result:adversary-protocol-floor-pass-1`), the review of the integration branch (`review-result:review-wave-9-model`) and the merge of `impl/protocol-floor` (`95aaeeb6`: 18 files, +1090 −18). It corrects the body where the two differ.
+
+- Built in wave 3 (`f2d7d8f7`, base `be2c8613`); in wave 9 the unit merged the wave branch at `738f895a` (`a94c9f85`, three conflicts, both sides kept) and moved three `# read from:` comments (`9738a3c8`).
+- Every path of the typed scope changed. Outside it: `crates/canon-cli/tests/adversary_floor.rs` (the adversary's three cases, `4df0f19a`), `crates/canon-cli/tests/adversary_ess_commands.rs`, `crates/canon/tests/adversary_scenario_generation.rs`, and the generated `website/docs/reference/cli.md`.
+- After the merge: correction unit 1 (`abb281809`) writes a limit into the `canon floor` help and `crates/canon/src/floor/mod.rs` (6 lines): an added action is an `EXPANSION`, so an action that produces the floor's finding without the floor's capability passes (model finding F1, D124). The review's red case for it is not merged; story:floor-guards-added-actions (draft) holds it.
+- Acceptance: `floor_admits_only_tightening_and_expansion` passed in the gate below. Not shown at the close-out: each of the six expectations on its own (they are assertions of that one test), and `task check` as one command.
+- `website/data/status.json` is not regenerated by the close-out; it reads this story's status.
+
+**Gate of the close-out**, on `wave/2026-11-21` at `2f3d14b14`, 2026-11-22 10:43 to 11:01 UTC, host load 67 on 20 CPUs, rustc 1.100.0, each step run once by the coordinator's gate script (not `task check` as one command): build exit 0 (125 s); `task ess-gate` 0; `cargo fmt --check` 0; `cargo clippy --workspace --all-targets --locked -- -D warnings` 0; `task test` 0 (1275 tests; the step's own line: `ess-gate 2.2 s + workspace 50.4 s + -p b10x-canon 2.7 s = 55.4 s, bound 120 s`; slowest 16.9 s); `canon conform run` 0 (`30 passed, 0 failed`; `31 implemented, 31 covered`); `task docs-check` 0 (18 generated files current); `task test-slow` exit 201 (63 tests: 53 passed, 10 killed at 60 s; its CI step may fail, D123, story:slow-lane-under-bound). Recorded as `test_result` evidence. The four review results of the wave are `review-result:review-wave-9-eval`, `-simulate`, `-model` and `-gate`.

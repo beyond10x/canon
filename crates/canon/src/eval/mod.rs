@@ -58,6 +58,13 @@
 //!   `observed_at`; the predicate's reference in `protocol/1` gives every rule (CANON-ORDER-001,
 //!   CANON-ORDER-002, CANON-ORDER-004). No record is listed in `excluded_evidence` because of an
 //!   order form.
+//! - The order form over revisions, `{descended: {first: {kind: K1, result: R1}, then: {kind:
+//!   K2, result: R2}}}` (story:revision-ordering), reads the history the same way and no
+//!   `observed_at`: whether a record of `K2` with `R2` about the current revision of its subject
+//!   names an `item` that a record of `K1` with `R1` about the same subject names on a revision
+//!   the case snapshot lists in that artifact's `descends_from`. It is `true` when one does,
+//!   otherwise `unknown` with no such later record or when the snapshot gives no
+//!   `descends_from` for its subject, and otherwise `false` (CANON-ORDER-005).
 //! - The form over the child cases, `{children: {in: [O, ...]}}` (story:case-composition), reads
 //!   every `case_outcome` record the evidence check accepted, as the order forms read the history,
 //!   one per child case: its `child_case` names the child and its `result` the child's outcome,
@@ -83,7 +90,10 @@
 //! the refusal: the compiled protocol's depth (a predicate nested more than [`MAX_IR_DEPTH`]
 //! levels, itself or along the claims it tests, as `predicate-too-deep`, and claims that test each
 //! other in a cycle as `claim-cycle`; see "Depth" below), the case snapshot's format, its identifiers (case id, protocol id, the case
-//! revision when given, then each artifact id and revision in the order written), its protocol against the compiled protocol's,
+//! revision when given, then each artifact id and revision in the order written, each followed by
+//! the revisions its `descends_from` lists, in the order written: an identifier, listed once, else
+//! `duplicate-identifier`, and not the artifact's current revision, else `self-descent`, each
+//! naming the case, the revision and the artifact), its protocol against the compiled protocol's,
 //! each artifact it lists (declared by the protocol, listed once), each artifact the protocol
 //! declares (listed by the case), each case input it gives, in the order written (its id and
 //! value identifiers, then declared by the protocol, else `undeclared-input`, given once, else
@@ -94,8 +104,8 @@
 //! identifier, listed once for it, else `duplicate-identifier`, and declared by the protocol, else
 //! `undeclared-dimension`, naming the producer and the dimension); then each evidence record in
 //! the order given: its format, its identifiers (id, kind, subject, subject revision, then each
-//! upstream artifact and revision in `upstream_revisions`, then its `producer` and its
-//! `child_case` when given), its
+//! upstream artifact and revision in `upstream_revisions`, then its `producer`, its
+//! `child_case` and its `item` when given), its
 //! `observed_at` when given (an instant, a fraction of one to nine digits allowed, else
 //! `invalid-instant`), its id
 //! (used once in the set: a copy equal to the first counts once, and a copy that differs is
@@ -293,7 +303,15 @@
 //!   [...]}}`, every principal whose decision applied, sorted by Unicode code point; otherwise it
 //!   is blocked with the one reason `{"decision": <name>, "present": false}` (CANON-OUTCOME-002),
 //!   which adds `"stale_grounds": [...]` when a decision taken at that revision was set aside by
-//!   its grounds, as "Explicit decisions" below says (CANON-GROUND-001). The case snapshot's
+//!   its grounds, as "Explicit decisions" below says (CANON-GROUND-001). A decision requirement
+//!   may carry a condition (`requires: {decision: <name>, when: <predicate>}`,
+//!   story:decision-condition, CANON-OUTCOME-003): a decision counts when `when` is `true` at
+//!   this evaluation, whenever it was taken. While `when` is `false` or `unknown` the outcome is
+//!   `blocked` by the reasons a precondition that is not `true` gives, such as `{"claim": <id>,
+//!   "value": "false"}`; a decision given is neither counted nor refused, so the same decisions
+//!   document counts at a later evaluation once `when` is `true`; no `decision` reason and no
+//!   `stale_grounds` is written, and `pending_decisions` lists nothing for it. `when` is
+//!   decided over the claim values and case inputs, as `requires` is. The case snapshot's
 //!   `termination` is checked against it, as the refusals above say (CANON-OUTCOME-001).
 //! - `explanation` is written for every decision: what the decision was computed from (design
 //!   § 37), and why each claim that is not `true`, each open obligation, each action that is not
@@ -393,6 +411,8 @@ mod case;
 mod claims;
 mod composition;
 mod decision;
+#[cfg(test)]
+mod decision_condition;
 mod decisions;
 mod depth;
 mod evidence;
@@ -640,12 +660,14 @@ pub(crate) fn unmet_reasons(
 }
 
 /// The reason each order form among `forms` gives, as a blocked action names it, with its value
-/// over the `history` (`order.rs`): `before` forms first, each form once.
+/// over the `history` and, for a `descended` form, the descent of the case's `artifacts`
+/// (`order.rs`): each form once, in the order `order.rs` gives.
 pub(crate) fn order_reasons<'a>(
     forms: impl IntoIterator<Item = &'a Predicate>,
     history: &[EvidenceRecord],
+    artifacts: &Declarations<ArtifactId, crate::model::CaseArtifact>,
 ) -> Vec<crate::model::Json> {
-    order::reasons(forms, history)
+    order::reasons(forms, history, Some(artifacts))
 }
 
 /// The reason each `children` form among `forms` gives, as a blocked action names it, with its
@@ -1087,6 +1109,7 @@ mod tests {
             observed_at: None,
             upstream_revisions: crate::model::Declarations::default(),
             child_case: None,
+            item: None,
         }
     }
 

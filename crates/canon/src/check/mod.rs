@@ -90,7 +90,7 @@
 //!
 //! # Order forms
 //!
-//! A protocol with no order form (`first`, `before`, `after`, `since`) has exactly the dimensions
+//! A protocol with no order form (`first`, `before`, `after`, `since`, `descended`) has exactly the dimensions
 //! above, and its records carry no observation instant: it checks as it did before order forms
 //! existed.
 //! An order form reads every record of its kind the evidence check accepts, including those the
@@ -115,7 +115,16 @@
 //!   classes, one earlier record each, observed first; the current records come after them. An
 //!   earlier record is about the dimension's artifact at a superseded revision (`r0`), so revision
 //!   binding keeps it from every evidence match, as a record observed before a fix moved the
-//!   artifact is kept;
+//!   artifact is kept. In a protocol with a `descended` form (story:revision-ordering) the records
+//!   of the dimensions in value 1 name no item, and every other record names one; a dimension
+//!   that a `descended` form and another order form both read has `3 * (2^classes + 1)` values:
+//!   the values above, then again with every record naming no item, then again with the earlier
+//!   records observed after the current ones, which are the first observations (value 1 then
+//!   names an item and has no instant in the first run), so a `descended` form can be `unknown`
+//!   beside a `first`, a `before`, an `after` or a `since` that has instants, `true` beside a
+//!   first observation that is a current record, and `true` or `false` beside none. Such a state
+//!   writes `` evidence `k` naming no item `` or `` evidence `k` earlier observed last `` and
+//!   weighs one more;
 //! - when two or more dimensions have a history dimension, an order dimension last: every weak
 //!   order of those dimensions (their first observations earlier, later or at one instant), in
 //!   lexicographic order of their ranks, as many values as the ordered Bell number of their count
@@ -260,7 +269,9 @@
 //! dimensions above that it reads (story:check-subject-slices).
 //!
 //! - An outcome's slice is the evidence dimensions its requirement reads, directly or through the
-//!   claims it tests, and the case inputs it tests, likewise; or its one decision dimension.
+//!   claims it tests, and the case inputs it tests, likewise; or, for an outcome that requires a
+//!   decision, its decision dimension and what the decision's `when` reads, as a requirement's
+//!   slice does (story:decision-condition).
 //! - An action's slice is the evidence dimensions and case inputs its precondition reads, likewise,
 //!   and one capability dimension per capability it requires.
 //! - A property's slice is its subject's, together with the evidence dimensions and case inputs its
@@ -276,8 +287,8 @@
 //! `` input `s` `v` ``, the `` v` `` first in code-point order), and stays in the slice when one
 //! value's text begins another's. A state of a slice is written, and evaluated, as the whole
 //! product's state with those values. An action's status depends only on its precondition and the
-//! authority given for its requirements, and an outcome's only on its requirement or its decision,
-//! so each subject has in its slice every status it has in the whole product, the same pairs of
+//! authority given for its requirements, and an outcome's only on its requirement, or on its
+//! decision and what the decision's `when` reads, so each subject has in its slice every status it has in the whole product, the same pairs of
 //! statuses across its `independent_of` claim, and the same witnesses: a state that differs outside
 //! the slice weighs more, or, by an input, is written after one that does not.
 //! `unproduced-evidence` reads no state. When the whole product is within the bound and holds no
@@ -665,6 +676,26 @@ pub(crate) fn check_by(
     properties: Option<&Properties>,
     strategy: Strategy,
 ) -> Result<Report, Refusal> {
+    check_keeping(ir, properties, strategy).map(|(report, _)| report)
+}
+
+/// One space a check enumerated: its slice of `Space::new(ir)` (`None` for the whole product), the
+/// subjects decided over it (indices of the outcomes, then of the actions, then of the
+/// properties), and its states by index with each one's evaluation.
+pub(crate) struct Enumeration {
+    pub(crate) slice: Option<Slice>,
+    pub(crate) members: Vec<usize>,
+    pub(crate) states: Vec<State>,
+    pub(crate) evaluated: Vec<Evaluated>,
+}
+
+/// [`check_by`], also giving every space it enumerated, so a caller that needs the states and
+/// their evaluations (`canon generate`) does not enumerate them again.
+pub(crate) fn check_keeping(
+    ir: &Ir,
+    properties: Option<&Properties>,
+    strategy: Strategy,
+) -> Result<(Report, Vec<Enumeration>), Refusal> {
     eval::check_depth(ir).map_err(|refusal| Refusal::new(refusal.code(), refusal.to_string()))?;
     if let Some(properties) = properties {
         properties::validate(ir, properties)?;
@@ -763,6 +794,7 @@ pub(crate) fn check_by(
     }
 
     let mut decided: Vec<Decided> = subjects.iter().map(|_| Decided::default()).collect();
+    let mut kept: Vec<Enumeration> = Vec::new();
     for (slice, members) in &plan {
         let sliced;
         let space = match slice {
@@ -797,6 +829,12 @@ pub(crate) fn check_by(
                 },
             };
         }
+        kept.push(Enumeration {
+            slice: slice.clone(),
+            members: members.clone(),
+            states: enumerated.states,
+            evaluated: enumerated.evaluated,
+        });
     }
 
     let mut findings = Vec::new();
@@ -844,7 +882,7 @@ pub(crate) fn check_by(
             findings.extend(decided.finding.clone());
         }
     }
-    Ok(Report {
+    let report = Report {
         protocol: ir.protocol.id.clone(),
         revision: ir.protocol.revision,
         states: covered,
@@ -855,7 +893,8 @@ pub(crate) fn check_by(
             .collect(),
         properties: properties.map_or(0, |p| p.properties.len()),
         findings,
-    })
+    };
+    Ok((report, kept))
 }
 
 /// Every subject in finding order, with its slice: each outcome and each action in identifier
@@ -960,6 +999,7 @@ pub(crate) fn evaluate_records(
                 .map(|id| {
                     let current = CaseArtifact {
                         revision: revision.clone(),
+                        descends_from: space.descends_from(),
                     };
                     (id.clone(), current)
                 })
@@ -1008,7 +1048,18 @@ pub(crate) fn witness(
     states: &[State],
     candidates: impl Iterator<Item = usize>,
 ) -> Option<usize> {
-    candidates.min_by_key(|index| (space.weight(&states[*index]), space.render(&states[*index])))
+    // The least weight first, then the rendering of only the candidates of that weight: the same
+    // state `min_by_key` over `(weight, rendering)` gives, the first of equal keys included,
+    // without rendering every candidate.
+    let candidates: Vec<(usize, u32)> = candidates
+        .map(|index| (index, space.weight(&states[index])))
+        .collect();
+    let least = candidates.iter().map(|(_, weight)| *weight).min()?;
+    candidates
+        .into_iter()
+        .filter(|(_, weight)| *weight == least)
+        .map(|(index, _)| index)
+        .min_by_key(|index| space.render(&states[*index]))
 }
 
 /// The evidence kinds `action` may produce: each its `may_produce` lists and, when it opens a child

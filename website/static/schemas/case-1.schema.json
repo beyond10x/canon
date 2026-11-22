@@ -100,6 +100,13 @@
         "revision": {
           "description": "The artifact's current revision.",
           "$ref": "#/$defs/Identifier"
+        },
+        "descends_from": {
+          "description": "Every revision the current one descends from, as whoever writes the snapshot gives it: the whole ancestry, which Canon reads and does not compute (story:revision-ordering). Only a `descended` form reads it. Absent, the snapshot does not say; `[]`, it descends from none.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
         }
       },
       "required": [

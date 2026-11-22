@@ -572,6 +572,7 @@ fn claim_values_with(
                 .map(|id| {
                     let current = CaseArtifact {
                         revision: Revision::new(REVISION),
+                        descends_from: None,
                     };
                     (id.clone(), current)
                 })
@@ -587,6 +588,33 @@ fn claim_values_with(
         .iter()
         .map(|(_, entry)| entry.value)
         .collect()
+}
+
+/// The threads [`par_map`] runs on: the `threads-required` that `.config/nextest.toml` gives the
+/// tests of the `slow` lane that use it (story:fast-test-step).
+const WORKERS: usize = 4;
+
+/// `f` of every index below `n`, in index order, computed on [`WORKERS`] threads: the same cases
+/// and the same assertions as a sequential map, in less wall time. A panic in `f` is the caller's.
+fn par_map<R: Send>(n: usize, f: impl Fn(usize) -> R + Sync) -> Vec<R> {
+    let chunk = n.div_ceil(WORKERS).max(1);
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..n)
+            .step_by(chunk)
+            .map(|start| {
+                let f = &f;
+                scope.spawn(move || (start..(start + chunk).min(n)).map(f).collect::<Vec<R>>())
+            })
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|worker| {
+                worker
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+            })
+            .collect()
+    })
 }
 
 /// xorshift64*, a fixed seed: the same histories on every run.
@@ -611,9 +639,11 @@ fn every_value_of_every_order_form_is_reached_jointly_with_the_evidence_matches(
     let space = Space::new(&ir);
     let size = space.size().expect("fits");
     assert_eq!(size, 31200, "{}", space.dimensions());
-    let reached: BTreeSet<Vec<crate::model::Truth>> = (0..size)
-        .map(|index| claim_values(&ir, &space.evidence(&space.state(index))))
-        .collect();
+    let reached: BTreeSet<Vec<crate::model::Truth>> = par_map(size as usize, |index| {
+        claim_values(&ir, &space.evidence(&space.state(index as u128)))
+    })
+    .into_iter()
+    .collect();
     let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
     let instants = [
         Some("2026-10-01T09:00:00Z"),
@@ -621,7 +651,7 @@ fn every_value_of_every_order_form_is_reached_jointly_with_the_evidence_matches(
         Some("2026-10-01T09:00:02Z"),
         None,
     ];
-    let mut histories = 0;
+    let mut histories = Vec::new();
     for _ in 0..20_000 {
         let records: Vec<crate::model::EvidenceRecord> = (0..rng.below(6))
             .map(|n| {
@@ -639,20 +669,199 @@ fn every_value_of_every_order_form_is_reached_jointly_with_the_evidence_matches(
                     observed_at: at.map(crate::model::Instant::new),
                     upstream_revisions: Declarations::default(),
                     child_case: None,
+                    item: None,
                 }
             })
             .collect();
-        let values = claim_values(&ir, &records);
+        histories.push(records);
+    }
+    let checked = par_map(histories.len(), |at| {
+        let records = &histories[at];
+        let values = claim_values(&ir, records);
         assert!(
             reached.contains(&values),
             "no state gives {values:?}, which {records:?} gives"
         );
-        histories += 1;
-    }
-    assert_eq!(histories, 20_000);
+    });
+    assert_eq!(checked.len(), 20_000);
     // The space is not trivially everything: `first_k_a` true and `first_k` false needs `b`'s
     // first record before `a`'s, so both orders are reached.
     assert!(reached.len() > 100, "{}", reached.len());
+}
+
+/// A protocol with a `descended` form (story:revision-ordering) over one kind, beside evidence
+/// matches on its two results and a `first` on another kind.
+const DESCENDED: &str = "format: protocol/1\n\
+    protocol: {id: p, revision: 1}\n\
+    artifacts: {a: {}}\n\
+    evidence_kinds: {k: {}, m: {}}\n\
+    claims:\n\
+    \x20\x20red_then_green: {true_when: {descended: {first: {kind: k, result: failed}, \
+    then: {kind: k, result: passed}}}}\n\
+    \x20\x20passes: {true_when: {evidence: {kind: k, result: passed}}}\n\
+    \x20\x20fails: {true_when: {evidence: {kind: k, result: failed}}}\n\
+    \x20\x20first_m: {true_when: {first: {kind: m, result: passed}}}\n\
+    actions: {run: {may_produce: [{evidence: k}, {evidence: m}]}}\n\
+    outcomes: {done: {requires: {all: [{claim: red_then_green}, {claim: passes}]}}}\n";
+
+/// The value of every claim of `ir`, in claim order, for `evidence` and a case whose every artifact
+/// is at `r` and descends from `ancestors`.
+fn claim_values_descending(
+    ir: &Ir,
+    evidence: &[crate::model::EvidenceRecord],
+    ancestors: Option<Vec<Revision>>,
+) -> Vec<crate::model::Truth> {
+    let case = Case {
+        format: CASE_FORMAT.to_owned(),
+        independence: Declarations::default(),
+        id: CaseId::new("check"),
+        protocol: ir.protocol.id.clone(),
+        artifacts: Declarations::new(
+            ir.artifacts
+                .keys()
+                .map(|id| {
+                    let current = CaseArtifact {
+                        revision: Revision::new(REVISION),
+                        descends_from: ancestors.clone(),
+                    };
+                    (id.clone(), current)
+                })
+                .collect(),
+        ),
+        termination: None,
+        revision: None,
+        inputs: Declarations::default(),
+    };
+    eval::evaluate(ir, &case, evidence)
+        .expect("evaluates")
+        .claims
+        .iter()
+        .map(|(_, entry)| entry.value)
+        .collect()
+}
+
+/// Soundness of the space for `descended` (story:revision-ordering): the space's case says every
+/// artifact descends from `r0`, and every combination of claim values an evidence set and a
+/// snapshot give, records of either kind, with any result, at the current revision, at `r0` or
+/// at `r1`, naming the space's item, another or none, at one of two instants or none, under a
+/// `descends_from` absent, empty, `[r0]` or `[r1, r0]`, is the combination of some state; and
+/// the form takes each of its three values in some state.
+#[test]
+fn every_value_of_descended_is_reached_jointly_with_the_evidence_matches() {
+    let reached =
+        every_descended_history_is_reached(DESCENDED, &["k", "m"], 0x5EC0_4D5A_F7E2_0005, None);
+    let forms: BTreeSet<crate::model::Truth> = reached.iter().map(|values| values[3]).collect();
+    assert_eq!(forms.len(), 3, "{reached:?}");
+}
+
+/// The same soundness for a protocol whose `first` reads the kind the `descended` form reads (the
+/// review of wave 2026-11-21): each value of `descended`, `unknown` included, is reached with the
+/// `first` form true, false and unknown (nine pairs), and every pair of those two claims records
+/// of the one kind give is a pair of some state. The pairs are not read together with `passes`
+/// and `fails`: a `descended` `true` beside a `first` that is a current `passed` observed before a
+/// current `failed`, with both current, needs earlier records of two results at two instants,
+/// which no state has (finding of this unit, left to the backlog).
+#[test]
+fn every_value_of_descended_is_reached_jointly_with_a_first_of_its_kind() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {k: {}}\n\
+        claims:\n\
+        \x20\x20red_then_green: {true_when: {descended: {first: {kind: k, result: failed}, \
+        then: {kind: k, result: passed}}}}\n\
+        \x20\x20passes: {true_when: {evidence: {kind: k, result: passed}}}\n\
+        \x20\x20fails: {true_when: {evidence: {kind: k, result: failed}}}\n\
+        \x20\x20first_pass: {true_when: {first: {kind: k, result: passed}}}\n\
+        actions: {run: {may_produce: [{evidence: k}]}}\n\
+        outcomes: {done: {requires: {all: [{claim: red_then_green}, {claim: passes}]}}}\n";
+    let reached =
+        every_descended_history_is_reached(source, &["k"], 0x5EC0_4D5A_F7E2_0006, Some(&[1, 3]));
+    assert_eq!(reached.len(), 9, "first_pass, red_then_green: {reached:?}");
+}
+
+/// Every combination of claim values that records of `kinds`, with any result, at the current
+/// revision, at `r0` or at `r1`, naming the space's item, another or none, at one of two instants
+/// or none, under a `descends_from` absent, empty, `[r0]` or `[r1, r0]`, give is the combination
+/// of some state of the space of `source`, read at the claims at `read` (every claim when
+/// `None`). Returns the combinations the states reach.
+fn every_descended_history_is_reached(
+    source: &str,
+    kinds: &[&str],
+    seed: u64,
+    read: Option<&[usize]>,
+) -> BTreeSet<Vec<crate::model::Truth>> {
+    let ir = compiled(source);
+    let space = Space::new(&ir);
+    assert_eq!(space.descends_from(), Some(vec![Revision::new("r0")]));
+    let size = space.size().expect("fits");
+    let project = |values: &Vec<crate::model::Truth>| -> Vec<crate::model::Truth> {
+        read.map_or_else(
+            || values.clone(),
+            |read| read.iter().map(|at| values[*at]).collect(),
+        )
+    };
+    let reached: BTreeSet<Vec<crate::model::Truth>> = (0..size)
+        .map(|index| {
+            let evidence = space.evidence(&space.state(index));
+            project(&claim_values_descending(
+                &ir,
+                &evidence,
+                space.descends_from(),
+            ))
+        })
+        .collect();
+    let mut rng = Rng(seed);
+    let instants = [
+        Some("2026-10-01T09:00:00Z"),
+        Some("2026-10-01T09:00:01Z"),
+        None,
+    ];
+    for _ in 0..20_000 {
+        let records: Vec<crate::model::EvidenceRecord> = (0..rng.below(6))
+            .map(|n| crate::model::EvidenceRecord {
+                format: crate::model::EVIDENCE_FORMAT.to_owned(),
+                producer: None,
+                id: crate::model::EvidenceId::new(format!("h{n}")),
+                kind: EvidenceKindId::new(kinds[rng.below(kinds.len())]),
+                result: [Some("passed"), Some("failed"), None][rng.below(3)].map(str::to_owned),
+                subject: crate::model::ArtifactId::new("a"),
+                subject_revision: Revision::new(["r", "r0", "r1"][rng.below(3)]),
+                observed_at: instants[rng.below(3)].map(crate::model::Instant::new),
+                upstream_revisions: Declarations::default(),
+                child_case: None,
+                item: [Some("item"), Some("other"), None][rng.below(3)]
+                    .map(crate::model::ItemId::new),
+            })
+            .collect();
+        let ancestors = [
+            None,
+            Some(vec![]),
+            Some(vec![Revision::new("r0")]),
+            Some(vec![Revision::new("r1"), Revision::new("r0")]),
+        ][rng.below(4)]
+        .clone();
+        let values = claim_values_descending(&ir, &records, ancestors.clone());
+        let values = project(&values);
+        assert!(
+            reached.contains(&values),
+            "no state gives {values:?}, which {records:?} under {ancestors:?} gives"
+        );
+    }
+    reached
+}
+
+/// `canon check` of a protocol with a `descended` form reaches the outcome that needs it: a
+/// failure about `r0` and a pass about the current revision, one item.
+#[test]
+fn descended_is_checked_over_the_history_dimension() {
+    let ir = compiled(DESCENDED);
+    let report = check(&ir, None).expect("checked");
+    assert!(
+        !report.to_string().contains("unreachable-outcome"),
+        "{report}"
+    );
+    assert_slices_agree(&ir, None, DESCENDED);
 }
 
 /// A protocol with order forms is checked over its history and order dimensions: an outcome no
@@ -846,6 +1055,7 @@ fn every_combination_of_demands_met_is_reached_by_a_state() {
                 observed_at: None,
                 upstream_revisions: Declarations::default(),
                 child_case: None,
+                item: None,
             })
             .collect();
         let values = claim_values_with(&ir, &records, independence.clone());
@@ -964,6 +1174,7 @@ fn a_dimension_only_demanding_matches_read_has_no_record_without_a_producer() {
                 observed_at: None,
                 upstream_revisions: Declarations::default(),
                 child_case: None,
+                item: None,
             })
             .collect();
         let values = claim_values_with(&ir, &records, independence.clone());
@@ -1015,10 +1226,12 @@ fn unreached_histories(
     let space = Space::new(&ir);
     let size = space.size().expect("fits");
     assert!(size <= STATE_BOUND, "{size} states: {}", space.dimensions());
-    let reached: BTreeSet<Vec<crate::model::Truth>> = (0..size)
-        .map(|index| claim_values(&ir, &space.evidence(&space.state(index))))
-        .collect();
-    let mut unreached = Vec::new();
+    let reached: BTreeSet<Vec<crate::model::Truth>> = par_map(size as usize, |index| {
+        claim_values(&ir, &space.evidence(&space.state(index as u128)))
+    })
+    .into_iter()
+    .collect();
+    let mut histories = Vec::new();
     let mut rng = Rng(seed);
     let instants = [
         Some("2026-10-01T09:00:00Z"),
@@ -1039,13 +1252,17 @@ fn unreached_histories(
                 observed_at: instants[rng.below(4)].map(crate::model::Instant::new),
                 upstream_revisions: Declarations::default(),
                 child_case: None,
+                item: None,
             })
             .collect();
-        let values = claim_values(&ir, &records);
-        if !reached.contains(&values) {
-            unreached.push((values, records));
-        }
+        histories.push(records);
     }
+    let values = par_map(histories.len(), |at| claim_values(&ir, &histories[at]));
+    let unreached = values
+        .into_iter()
+        .zip(histories)
+        .filter(|(values, _)| !reached.contains(values))
+        .collect();
     (reached, unreached)
 }
 
@@ -1705,7 +1922,16 @@ fn since_is_checked_over_last_records_and_counts_for_authority_bypass() {
         \x20\x20both: {requires: {all: [{claim: red_since}, {claim: not_red}]}}\n\
         \x20\x20red: {requires: {claim: red_since}}\n\
         \x20\x20clean: {requires: {claim: not_red}}\n";
-    let report = check(&compiled(source), None).expect("checked");
+    let ir = compiled(source);
+    // The report and the slices (below) are computed side by side.
+    let report = std::thread::scope(|scope| {
+        let report = scope.spawn(|| check(&ir, None).expect("checked"));
+        // Over slices too: `test`'s capability is in no outcome's slice (story:check-subject-slices).
+        assert_slices_agree(&ir, None, source);
+        report
+            .join()
+            .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+    });
     assert_eq!(
         report.to_string(),
         "unreachable-outcome: outcome `both` is legitimate in no state\n\
@@ -1713,8 +1939,6 @@ fn since_is_checked_over_last_records_and_counts_for_authority_bypass() {
          {evidence `change` earlier, observed at no known instant}\n\
          checked: protocol `p` revision 1: 21060 states, 0 properties, 2 findings\n"
     );
-    // Over slices too: `test`'s capability is in no outcome's slice (story:check-subject-slices).
-    assert_slices_agree(&compiled(source), None, source);
 }
 
 /// The refusal names the first subject in finding order whose slice is above the bound: outcomes,
@@ -1838,11 +2062,40 @@ fn a_slice_holds_what_its_last_records_are_placed_against() {
 /// The three strategies give one result: each subject over its own slice, each over the widest
 /// slice holding its own (or the whole product) as `canon check` does, and the whole product as
 /// before slices existed. Returns how many states the slices of `ir` hold at most, against the
-/// whole product's.
+/// whole product's. The three run side by side.
 fn assert_slices_agree(ir: &Ir, properties: Option<&Properties>, source: &str) -> (u128, u128) {
-    let whole = check_by(ir, properties, Strategy::Whole);
-    let own = check_by(ir, properties, Strategy::Own);
-    let chosen = check(ir, properties);
+    let (widest, whole, _) = slices_agree(ir, properties, source, true);
+    (widest, whole)
+}
+
+/// [`assert_slices_agree`], the three strategies one after another when `side_by_side` is false:
+/// for a caller that already runs protocols on [`WORKERS`] threads. Also gives `canon check`'s
+/// report, so a caller that reads it does not check again.
+fn slices_agree(
+    ir: &Ir,
+    properties: Option<&Properties>,
+    source: &str,
+    side_by_side: bool,
+) -> (u128, u128, Result<Report, Refusal>) {
+    let (whole, own, chosen) = if side_by_side {
+        std::thread::scope(|scope| {
+            let own = scope.spawn(|| check_by(ir, properties, Strategy::Own));
+            let chosen = scope.spawn(|| check(ir, properties));
+            let whole = check_by(ir, properties, Strategy::Whole);
+            let joined = |worker: std::thread::ScopedJoinHandle<'_, _>| {
+                worker
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+            };
+            (whole, joined(own), joined(chosen))
+        })
+    } else {
+        (
+            check_by(ir, properties, Strategy::Whole),
+            check_by(ir, properties, Strategy::Own),
+            check(ir, properties),
+        )
+    };
     assert_eq!(
         own, whole,
         "own slices differ from the whole product:\n{source}"
@@ -1857,7 +2110,7 @@ fn assert_slices_agree(ir: &Ir, properties: Option<&Properties>, source: &str) -
         .filter_map(|(_, slice)| space.slice(slice).size())
         .max()
         .unwrap_or(1);
-    (widest, space.size().unwrap_or(u128::MAX))
+    (widest, space.size().unwrap_or(u128::MAX), chosen)
 }
 
 /// The protocols a generator writes: two or three evidence kinds about one or two artifacts, an
@@ -2125,8 +2378,8 @@ const GENERATED_STATES: u128 = 2048;
 /// whole product.
 fn generated_protocols_agree(seed: u64, wanted: usize) -> (usize, usize) {
     let mut rng = Rng(seed);
-    let (mut compared, mut sliced, mut attempts) = (0, 0, 0);
-    let mut features: BTreeMap<&str, usize> = BTreeMap::new();
+    let (mut compared, mut attempts) = (0, 0);
+    let mut chosen = Vec::new();
     while compared < wanted {
         attempts += 1;
         assert!(
@@ -2155,13 +2408,25 @@ fn generated_protocols_agree(seed: u64, wanted: usize) -> (usize, usize) {
         {
             continue;
         }
-        let (widest, whole) = assert_slices_agree(&ir, properties.as_ref(), &source);
         compared += 1;
-        if widest < whole {
+        chosen.push((ir, properties, source));
+    }
+    // The protocols are chosen above in generation order; each is then compared on its own.
+    let results = par_map(chosen.len(), |at| {
+        let (ir, properties, source) = &chosen[at];
+        let (widest, whole, chosen) = slices_agree(ir, properties.as_ref(), source, false);
+        let report = chosen.map(|report| report.to_string());
+        (
+            widest < whole,
+            report.unwrap_or_else(|_| "refused".to_owned()),
+        )
+    });
+    let mut sliced = 0;
+    let mut features: BTreeMap<&str, usize> = BTreeMap::new();
+    for ((_, _, source), (narrower, text)) in chosen.iter().zip(&results) {
+        if *narrower {
             sliced += 1;
         }
-        let report = check(&ir, properties.as_ref()).map(|report| report.to_string());
-        let text = report.as_deref().unwrap_or("refused");
         for feature in GENERATED_FEATURES {
             if source.contains(feature) || text.contains(feature) {
                 *features.entry(feature).or_default() += 1;
@@ -2236,25 +2501,26 @@ const FIXTURE_STATES: u128 = 8192;
 /// `properties.yaml` when it has one.
 #[test]
 fn every_fixture_protocol_checks_alike_sliced_and_whole() {
-    let (mut compared, mut sliced) = (0, 0);
-    for (path, ir) in fixture_protocols() {
-        if Space::new(&ir)
-            .size()
-            .is_none_or(|size| size > FIXTURE_STATES)
-        {
-            continue;
-        }
+    let fixtures: Vec<_> = fixture_protocols()
+        .into_iter()
+        .filter(|(_, ir)| {
+            Space::new(ir)
+                .size()
+                .is_some_and(|size| size <= FIXTURE_STATES)
+        })
+        .collect();
+    let narrower = par_map(fixtures.len(), |at| {
+        let (path, ir) = &fixtures[at];
         let declared = path.with_file_name("properties.yaml");
         let properties = declared
             .exists()
             .then(|| properties(&std::fs::read_to_string(&declared).expect("readable")));
-        let (widest, whole) =
-            assert_slices_agree(&ir, properties.as_ref(), &path.display().to_string());
-        compared += 1;
-        if widest < whole {
-            sliced += 1;
-        }
-    }
+        let (widest, whole, _) =
+            slices_agree(ir, properties.as_ref(), &path.display().to_string(), false);
+        widest < whole
+    });
+    let compared = narrower.len();
+    let sliced = narrower.iter().filter(|narrower| **narrower).count();
     eprintln!("{compared} fixture protocols compared, {sliced} sliced");
     assert!(
         compared >= 20 && sliced >= 10,
@@ -2498,7 +2764,10 @@ fn a_protocol_artifact_or_input_named_with_a_space_is_refused() {
         |ir| {
             ir.artifacts.insert(
                 crate::model::ArtifactId::new("b b"),
-                crate::ir::Described { description: None },
+                crate::ir::Artifact {
+                    description: None,
+                    revised_by: None,
+                },
             );
         },
         "",
@@ -2677,7 +2946,10 @@ fn a_capability_or_decision_named_with_a_space_is_refused() {
                 .get_mut(&OutcomeId::new("done"))
                 .expect("declared")
                 .requires =
-                crate::model::OutcomeRequirement::Decision(crate::model::DecisionName::new("d d"));
+                crate::model::OutcomeRequirement::Decision(crate::model::DecisionRequirement {
+                    decision: crate::model::DecisionName::new("d d"),
+                    when: None,
+                });
         },
         "",
         true,
@@ -2694,5 +2966,87 @@ fn a_capability_or_decision_named_with_a_space_is_refused() {
                 "decision name `d d` is empty or contains whitespace or a control character"
             )
         ]
+    );
+}
+
+/// An outcome that requires a decision with a condition (story:decision-condition) is decided
+/// over the decision's dimension and what the condition reads, so a slice that leaves the
+/// condition's evidence out would decide it over states that cannot tell `when` apart. The check
+/// gains no new kind of dimension, and the three strategies agree.
+#[test]
+fn a_decision_outcome_slice_holds_the_dimensions_its_condition_reads() {
+    let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\nartifacts: {a: {}}\n\
+        evidence_kinds: {k: {}, m: {}}\n\
+        claims:\n\
+        \x20\x20refused: {true_when: {evidence: {kind: k}}}\n\
+        \x20\x20noted: {true_when: {evidence: {kind: m}}}\n\
+        actions: {act: {may_produce: [{evidence: k}, {evidence: m}]}}\n\
+        outcomes:\n\
+        \x20\x20withdrawn: {requires: {decision: d, when: {claim: refused}}}\n\
+        \x20\x20plain: {requires: {decision: e}}\n";
+    let ir = compiled(source);
+    let space = Space::new(&ir);
+    let withdrawn = space.outcome_slice(&ir, &ir.outcomes[&OutcomeId::new("withdrawn")]);
+    let plain = space.outcome_slice(&ir, &ir.outcomes[&OutcomeId::new("plain")]);
+    assert_eq!(
+        space.slice(&withdrawn).dimensions(),
+        "evidence kind `k` 2, decision `d` 2"
+    );
+    assert_eq!(space.slice(&plain).dimensions(), "decision `e` 2");
+    assert_slices_agree(&ir, None, source);
+}
+
+/// Adversary, review of wave 2026-11-21 (area `eval`): the check space gives a record no `item`
+/// only in a dimension whose history is `UNPLACED`, which also takes every `observed_at` away. So
+/// a `descended` form that is `unknown` while a current record of its `then` result is present
+/// never stands beside a placed `first` over the same kind. One record (`k` passed, current
+/// revision, an instant, no item; the case gives `descends_from: [r0]`) gives `unknown`, `true`,
+/// `true`, and the outcome needing that is legitimate under `canon evaluate`; `canon check`
+/// reports it `unreachable-outcome`, and `canon generate` refuses the protocol.
+#[test]
+fn adversary_descended_unknown_beside_a_placed_first_of_its_kind_is_reached() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1}\n\
+        artifacts: {a: {}}\n\
+        evidence_kinds: {k: {}}\n\
+        claims:\n\
+        \x20\x20red_then_green: {true_when: {descended: {first: {kind: k, result: failed}, \
+        then: {kind: k, result: passed}}}}\n\
+        \x20\x20passes: {true_when: {evidence: {kind: k, result: passed}}}\n\
+        \x20\x20first_pass: {true_when: {first: {kind: k, result: passed}}}\n\
+        actions: {run: {may_produce: [{evidence: k}]}}\n\
+        outcomes:\n\
+        \x20\x20undecided: {requires: {all: [{claim: red_then_green, is: unknown}, \
+        {claim: passes}, {claim: first_pass}]}}\n";
+    let ir = compiled(source);
+    let record = crate::model::EvidenceRecord {
+        format: crate::model::EVIDENCE_FORMAT.to_owned(),
+        producer: None,
+        id: crate::model::EvidenceId::new("e1"),
+        kind: EvidenceKindId::new("k"),
+        result: Some("passed".to_owned()),
+        subject: crate::model::ArtifactId::new("a"),
+        subject_revision: Revision::new(REVISION),
+        observed_at: Some(crate::model::Instant::new("2026-10-01T09:00:00Z")),
+        upstream_revisions: Declarations::default(),
+        child_case: None,
+        item: None,
+    };
+    let evidence = [record];
+    let ancestors = Some(vec![Revision::new("r0")]);
+    assert_eq!(
+        claim_values_descending(&ir, &evidence, ancestors.clone()),
+        [
+            crate::model::Truth::True,
+            crate::model::Truth::True,
+            crate::model::Truth::Unknown
+        ],
+        "first_pass, passes, red_then_green"
+    );
+    let report = check(&ir, None).expect("checked");
+    assert!(
+        !report.to_string().contains("unreachable-outcome"),
+        "canon evaluate makes `undecided` legitimate with one record about the current \
+         revision without an item, yet canon check reports:\n{report}"
     );
 }

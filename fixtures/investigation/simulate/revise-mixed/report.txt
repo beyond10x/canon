@@ -1,0 +1,1 @@
+simulated: protocol `simulate.revise.mixed` revision 1: 4 reachable states, 1 terminable (outcome `approved` 1), 0 findings (0 stuck or cycle states)

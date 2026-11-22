@@ -1,0 +1,65 @@
+format: protocol/1
+protocol:
+  id: adversary.order
+  revision: 1
+  description: an action with two groups, written in the reverse of their least kinds' order
+artifacts:
+  doc:
+    description: the document checked
+evidence_kinds:
+  a:
+    description: least kind of the second group written
+  b:
+    description: least kind of the first group written
+  c:
+    description: member of the first group written
+  d:
+    description: member of the second group written
+  w:
+    description: a kind no action produces
+claims:
+  has_a:
+    true_when:
+      evidence:
+        kind: a
+        subject: doc
+  has_b:
+    true_when:
+      evidence:
+        kind: b
+        subject: doc
+  has_c:
+    true_when:
+      evidence:
+        kind: c
+        subject: doc
+  has_d:
+    true_when:
+      evidence:
+        kind: d
+        subject: doc
+  has_w:
+    true_when:
+      evidence:
+        kind: w
+        subject: doc
+outcomes:
+  done:
+    requires:
+      claim: has_w
+actions:
+  act:
+    precondition:
+      any:
+        - claim: has_a
+          is: unknown
+        - claim: has_b
+          is: unknown
+    may_produce:
+      - evidence: d
+      - evidence: c
+      - evidence: b
+      - evidence: a
+    records_together:
+      - kinds: [c, b]
+      - kinds: [d, a]

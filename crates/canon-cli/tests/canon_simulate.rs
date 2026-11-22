@@ -34,6 +34,10 @@
 //! outcomes, was removed by story:simulate-child-outcome-step, whose child-outcome step those two
 //! fixtures also take.
 //!
+//! The revise step of story:simulate-revise-step, which moves an artifact an admissible action
+//! declares in `revises` to a new revision, is held by `simulate_revises_declared_artifacts` over
+//! the six `revise*` fixtures.
+//!
 //! Each fixture directory carries `protocol.yaml` and the exact output: `report.txt` on standard
 //! output with nothing on standard error, or `refusal.txt` on standard error with nothing on
 //! standard output. Both were written by hand from the story before `canon simulate` existed.
@@ -55,7 +59,7 @@ enum Expected {
 
 /// Every fixture directory, the exit status and where the expected text goes. A walk that finds
 /// nothing exits 0; findings and a refusal exit 1 (`REJECTED`).
-const CASES: [(&str, i32, Expected); 17] = [
+const CASES: [(&str, i32, Expected); 29] = [
     ("clean", 0, Expected::Report),
     ("mutual", 1, Expected::Report),
     ("denied", 1, Expected::Report),
@@ -73,6 +77,36 @@ const CASES: [(&str, i32, Expected); 17] = [
     ("clean-result", 0, Expected::Report),
     ("child-expiry", 1, Expected::Report),
     ("child-expiry-held", 1, Expected::Report),
+    ("revise", 0, Expected::Report),
+    ("revise-undeclared", 1, Expected::Report),
+    ("revise-upstream", 0, Expected::Report),
+    ("revise-denied", 1, Expected::Report),
+    ("revise-mixed", 0, Expected::Report),
+    ("revise-child", 0, Expected::Report),
+    ("revised-by", 0, Expected::Report),
+    ("revised-by-undeclared", 1, Expected::Report),
+    ("revise-child-current", 0, Expected::Report),
+    ("revise-child-other-subject", 1, Expected::Report),
+    ("revise-child-two-subjects", 1, Expected::Report),
+    ("revise-child-late", 1, Expected::Report),
+];
+
+/// The cases of story:child-outcome-recovery, expectations 1 to 4.
+const RECOVERY: [&str; 4] = [
+    "revise-child-current",
+    "revise-child-other-subject",
+    "revise-child-two-subjects",
+    "revise-child-late",
+];
+
+/// The cases of story:simulate-revise-step, expectations 1 to 6.
+const REVISE: [&str; 6] = [
+    "revise",
+    "revise-undeclared",
+    "revise-upstream",
+    "revise-denied",
+    "revise-mixed",
+    "revise-child",
 ];
 
 /// The cases of the rules refined after adversary pass 2 (R2a and R7).
@@ -134,7 +168,12 @@ fn simulate(case: &str) -> Output {
     canon(&["simulate", "--path", &protocol(case)])
 }
 
-/// Runs each of `cases` twice and returns what differs from its expectation.
+/// The largest fixture (3160 states, about 4 s in a debug build): `failures` walks it once, and
+/// `simulate_walks_the_largest_recovery_fixture_the_same_twice` holds its second run to the first.
+const WALKED_ONCE: [&str; 1] = ["revise-child-two-subjects"];
+
+/// Runs each of `cases` twice, except those of `WALKED_ONCE`, and returns what differs from its
+/// expectation.
 fn failures(cases: &[&str]) -> Vec<String> {
     let mut failures = Vec::new();
     for case in cases {
@@ -164,6 +203,9 @@ fn failures(cases: &[&str]) -> Vec<String> {
                 text(&first.stdout),
                 text(&first.stderr),
             ));
+            continue;
+        }
+        if WALKED_ONCE.contains(case) {
             continue;
         }
         let second = simulate(case);
@@ -257,6 +299,130 @@ fn simulate_follows_the_refined_rules() {
 fn simulate_follows_the_rules_refined_after_pass_2() {
     let failures = failures(&CHILDREN);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// story:simulate-revise-step: an admissible action may move each artifact it declares in
+/// `revises` to a new revision, alone or with one record or one group it may produce, in one step.
+///
+/// 1. `revise`: a test of `doc` that did not pass is set aside by `fix`, which revises `doc` and
+///    records nothing, and `doc` is tested again: exit 0, the summary line only.
+/// 2. `revise-undeclared`, the same protocol without `revises`: the `cycle` naming `fix`, the
+///    bytes the walk gave before the revise step.
+/// 3. `revise-upstream`: a test of `b` under an invalidation rule with upstream `a`; `fix` revises
+///    `a`, which keeps the failed test from the claim, so `b` is tested again: exit 0. Without the
+///    change to "observed before upstream `a` moved" the revise step would change nothing and the
+///    state would be a `cycle`.
+/// 4. `revise-denied`: approving needs a denied capability; the case revision does not move, so
+///    the denial lasts, and exactly one `cycle` is printed, ending with the revision suffix.
+/// 5. `revise-mixed`: two different results of one approval leave it unknown; revising the
+///    document sets both aside: no finding.
+/// 6. `revise-child`: a child's `accepted` outcome stays read by the `children` form after its
+///    subject is revised, as an earlier record: exit 0, where a revise step that dropped the
+///    record would leave a `cycle`.
+///
+/// Two runs of each give identical bytes (`failures`); the fixtures without `revises` are held
+/// unchanged by the other tests of this file (expectation 7).
+#[test]
+fn simulate_revises_declared_artifacts() {
+    let failures = failures(&REVISE);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// story:child-outcome-recovery: the revise step sets aside only the child outcomes about the
+/// artifact it revises, and a child that ends after its subject was revised may end against the
+/// earlier revision. Every fixture declares `a` and `b`; action `open` opens a child case about
+/// `b`; claim `done.current` is `{children: {in: [done], revision: current}}`; action `fix` is
+/// admissible while it is false; outcome `built` requires it.
+///
+/// 1. `revise-child-current`, `fix` revises `b`: exit 0, the summary line only. The failed child's
+///    outcome, about `b`, becomes an earlier one, the claim is unknown again, and a new child ends
+///    `done`.
+/// 2. `revise-child-other-subject`, `fix` revises `a`: exit 1, one finding, whose state holds the
+///    failed outcome as a current one.
+/// 3. `revise-child-two-subjects`, `open_a` opens a child about `a` too, `fix` revises `b`: a
+///    failed child of `open` is in no printed state, a failed child of `open_a` is in exactly one.
+/// 4. `revise-child-late`: a path holds a child's outcome written `earlier` after
+///    `` action `fix` revises `b` ``.
+///
+/// The text of each is held byte for byte; two runs give the same bytes (`failures`, and for the
+/// largest fixture `simulate_walks_the_largest_recovery_fixture_the_same_twice`).
+#[test]
+fn simulate_sets_aside_child_outcomes_of_the_revised_subject() {
+    let mut failures = failures(&RECOVERY);
+
+    // `failures` walked each case and held its output to `report.txt`; the properties
+    // below read that file, so no walk is repeated for them.
+    let report = |case: &str| read(&format!("{FIXTURES}/{case}/report.txt"));
+    let current = report("revise-child-current");
+    let findings = |report: &str| {
+        report
+            .lines()
+            .filter(|line| !line.starts_with("simulated:"))
+            .count()
+    };
+    if findings(&current) != 0 {
+        failures.push(format!("revise-child-current: findings in {current:?}"));
+    }
+    let other = report("revise-child-other-subject");
+    if findings(&other) != 1 || !other.contains("`case_outcome` about `b`") {
+        failures.push(format!(
+            "revise-child-other-subject: expected one finding holding a current record about b: {other:?}"
+        ));
+    }
+    let two = report("revise-child-two-subjects");
+    let printed: Vec<&str> = two
+        .lines()
+        .filter(|line| line.contains("state {"))
+        .collect();
+    // A failed child's record is the one without a result.
+    let about = |subject: &str| {
+        let failed = format!("evidence `case_outcome` about `{subject}`");
+        printed
+            .iter()
+            .filter(|line| {
+                let state = line.split_once("state {").map_or("", |(_, rest)| rest);
+                let state = state.split_once("}:").map_or(state, |(state, _)| state);
+                state.split(", ").any(|item| item == failed)
+            })
+            .count()
+    };
+    if about("b") != 0 || about("a") != 1 {
+        failures.push(format!(
+            "revise-child-two-subjects: a failed child of open in {} printed states, of open_a in {}: {two:?}",
+            about("b"),
+            about("a")
+        ));
+    }
+    let late = report("revise-child-late");
+    let revise = "action `fix` revises `b`";
+    let path_has_earlier = late.lines().any(|line| {
+        line.split_once("path: ").is_some_and(|(_, path)| {
+            path.find(revise)
+                .is_some_and(|at| path[at..].contains(" earlier"))
+        })
+    });
+    if !path_has_earlier {
+        failures.push(format!(
+            "revise-child-late: no path with an earlier record after `fix`: {late:?}"
+        ));
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// A second, independent run of the largest recovery fixture gives the bytes of `report.txt`, to
+/// which the one walk of `simulate_sets_aside_child_outcomes_of_the_revised_subject` holds the
+/// first: the two runs give the same bytes.
+#[test]
+fn simulate_walks_the_largest_recovery_fixture_the_same_twice() {
+    for case in WALKED_ONCE {
+        let output = simulate(case);
+        assert_eq!(
+            text(&output.stdout),
+            read(&format!("{FIXTURES}/{case}/report.txt")),
+            "{case}: a second run gave different bytes"
+        );
+        assert_eq!(text(&output.stderr), "", "{case}");
+    }
 }
 
 /// The red run must not come from a fixture typo: every fixture protocol is one `canon validate`

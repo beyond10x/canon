@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:child-outcome-recovery
 kind: story
-status: active
+status: implemented
 title: 'Set aside only the revised subject''s child outcomes in canon simulate''s revise step, so a parent''s recovery under `revision: current` is walked'
 tags:
 - from-request
@@ -37,10 +37,11 @@ scope:
   path: fixtures/investigation/simulate/revise-child-other-subject/
 - confidence: inferred
   path: fixtures/investigation/simulate/revise-child-two-subjects/
-revision: 14
+revision: 16
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T07:04:05Z", actor: "human:timo", revision: 13, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w6"}
 - {from: "proposed", to: "active", at: "2026-11-21T07:04:05Z", actor: "human:timo", revision: 14, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w6"}
+- {from: "active", to: "implemented", at: "2026-11-22T11:12:33Z", actor: "human:timo", revision: 16, decided_on: {"recorded":{"test_result":1}}, correlation: "wave-2026-11-20-w9"}
 ---
 ## Outcome
 
@@ -174,3 +175,14 @@ Options L0 and W1 of § Decision needed. Decided on 2026-11-21 by the session wo
 > `story:child-outcome-recovery` is accepted as drafted (L0, no language change; W1 in `canon simulate`, wave 9 or later, after the child-outcome step, the revise step and story:child-outcome-subject). That `{children: {in: [...], revision: current}}` already gives the recovery is the answer I needed; SDC writes its side (the key on `children.passed`, a write action with `revises: [epic]`, `not_released` only after the reworks are spent, new child ids). The uncovered case (a failed child opened about another artifact, e.g. a story `dropped` about `spec` s1) is noted; SDC will revise the artifact the child was about.
 
 The story was accepted under the operator's standing grant (`approval-record:accept-sdc-request-17-2026-11-21`). The unit builds W1 and does not reopen the choice. The scenario step of § Acceptance 5 uses neutral identifiers, as the "Fixture rule" of story:simulate-child-outcome-step says for protocols of another repository.
+
+## Scope as built
+
+Written at the close of wave 2026-11-20-w9 from the wave page, the review of the integration branch (`review-result:review-wave-9-simulate`) and the merge of `impl/child-outcome-recovery` (`c6c69ced8`: 18 files, +928 −23). It corrects the body where the two differ.
+
+- The split is in the new `crates/canon/src/simulate/recovery.rs`, not in `check/space.rs` (in the typed scope, not changed). A new `Step::Late` renders like a child step with " earlier" appended. Outside the typed scope also: `crates/canon/src/simulate/tests.rs`, `crates/canon/tests/case_composition.rs`, `fixtures/investigation/child-outcome-revision.yaml` (`epic` added, which re-pinned the compile step's IR), and the generated `website/docs/reference/cli.md`.
+- Decided by the unit: the `revise-child-late` report has 2 waiting states, not 0; two conformance steps, not one.
+- After the merge, correction unit 1: `32fc74fd5` splits the `case_outcome` dimension only when the protocol has a revision (an action with `revises` or an artifact with `revised_by`). Before, festival walked 86 states and event 178 against the committed 78 and 122, and the state bound refused protocols 0.10.0 walked (simulate D1). The coordinator's rule (split only when a `case_open` subject is revisable) broke `revise-child-other-subject`; the unit widened it (D126). `abb281809` documents that a child opened about the space's own artifact does not end against an earlier revision (simulate F1, D125; story:simulate-child-about-own-artifact, draft; outcome 3 and outcome 5 contradict each other there). `473278cd4` walks the largest fixture once (F3: the test was killed at 60.1 s).
+- Acceptance: `simulate_sets_aside_child_outcomes_of_the_revised_subject` passed in the test step and `CANON-COMPOSE-002` in the conform step of the gate below. Acceptance 6: `simulate_lets_a_child_outcome_arrive_after_its_opening` passed with the festival expectations as committed (not re-pinned; no fixture changed between `f7dcbf11a` and `2f3d14b14`). Not shown at the close-out: two runs of each new fixture compared byte for byte.
+
+**Gate of the close-out**, on `wave/2026-11-21` at `2f3d14b14`, 2026-11-22 10:43 to 11:01 UTC, host load 67 on 20 CPUs, rustc 1.100.0, each step run once by the coordinator's gate script (not `task check` as one command): build exit 0 (125 s); `task ess-gate` 0; `cargo fmt --check` 0; `cargo clippy --workspace --all-targets --locked -- -D warnings` 0; `task test` 0 (1275 tests; the step's own line: `ess-gate 2.2 s + workspace 50.4 s + -p b10x-canon 2.7 s = 55.4 s, bound 120 s`; slowest 16.9 s); `canon conform run` 0 (`30 passed, 0 failed`; `31 implemented, 31 covered`); `task docs-check` 0 (18 generated files current); `task test-slow` exit 201 (63 tests: 53 passed, 10 killed at 60 s; its CI step may fail, D123, story:slow-lane-under-bound). Recorded as `test_result` evidence. The four review results of the wave are `review-result:review-wave-9-eval`, `-simulate`, `-model` and `-gate`.

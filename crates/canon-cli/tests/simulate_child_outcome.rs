@@ -381,9 +381,12 @@ fn simulate_lets_a_child_outcome_arrive_after_its_opening() {
             ));
         }
     }
-    if unchanged != 15 {
+    // The 15 fixtures of story:canon-simulate with no opening action, the 5 `revise*` fixtures of
+    // story:simulate-revise-step with none, and the 2 `revised-by*` fixtures of
+    // story:artifact-revised-by with none.
+    if unchanged != 22 {
         failures.push(format!(
-            "{SIMULATE}: expected 15 fixtures with no opening action, found {unchanged}"
+            "{SIMULATE}: expected 22 fixtures with no opening action, found {unchanged}"
         ));
     }
 

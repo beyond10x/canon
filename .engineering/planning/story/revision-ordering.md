@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:revision-ordering
 kind: story
-status: active
+status: implemented
 title: Order red and green across descended revisions with the same test id
 refs:
 - provider: atlas
@@ -51,10 +51,11 @@ scope:
   path: ess/domains/protocol.yaml
 - confidence: cited
   path: fixtures/investigation/revision-ordering.yaml
-revision: 33
+revision: 37
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T20:58:28Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 - {from: "proposed", to: "active", at: "2026-11-20T20:58:28Z", actor: "human:timo", revision: 5, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
+- {from: "active", to: "implemented", at: "2026-11-22T11:12:32Z", actor: "human:timo", revision: 37, decided_on: {"recorded":{"test_result":1,"review_outcome":7}}, correlation: "wave-2026-11-20-w9"}
 ---
 ## Outcome
 
@@ -193,3 +194,99 @@ Atlas ADR 0084 (accepted 2026-10-04; on Atlas `main`, commit `38266148c` is an a
 `759e16472`) § Decision 3 (`0084-protocols-express-step-order.md:41-43`) and § Open (`:54`); aep
 `principles/development/test-driven.yaml:50`; draft `canon-stories-step-order.md`; Atlas ADR 0080;
 rescope of 2026-11-20 (`approval-record:accept-drafts-2026-11-20`).
+
+## Decided by the unit, accepted 2026-11-21
+
+Option A and the key `item` left five points to the unit. It decided them before its first commit,
+and the session that requested the story (`sdc`) accepted them as built on 2026-11-21, before the
+adversary pass.
+
+- **F1. The form** is `{descended: {first: {kind, result}, then: {kind, result}, subject?}}`,
+  struct `canon.protocol.EvidenceDescended`; `first` and `then` are `LaterRecord`s. Not taken:
+  fields that name a kind only, which cannot say failed and passed; an item named in the form.
+- **F2. Which revisions count.** The later record is on the current revision of its subject. The
+  earlier record is on a revision the case lists in that artifact's `descends_from`. A record on
+  any other revision, the current one included for the earlier record, takes no part.
+- **F3. `item`** is opaque text, compared for equality only, checked as an identifier. The form
+  names no item. A record without an item takes no part.
+- **F4. The value.** TRUE when a later record has an earlier record. Otherwise UNKNOWN when there
+  is no later record, or when the case gives no `descends_from` for the subject of one. Otherwise
+  FALSE. The ten-row table is in the comment of `canon.protocol.EvidenceDescended` in
+  `ess/domains/protocol.yaml`.
+- **F5. Refusals.** In `descends_from`: `invalid-identifier`, `duplicate-identifier` and the new
+  code `self-descent` (it lists the current revision). The form with an undeclared kind or subject,
+  and in an obligation's discharge or applicability, as every order form. `canon simulate` refuses
+  a protocol with it (`ordered-evidence`).
+
+Two consequences were put to `sdc` with the table. Its answer, verbatim: "accepted as built: the
+name `descended`, the fields and the value table. My use is the bug-fix protocol's "red first": the
+reproducing test failed on an ancestor revision and passes on the current one; one item is what
+that claim is about, and the other tests are a separate claim, so point (1) is right for it. Point
+(2) (the same item failed and passed on the current revision is TRUE) is acceptable with a second
+predicate; put that sentence and the two-predicate pattern into the reference comment of
+canon.protocol.EvidenceDescended so a protocol author meets it there."
+
+- **F6.** One item is enough for TRUE; what other items did is another claim.
+- **F7.** An item that failed on an ancestor, passed on the current revision and also failed on
+  the current revision is TRUE. The comment of `canon.protocol.EvidenceDescended` gains that
+  sentence and the pattern of a second predicate that excludes it; the unit writes both in its
+  correction pass.
+- **F8.** `Predicate` stays 96 bytes: the variant is `Descended(Box<EvidenceDescended>)`, because
+  three tests of deep nesting overflowed the stack at 120 bytes. A later variant larger than that
+  is boxed too.
+
+## Decided in review, after adversary pass 1
+
+`review-result:adversary-revision-ordering-pass-1` was red by two cases (3 warnings, 4 notes).
+The coordinator decided the points below on 2026-11-21 and 2026-11-22; the correction is the
+commits `ce73975e` to `a16d719d` on `impl/revision-ordering`.
+
+- **D1. The refusal of a `descends_from` entry that is not an identifier names the case, the
+  revision and the artifact** (`ce73975e`), as the other two refusals of that list do.
+- **D2. `item` is a `canon.protocol.ItemId`** (specification `37a8e0e4`, model `a16d719d`),
+  declared next to `EvidenceId`. `EvidenceRecord.item` is `Optional<ItemId>`, so the published
+  schema of an evidence record holds the identifier rule the evaluator applies. The refusal
+  keeps its code, its text and its exit status; the type's parse does not check the rule, the
+  evaluator's check still does. The adversary's case built its record with a plain string and
+  did not compile with the type: the coordinator allowed the unit to change that one line
+  (`adversary_descended.rs:112`), which changes how the record is built and not what the case
+  expects.
+- **D3. `computed_from` carries `descends_from` as written** for each case artifact
+  (`5eea4ada`): absent when the case does not give it, `[]` when it gives an empty list.
+- **D4. Earlier records are indexed once by subject and item** (`0a1efe34`). Debug build, best
+  of three, all values FALSE: 4000 items on two revisions took 8.48 s and take 0.63 s; 2000 took
+  2.18 s and take 0.29 s. `canon evaluate` over the adversary's 29 rows gives the same bytes.
+- **D5. An item that failed on an ancestor and still fails stays UNKNOWN.** The value table of
+  this story (F1 to F8) decides it. The comment of `EvidenceDescended` now says so and shows the
+  pattern that gives FALSE for it (`6cb78878`).
+- **D6. The lists of order forms name `descended`** in the help of `canon`, in the refusal of
+  `canon simulate` and its pinned text (`a9b16dc4`).
+- **D7. The unit merged the wave branch at `98169001`** (`93df6057`, no conflict). `canon mutate`
+  walks past the form; the test `nothing_inside_a_descended_form_is_mutated` holds that
+  (`8ef2595c`).
+- **D8. Fenced code is left out of the plain-text description of a schema** (`34afa10d`), found
+  when the comment of D5 gained a snippet.
+- **D9. The fixture keeps its vocabulary** (`test_result`, `merge`, `red.then.green`). It follows
+  the existing order fixtures. Whether fixtures need a stated exception from the boundary rule
+  of `AGENTS.md` is a backlog question at the wave's close.
+- **D10. No second adversary pass on this unit.** On 2026-11-22 the operator put every open
+  story into one wave with one review of the integration branch
+  (`approval-record:accept-artifact-revised-by-2026-11-22`). The correction is read there.
+
+The unit's runs on `a16d719d`: the four adversary cases pass; 225 library tests of `eval`,
+`model`, `generate`, `mutate` and `check` pass; 29 tests of `canon-docs` pass; the `ess-gate`
+task, fmt and clippy exit 0; `conform: 29 passed, 0 failed, 0 unreadable`,
+`requirements: 30 implemented, 30 covered, 0 planned`.
+
+## Scope as built
+
+Written at the close of wave 2026-11-20-w9 from the wave page, the adversary report (`review-result:adversary-revision-ordering-pass-1`), the review of the integration branch (`review-result:review-wave-9-eval`, `-model`) and the merge of `impl/revision-ordering` (`c82d2439`: 51 files, +2162 −149). It corrects the body where the two differ.
+
+- The form is `{descended: {first, then, subject?}}`, with `descends_from` on a case's artifact and `item` (an `ItemId`) on an evidence record (F1 to F8, accepted by `sdc`).
+- Every path of the typed scope changed. Outside it, 33 files: `crates/canon/src/eval/{binding,case,composition,evidence,mod}.rs`, `explain/mod.rs` (`computed_from` carries `descends_from`), `generate/mod.rs`, `model/{ids,mod,requirement,write}.rs`, `mutate/{mod,tests}.rs`, `simulate/{mod,tests}.rs`, `check/{mod,tests}.rs`, `crates/canon-cli/src/lib.rs` (the lists of order forms), `crates/canon-docs/src/md.rs`, the requirement counts in `crates/canon-cli/tests/adversary_conformance_suite_cli.rs` and `conform_requirements.rs`, the tests `crates/canon/tests/adversary2_ir_order.rs` and `adversary_descended.rs`, `fixtures/investigation/simulate/ordered/refusal.txt`, and the generated pages, schemas and `website/data/canon.terminal.json`.
+- The second adversary pass was not run: one review of the integration branch replaced it (plan § Replan 16).
+- After the merge: correction unit 2 (`88f838ab2`, `f903df4b0`, `ddc337201`, `b3a97c66f`, merged in `2f3d14b14`) gives the check space a no-item mode and a last-earlier mode, so `descended` unknown beside a placed `first` over the same kind is reached (eval E1: the reviewer's protocol 72→216 states, no finding; `revision-ordering.yaml` identical). One combination is still not reached (story:check-descended-two-result-history, draft). `1b60756cb` adds a test for the diff's `(Descended, Descended)` implication arm (model F3).
+- Acceptance: `CANON-ORDER-005` passed in the conform step and `ess_model_matches::specification_and_model_are_equal` in the `ess-gate` step of the gate below. Not shown at the close-out: the four expectations one by one (steps of that scenario).
+- `website/data/status.json` is not regenerated by the close-out; it reads this story's status.
+
+**Gate of the close-out**, on `wave/2026-11-21` at `2f3d14b14`, 2026-11-22 10:43 to 11:01 UTC, host load 67 on 20 CPUs, rustc 1.100.0, each step run once by the coordinator's gate script (not `task check` as one command): build exit 0 (125 s); `task ess-gate` 0; `cargo fmt --check` 0; `cargo clippy --workspace --all-targets --locked -- -D warnings` 0; `task test` 0 (1275 tests; the step's own line: `ess-gate 2.2 s + workspace 50.4 s + -p b10x-canon 2.7 s = 55.4 s, bound 120 s`; slowest 16.9 s); `canon conform run` 0 (`30 passed, 0 failed`; `31 implemented, 31 covered`); `task docs-check` 0 (18 generated files current); `task test-slow` exit 201 (63 tests: 53 passed, 10 killed at 60 s; its CI step may fail, D123, story:slow-lane-under-bound). Recorded as `test_result` evidence. The four review results of the wave are `review-result:review-wave-9-eval`, `-simulate`, `-model` and `-gate`.

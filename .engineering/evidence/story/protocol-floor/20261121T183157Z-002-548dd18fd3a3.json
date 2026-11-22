@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T18:31:57Z",
+  "actor": "human:timo",
+  "artifact": "story:protocol-floor",
+  "kind": "story",
+  "revision": 28,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "finding 3, crates/canon-cli/tests/floor.rs:170, mutant: every pinned holds output had a NO SEMANTIC CHANGE count of 0, so counting such changes as EXPANSION passed the unit's test; the adversary case each_count_is_the_classifiers_number_of_that_category fails on that mutant; the code was right",
+    "reference": "4df0f19a",
+    "review": "review-result:adversary-protocol-floor-pass-1",
+    "outcome": "fixed"
+  }
+}

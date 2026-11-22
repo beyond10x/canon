@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:simulate-record-groups
 kind: story
-status: active
+status: implemented
 title: Walk one run of an action that records several kinds as one step with records_together in canon simulate
 tags:
 - from-request
@@ -16,10 +16,12 @@ relations:
 - depends_on: story:canon-simulate
 - depends_on: story:judgement-marking
 scope:
+- confidence: cited
+  path: crates/canon-cli/src/lib.rs
+- confidence: cited
+  path: crates/canon-cli/tests/adversary_record_groups_cli.rs
 - confidence: inferred
   path: crates/canon-cli/tests/simulate_record_groups.rs
-- confidence: inferred
-  path: crates/canon-docs/src/source.rs
 - confidence: cited
   path: crates/canon/src/diff/mod.rs
 - confidence: cited
@@ -28,6 +30,8 @@ scope:
   path: crates/canon/src/ir/mod.rs
 - confidence: cited
   path: crates/canon/src/model/mod.rs
+- confidence: cited
+  path: crates/canon/src/model/write.rs
 - confidence: inferred
   path: crates/canon/src/simulate/mod.rs
 - confidence: cited
@@ -36,10 +40,15 @@ scope:
   path: ess/domains/protocol.yaml
 - confidence: inferred
   path: fixtures/investigation/record-group/
-revision: 16
+- confidence: cited
+  path: fixtures/record-group-adversary/
+- confidence: cited
+  path: fixtures/record-group-large/
+revision: 24
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-21T04:43:47Z", actor: "human:timo", revision: 13, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
 - {from: "proposed", to: "active", at: "2026-11-21T04:43:47Z", actor: "human:timo", revision: 14, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w5"}
+- {from: "active", to: "implemented", at: "2026-11-21T16:01:29Z", actor: "human:timo", revision: 24, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w7"}
 ---
 ## Outcome
 
@@ -237,3 +246,18 @@ The story was accepted under the operator's standing grant (`approval-record:acc
 ## Fixture rule, 2026-11-21
 
 Decided by the wave coordinator on 2026-11-21, from `AGENTS.md` ("Canon contains no engineering vocabulary"), which is a rule of this repository: a protocol of the SDC prototype does not enter the repository unchanged, and no file names it as a source. Where this story takes such a protocol as a fixture, the unit builds the fixture by a structure-preserving rename: every identifier and every description is replaced by a neutral one, the declarations, predicates and their order stay, and the relative order of identifiers within a section is kept wherever the output depends on it. The unit shows once, in its scratch directory and not in the repository, that `canon simulate` gives the same counts on the original and on the renamed protocol, and quotes the summary lines in its report. The figures of § Acceptance then apply to the renamed fixtures.
+
+## Scope as built
+
+Written by the wave coordinator at the close of wave 2026-11-20-w7 from the implementor's three reports, the adversary's report (`review-result:adversary-simulate-record-groups-pass-1`, green) and the merge of `impl/simulate-record-groups` (`f51aa282`). It corrects the body where the two differ.
+
+- Option A is built. `Action` holds `records_together`, a list of `RecordGroup { kinds }` (`crates/canon/src/model/mod.rs`); `ess/domains/protocol.yaml` declares the type and the field.
+- `canon validate` refuses, as `invalid-record-group` naming the action: a group with fewer than two distinct kinds, a kind outside the action's `may_produce`, a kind in two groups of one action, and `case_outcome` in a group on an action that opens a child case. The fourth is the unit's rule for keeping a child's outcome out of groups. A kind repeated inside one group (`[a, a, b]`) is accepted and counts once; an empty list is accepted; a kind may be in a group of two different actions.
+- The walk (`crates/canon/src/simulate/mod.rs`): an admissible action offers one record of each kind in no group, as before, then for each group one record of each member kind in one step, one successor per combination of the members' dimension, class and producer profile. Single-kind steps come first, group steps in order of each group's least kind id, the last member varying fastest. A path prints a group step as one line, members joined by ` and `. A grouped kind is never offered alone by its action; a grouped kind that declares `supplied_by` is still added alone by the supplied step, and an expiry step may leave one member, after which the group step adds both again.
+- No evaluation meaning: `canon evaluate`, `canon check` and `canon generate` give the same bytes with and without the declaration (10 grouped protocols compared by the adversary). `canon-ir/1` writes `records_together` only when a group is declared, groups and kinds sorted, each kind once; the read-back reads it; `canon diff` reports a group added, removed or changed as `NO SEMANTIC CHANGE`.
+- Without a group nothing changes: 130 `protocol/1` files under `fixtures/` and `conformance/` give identical bytes on validate, compile, check, simulate and generate against the base binary.
+- Condition 2 of § Decided holds: the renamed fixture gives ``simulated: protocol `grouped.chain` revision 8: 405 reachable states, 3 terminable (outcome `complete` 3), 35 findings (89 stuck or cycle states)`` with the group and 42 findings standing for 88 states without it. The fixture is at `fixtures/record-group-large/chain/protocol.yaml`, not under `fixtures/investigation/record-group/` as § Scope said: inside `fixtures/investigation/` it added about a minute to the test over every investigation fixture (187.33 s before the move, 96.21 s after).
+- The help text of `canon simulate` (`crates/canon-cli/src/lib.rs`) names the group step; `website/docs/reference/cli.md` is regenerated from it. `ess/domains/cli.yaml` did not change.
+- The protocol writer of story:protocol-writer writes `records_together` after `may_produce`, groups and kinds in model order, and leaves an empty list out (`crates/canon/src/model/write.rs`, `record_group`); its coverage test requires `Action.records_together` and `RecordGroup.kinds`, and its corpus went from 128 to 140 protocols.
+- In § Scope and not edited: `crates/canon-docs/src/source.rs` (the generator read the new struct as it is). Added and not in § Scope: `crates/canon-cli/src/lib.rs`, `crates/canon/src/model/write.rs`, `fixtures/record-group-large/`. Added by the adversary: `crates/canon-cli/tests/adversary_record_groups_cli.rs` (4 cases, which hold the step order three mutants passed the unit's tests on) and `fixtures/record-group-adversary/`.
+- No scenario and no requirement: the declaration has no evaluation meaning.

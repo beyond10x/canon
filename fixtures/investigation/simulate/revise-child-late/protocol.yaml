@@ -1,0 +1,62 @@
+format: protocol/1
+
+protocol:
+  id: simulate.revise.child.late
+  revision: 1
+  description: Open one child case about b, once; while it runs the document can be revised, so the child may end against the revision it was opened at, and its outcome is then an earlier one, which a claim over every revision still reads.
+
+artifacts:
+  a:
+    description: The artifact the opening is recorded against.
+  b:
+    description: The artifact the child case is opened about.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of the child case opened about b.
+  start:
+    description: A record that the child case was opened.
+
+claims:
+  started:
+    description: The child case was opened.
+    true_when:
+      evidence:
+        kind: start
+        subject: a
+  done.current:
+    description: Every child case about the current revision of its subject ended done.
+    true_when:
+      children:
+        in: [done]
+        revision: current
+  done.any:
+    description: Every child case, about whatever revision, ended done.
+    true_when:
+      children:
+        in: [done]
+
+actions:
+  open:
+    description: Open the one child case about b.
+    precondition:
+      claim: started
+      is: unknown
+    may_produce:
+      - evidence: start
+    case_open:
+      protocol: simulate.child
+      subject: b
+
+  fix:
+    description: Revise b while no child case has ended; it records nothing.
+    precondition:
+      claim: done.any
+      is: unknown
+    revises: [b]
+
+outcomes:
+  built:
+    description: Every child case about the current revision of b ended done.
+    requires:
+      claim: done.current

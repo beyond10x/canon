@@ -13,9 +13,9 @@
 domain: canon.cli
 
 summary: >-
-  The canon command line: validate, compile, evaluate, check, simulate, generate, diff and conform
-  run, each reading files named by its flags and printing its result, or refusing with exit status
-  1 when a document is rejected and 2 when an input cannot be read.
+  The canon command line: validate, compile, evaluate, check, simulate, generate, diff, floor,
+  mutate and conform run, each reading files named by its flags and printing its result, or
+  refusing with exit status 1 when a document is rejected and 2 when an input cannot be read.
 
 naming:
   wire: cli
@@ -23,7 +23,8 @@ naming:
 
 errors:
   # Exit status 1: a document was read and rejected, an evaluation or a check was refused, a
-  # conformance scenario failed, a check found something, or generation was refused.
+  # conformance scenario failed, a check found something, generation was refused, or a mutation
+  # run was refused or found a weak point.
   # read from: crates/canon-cli/src/lib.rs:12-13
   # read from: crates/canon-cli/src/lib.rs:27-32
   - name: canon.cli.Rejected
@@ -233,19 +234,23 @@ commands:
 
   # Walks every state a case can reach from the empty case, one step at a time
   # (story:canon-simulate), modelled on canon.cli.Check; a child case's outcome arrives at any step
-  # after the action that opened the child was taken (story:simulate-child-outcome-step).
+  # after the action that opened the child was taken (story:simulate-child-outcome-step); an
+  # admissible action may move an artifact it declares in revises to a new revision
+  # (story:simulate-revise-step).
   # read from: .engineering/planning/story/canon-simulate.md:44-80
   # read from: .engineering/planning/story/canon-simulate.md:125
   # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Outcome", 1 to 5
+  # read from: .engineering/planning/story/simulate-revise-step.md, section "Outcome", 1
   - name: canon.cli.Simulate
     naming:
       wire: simulate
       display: Simulate
       summary: >-
         Walk every state a case of a protocol/1 document can reach from the empty case, a child
-        case's outcome arriving at any step after the action that opened the child, and report the
-        states no sequence of steps gets out of (stuck states and cycles, one per smallest state),
-        dead actions and unreached outcomes.
+        case's outcome arriving at any step after the action that opened the child and an
+        admissible action moving the artifacts it declares in revises to a new revision, and
+        report the states no sequence of steps gets out of (stuck states and cycles, one per
+        smallest state), dead actions and unreached outcomes.
     input:
       # The protocol/1 document to simulate.
       # read from: .engineering/planning/story/canon-simulate.md:44
@@ -258,10 +263,32 @@ commands:
       # declares a supplied or an expiring kind and no action that opens a child case, and as
       # waiting on supplied evidence, a child outcome or expiry when an action opens a child case
       # (case_open). A state names each opening action whose children have not all ended: `action
-      # a opened a child` for one, `action a opened 2 or more children` for more.
+      # a opened a child` for one, `action a opened 2 or more children` for more. An open state
+      # waits only when no outcome is legitimate in it, no action is approval-required there, and
+      # every step of every admissible action, record or revise, returns it. A revise step is
+      # written `action x revises a`, or `action x revises a and produces …` with the record or
+      # group it adds; in a state, a record of a dimension a children form reads that a revision
+      # set aside is written `… earlier`, and one observed before an upstream artifact moved `…
+      # observed before upstream a moved`. An artifact that declares revised_by (story:artifact-
+      # revised-by) has a revise step in every state, written `protocol q revises a`: a case of
+      # the named protocol may move it between two evaluations. It is no action step, so a state
+      # only it opens waits and is no finding; a protocol with such an artifact counts its
+      # waiting states as waiting on supplied evidence, expiry or a revision by another protocol.
+      # A protocol whose children forms name no subject and in which some action revises an
+      # artifact or some artifact declares revised_by has one
+      # case_outcome dimension for each case_open subject, and a state names such a record `evidence
+      # case_outcome about b`; a protocol with no case_open, with no revision of either kind, or with one
+      # case_open subject that is also the one standing for the artifacts nothing names, is
+      # written as before. A child opened about the artifact the space already uses does not end
+      # against an earlier revision. The external revise step is tried after the supplied steps
+      # and before the child-outcome and expiry steps, and a state is open when it leads to a
+      # legitimate outcome through it too.
+      # read from: .engineering/planning/story/child-outcome-recovery.md, section "Outcome", 1
       # read from: .engineering/planning/story/canon-simulate.md:67
+      # read from: .engineering/planning/story/artifact-revised-by.md, section "Outcome", 5 and 6
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R3 and R5
       # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Decided in review, after adversary pass 1", D1
+      # read from: .engineering/planning/story/simulate-revise-step.md, section "Outcome", 1, 2 and 4
       - name: output
         type: String
     outcomes:
@@ -269,8 +296,9 @@ commands:
       - name: unreadable
         external: the protocol cannot be read
         error: canon.cli.Unreadable
-      # A stuck state or a cycle is a state that is not open: no sequence of action, supplied,
-      # child-outcome, expiry and authority steps leads from it to a legitimate outcome. The walk
+      # A stuck state or a cycle is a state that is not open: no sequence of action (record and
+      # revise), supplied, child-outcome, expiry and authority steps leads from it to a
+      # legitimate outcome. The walk
       # counts, per action that opens a child case, its children that have not ended: none, one,
       # or two or more. A step of the action raises the count; a child's outcome arrives while the
       # count is above none, an outcome other than open lowers it, or from two or more may also
@@ -289,6 +317,32 @@ commands:
       # that artifact by name, in a children form or an evidence match, otherwise without a
       # subject; an open record keeps a count above none on an action that produces its
       # dimension. A protocol that reads case_outcome about no artifact by name walks as before.
+      # Revise step: from a state in which an action that declares revises is admissible, one
+      # step per non-empty subset of those artifacts, alone or with one record or one group the
+      # action may produce, tried after the action's record steps. A revision of an artifact
+      # removes the current records about it, except that a record of a dimension a children
+      # form reads becomes an earlier record, which every children form without revision:
+      # current still reads; a record of a dimension with that artifact upstream becomes one
+      # observed before it moved, which its invalidation rules keep from their claims. A state
+      # holds no revision number, and the case revision does not move: authority decisions and
+      # taken decisions stay. A cycle is a state that is not open, in which no action is
+      # approval-required, some action is admissible and every record step of every admissible
+      # action returns the same state; when a revise step of an admissible action changes it,
+      # the finding says every record step and ends with `every revision by action x leads to a
+      # state no outcome is reachable from`. An action that declares no revises has no revise
+      # step, so a protocol without revises walks as before. Child outcomes of the revised
+      # subject (story:child-outcome-recovery): a revision of a sets aside only the case_outcome
+      # records about a, which become earlier; a case_outcome record about any other artifact
+      # stays current. The count of an opening action whose children case_outcome records are
+      # about a, when a child has not ended, also takes a third value in a revision of a, ending
+      # at none when the last child ends: a child that ends from it records its outcome as an
+      # earlier one, written `a child of action x records evidence case_outcome about a result r
+      # earlier`, or as a current one. A step of the opening action leaves that third value as it
+      # is. A parent that revises the artifact a failed child was about, and opens new children,
+      # is therefore walked to the outcome the form reads.
+      # read from: .engineering/planning/story/child-outcome-recovery.md, section "Outcome", 1 to 3
+      # read from: .engineering/planning/story/simulate-revise-step.md, section "Outcome", 1 to 4
+      # read from: .engineering/planning/story/simulate-revise-step.md, section "Scope" (one record or one group)
       # read from: .engineering/planning/story/canon-simulate.md:69-80
       # read from: .engineering/planning/story/canon-simulate.md:235
       # read from: .engineering/planning/story/canon-simulate.md, section "Refined after adversary pass 1", R1 to R5
@@ -381,6 +435,95 @@ commands:
         error: canon.cli.Rejected
       # read from: crates/canon-cli/src/diff.rs:37-40
       - name: compared
+        returns: true
+
+  # read from: crates/canon-cli/src/lib.rs:247-262
+  # read from: crates/canon-cli/src/floor.rs:12-51
+  - name: canon.cli.Floor
+    naming:
+      wire: floor
+      display: Floor
+      summary: >-
+        Check that a compiled protocol stays above a compiled floor: every change from the floor to
+        the protocol is a tightening, an expansion or no semantic change.
+    input:
+      # The organization's floor, a protocol/1 document compiled as `canon compile` prints it.
+      # read from: crates/canon-cli/src/lib.rs:255-257
+      - name: floor
+        type: String
+      # The protocol checked, as `canon compile` prints it; a composed protocol is compiled with
+      # its imports first.
+      # read from: crates/canon-cli/src/lib.rs:258-261
+      - name: ir
+        type: String
+    response:
+      # `floor: holds` and the counts of tightening, expansion and no semantic change.
+      # read from: crates/canon-cli/src/floor.rs:39
+      - name: output
+        type: String
+    outcomes:
+      # read from: crates/canon-cli/src/floor.rs:19
+      - name: unreadable
+        external: the floor or the protocol cannot be read
+        error: canon.cli.Unreadable
+      # read from: crates/canon-cli/src/floor.rs:20-27
+      # read from: crates/canon-cli/src/floor.rs:42-49
+      - name: rejected
+        external: >-
+          the floor or the protocol is not canon-ir/1, or the protocol is below the floor: a change
+          from the floor to it is a relaxation or breaking
+        error: canon.cli.Rejected
+      # read from: crates/canon-cli/src/floor.rs:38-41
+      - name: holds
+        returns: true
+
+  # Measures how strong a scenario set is (story:canon-mutate): five mutation operators applied to
+  # the protocol, each mutant run against the scenarios whose fixture is the protocol file (one that
+  # names it only as an import pins it by digest and is not run) and classified with the semantic
+  # diff of canon.cli.Diff. A weakening mutant no scenario fails is a weak point.
+  # read from: .engineering/planning/story/canon-mutate.md, section "Outcome"
+  # read from: .engineering/planning/story/canon-mutate.md, section "Acceptance"
+  - name: canon.cli.Mutate
+    naming:
+      wire: mutate
+      display: Mutate
+      summary: >-
+        Apply five mutation operators to a protocol/1 document, run each mutant against the
+        canon-conformance/1 scenarios of a directory, and report each mutant killed, survived or
+        invalid with its semantic-diff categories, a weakening survivor as a weak point.
+    input:
+      # The protocol/1 document to mutate; a scenario names it as its fixture.
+      # read from: .engineering/planning/story/canon-mutate.md, section "Outcome"
+      - name: path
+        type: String
+      # The directory of canon-conformance/1 scenarios each mutant runs against; every *.yaml file
+      # in it is one scenario.
+      # read from: .engineering/planning/story/canon-mutate.md, section "Outcome"
+      - name: scenarios
+        type: String
+    response:
+      # One line per mutant (killed, survived, weak point or invalid, the operator, the site, the
+      # categories of its semantic diff and the scenario that failed) and a summary line, with no
+      # weak point.
+      # read from: .engineering/planning/story/canon-mutate.md, section "Outcome"
+      # read from: fixtures/investigation/mutate/complete.txt
+      - name: output
+        type: String
+    outcomes:
+      # read from: .engineering/planning/story/canon-mutate.md, section "Outcome"
+      - name: unreadable
+        external: the protocol, the scenario directory or a scenario file cannot be read
+        error: canon.cli.Unreadable
+      # read from: .engineering/planning/story/canon-mutate.md, section "Outcome", "Decided by the rescope"
+      # read from: fixtures/investigation/mutate/lacking.txt
+      # read from: fixtures/investigation/mutate/unnamed.txt
+      - name: rejected
+        external: >-
+          the protocol is rejected, no scenario names the protocol file as its fixture, a scenario
+          does not parse or fails on the protocol itself, or at least one weak point is reported
+        error: canon.cli.Rejected
+      # read from: .engineering/planning/story/canon-mutate.md, section "Outcome", "Decided by the rescope"
+      - name: no-weak-point
         returns: true
 
   # The clap path `conform run`.

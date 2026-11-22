@@ -268,7 +268,7 @@ and `canon evaluate --ir investigation.ir.json --case case.yaml --evidence evide
       "protocol": "investigation",
       "protocol_revision": 1,
       "semantics": {
-        "canon": "0.10.0",
+        "canon": "0.11.0",
         "format": "canon-decision/1"
       }
     }
@@ -304,6 +304,7 @@ The repository keeps broken copies of this protocol in [`fixtures/investigation/
 | [`input-test-empty.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/input-test-empty.yaml) | `empty-input-test` | obligation `peer.review` tests input `severity` for no value |
 | [`input-undeclared-value.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/input-undeclared-value.yaml) | `undeclared-input-value` | obligation `peer.review` tests input `severity` for value `critical`, which the input does not declare |
 | [`input-undeclared.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/input-undeclared.yaml) | `undeclared-input` | action `publish_finding` references input `urgency`, which is not declared |
+| [`revised-by-self.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/revised-by-self.yaml) | `self-revised-artifact` | artifact `doc` is revised by protocol `revised.by.example`, the protocol's own id |
 | [`supplied-by-self.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/supplied-by-self.yaml) | `self-supplied-evidence` | evidence kind `peer_review` is supplied by protocol `investigation.publication`, the protocol's own id |
 | [`undeclared-claim.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/undeclared-claim.yaml) | `undeclared-claim` | outcome `supported` references claim `explanation.refuted`, which is not declared |
 | [`undeclared-discharge-claim.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/undeclared-discharge-claim.yaml) | `undeclared-claim` | obligation `establish.explanation` references claim `explanation.refuted`, which is not declared |

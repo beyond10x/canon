@@ -16,38 +16,46 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   are written in. The members of an `all` or `any` predicate are sorted by `canonical_order`,
   and an action's capability requirements (by capability, then by scope, one without a scope
   first, a scope comparing its keys and values in key order), the evidence kinds it may
-  produce and the artifacts it revises, the claims an
+  produce, the kinds of each group it records together (`records_together`), those groups (by
+  their kinds, so by their least kind, since no kind is in two groups) and the artifacts it
+  revises, the claims an
   invalidation rule invalidates, the values a case input declares, the values an input test
   lists and the dimensions an evidence match demands independence on by identifier, and the
   outcomes a `children` form lists by code point.
-- **No repetition.** Each of those ten lists holds every member once: in three-valued logic
-  `all` and `any` are idempotent, and the three action lists, the invalidated claims, the two
+- **No repetition.** Each of those twelve lists holds every member once: in three-valued logic
+  `all` and `any` are idempotent, and the five action lists, the invalidated claims, the two
   lists of input values, the dimensions of `independent_on` and the outcomes of `children` are
   sets. A kind an action lists twice may produce once, and is judgement-decided when either
   listing is.
 - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
   evidence match without a result has `"result": null`; a claim test without `is` has
   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-  true; absent lists and sections are empty. The fifteen exceptions are an evidence kind's
-  `max_age` and its `supplied_by`, the `subject` of an evidence match, an order form or a
+  true; absent lists and sections are empty. The eighteen exceptions are an artifact's
+  `revised_by`, an evidence kind's `max_age` and its `supplied_by`, the `when` of an outcome's
+  decision requirement, the `subject` of an evidence match, an order form or a
   `children` form, an evidence match's `independent_on`, an obligation's `applicable_when`, an
-  action's `arguments`, an action's `case_open`, an action's `author` and its `revises`, the
+  action's `arguments`, an action's `case_open`, an action's `author` and its `revises`, an
+  action's `records_together`, the
   `decided_by` of an evidence kind an action may produce, the `scope` of a capability
   requirement, the `revision` of a `children` form, the `invalidation` section, the `case`
   section and the `independence_dimensions` section: each written only when it is declared (a
   scope only when it names a key, a `children` form's `revision` only when it is `current`, an
   action's `author` only as `"author": "judgement"`, its `revises` only when it lists an
-  artifact, a production's `decided_by` only as `"decided_by": "judgement"`, a section only
+  artifact, its `records_together` only when it declares a group, as
+  `[{"kinds": [...]}, ...]` (story:simulate-record-groups), a production's `decided_by` only as `"decided_by": "judgement"`, a section only
   when it holds a rule, an input or a dimension), so the IR of a protocol that declares none of
   them is the IR it was before they existed. A production's `decided_by` is resolved: the
   action's `author` when the production declares none (story:judgement-marking), so
   `author: program` and a `decided_by` equal to the action's `author` compile to no key. An evidence kind's `supplied_by` is the protocol id as
-  declared, a name nothing resolves (story:supplied-evidence). A capability requirement is `{"capability": …}`, or `{"capability": …, "scope": {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
+  declared, a name nothing resolves (story:supplied-evidence). An artifact's `revised_by` is
+  one more such key: written after its `description` only when the protocol declares it
+  (story:artifact-revised-by). A capability requirement is `{"capability": …}`, or `{"capability": …, "scope": {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
   section is `{<id>: {"description": …}}`. The `case` section is
   `{"inputs": {<id>: {"description": …, "values": [...]}}}`. An order form is written as
   authored: `{"first": {"kind": …, "result": …}}`, `{"before": {"first": …, "then": …}}`,
   `{"after": {"first": …, "then": {"kind": …, "result": …}}}` and
-  `{"since": {"last": …, "then": {"kind": …, "result": …}}}`.
+  `{"since": {"last": …, "then": {"kind": …, "result": …}}}`, and the order form over
+  revisions `{"descended": {"first": {"kind": …, "result": …}, "then": {"kind": …, "result": …}}}` (story:revision-ordering). Each adds `"subject": …` when it names one.
   The form over the child cases is `{"children": {"in": [...]}}`, or `{"children": {"in": [...], "revision": "current"}}` when it reads only the records about the current revision of
   their subject (story:child-outcome-revision): `revision: any` reads what no key reads and is
   written as no key. A form that reads only the records about one artifact adds `"subject": …`, as declared (story:child-outcome-subject). An action's `case_open` is `{"protocol": …, "subject": …}`, as declared (story:case-composition).
@@ -55,8 +63,9 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   sorted like every object's (story:action-arguments).
 - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
   it was written, and an input test `{"input": {"id": …, "in": [...]}}`. An outcome that
-  requires an explicit decision has the requirement `{"decision": <name>}`, as written; any
-  other requirement is its predicate.
+  requires an explicit decision has the requirement `{"decision": <name>}`, as written, with
+  `"when": <predicate>`, normalized like every predicate, only when the decision has a condition
+  (story:decision-condition); any other requirement is its predicate.
 - **Resolved references.** Only a document the validator accepts compiles, so every claim and
   evidence kind the IR references is declared in it (`case_outcome` wherever a `children` form
   reads it), and so is every artifact an evidence match, an order form or a `children` form

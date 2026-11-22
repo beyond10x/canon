@@ -56,4 +56,9 @@ pub struct CaseArtifact {
     /// The artifact's current revision.
     #[serde(deserialize_with = "super::present::required")]
     pub revision: Revision,
+    /// Every revision the current one descends from, as whoever writes the snapshot gives it: the
+    /// whole ancestry, which Canon reads and does not compute (story:revision-ordering). Only a
+    /// `descended` form reads it. Absent, the snapshot does not say; `[]`, it descends from none.
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub descends_from: Option<Vec<Revision>>,
 }

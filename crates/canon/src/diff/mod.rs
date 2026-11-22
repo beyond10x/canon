@@ -24,6 +24,7 @@
 //! | supplier (`supplied_by`) introduced (a record of the kind may then name upstream artifacts the protocol does not declare) | `EXPANSION` |
 //! | supplier removed (such a record is refused again) | `BREAKING` |
 //! | supplier changed to another protocol (a name the runner acts on and nothing resolves, as a changed `case_open` protocol) | `BREAKING` |
+//! | an artifact's `revised_by` introduced, removed or replaced (nothing evaluated reads it; story:artifact-revised-by) | `NO SEMANTIC CHANGE` |
 //! | claim added | `EXPANSION` |
 //! | claim removed | `BREAKING` |
 //! | claim's predicate changed | by implication, in the direction the protocol reads the claim (below) |
@@ -43,6 +44,7 @@
 //! | evidence kind an action may produce removed | `BREAKING` |
 //! | evidence kind an action may produce in both revisions becoming judgement-decided (its resolved `decided_by`) | `TIGHTENING` |
 //! | evidence kind an action may produce in both revisions becoming program-decided | `RELAXATION` |
+//! | group of kinds an action records together (`records_together`) added or removed, a changed group being one removed and one added (no evaluation, check or generation reads it; story:simulate-record-groups) | `NO SEMANTIC CHANGE` |
 //! | artifact added to what an action `revises` (more may move) | `RELAXATION` |
 //! | artifact removed from what an action `revises` | `TIGHTENING` |
 //! | action argument schema introduced or removed (absent, the action takes only `{}`) | `BREAKING` |
@@ -73,8 +75,8 @@
 //! under an `all` strengthens it, a member added under an `any` weakens it, `not` reverses the
 //! direction, and two evidence matches, claim tests or input tests imply each other only when they
 //! are equal, so an input test whose `in` list changed implies nothing it did not before. What it
-//! cannot show is classified as changed. An order form (`first`, `before`, `after`, `since`) and a
-//! `children` form are compared structurally only: a predicate whose such forms, taken as a set,
+//! cannot show is classified as changed. An order form (`first`, `before`, `after`, `since`,
+//! `descended`) and a `children` form are compared structurally only: a predicate whose such forms, taken as a set,
 //! differ between the revisions is changed (`BREAKING`), whatever members around them were added
 //! or removed; one whose such forms are the same is classified by implication, each form implying
 //! only an equal one. A `children` form whose outcome list grew is weaker, but, like an input
@@ -145,8 +147,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 
 use crate::ir::{
-    Action, CaseInput, Claim, Described, EvidenceKind, Header, InvalidationRule, Ir, Obligation,
-    Outcome,
+    Action, Artifact, CaseInput, Claim, Described, EvidenceKind, Header, InvalidationRule, Ir,
+    Obligation, Outcome,
 };
 use crate::model::{
     Age, ArtifactId, Author, CaseOpening, ClaimId, EvidenceKindId, EvidenceMatch,
@@ -481,6 +483,7 @@ fn demands(predicate: &Predicate) -> BTreeSet<Demand<'_>> {
             | Predicate::Before(_)
             | Predicate::After(_)
             | Predicate::Since(_)
+            | Predicate::Descended(_)
             | Predicate::Children(_) => {}
         }
     }
@@ -615,6 +618,9 @@ impl Readers {
             if let Some(requires) = outcome.requires.predicate() {
                 reads(requires, Reading::POSITIVE, &mut read);
             }
+            if let Some(when) = outcome.requires.when() {
+                reads(when, Reading::POSITIVE, &mut read);
+            }
         }
         for (claim, reading) in read {
             let entry = readers.places.entry(claim).or_default();
@@ -664,6 +670,7 @@ fn reads(predicate: &Predicate, reading: Reading, found: &mut Vec<(ClaimId, Read
         | Predicate::Before(_)
         | Predicate::After(_)
         | Predicate::Since(_)
+        | Predicate::Descended(_)
         | Predicate::Children(_) => {}
     }
 }
@@ -756,10 +763,17 @@ fn changes(from: &Ir, to: &Ir) -> Vec<Change> {
         to_artifacts,
         Breaking,
         Breaking,
-        |changes, id, from: &Described, to: &Described| {
-            let Described { description: from } = from;
-            let Described { description: to } = to;
+        |changes, id, from: &Artifact, to: &Artifact| {
+            let Artifact {
+                description: from,
+                revised_by: from_reviser,
+            } = from;
+            let Artifact {
+                description: to,
+                revised_by: to_reviser,
+            } = to;
             changes.description("artifact", id, from, to);
+            reviser(changes, id, from_reviser, to_reviser);
         },
     );
     changes.section(
@@ -945,6 +959,27 @@ fn supplier(changes: &mut Changes, id: &str, from: &Option<ProtocolId>, to: &Opt
     changes.push(category, SECTION, id, what);
 }
 
+/// An artifact's reviser (story:artifact-revised-by). Nothing evaluated reads it: `canon
+/// evaluate`, `canon check` and `canon generate` give the same bytes with or without it, and a
+/// runner takes no action from it, so introducing, removing and replacing it are each
+/// `NO SEMANTIC CHANGE`.
+fn reviser(changes: &mut Changes, id: &str, from: &Option<ProtocolId>, to: &Option<ProtocolId>) {
+    const SECTION: &str = "artifact";
+    let shown = |reviser: &ProtocolId| one_line(reviser.as_str());
+    let what = match (from, to) {
+        (None, None) => return,
+        (None, Some(to)) => format!("revised_by introduced: protocol `{}`", shown(to)),
+        (Some(from), None) => format!("revised_by removed: was protocol `{}`", shown(from)),
+        (Some(from), Some(to)) if from == to => return,
+        (Some(from), Some(to)) => format!(
+            "revised_by changed from protocol `{}` to protocol `{}`",
+            shown(from),
+            shown(to)
+        ),
+    };
+    changes.push(Category::NoSemanticChange, SECTION, id, what);
+}
+
 /// An obligation's discharge predicate is compared by implication. Its applicability predicate is
 /// not: introducing one relaxes (the obligation now applies in fewer cases), removing one tightens
 /// (it applies in every case), and any change to one present in both is `BREAKING`.
@@ -1014,6 +1049,7 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         author: from_author,
         may_produce: from_may_produce,
         judgement_decided: from_judged,
+        records_together: from_groups,
         revises: from_revises,
         arguments: from_arguments,
         case_open: from_case_open,
@@ -1027,6 +1063,7 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         author: to_author,
         may_produce: to_may_produce,
         judgement_decided: to_judged,
+        records_together: to_groups,
         revises: to_revises,
         arguments: to_arguments,
         case_open: to_case_open,
@@ -1111,6 +1148,31 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
                     one_line(kind.as_str()),
                     by.as_str()
                 ),
+            );
+        }
+    }
+    // No evaluation, check or generation reads `records_together` (story:simulate-record-groups,
+    // Correction): a group removed, then a group added, each `NO SEMANTIC CHANGE`.
+    let together = |group: &Vec<EvidenceKindId>| {
+        let kinds: Vec<String> = group
+            .iter()
+            .map(|kind| format!("`{}`", one_line(kind.as_str())))
+            .collect();
+        match kinds.split_last() {
+            Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
+            _ => kinds.join(""),
+        }
+    };
+    for (groups, others, how) in [
+        (from_groups, to_groups, "no longer records together"),
+        (to_groups, from_groups, "now records together"),
+    ] {
+        for group in groups.iter().filter(|group| !others.contains(group)) {
+            changes.push(
+                Category::NoSemanticChange,
+                SECTION,
+                id,
+                format!("{how} evidence {}", together(group)),
             );
         }
     }
@@ -1274,6 +1336,7 @@ impl Implication {
             (Predicate::Before(left), Predicate::Before(right)) => left == right,
             (Predicate::After(left), Predicate::After(right)) => left == right,
             (Predicate::Since(left), Predicate::Since(right)) => left == right,
+            (Predicate::Descended(left), Predicate::Descended(right)) => left == right,
             (Predicate::Children(left), Predicate::Children(right)) => left == right,
             // Two different kinds of leaf, or an `all`, `any` or `not` the rules above leave
             // undecided: not shown, so not implied.
@@ -1372,6 +1435,35 @@ mod tests {
         assert_eq!(category(&hour, &minutes), Category::NoSemanticChange);
         assert_eq!(category(&hour, &day), Category::Relaxation);
         assert_eq!(category(&day, &hour), Category::Tightening);
+    }
+
+    /// A reviser introduced, removed or replaced changes nothing an evaluation reads: each is
+    /// `NO SEMANTIC CHANGE`, after the artifact's description.
+    #[test]
+    fn a_reviser_introduced_removed_or_replaced_is_no_semantic_change() {
+        let none = ir("artifacts: {a: {description: x}}\n");
+        let owner = ir("artifacts: {a: {description: y, revised_by: owner}}\n");
+        let other = ir("artifacts: {a: {description: y, revised_by: other}}\n");
+        assert_eq!(
+            lines(&none, &owner),
+            [
+                "NO SEMANTIC CHANGE: artifact `a` description changed",
+                "NO SEMANTIC CHANGE: artifact `a` revised_by introduced: protocol `owner`",
+            ]
+        );
+        assert_eq!(
+            lines(&owner, &none),
+            [
+                "NO SEMANTIC CHANGE: artifact `a` description changed",
+                "NO SEMANTIC CHANGE: artifact `a` revised_by removed: was protocol `owner`",
+            ]
+        );
+        assert_eq!(
+            lines(&owner, &other),
+            [
+                "NO SEMANTIC CHANGE: artifact `a` revised_by changed from protocol `owner` to protocol `other`"
+            ]
+        );
     }
 
     /// A supplier introduced admits records once refused and changes no other decision
@@ -1518,6 +1610,54 @@ mod tests {
             "{kinds}actions: {{act: {{author: program, revises: []}}}}\n"
         ));
         assert_eq!(lines(&unwritten, &written), Vec::<String>::new());
+    }
+
+    /// story:simulate-record-groups: no evaluation, check or generation reads `records_together`,
+    /// so a group removed and a group added are each `NO SEMANTIC CHANGE`, a changed group one of
+    /// each, after the kinds the action may produce and before what it revises; the same groups
+    /// written in another order are no change.
+    #[test]
+    fn a_record_group_added_removed_or_changed_is_no_semantic_change() {
+        let kinds = "artifacts: {a: {}}\nevidence_kinds: {k: {}, l: {}, m: {}, n: {}}\n";
+        let action = |rest: &str| {
+            ir(&format!(
+                "{kinds}actions: {{act: {{may_produce: [{{evidence: k}}, {{evidence: l}}, \
+                 {{evidence: m}}, {{evidence: n}}]{rest}}}}}\n"
+            ))
+        };
+        let none = action("");
+        let one = action(", records_together: [{kinds: [l, k]}]");
+        let two = action(", records_together: [{kinds: [n, m]}, {kinds: [k, l]}], revises: [a]");
+        let changed = action(", records_together: [{kinds: [k, l, m]}]");
+        assert_eq!(
+            lines(&none, &one),
+            ["NO SEMANTIC CHANGE: action `act` now records together evidence `k` and `l`"]
+        );
+        assert_eq!(
+            lines(&one, &none),
+            ["NO SEMANTIC CHANGE: action `act` no longer records together evidence `k` and `l`"]
+        );
+        assert_eq!(
+            lines(&one, &two),
+            [
+                "NO SEMANTIC CHANGE: action `act` now records together evidence `m` and `n`",
+                "RELAXATION: action `act` now revises artifact `a`",
+            ]
+        );
+        assert_eq!(
+            lines(&one, &changed),
+            [
+                "NO SEMANTIC CHANGE: action `act` no longer records together evidence `k` and `l`",
+                "NO SEMANTIC CHANGE: action `act` now records together evidence `k`, `l` and `m`",
+            ]
+        );
+        assert_eq!(
+            lines(
+                &two,
+                &action(", revises: [a], records_together: [{kinds: [l, k]}, {kinds: [m, n, m]}]")
+            ),
+            Vec::<String>::new()
+        );
     }
 
     /// An input `s` and a claim `c` for the protocols of the tests below.
@@ -1796,5 +1936,65 @@ mod tests {
         assert!(implies(&since("red"), &since("red")));
         assert!(!implies(&since("red"), &since("green")));
         assert!(!implies(&since("red"), &evidence("m")));
+    }
+
+    /// A `descended` is compared structurally like the other order forms
+    /// (story:revision-ordering): a change to its records, result or subject is `BREAKING`; with
+    /// the same order forms, a member added under an `all` strengthens (`TIGHTENING`), one removed
+    /// weakens (`RELAXATION`), reordering members changes nothing, and it implies only an equal
+    /// one. The implication arm `(Descended, Descended)` is what decides the first three.
+    #[test]
+    fn a_descended_form_is_compared_by_implication_when_unchanged() {
+        let claim = |true_when: &str| {
+            ir(&format!(
+                "artifacts: {{a: {{}}}}\nevidence_kinds: {{k: {{}}, m: {{}}}}\nclaims: {{c: {{true_when: {true_when}}}}}\n"
+            ))
+        };
+        let red = "{descended: {first: {kind: k, result: red}, then: {kind: m, result: red}}}";
+        let both = format!("{{all: [{{evidence: {{kind: k}}}}, {red}]}}");
+        for to in [
+            "{descended: {first: {kind: m, result: red}, then: {kind: m, result: red}}}",
+            "{descended: {first: {kind: k, result: green}, then: {kind: m, result: red}}}",
+            "{descended: {first: {kind: k, result: red}, then: {kind: m, result: green}}}",
+            "{descended: {first: {kind: k, result: red}, then: {kind: m, result: red}, subject: a}}",
+        ] {
+            assert_eq!(
+                lines(&claim(red), &claim(to)),
+                ["BREAKING: claim `c` predicate changed"],
+                "{red} -> {to}"
+            );
+        }
+        assert_eq!(
+            lines(&claim(red), &claim(&both)),
+            ["TIGHTENING: claim `c` predicate strengthened"]
+        );
+        assert_eq!(
+            lines(&claim(&both), &claim(red)),
+            ["RELAXATION: claim `c` predicate weakened"]
+        );
+        assert!(
+            lines(
+                &claim(&both),
+                &claim(&format!("{{all: [{red}, {{evidence: {{kind: k}}}}]}}"))
+            )
+            .is_empty()
+        );
+        assert!(lines(&claim(red), &claim(red)).is_empty());
+        let descended = |result: &str| {
+            Predicate::Descended(Box::new(crate::model::EvidenceDescended {
+                first: crate::model::LaterRecord {
+                    kind: EvidenceKindId::new("k"),
+                    result: "red".to_owned(),
+                },
+                then: crate::model::LaterRecord {
+                    kind: EvidenceKindId::new("m"),
+                    result: result.to_owned(),
+                },
+                subject: None,
+            }))
+        };
+        assert!(implies(&descended("red"), &descended("red")));
+        assert!(!implies(&descended("red"), &descended("green")));
+        assert!(!implies(&descended("red"), &evidence("m")));
     }
 }

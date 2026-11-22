@@ -1,6 +1,8 @@
 # Retrofitted from the protocol/1 source model in crates/canon/src/model/ (story:protocol-source-model).
-# This is the typed model, not the protocol/1 surface syntax: parsing that syntax, and every
-# validation rule (duplicate identifiers, references that resolve), is tested by Canon itself.
+# This is the typed model, not the protocol/1 surface syntax: parsing that syntax, writing a model
+# back out as canonical JSON text (b10x_canon::model::write, story:protocol-writer) with the round
+# trip between the two (for keys of at most 1022 bytes as written), and every validation rule
+# (duplicate identifiers, references that resolve), is tested by Canon itself.
 # The evaluation documents (canon-case/1, canon-evidence/1, canon-decision/1) are specified first
 # here (story:three-valued-claims), and the explicit decisions an evaluation reads
 # (canon-decisions/1) too (story:decision-outcomes), and the authority decisions it reads
@@ -8,7 +10,9 @@
 # declares and a case gives values for, the input predicate and an obligation's applicability.
 # story:evidence-order-predicate adds the order forms `first` and `before` of the predicate,
 # story:evidence-order-after the order form `after`, and story:evidence-order-since the order form
-# `since`.
+# `since`. story:revision-ordering adds the order form `descended`, the revisions a case artifact's
+# current revision descends from (CaseArtifact.descends_from) and the item an evidence record is
+# about (EvidenceRecord.item).
 # story:evidence-independence adds the independence dimensions a protocol declares, the
 # independence an evidence match demands of its records, the producer an evidence record names and
 # the independence a case gives each producer. story:action-arguments adds the argument schema an
@@ -86,6 +90,17 @@ types:
       # read from: crates/canon/src/model/mod.rs:64
       - name: description
         type: Optional<String>
+      # The protocol whose cases revise this artifact (story:artifact-revised-by): any protocol
+      # but this one. It is a name, like EvidenceKind.supplied_by: nothing resolves it, and canon
+      # evaluate, canon check and canon generate read nothing from it. canon validate refuses the
+      # protocol's own id (self-revised-artifact), naming the artifact: an artifact the protocol
+      # revises itself is named by an action's revises. canon simulate offers a revise step for
+      # the artifact in every state. Absent, no key is compiled, so the canon-ir/1 of a protocol
+      # without it is unchanged.
+      # read from: .engineering/planning/story/artifact-revised-by.md, section "Outcome", 1 and 2
+      # read from: crates/canon/src/model/mod.rs:66
+      - name: revised_by
+        type: Optional<canon.protocol.ProtocolId>
 
   # read from: crates/canon/src/model/mod.rs:179-198
   - name: canon.protocol.EvidenceKind
@@ -179,6 +194,22 @@ types:
       # read from: crates/canon/src/model/mod.rs:106
       - name: may_produce
         type: List<canon.protocol.EvidenceProduction>
+      # The kinds one run of the action records together, all of them or none
+      # (story:simulate-record-groups). Absent means no group. canon validate refuses a group with
+      # fewer than two distinct kinds, a kind its may_produce does not list, a kind an earlier
+      # group of the action names, and case_outcome on an action that opens a child case (its
+      # child's outcome arrives on its own), each as invalid-record-group naming the action. No
+      # evaluation reads it: canon evaluate, canon check and canon generate give the same bytes
+      # with or without it, and canon diff reports a group added, removed or changed as NO
+      # SEMANTIC CHANGE. canon simulate adds a group's records in one step, one record of each
+      # member kind, and never offers a grouped kind alone. canon-ir/1 writes
+      # `"records_together"` only when the list is not empty, the groups sorted and the kinds
+      # sorted within each group, each kind once.
+      # read from: .engineering/planning/story/simulate-record-groups.md:48-67
+      # read from: .engineering/planning/story/simulate-record-groups.md:233-235
+      # read from: crates/canon/src/model/mod.rs:242-248
+      - name: records_together
+        type: List<canon.protocol.RecordGroup>
       # The one argument schema the action declares (story:action-arguments). Absent: the action
       # takes no arguments; a runner accepts only `{}`. Canon evaluates no call and never calls an
       # action. The library function b10x_canon::validate::check_arguments (story:argument-validator)
@@ -325,6 +356,18 @@ types:
       - name: decided_by
         type: Optional<canon.protocol.Author>
 
+  # One group of an action's records_together (story:simulate-record-groups): kinds one run of
+  # the action records together, all of them or none. A named type, not a list of lists.
+  # read from: .engineering/planning/story/simulate-record-groups.md:48-52
+  # read from: crates/canon/src/model/mod.rs:340-348
+  - name: canon.protocol.RecordGroup
+    kind: struct
+    fields:
+      # The kinds of the group: two or more distinct kinds the action may produce.
+      # read from: crates/canon/src/model/mod.rs:345-347
+      - name: kinds
+        type: List<canon.protocol.EvidenceKindId>
+
   # read from: crates/canon/src/model/mod.rs:124-130
   - name: canon.protocol.Outcome
     kind: struct
@@ -355,7 +398,35 @@ types:
       # read from: crates/canon/src/model/mod.rs:129
       predicate: canon.protocol.Predicate
       # read from: docs/design/canon-protocol-calculus-design.md:662
-      decision: canon.protocol.DecisionName
+      # read from: .engineering/planning/story/decision-condition.md
+      decision: canon.protocol.DecisionRequirement
+
+  # An outcome's explicit decision with its optional condition (story:decision-condition). Source
+  # text writes `requires: {decision: d, when: <predicate>}`; `when` beside no `decision` is
+  # refused. The decision counts toward the outcome only while `when` is TRUE. A decision counts
+  # when `when` is TRUE at the evaluation, whenever it was taken: a decision supplied while `when`
+  # is not TRUE is ignored at that evaluation, neither counted nor refused, and the same supplied
+  # decision counts at a later evaluation once `when` is TRUE. A caller that wants "taken after
+  # the condition held" enforces that itself. With `when` TRUE and a decision applying, the
+  # outcome is legitimate, with `decided_by`. With `when` TRUE and no decision applying it is
+  # blocked with {decision, present: false}, and pending decisions list it as today. With `when`
+  # FALSE or UNKNOWN it is blocked by the reasons a precondition that is not true gives, and no
+  # pending decision is listed (CANON-OUTCOME-003). `when` holds claims and case inputs only, as
+  # `applicable_when` does: an evidence match, an order form or a `children` form is refused as
+  # evidence-in-decision-condition, naming the outcome. canon-ir/1 writes "when" only when it is
+  # present, normalized as `requires` is. canon diff: adding, removing or changing `when` is
+  # BREAKING, `outcome `o` requirement changed`.
+  # read from: .engineering/planning/story/decision-condition.md
+  # read from: crates/canon/src/model/requirement.rs:50-60
+  - name: canon.protocol.DecisionRequirement
+    kind: struct
+    fields:
+      # read from: crates/canon/src/model/requirement.rs:52
+      - name: decision
+        type: canon.protocol.DecisionName
+      # read from: crates/canon/src/model/requirement.rs:59
+      - name: when
+        type: Optional<canon.protocol.Predicate>
 
   # The name of an explicit decision an outcome requires (explicitly_inconclusive). An identifier:
   # not empty, no whitespace, control or Unicode format characters.
@@ -559,8 +630,8 @@ types:
     variants: ["true", "false", "unknown"]
 
   # Source text writes a predicate as a map with exactly one of the keys all, any, not, evidence,
-  # claim, input, first, before, after, since or children (crates/canon/src/model/predicate.rs);
-  # the typed model is this union.
+  # claim, input, first, before, after, since, descended or children
+  # (crates/canon/src/model/predicate.rs); the typed model is this union.
   # read from: crates/canon/src/model/predicate.rs:127-154
   # read from: .engineering/planning/story/evidence-order-predicate.md:71-74
   # read from: .engineering/planning/story/evidence-order-after.md:70-75
@@ -601,6 +672,11 @@ types:
       # read from: .engineering/planning/story/evidence-order-since.md:33-38
       # read from: crates/canon/src/model/predicate.rs:147-149
       since: canon.protocol.EvidenceSince
+      # Whether an item that had one result on a revision the current revision of its subject
+      # descends from has another on the current revision (story:revision-ordering).
+      # read from: .engineering/planning/story/revision-ordering.md:96
+      # read from: .engineering/planning/story/revision-ordering.md:100-115
+      descended: canon.protocol.EvidenceDescended
       # Whether every child case of the case ended with one of the outcomes listed
       # (story:case-composition).
       # read from: .engineering/planning/story/case-composition.md:64-67
@@ -764,8 +840,88 @@ types:
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
 
+  # An order form over revisions, not instants (story:revision-ordering), written
+  # `{descended: {first: {kind: K1, result: R1}, then: {kind: K2, result: R2}, subject: A}}`:
+  # whether an item that had result R1 in a record of K1 on a revision the current revision of its
+  # subject descends from has result R2 in a record of K2 on the current revision. It reads the
+  # history as FirstResult does, about `subject` when named, and never observed_at: descent is the
+  # order. A later record is a record of K2 with R2 that names an item and is about the case
+  # snapshot's current revision of its subject; one about another revision takes no part. An
+  # earlier record for it is a record of K1 with R1 that names the same item, is about the same
+  # subject, and is about a revision the case lists in that subject's CaseArtifact.descends_from;
+  # one about any other revision, the current one included, takes no part, though revision binding
+  # keeps it from evidence matches. A record without an item takes no part; items are compared
+  # for equality only, and the form names none. The form is true when a later record has an
+  # earlier record; otherwise unknown when there is no later record, or when the case gives no
+  # descends_from for the subject of one; otherwise false.
+  # One item is enough for true: the form does not ask that every item with R1 on an ancestor
+  # has R2 now. An item with R1 on an ancestor, R2 on the current revision and also R1 on the
+  # current revision is true, because the form asks for a record of R2 on the current revision
+  # and does not ask that no record of R1 is there. A protocol that must exclude it adds a second
+  # predicate beside the form, such as a second descended form from R1 to R1 read through a
+  # claim (R1 `failed`, R2 `passed`):
+  #
+  #   claims:
+  #     failed_again:
+  #       true_when:
+  #         descended:
+  #           first: {kind: observation, result: failed}
+  #           then: {kind: observation, result: failed}
+  #           subject: work
+  #     resolved:
+  #       true_when:
+  #         all:
+  #           - descended:
+  #               first: {kind: observation, result: failed}
+  #               then: {kind: observation, result: passed}
+  #               subject: work
+  #           - any: [{claim: failed_again, is: false}, {claim: failed_again, is: unknown}]
+  #
+  # `resolved` is false when an item has R1 on an ancestor and R1 again on the current revision,
+  # and the form's value otherwise.
+  #
+  #   records read (descends_from given unless said)                  value
+  #   none                                                            unknown
+  #   item T: R1 on an ancestor, none of R2 on the current revision    unknown
+  #   item T: R2 on the current revision, none of R1 on an ancestor    false
+  #   item T: R1 on an ancestor, R2 on the current revision            true
+  #   item T: R1 on a revision not listed, R2 on the current one       false
+  #   item T: R1 and R2 both on the current revision                   false
+  #   T: R1 on an ancestor; U: R2 on the current revision              false
+  #   T: R1 on an ancestor, R2 now; U: R2 now, no R1                   true
+  #   R2 on the current revision, descends_from not given              unknown
+  #   records without an item only                                     unknown
+  #
+  # `first` and `then` may name one kind, and one result. canon validate refuses, naming the
+  # declaration the form is written in, a kind it names that is not declared
+  # (undeclared-evidence-kind, `first` before `then`, each kind once) and a subject that is not
+  # (undeclared-artifact), and the form in an obligation's discharge (evidence-in-discharge) or
+  # applicability (evidence-in-applicability) predicate, as it refuses every order form there. canon simulate refuses a protocol with it
+  # (ordered-evidence). What it means is CANON-ORDER-005
+  # (conformance/scenarios/revision-ordering.yaml), not this file.
+  # read from: .engineering/planning/story/revision-ordering.md:59-67
+  # read from: .engineering/planning/story/revision-ordering.md:96
+  # read from: .engineering/planning/story/revision-ordering.md:100-115
+  # read from: .engineering/planning/story/revision-ordering.md:182-188
+  - name: canon.protocol.EvidenceDescended
+    kind: struct
+    fields:
+      # The earlier record: its kind and its result.
+      # read from: .engineering/planning/story/revision-ordering.md:59-62
+      - name: first
+        type: canon.protocol.LaterRecord
+      # The later record, on the current revision: its kind and its result.
+      # read from: .engineering/planning/story/revision-ordering.md:59-62
+      - name: then
+        type: canon.protocol.LaterRecord
+      # A declared artifact: only records about it are read, of either kind.
+      # read from: .engineering/planning/story/revision-ordering.md:96
+      - name: subject
+        type: Optional<canon.protocol.ArtifactId>
+
   # What an `after` reads later than the first record of its `first` kind, and a `since` later than
-  # the latest record of its `last` kind: a record of `kind` with `result`.
+  # the latest record of its `last` kind: a record of `kind` with `result`. A `descended` form names
+  # each of the two records it pairs by one.
   # read from: .engineering/planning/story/evidence-order-after.md:70-75
   # read from: .engineering/planning/story/evidence-order-since.md:37-38
   # read from: crates/canon/src/model/predicate.rs:232-243
@@ -903,6 +1059,13 @@ types:
     kind: newtype
     of: String
 
+  # What an evidence record is about within its kind (EvidenceRecord.item, story:revision-ordering):
+  # opaque text, compared for equality only, with no meaning to Canon.
+  # read from: .engineering/planning/story/revision-ordering.md:100-103
+  - name: canon.protocol.ItemId
+    kind: newtype
+    of: String
+
   # An instant written YYYY-MM-DDTHH:MM:SSZ in UTC, or with a fraction of one to nine digits after
   # the seconds, YYYY-MM-DDTHH:MM:SS.fffZ; uppercase T and Z, no leap second (2026-10-04T12:00:00Z,
   # 2026-10-04T12:00:00.400Z). An empty fraction, more than nine digits and a comma are not instants.
@@ -937,6 +1100,19 @@ types:
       # read from: .engineering/planning/story/three-valued-claims.md:57-58
       - name: revision
         type: canon.protocol.Revision
+      # Every revision the current revision descends from, written by whoever writes the snapshot
+      # as the whole ancestry, not only the parents (story:revision-ordering, option A): Canon
+      # reads descent here and computes none. Only a `descended` form reads it. Optional: a
+      # snapshot without it does not say what the current revision descends from, so a
+      # `descended` form with a later record about the artifact is unknown, and no earlier
+      # expectation changes; `[]` says it descends from none. An evaluation is refused, naming the
+      # case, the artifact and the revision, when an entry is not an identifier
+      # (invalid-identifier), is listed twice (duplicate-identifier), or is the current revision
+      # itself, which does not descend from itself (self-descent).
+      # read from: .engineering/planning/story/revision-ordering.md:96
+      # read from: .engineering/planning/story/revision-ordering.md:111-115
+      - name: descends_from
+        type: Optional<List<canon.protocol.Revision>>
 
   # One canon-evidence/1 record. subject and subject_revision bind it to one revision of one
   # declared artifact; story:evidence-revision-binding makes the evaluator apply it only there.
@@ -950,8 +1126,8 @@ types:
         type: String
       # Used once in an evaluation's evidence set, except that a record given more than once
       # counts once when every copy equals the first (story:evidence-redelivery): equal in kind,
-      # result, subject, subject_revision, observed_at as written text, producer, child_case and
-      # upstream_revisions (the same pairs in any order). The evaluator keeps the first copy, in
+      # result, subject, subject_revision, observed_at as written text, producer, child_case, item
+      # and upstream_revisions (the same pairs in any order). The evaluator keeps the first copy, in
       # the order given, and every later stage reads each id once. A copy that differs in any of
       # these is refused as duplicate-identifier, "evidence `e1` is given more than once with
       # different content". Where the evaluator does this: crates/canon/src/eval/evidence.rs.
@@ -1017,6 +1193,15 @@ types:
       # read from: crates/canon/src/model/evidence.rs:48-52
       - name: child_case
         type: Optional<canon.protocol.CaseId>
+      # What the observation is about within its subject, such as the one check it ran
+      # (story:revision-ordering): opaque text, compared for equality only, which a `descended`
+      # form pairs an earlier and a later record on. Optional: a record without it takes no part
+      # in a `descended` form and in everything else is read as before, so no earlier expectation
+      # changes. The evaluator refuses one that is not an identifier (invalid-identifier), naming
+      # the record, and a copy of a record counts once only when its item is equal too.
+      # read from: .engineering/planning/story/revision-ordering.md:100-103
+      - name: item
+        type: Optional<canon.protocol.ItemId>
 
   # One explicit decision of a canon-decisions/1 document. `canon evaluate --decisions` names that
   # document: a YAML (or JSON) list of these entries, the way canon-authority/1 is a list of

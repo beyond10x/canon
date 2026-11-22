@@ -1,0 +1,56 @@
+format: protocol/1
+protocol:
+  id: adversary.single
+  revision: 1
+  description: an action with a kind in no group and a group whose least kind sorts before it
+artifacts:
+  doc:
+    description: the document checked
+evidence_kinds:
+  a:
+    description: first kind, grouped
+  b:
+    description: second kind, in no group
+  c:
+    description: third kind, grouped
+  w:
+    description: a kind no action produces
+claims:
+  has_a:
+    true_when:
+      evidence:
+        kind: a
+        subject: doc
+  has_b:
+    true_when:
+      evidence:
+        kind: b
+        subject: doc
+  has_c:
+    true_when:
+      evidence:
+        kind: c
+        subject: doc
+  has_w:
+    true_when:
+      evidence:
+        kind: w
+        subject: doc
+outcomes:
+  done:
+    requires:
+      claim: has_w
+actions:
+  act:
+    precondition:
+      any:
+        - claim: has_a
+          is: unknown
+        - claim: has_b
+          is: unknown
+    may_produce:
+      - evidence: c
+      - evidence: b
+      - evidence: a
+    records_together:
+      - kinds: [c, a]

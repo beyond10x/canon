@@ -63,16 +63,17 @@ pub(crate) fn check(ir: &Ir) -> Result<(), Refusal> {
                 .iter()
                 .map(|(id, action)| ("action", id.as_str(), "precondition", &action.precondition)),
         )
-        .chain(
-            ir.outcomes
-                .iter()
-                .filter_map(|(id, outcome)| match &outcome.requires {
-                    OutcomeRequirement::Predicate(requires) => {
-                        Some(("outcome", id.as_str(), "requires", requires))
-                    }
-                    OutcomeRequirement::Decision(_) => None,
-                }),
-        );
+        .chain(ir.outcomes.iter().filter_map(|(id, outcome)| {
+            match &outcome.requires {
+                OutcomeRequirement::Predicate(requires) => {
+                    Some(("outcome", id.as_str(), "requires", requires))
+                }
+                OutcomeRequirement::Decision(requirement) => requirement
+                    .when
+                    .as_ref()
+                    .map(|when| ("outcome", id.as_str(), "when", when)),
+            }
+        }));
     for (owner, id, field, predicate) in others {
         own(predicate).ok_or_else(|| too_deep(owner, id, field))?;
     }
@@ -111,6 +112,7 @@ fn own(predicate: &Predicate) -> Option<Own<'_>> {
             | Predicate::Before(_)
             | Predicate::After(_)
             | Predicate::Since(_)
+            | Predicate::Descended(_)
             | Predicate::Children(_) => {}
         }
     }

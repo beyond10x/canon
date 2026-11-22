@@ -3,10 +3,15 @@ name = "canon-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+autotests = false
 
 [[bin]]
 name = "canon"
 path = "src/main.rs"
+
+[[test]]
+name = "main"
+path = "tests/main.rs"
 
 [dependencies]
 b10x-canon = { path = "../canon" }

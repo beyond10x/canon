@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:decision-condition
 kind: story
-status: draft
+status: implemented
 title: Let an outcome's explicit decision carry an optional `when` predicate, so the decision counts only while the predicate is true
 tags:
 - from-request
@@ -55,7 +55,11 @@ scope:
   path: fixtures/investigation/decision-condition.yaml
 - confidence: inferred
   path: fixtures/investigation/decision-condition/
-revision: 20
+revision: 26
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-21T12:57:52Z", actor: "human:timo", revision: 21}
+- {from: "proposed", to: "active", at: "2026-11-21T17:02:28Z", actor: "human:timo", revision: 23}
+- {from: "active", to: "implemented", at: "2026-11-22T11:12:34Z", actor: "human:timo", revision: 26, decided_on: {"recorded":{"test_result":1}}, correlation: "wave-2026-11-20-w9"}
 ---
 ## Outcome
 
@@ -269,3 +273,35 @@ The case is at `revision: c1`.
   - `aep plan artifact show story:<slug>`
   - `target/debug/canon validate`, `compile`, `diff`, `simulate`, `check` and `evaluate` on probe protocols in the scratch directory: `both.yaml`, `when.yaml`, `nested.yaml`, `today.yaml`
 - **Date:** 2026-11-21.
+
+## Decided
+
+D1 A, D2 A, D3 A and D4 B of § Decision needed. Decided on 2026-11-21 by the session working on the SDC prototype, which the operator named the orchestrator of this plan. Its words:
+
+> story:decision-condition, my choices: D1 A, D2 A, D3 A, D4 B, your defaults; accept it and place it as you propose (after wave 9, in the wave of story:child-outcome-recovery). D4 B fits my use: "only after the publication was refused" as `when: {claim: publication.refused}` with the claim's `true_when` reading the evidence.
+
+What the four choices fix:
+
+- **D1 A.** A decision supplied while `when` is not TRUE is ignored at that evaluation: not counted, not refused.
+- **D2 A.** While `when` is not TRUE the outcome's reasons name only `when`, and `pending_decisions` holds no entry for the decision.
+- **D3 A.** `canon simulate` offers the decision step in every state where the decision is not taken, as today. `crates/canon/src/simulate/mod.rs` is not edited.
+- **D4 B.** `when` holds claims and case inputs only, as `applicable_when` does. An evidence match, an order form or a `children` form inside it is refused by validation as `evidence-in-decision-condition`, naming the outcome.
+
+One consequence the same session asked the story and the reference to state in one sentence: **a decision counts when `when` is TRUE at the evaluation, whenever it was taken.** With D1 A and D3 A, a decision supplied while `when` was not TRUE is ignored at that evaluation, and the same supplied decision counts at a later evaluation once `when` is TRUE. A caller that wants "taken after the condition held" enforces that itself. The unit writes the sentence in the comment of `canon.protocol.DecisionRequirement` in `ess/domains/protocol.yaml`, from which the reference page is generated, and pins it with one scenario: the same decisions document, `when` not TRUE at one evaluation and TRUE at the next.
+
+The question that session attached when it proposed the story, whether `when` breaks a `protocol/1` document valid under 0.10.0: it does not. The binary built at `997c3997`, which prints `canon 0.10.0`, refuses a `when` key beside `decision` (`error[parse]: outcomes.inconclusive.requires: unknown field `when`, expected one of `decision`, `all`, …`, exit 1) and accepts the same fixture without the key, so no document valid under 0.10.0 holds the key. That a requirement written without `when` gives the same bytes is acceptance the unit must show over every `protocol/1` file under `fixtures/` and `conformance/`. A document that uses `when` is refused by a 0.10.0 binary with the parse error above. No story covers that direction: the coordinator found no field in `ess/domains/protocol.yaml` by which a `protocol/1` document states the lowest Canon version that reads it. (This section first named story:protocol-floor for it. That was wrong: that story compares a protocol with an organization's floor protocol. Corrected at the close of wave 8.)
+
+Accepted under the operator's standing grant (`approval-record:accept-sdc-request-17-2026-11-21`). Order: after wave 9, in the wave of story:child-outcome-recovery; with D3 A and D4 B the two stories share no file under `crates/canon/src/simulate/`.
+
+## Scope as built
+
+Written at the close of wave 2026-11-20-w9 from the wave page, the review of the integration branch (`review-result:review-wave-9-eval`, `-model`) and the merge of `impl/decision-condition` (`ecd84c068`: 33 files, +1733 −65). It corrects the body where the two differ.
+
+- Every path of the typed scope changed. Outside it: the new `crates/canon/src/eval/decision_condition.rs`, `crates/canon/src/eval/mod.rs`, `crates/canon/src/mutate/mod.rs`, `crates/canon-cli/tests/main.rs` (`mod decision_condition;`), `crates/canon/tests/protocol_write.rs`, and the generated `website/docs/reference/{canon-ir,evaluation,protocol,validation}.md`, `website/static/schemas/protocol-1.schema.json` and `website/data/canon.terminal.json`.
+- Decided by the unit: `when` alone gets the `when` message, not "found 0"; no digest pin exists in `conformance/requirements.yaml`, so that line of the brief did not apply.
+- The unit did not run the scenario-generation test: its three fixtures written to be refused (`decision-inside-when.yaml`, `when-beside-claim.yaml`, `evidence-in-when.yaml`) failed it. `3e8559225` adds them to the expected refusals; `b68cc9b3d` re-pins the requirement counts 30→31 (`CANON-OUTCOME-003`).
+- After the merge: `b3a97c66f` says in the `check` docs that an outcome's slice adds what `when` reads (eval E2). Three notes stay open in story:review-notes-wave-9 (draft): `unproduced-evidence` does not name an outcome whose `when` reads unproduced evidence (E3); `canon mutate` skips a conditioned decision without saying so (model F2); adding `when` is `BREAKING` though it narrows (model F4, as acceptance 8 decided).
+- Acceptance: `a_decision_counts_only_while_its_condition_is_true` passed in the test step and `CANON-OUTCOME-003` with every other scenario in the conform step of the gate below. Not shown at the close-out: the eight expectations one by one (assertions of that test).
+- `website/data/status.json` is not regenerated by the close-out; it reads this story's status.
+
+**Gate of the close-out**, on `wave/2026-11-21` at `2f3d14b14`, 2026-11-22 10:43 to 11:01 UTC, host load 67 on 20 CPUs, rustc 1.100.0, each step run once by the coordinator's gate script (not `task check` as one command): build exit 0 (125 s); `task ess-gate` 0; `cargo fmt --check` 0; `cargo clippy --workspace --all-targets --locked -- -D warnings` 0; `task test` 0 (1275 tests; the step's own line: `ess-gate 2.2 s + workspace 50.4 s + -p b10x-canon 2.7 s = 55.4 s, bound 120 s`; slowest 16.9 s); `canon conform run` 0 (`30 passed, 0 failed`; `31 implemented, 31 covered`); `task docs-check` 0 (18 generated files current); `task test-slow` exit 201 (63 tests: 53 passed, 10 killed at 60 s; its CI step may fail, D123, story:slow-lane-under-bound). Recorded as `test_result` evidence. The four review results of the wave are `review-result:review-wave-9-eval`, `-simulate`, `-model` and `-gate`.

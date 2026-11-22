@@ -1,0 +1,43 @@
+format: protocol/1
+
+protocol:
+  id: shared
+  revision: 1
+  description: A library protocol that another protocol imports; its scenarios lack a witness for each check alone.
+
+artifacts:
+  item:
+    description: The item under review.
+
+evidence_kinds:
+  first_check:
+    description: The first check of the item.
+  second_check:
+    description: The second check of the item.
+
+claims:
+  item.ready:
+    description: Both checks of the item are recorded.
+    true_when:
+      all:
+        - evidence:
+            kind: first_check
+        - evidence:
+            kind: second_check
+
+actions:
+  run_first:
+    description: Run the first check.
+    may_produce:
+      - evidence: first_check
+
+  run_second:
+    description: Run the second check.
+    may_produce:
+      - evidence: second_check
+
+outcomes:
+  ready:
+    description: The item is ready.
+    requires:
+      claim: item.ready

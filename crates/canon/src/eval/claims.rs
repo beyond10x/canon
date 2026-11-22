@@ -325,8 +325,10 @@ impl<'a> Walk<'a> {
             Predicate::First(_)
             | Predicate::Before(_)
             | Predicate::After(_)
-            | Predicate::Since(_) => {
-                super::order::value(predicate, self.evidence.history).unwrap_or(Truth::Unknown)
+            | Predicate::Since(_)
+            | Predicate::Descended(_) => {
+                super::order::value(predicate, self.evidence.history, self.evidence.artifacts)
+                    .unwrap_or(Truth::Unknown)
             }
             // The case_outcome records the form reads of the history, likewise: a child's outcome
             // is not invalidated.
@@ -381,8 +383,13 @@ pub(super) fn predicate(
                 .iter()
                 .filter(|record| evidence.of_match(matching, record)),
         ),
-        Predicate::First(_) | Predicate::Before(_) | Predicate::After(_) | Predicate::Since(_) => {
-            super::order::value(predicate, evidence.history).unwrap_or(Truth::Unknown)
+        Predicate::First(_)
+        | Predicate::Before(_)
+        | Predicate::After(_)
+        | Predicate::Since(_)
+        | Predicate::Descended(_) => {
+            super::order::value(predicate, evidence.history, evidence.artifacts)
+                .unwrap_or(Truth::Unknown)
         }
         Predicate::Children(form) => {
             super::composition::value(form, evidence.history, evidence.artifacts)
@@ -498,6 +505,7 @@ mod tests {
             observed_at: None,
             upstream_revisions: crate::model::Declarations::default(),
             child_case: None,
+            item: None,
         }
     }
 

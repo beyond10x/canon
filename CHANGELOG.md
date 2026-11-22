@@ -1,5 +1,174 @@
 # Changelog
 
+## [0.11.0] - 2026-11-22
+
+Protocols order evidence by revision, an outcome's decision can carry a condition, an artifact can
+name the protocol that revises it, and an action can record several kinds at once. `canon floor`
+checks a protocol against an organization floor, `canon mutate` measures a scenario set, and
+`canon simulate` walks revisions. Canon is also tested faster and the gate reads one pinned
+compiler. Install the CLI or depend on the libraries from Git tag `0.11.0`.
+
+There is no `protocol/1` break: the new keys are optional, and a protocol that uses none of them
+parses, compiles and evaluates to the same bytes as under 0.10.0.
+
+What breaks, and for whom (read against the diff of `crates/canon/src/model` and
+`crates/canon/src/ir` since 0.10.0):
+
+- Rust consumers that build these types with struct literals or match them exhaustively.
+  `Artifact` gains `revised_by`, `Action` gains `records_together` (a list of the new `RecordGroup`,
+  which holds `kinds`), `EvidenceRecord` gains `item` (the new identifier type `ItemId`),
+  `CaseArtifact` gains `descends_from`, and `Predicate` gains the variant `Descended`, which holds
+  the new `EvidenceDescended` (`first`, `then`, `subject`). `OutcomeRequirement::Decision` no
+  longer holds a `DecisionName`: it holds the new `DecisionRequirement` (`decision`, `when`), and
+  `OutcomeRequirement::decision()` still returns the name. `validate::Problem` gains
+  `EvidenceInDecisionCondition`, `InvalidRecordGroup` (with the new `RecordGroupFault`) and
+  `SelfRevisedArtifact`. In `ir`, `Ir::artifacts` is now a map to the new `ir::Artifact`
+  (`description`, `revised_by`) and no longer to `Described`, and `ir::Action` gains
+  `records_together`. `simulate::Report` gains `revisions`.
+- Tooling that compares `canon-decision/1` bytes. `computed_from.semantics.canon` reads `0.11.0`,
+  and `computed_from.case.artifacts.<artifact>` adds `descends_from` as the case wrote it (`[]`
+  when given empty) when the case gives one. The conformance expectations that pin the version
+  moved to `0.11.0`; other expected output did not change.
+- Tooling that reads `canon simulate` output for a protocol where an action declares `revises`, an
+  artifact declares `revised_by`, or an action declares `records_together`. 0.10.0 walked no
+  revision; the walk now has a revise step and a group step, so the states, the findings and the
+  summary of such a protocol can differ, and a walk that was under the bound of 65,536 states can
+  now refuse as `reachable-state-bound`. A protocol with none of them, and the festival fixtures,
+  walk as before. The refusal `ordered-evidence` now names `descended` among the order forms.
+- Tooling that reads `canon check` state counts. For a protocol that reads a `descended` form
+  beside another order form over one evidence kind, the state count grows: the protocol of the
+  review that found it, 72 to 216 states. A protocol with `descended` over one kind and `first`
+  over another stays at 4,320 states.
+- A `protocol/1` document, case or evidence record that uses a new key (`when`, `revised_by`,
+  `records_together`, `descended`, `item`, `descends_from`) is refused by Canon 0.10.0 and earlier
+  as an unknown field: every structure it sits in refuses unknown fields.
+- `canon diff` classes for the new constructs: a `when` added to a decision or removed is a changed
+  outcome requirement, `BREAKING`; a `descended` form changed in its records, results or subject
+  is `BREAKING`, and added or removed as a member of an `all` it is `TIGHTENING` or `RELAXATION`
+  as for any member; `revised_by` introduced, removed or replaced, and a `records_together` group
+  added or removed, are each `NO SEMANTIC CHANGE`.
+
+Writing protocols.
+
+- `{descended: {first: {kind: K1, result: R1}, then: {kind: K2, result: R2}, subject: A}}`
+  orders by revision and not by time (`CANON-ORDER-005`,
+  `conformance/scenarios/revision-ordering.yaml`). It is `true` when an item that had `R1` in a
+  record of `K1`, on a revision the case snapshot lists in the artifact's `descends_from`, has
+  `R2` in a record of `K2` about the artifact's current revision; `unknown` with no such later
+  record or when the snapshot gives no `descends_from` for the subject of one; otherwise `false`.
+  Records pair on equal `item`; a record without an `item` takes no part, and `observed_at` is not
+  read. One item is enough for `true`: an item that failed on an earlier revision, passed on the
+  current one and also failed on the current one is `true`; the model's documentation shows how to
+  add a second form to exclude it. `subject` is optional and names a declared artifact.
+- `item` on an evidence record is opaque text without whitespace or a control character
+  (`invalid-identifier` otherwise), compared for equality only. It takes part in the comparison of
+  two copies of one record id. `descends_from` on a `canon-case/1` artifact lists every revision
+  the current one descends from. Canon reads it and does not compute it; each entry is refused as
+  `invalid-identifier`, `duplicate-identifier` when listed twice, or `self-descent` when it is the
+  current revision.
+- `requires: {decision: d, when: <predicate>}` on an outcome (`CANON-OUTCOME-003`,
+  `conformance/scenarios/decision-condition.yaml`). The decision counts only while `when` is
+  `true` at the evaluation, whenever it was taken. While `when` is `false` or `unknown`, the
+  outcome is blocked by `when`'s reasons, and a decision given is neither counted nor refused, so
+  the same decisions document counts at a later evaluation once `when` is `true`. `when` holds
+  claims and case inputs only; an evidence match, an order form or a `children` form in it is
+  refused as `evidence-in-decision-condition`. `when` beside any requirement but `decision` is a
+  parse error. `canon-ir/1` writes `"when"` only when set.
+- `revised_by: <protocol id>` on an artifact names the protocol whose cases revise it. `canon
+  validate` refuses the protocol's own id as `self-revised-artifact` and checks the id as a
+  protocol identifier. `canon-ir/1` writes it after the artifact's `description` only when set.
+  `canon evaluate`, `canon check` and `canon generate` read nothing from it; `canon simulate` does,
+  below.
+- `records_together: [{kinds: [K1, K2, ...]}]` on an action names kinds its `may_produce` lists
+  that one run records all together or not at all. `canon validate` refuses a group of fewer than
+  two distinct kinds, a kind the action does not produce, the `case_outcome` kind of an action
+  that opens a child case, and a kind already in an earlier group, all as `invalid-record-group`.
+  It has no evaluation meaning; only `canon simulate` reads it. `canon-ir/1` writes it only when
+  set, groups sorted.
+- `b10x_canon::model::write` writes a `protocol/1` model back out as canonical JSON text that
+  `parse` reads to an equal model (story:protocol-writer). It is pure and infallible, and
+  `canon validate` stays the judge of validity. The round trip holds for a model in which every key
+  is at most 1022 bytes as written; the module documentation lists what it does not keep
+  (comments, YAML style, key order inside bodies, how a scalar was spelled) and the depth it needs.
+- Compiled `canon-ir/1` of a protocol that uses none of the new keys is unchanged.
+
+The command line.
+
+- `canon floor --floor <protocol> --ir <canon-ir>` checks that a compiled protocol stays above a
+  compiled organization floor: every change from the floor to the protocol, classified as `canon
+  diff` classifies it, is `TIGHTENING`, `EXPANSION` or `NO SEMANTIC CHANGE`. It prints `floor:
+  holds` and the three counts and exits 0, or prints `floor: breached` with each `RELAXATION` and
+  `BREAKING` change and exits 1. The two keep their own ids, revisions and descriptions. The
+  protocol does not name its floor; passing a compiled import as the floor checks that a
+  refinement only tightens it. Library: `b10x_canon::floor`.
+- `canon mutate --path <protocol> --scenarios <directory>` applies five operators to a protocol
+  (drop a member of an `all`, turn an `all` into an `any`, remove an action's precondition, remove
+  one of its capability requirements, change the result an evidence match names), runs each mutant
+  against the scenarios of the directory whose fixture is the protocol file, and classifies it with
+  `canon diff`. It prints one line per mutant (`killed`, `survived`, `weak point` for a survivor
+  whose difference holds a `RELAXATION`, or `invalid`) and a summary, and exits 1 when at least one
+  weak point is reported. Refused, running nothing: no scenario names the file as its fixture, a
+  scenario does not parse, the protocol does not compile, or a scenario does not pass on the
+  protocol itself. Library: `b10x_canon::mutate`.
+- `canon simulate` gains these steps. A group step adds one record of each kind of a
+  `records_together` group, never one of them alone. A revise step moves a non-empty subset of the
+  artifacts an admissible action declares in `revises` to a new revision, alone or with one record
+  or group of that action (written `action x revises a`). An external revise step moves an
+  artifact that declares `revised_by` with no record added (written `protocol q revises a`);
+  a state only that step opens is counted as waiting, and the summary then reads `waiting on
+  supplied evidence, expiry or a revision by another protocol`. A revision removes the current
+  records about the artifact, except that a `case_outcome` record a `children` form reads becomes
+  an `earlier` record. Where some action revises an artifact or some artifact declares
+  `revised_by`, the walk has one `case_outcome` dimension for each `case_open` subject (written
+  `evidence `case_outcome` about b`), so a revision sets aside only the child outcomes about it, and
+  a child that has not ended when its subject is revised may end against the earlier revision (a
+  step written `… earlier`). A parent that revises the artifact a failed child was about and opens
+  new children is walked to the outcome a `{children: {in: [...], revision: current}}` form reads.
+  `CANON-COMPOSE-002` gains two steps. A protocol with a `descended` form is refused
+  (`ordered-evidence`), as with the other order forms.
+- `canon check` decides a `descended` form: its state space gives each record one `item` and each
+  artifact its descent, and tests pin that it reaches every value of the form beside evidence
+  matches, beside a `first` over its kind and beside another order form of one kind.
+  `canon generate` writes the `item` and `descends_from: [r0]` a
+  scenario for such a protocol needs. `canon generate` takes the state spaces `canon check` has
+  already enumerated and no longer enumerates the whole product a second time; its code and the
+  commit that made it state that every scenario and refusal is the same.
+- Exit statuses: 0 also covers a protocol above its floor and a mutation run with no weak point; 1
+  also covers a protocol below its floor, a refused or weak mutation run. `ess/domains/cli.yaml`
+  declares `floor` and `mutate`, and `task ess-gate` fails when they differ from clap.
+
+Documented limits.
+
+- `canon floor` guards only what the protocol requires of an action it declares. An added action is
+  an `EXPANSION` and every `EXPANSION` passes, so an action added to the protocol that produces a
+  finding the floor guards, without the capability the floor requires, is not caught. A protocol
+  that adds an artifact, a case input or an order form under an `all`, or changes the case an
+  action opens, is `BREAKING` and below the floor though it may tighten.
+- `canon simulate`: a child opened about the artifact the space already uses does not end against
+  an earlier revision, and the walk of such a protocol is unchanged. It checks nothing about the
+  protocol named in `revised_by`.
+- `canon mutate` makes no mutant at a conditioned decision, and does not say it skipped the site.
+- The `slow` lane of the test step may fail: 10 of its 63 tests were killed at 60 s on the
+  workstation (see below).
+
+For contributors.
+
+- The test step of `task check` runs every test once under cargo-nextest: a test is killed at 60 s
+  and counted as failed, the step prints its ten slowest tests and fails over 120 s
+  (`.config/nextest.toml`, `Taskfile.yml`). Each crate has one integration-test binary
+  (`tests/main.rs`), and test builds carry no debug information (`.cargo/config.toml`). Tests
+  measured over 5 s run in `task test-slow`, which CI runs after `task check` with
+  `continue-on-error`: the lane is not yet under the 60 s bound (`story:slow-lane-under-bound`).
+  On the workstation, the step took 55.4 s on its own line (1,275 tests, slowest 16.9 s) and the
+  slow lane killed 10 of 63; before the story, 972.7 s for 1,255 tests in 163 test binaries.
+- `rust-toolchain.toml` pins rustc 1.100.0, read by both workflows. `scripts/ci-watch`
+  (`task ci-watch -- <pull request or branch>`) exits non-zero unless every check passed and the
+  job `canon / task check` reported, and exits 2 at once for a branch with no pull request.
+- A pull request that changes only planning or prose files passes `canon / task check` without
+  building or testing; a change under `website/` or a story file runs the documentation check only.
+  The one path list is `scripts/classify-changes.sh`, tested in
+  `crates/canon/tests/planning_only_classifier.rs`.
+
 ## [0.10.0] - 2026-11-21
 
 Protocols import pinned protocols, capabilities carry a scope, authority decisions can be bound to

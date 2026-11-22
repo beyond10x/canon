@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:canon-mutate
 kind: story
-status: active
+status: implemented
 title: Measure scenario strength with canon mutate
 relations:
 - decomposes: epic:protocol-analysis
@@ -30,10 +30,11 @@ scope:
   path: ess/domains/cli.yaml
 - confidence: cited
   path: fixtures/investigation/mutate/
-revision: 18
+revision: 21
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
 - {from: "proposed", to: "active", at: "2026-11-20T20:58:27Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-20-w1"}
+- {from: "active", to: "implemented", at: "2026-11-22T11:12:32Z", actor: "human:timo", revision: 21, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}, correlation: "wave-2026-11-20-w9"}
 ---
 ## Outcome
 
@@ -146,3 +147,50 @@ give identical bytes. `every_canon_subcommand_is_declared_in_ess` passes.
 
 epic:protocol-analysis part 3; the `ess:hardening` skill's mutation technique; Atlas ADR 0080;
 rescope of 2026-11-20 (`approval-record:accept-drafts-2026-11-20`).
+
+## Decided in review, after adversary pass 1
+
+`review-result:adversary-canon-mutate-pass-1` was red by one case. The coordinator decided the
+points below on 2026-11-21; the correction is `4a545374` and `d3e3e09f`.
+
+- **D1. The mutant is handed in only where the protocol is a scenario's fixture.** The unit had
+  also handed it in where a scenario names the protocol under `imports`. An import is pinned by
+  the digest of its compiled IR, so every importing scenario failed on `import-digest-mismatch`
+  for every mutant that changes the IR; the mutant counted as killed and the run exited 0. § Outcome
+  already says it: the mutant goes in for "the fixture whose path is the `--path` file, and every
+  other fixture unchanged". Now only the scenarios whose fixture is the protocol run, in the
+  baseline and against the mutants; a scenario that names the protocol only as an import is not
+  run; a set in which the protocol is only ever an import is refused `no-scenario`.
+- **D2. No digest pin is rewritten.** Running a mutant of an imported protocol through its
+  importers' scenarios needs the importer's pin rewritten per mutant. That is not this story; it
+  is on the plan's backlog page, cost not assessed.
+- **D3. The read-back guard needed no code.** Removing it left the unit's tests green. The
+  adversary's case `mutate_reports_a_mutant_that_does_not_read_back_as_unwritable` fails on that
+  mutant. A protocol reaches the guard only with an identifier of 1023 bytes or more.
+- **D4. No second adversary pass.** The correction changes 59 lines of
+  `crates/canon/src/mutate/mod.rs`, in the one function that chooses the scenarios, plus comments
+  and help text. The coordinator read it. The adversary's red case passes unchanged, and two unit
+  tests pin the rules of D1 (`a_protocol_named_only_as_an_import_is_refused`,
+  `a_scenario_importing_the_protocol_does_not_run`).
+- **D5. § Acceptance holds as written.** The classifier gives `BREAKING` for any change to an
+  outcome's own requirement, so such a mutant is never a weak point. The weak point of the
+  `lacking` set is a mutant of the claim the outcome reads. The adversary checked 15 mutants by
+  hand against `canon conform run` and `canon diff`; all 15 were equal to what `canon mutate`
+  printed.
+- **D6. The measurement the brief asked for could not be made.** The coordinator's brief named
+  `fixtures/investigation/protocol.yaml` with `conformance/scenarios/`; no scenario of the suite
+  names that file, and `canon mutate` refuses it (`no-scenario`) in 0.10 s. The unit measured the
+  27 fixtures the suite does name: 0.11 to 0.50 s each on a debug binary, 0 invalid mutants. The
+  same 27 gave the same counts after the correction.
+
+## Scope as built
+
+Written at the close of wave 2026-11-20-w9 from the wave page, the adversary report (`review-result:adversary-canon-mutate-pass-1`), the review of the integration branch (`review-result:review-wave-9-model`) and the merge of `impl/canon-mutate` (`f1e72413`: 27 files, +2347 −12). It corrects the body where the two differ.
+
+- Each mutant is the parsed model with one change, written with `model::write`. The correction after pass 1 (`4a545374`, `d3e3e09f`) hands the mutant in only for a scenario whose fixture is the mutated protocol, and runs only those scenarios (D1 to D6, "Decided in review").
+- Every path of the typed scope changed. Outside it: `crates/canon/src/mutate/tests.rs`, `crates/canon-cli/tests/adversary_mutate.rs` and `fixtures/mutate-adversary/import/` (4 files, the adversary's), and the generated `website/docs/reference/cli.md`.
+- After the merge: story:revision-ordering and story:decision-condition each changed `crates/canon/src/mutate/mod.rs` for their new forms. The review found that `canon mutate` makes no mutant at a conditioned decision and does not report the skipped site (model F2, a note; documented and pinned by `mutate_makes_no_mutant_at_a_conditioned_decision`); it is in story:review-notes-wave-9 (draft).
+- Acceptance: `mutate_reports_weakening_survivors` passed in the test step and `every_canon_subcommand_is_declared_in_ess` in the `ess-gate` step of the gate below. Not shown at the close-out: the five expectations one by one (assertions of that test).
+- `website/data/status.json` is not regenerated by the close-out; it reads this story's status.
+
+**Gate of the close-out**, on `wave/2026-11-21` at `2f3d14b14`, 2026-11-22 10:43 to 11:01 UTC, host load 67 on 20 CPUs, rustc 1.100.0, each step run once by the coordinator's gate script (not `task check` as one command): build exit 0 (125 s); `task ess-gate` 0; `cargo fmt --check` 0; `cargo clippy --workspace --all-targets --locked -- -D warnings` 0; `task test` 0 (1275 tests; the step's own line: `ess-gate 2.2 s + workspace 50.4 s + -p b10x-canon 2.7 s = 55.4 s, bound 120 s`; slowest 16.9 s); `canon conform run` 0 (`30 passed, 0 failed`; `31 implemented, 31 covered`); `task docs-check` 0 (18 generated files current); `task test-slow` exit 201 (63 tests: 53 passed, 10 killed at 60 s; its CI step may fail, D123, story:slow-lane-under-bound). Recorded as `test_result` evidence. The four review results of the wave are `review-result:review-wave-9-eval`, `-simulate`, `-model` and `-gate`.

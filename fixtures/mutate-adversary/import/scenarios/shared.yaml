@@ -1,0 +1,27 @@
+format: canon-conformance/1
+id: adversary-shared-both-checks
+covers: []
+fixture: fixtures/mutate-adversary/import/shared.yaml
+# Shared on its own: both checks recorded, `ready` legitimate. No scenario records one check alone,
+# so dropping either conjunct of `item.ready` goes unnoticed by every scenario's behaviour.
+steps:
+  - id: both-checks
+    evaluate:
+      case:
+        format: canon-case/1
+        id: c
+        protocol: shared
+        artifacts:
+          item: {revision: r1}
+      evidence:
+        - {format: canon-evidence/1, id: e1, kind: first_check, subject: item, subject_revision: r1}
+        - {format: canon-evidence/1, id: e2, kind: second_check, subject: item, subject_revision: r1}
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "ready": {
+              "status": "legitimate"
+            }
+          }
+        }

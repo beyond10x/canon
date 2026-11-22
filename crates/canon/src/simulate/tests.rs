@@ -309,10 +309,15 @@ fn a_child_outcome_held_as_expired_evaluates_as_a_case_past_its_max_age() {
         .expect("an accepted class");
     let both = layout.add(&layout.add(&empty, outcome, accepted, 0), at("lock"), 0, 0);
     let expired = layout.expire(&both, outcome, accepted);
-    assert_eq!(layout.held(&expired), [(at("lock"), 0, vec![0])]);
+    assert_eq!(layout.held(&expired), [(at("lock"), 0, 0, vec![0])]);
     assert_eq!(layout.expired(&expired), [(outcome, accepted)]);
     assert_eq!(
-        space.render_walk(&base, &layout.held(&expired), &layout.expired(&expired)),
+        space.render_walk(
+            &base,
+            &layout.held(&expired),
+            &layout.expired(&expired),
+            &[]
+        ),
         "{evidence `case_outcome` result `accepted` expired, evidence `lock`}"
     );
     let walked = check::evaluate_records(
@@ -450,6 +455,34 @@ fn a_protocol_that_opens_child_cases_states_no_limit() {
             .is_some_and(|summary| summary.contains(" waiting on supplied evidence or expiry, ")),
         "{without}"
     );
+}
+
+/// An artifact that declares `revised_by` adds the revision to what the waiting states wait on,
+/// whatever else the summary names, and a protocol without one keeps the phrase it had.
+#[test]
+fn a_revision_by_another_protocol_is_named_in_the_summary() {
+    let summary = |source: &str| report(source).lines().last().expect("a summary").to_owned();
+    let revised = HELD.replace(
+        "findings: {description: The findings.}",
+        "findings: {description: The findings., revised_by: q}",
+    );
+    assert_ne!(revised, HELD);
+    assert!(
+        summary(&revised).contains(
+            " waiting on supplied evidence, a child outcome, expiry or a revision by another \
+             protocol, "
+        ),
+        "{}",
+        summary(&revised)
+    );
+    let without_opening = revised.replace(", case_open: {protocol: q, subject: findings}", "");
+    assert!(
+        summary(&without_opening)
+            .contains(" waiting on supplied evidence, expiry or a revision by another protocol, "),
+        "{}",
+        summary(&without_opening)
+    );
+    assert!(summary(HELD).contains(" waiting on supplied evidence, a child outcome or expiry, "));
 }
 
 /// story:simulate-child-outcome-step: a record of the class `open` held as expired (R2a) is an
@@ -685,4 +718,306 @@ fn the_same_protocol_gives_the_same_report() {
         .replace("evidence_kinds:\n", &format!("evidence_kinds:\n{renewal}"));
     assert_ne!(reordered, EXPIRY);
     assert_eq!(report(&reordered), report(EXPIRY));
+}
+
+/// story:simulate-revise-step, § Outcome 2, third change: a revision of `a` turns a record of a
+/// dimension with upstream `a` into the one observed before `a` moved, which the invalidation
+/// rule keeps from `passed` but not from `recorded`. The stuck state is reached only by the revise
+/// step and is written with the variant; the state before it is a `cycle` under the restated rule
+/// (every record step of `fix` returns it, its revise step does not), with the suffix.
+#[test]
+fn a_revision_of_an_upstream_artifact_keeps_the_record_from_its_claim() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1, description: A protocol.}\n\
+        artifacts: {a: {description: A.}, b: {description: B.}}\n\
+        evidence_kinds: {test: {description: A test.}}\n\
+        claims:\n\
+        \x20 passed: {description: Passed., true_when: {evidence: {kind: test, subject: b, \
+        result: pass}}}\n\
+        \x20 recorded: {description: Recorded., true_when: {evidence: {kind: test, subject: b}}}\n\
+        actions:\n\
+        \x20 check: {description: Check., precondition: {claim: recorded, is: unknown}, \
+        may_produce: [{evidence: test}]}\n\
+        \x20 fix: {description: Fix., precondition: {claim: passed, is: false}, revises: [a]}\n\
+        outcomes:\n\
+        \x20 passed: {description: Passed., requires: {claim: passed}}\n\
+        invalidation:\n\
+        \x20 a.revised: {description: A moved., upstream: a, invalidates: [passed]}\n";
+    assert_eq!(
+        report(source),
+        "stuck-state: state {evidence `test` about `b` observed before upstream `a` moved}: no \
+         outcome is legitimate and no action is admissible or approval-required; path: action \
+         `check` produces evidence `test` about `b`, then action `fix` revises `a`\n\
+         cycle: state {evidence `test` about `b`}: no outcome is legitimate, no action is \
+         approval-required, and every record step of action `fix` returns this state; path: \
+         action `check` produces evidence `test` about `b`; every revision by action `fix` leads \
+         to a state no outcome is reachable from\n\
+         simulated: protocol `p` revision 1: 4 reachable states, 1 terminable (outcome `passed` \
+         1), 2 findings (2 stuck or cycle states)\n"
+    );
+}
+
+/// story:simulate-revise-step, § Outcome 2, second change: a revision of `doc` turns a child's
+/// record about `doc` into an earlier record, written `… earlier`. A `children` form with
+/// `revision: current` does not read it, so the outcome it requires is lost after the revision:
+/// the three states that hold the child's record, current with an unlisted outcome or earlier,
+/// are `cycle`s, the one with a current record with the revision suffix. The state with `open`
+/// earlier waits on the child's outcome; the one with `open` current does not wait, since its
+/// revise step changes it.
+#[test]
+fn a_record_a_children_form_reads_becomes_earlier() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1, description: A protocol.}\n\
+        artifacts: {b: {description: B.}, doc: {description: The document.}}\n\
+        evidence_kinds:\n\
+        \x20 case_outcome: {description: The outcome of a child case.}\n\
+        \x20 start: {description: A start.}\n\
+        claims:\n\
+        \x20 reviewed: {description: Reviewed., true_when: {children: {in: [accepted], subject: \
+        doc, revision: current}}}\n\
+        \x20 started: {description: Started., true_when: {evidence: {kind: start, subject: b}}}\n\
+        actions:\n\
+        \x20 fix: {description: Fix., revises: [doc]}\n\
+        \x20 open_review: {description: Open., precondition: {claim: started, is: unknown}, \
+        may_produce: [{evidence: start}], case_open: {protocol: q, subject: doc}}\n\
+        outcomes:\n\
+        \x20 accepted: {description: Accepted., requires: {claim: reviewed}}\n";
+    assert_eq!(
+        report(source),
+        "cycle: state {evidence `case_outcome` about `doc`, evidence `start` about `b`}: no \
+         outcome is legitimate, no action is approval-required, and every record step of action \
+         `fix` returns this state; path: action `open_review` produces evidence `start` about \
+         `b`, then a child of action `open_review` records evidence `case_outcome` about `doc`; \
+         every revision by action `fix` leads to a state no outcome is reachable from\n\
+         cycle: state {evidence `case_outcome` about `doc` earlier, evidence `start` about `b`}: \
+         no outcome is legitimate, no action is approval-required, and every step of action \
+         `fix` returns this state; path: action `open_review` produces evidence `start` about \
+         `b`, then a child of action `open_review` records evidence `case_outcome` about `doc`, \
+         then action `fix` revises `doc`\n\
+         cycle: state {evidence `case_outcome` about `doc` result `accepted` earlier, evidence \
+         `start` about `b`}: no outcome is legitimate, no action is approval-required, and every \
+         step of action `fix` returns this state; path: action `open_review` produces evidence \
+         `start` about `b`, then a child of action `open_review` records evidence `case_outcome` \
+         about `doc` result `accepted`, then action `fix` revises `doc`\n\
+         simulated: protocol `p` revision 1: 9 reachable states, 1 terminable (outcome \
+         `accepted` 1), 2 waiting on supplied evidence, a child outcome or expiry, 3 findings (3 \
+         stuck or cycle states)\n"
+    );
+}
+
+/// story:simulate-revise-step, § Scope: a revise step adds no record, one record or one group
+/// the action offers (story:simulate-record-groups), and a grouped kind is not added alone. The
+/// stuck state `{k, l}` is reached only by revising `doc`, which sets `m` aside, and adding the
+/// group in the same step, written on one line.
+#[test]
+fn a_revise_step_adds_a_group_in_the_same_step() {
+    let source = format!(
+        "{HEAD}\
+         evidence_kinds: {{k: {{description: K.}}, l: {{description: L.}}, m: {{description: \
+         M.}}}}\n\
+         claims:\n\
+         \x20 hk: {{description: K., true_when: {{evidence: {{kind: k}}}}}}\n\
+         \x20 hl: {{description: L., true_when: {{evidence: {{kind: l}}}}}}\n\
+         \x20 hm: {{description: M., true_when: {{evidence: {{kind: m}}}}}}\n\
+         actions:\n\
+         \x20 x: {{description: X., precondition: {{claim: hm}}, revises: [doc], may_produce: \
+         [{{evidence: k}}, {{evidence: l}}], records_together: [{{kinds: [k, l]}}]}}\n\
+         \x20 y: {{description: Y., precondition: {{claim: hk, is: unknown}}, may_produce: \
+         [{{evidence: m}}]}}\n\
+         outcomes:\n\
+         \x20 done: {{description: Done., requires: {{all: [{{claim: hk}}, {{claim: hl}}, \
+         {{claim: hm}}]}}}}\n"
+    );
+    assert_eq!(
+        report(&source),
+        "stuck-state: state {evidence `k`, evidence `l`}: no outcome is legitimate and no action \
+         is admissible or approval-required; path: action `y` produces evidence `m`, then action \
+         `x` revises `doc` and produces evidence `k` and evidence `l`\n\
+         simulated: protocol `p` revision 1: 4 reachable states, 1 terminable (outcome `done` \
+         1), 1 finding (1 stuck or cycle state)\n"
+    );
+}
+
+/// story:simulate-revise-step, § Outcome 1: the subsets of an action's `revises` are tried in
+/// order of their sorted ids, `[a]`, `[a, b]`, `[b]`. From `{l, m}` revising `a` changes nothing,
+/// and `[a, b]` and `[b]` both set `l` aside; the path names the first, `a, b`.
+#[test]
+fn revise_subsets_come_in_order_of_their_sorted_ids() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1, description: A protocol.}\n\
+        artifacts: {a: {description: A.}, b: {description: B.}, c: {description: C.}}\n\
+        evidence_kinds: {l: {description: L.}, m: {description: M.}}\n\
+        claims:\n\
+        \x20 hl: {description: L., true_when: {evidence: {kind: l, subject: b}}}\n\
+        \x20 hm: {description: M., true_when: {evidence: {kind: m, subject: c}}}\n\
+        actions:\n\
+        \x20 x: {description: X., precondition: {claim: hl}, revises: [b, a]}\n\
+        \x20 y: {description: Y., precondition: {claim: hm, is: unknown}, may_produce: \
+        [{evidence: l}, {evidence: m}], records_together: [{kinds: [l, m]}]}\n\
+        outcomes:\n\
+        \x20 done: {description: Done., requires: {all: [{claim: hl}, {claim: hm}]}}\n";
+    assert_eq!(
+        report(source),
+        "stuck-state: state {evidence `m` about `c`}: no outcome is legitimate and no action is \
+         admissible or approval-required; path: action `y` produces evidence `l` about `b` and \
+         evidence `m` about `c`, then action `x` revises `a`, `b`\n\
+         simulated: protocol `p` revision 1: 3 reachable states, 1 terminable (outcome `done` \
+         1), 1 finding (1 stuck or cycle state)\n"
+    );
+}
+
+/// story:simulate-revise-step, § Outcome 1: an action's record steps are tried before its revise
+/// steps, so a state both reach from one state is reached by the record step; a revise step that
+/// changes nothing is no step, and a `cycle` whose revise steps all return the state is written
+/// as before, without the suffix.
+#[test]
+fn a_record_step_is_tried_before_a_revise_step() {
+    let source = "format: protocol/1\n\
+        protocol: {id: p, revision: 1, description: A protocol.}\n\
+        artifacts: {b: {description: B.}, doc: {description: The document.}}\n\
+        evidence_kinds: {k: {description: K.}, z: {description: Z.}}\n\
+        claims:\n\
+        \x20 hk: {description: K., true_when: {evidence: {kind: k, subject: b}}}\n\
+        \x20 hz: {description: Z., true_when: {evidence: {kind: z}}}\n\
+        actions:\n\
+        \x20 x: {description: X., revises: [doc], may_produce: [{evidence: k}]}\n\
+        outcomes:\n\
+        \x20 done: {description: Done., requires: {claim: hz}}\n";
+    assert_eq!(
+        report(source),
+        "cycle: state {evidence `k` about `b`}: no outcome is legitimate, no action is \
+         approval-required, and every step of action `x` returns this state; path: action `x` \
+         produces evidence `k` about `b`\n\
+         unreached-outcome: outcome `done` is legitimate in no reachable state\n\
+         no-outcome-reachable: protocol `p` revision 1 reaches no state in which an outcome is \
+         legitimate\n\
+         simulated: protocol `p` revision 1: 2 reachable states, 0 terminable (outcome `done` \
+         0), 3 findings (1 stuck or cycle state)\n"
+    );
+}
+
+/// story:simulate-revise-step, § Outcome 2: a state holds no revision number, so a walk with
+/// revise steps reaches at most the states of `canon check`'s whole product, times three per
+/// opening action for its mark. Each `revise*` fixture is within that bound.
+#[test]
+fn a_walk_with_revise_steps_stays_within_the_check_product() {
+    let fixtures = [
+        include_str!("../../../../fixtures/investigation/simulate/revise/protocol.yaml"),
+        include_str!("../../../../fixtures/investigation/simulate/revise-upstream/protocol.yaml"),
+        include_str!("../../../../fixtures/investigation/simulate/revise-denied/protocol.yaml"),
+        include_str!("../../../../fixtures/investigation/simulate/revise-mixed/protocol.yaml"),
+        include_str!("../../../../fixtures/investigation/simulate/revise-child/protocol.yaml"),
+    ];
+    for source in fixtures {
+        let ir = compiled(source);
+        let product = Space::new(&ir).size().expect("a product that fits");
+        let openers = ir
+            .actions
+            .values()
+            .filter(|action| action.case_open.is_some())
+            .count();
+        let walked = simulate(&ir).expect("walked");
+        let states = u128::try_from(walked.states).expect("fits");
+        assert!(
+            states <= product * 3u128.pow(u32::try_from(openers).expect("few")),
+            "{}: {states} states, product {product}",
+            ir.protocol.id.as_str()
+        );
+    }
+}
+
+/// An external revision is a step of its own, written with the protocol that revises: it is tried
+/// after the supplied steps and before the expiry steps. The state `{u}` is reached from `{t, u}`
+/// both by `t` expiring and by `q` revising `a`, which `t` is about; the revise step comes first,
+/// so the shortest path to it ends with it.
+#[test]
+fn an_external_revision_is_written_as_protocol_revises() {
+    let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+        artifacts: {a: {revised_by: q}, b: {}}\n\
+        evidence_kinds: {t: {max_age: 1h}, u: {}, n: {}}\n\
+        claims:\n\
+        \x20 c: {true_when: {evidence: {kind: t, subject: a}}}\n\
+        \x20 g: {true_when: {any: [{evidence: {kind: t, subject: a}}, {evidence: {kind: u, subject: b}}]}}\n\
+        \x20 never: {true_when: {evidence: {kind: n}}}\n\
+        actions:\n\
+        \x20 produce_t: {precondition: {claim: g, is: unknown}, may_produce: [{evidence: t}]}\n\
+        \x20 produce_u: {precondition: {claim: c, is: true}, may_produce: [{evidence: u}]}\n\
+        outcomes: {o: {requires: {claim: never}}}\n";
+    let text = report(source);
+    assert!(
+        text.contains(
+            "stuck-state: state {evidence `u` about `b`}: no outcome is legitimate and no action is \
+             admissible or approval-required; path: action `produce_t` produces evidence `t` \
+             about `a`, then action `produce_u` produces evidence `u` about `b`, then protocol `q` \
+             revises `a`"
+        ),
+        "{text}"
+    );
+}
+
+/// story:artifact-revised-by § Acceptance 7: an external revision is tried after the supplied
+/// steps. The state `{u, s}` (`s` supplied) is reached at depth 4 from `{t, u, s}` by `q` revising
+/// `a`, which `t` is about, and from `{u}` by `s` arriving; both parents are first reached from
+/// `{t, u}` at depth 3, the supplied step first, so the shortest path to `{u, s}` ends with the
+/// revision. `produce_x` is open only while `s` is unknown, so `{u}` is no stuck state that
+/// would contain `{u, s}` and keep it from being printed.
+#[test]
+fn an_external_revision_is_tried_after_the_supplied_steps() {
+    let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+        artifacts: {a: {revised_by: q}, b: {}}\n\
+        evidence_kinds: {t: {}, u: {}, x: {}, s: {supplied_by: r}, n: {}}\n\
+        claims:\n\
+        \x20 c: {true_when: {evidence: {kind: t, subject: a}}}\n\
+        \x20 g: {true_when: {any: [{evidence: {kind: t, subject: a}}, {evidence: {kind: u, subject: b}}]}}\n\
+        \x20 sup: {true_when: {evidence: {kind: s, subject: b}}}\n\
+        \x20 never: {true_when: {evidence: {kind: n}}}\n\
+        actions:\n\
+        \x20 produce_t: {precondition: {claim: g, is: unknown}, may_produce: [{evidence: t}]}\n\
+        \x20 produce_u: {precondition: {claim: c, is: true}, may_produce: [{evidence: u}]}\n\
+        \x20 produce_x: {precondition: {all: [{claim: g, is: true}, {claim: sup, is: unknown}]}, \
+        may_produce: [{evidence: x}]}\n\
+        outcomes: {o: {requires: {claim: never}}}\n";
+    let text = report(source);
+    let line = text
+        .lines()
+        .find(|line| {
+            line.starts_with("stuck-state: state {evidence `s` about `b`, evidence `u` about `b`}")
+        })
+        .unwrap_or_else(|| panic!("no stuck state {{s, u}} printed:\n{text}"));
+    assert!(
+        line.contains(
+            "path: action `produce_t` produces evidence `t` about `a`, then action `produce_u` \
+             produces evidence `u` about `b`, then protocol `r` supplies evidence `s` about `b`, then \
+             protocol `q` revises `a`;"
+        ),
+        "{line}"
+    );
+}
+
+/// story:child-outcome-recovery, § Outcome 5: an action whose `case_open` subject is the artifact
+/// the space's `case_outcome` dimension is about (here `a`, the least id) is walked as before: no
+/// record is written about an artifact, and a revision of `b` leaves the failed outcome current.
+#[test]
+fn the_spaces_own_subject_is_not_split() {
+    let source = include_str!(
+        "../../../../fixtures/investigation/simulate/revise-child-current/protocol.yaml"
+    )
+    .replace("      subject: b\n", "      subject: a\n");
+    let text = report(&source);
+    assert!(text.contains("state {evidence `case_outcome`}"), "{text}");
+    assert!(!text.contains(" about "), "{text}");
+}
+
+/// A protocol with a `descended` form (story:revision-ordering) is refused as `ordered-evidence`,
+/// as one with any other order form is, naming the first declaration that has one.
+#[test]
+fn a_descended_form_is_refused_as_ordered_evidence() {
+    let source = format!(
+        "{HEAD}evidence_kinds: {{run: {{}}}}\nactions: {{go: {{may_produce: [{{evidence: run}}]}}}}\n\
+         outcomes: {{done: {{requires: {{descended: {{first: {{kind: run, result: failed}}, \
+         then: {{kind: run, result: passed}}, subject: doc}}}}}}}}\n"
+    );
+    let refusal = simulate(&compiled(&source)).expect_err("refused");
+    assert_eq!(refusal.code(), "ordered-evidence");
+    assert!(refusal.to_string().contains("outcome `done`"), "{refusal}");
 }

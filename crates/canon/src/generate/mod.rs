@@ -1,7 +1,7 @@
 //! Minimal witness scenarios for a compiled protocol (story:scenario-generation).
 //!
-//! [`generate`] walks the whole state space [`crate::check`] builds, evaluates every state with
-//! Canon's own evaluator, and writes one `canon-conformance/1` scenario per declared outcome and per
+//! [`generate`] takes the spaces [`crate::check`] enumerates, the whole state space or the slice
+//! each subject is decided over, each state evaluated with Canon's own evaluator, and writes one `canon-conformance/1` scenario per declared outcome and per
 //! action blocked in some state. Each scenario evaluates the witness state of its subject and
 //! expects the evaluation's section for that subject. Pure and deterministic: no clock, network or
 //! filesystem, and the same inputs give the same scenarios, byte for byte; `canon generate` writes
@@ -43,7 +43,9 @@
 //!   record of a kind an evidence match demanding independence reads with its `producer`,
 //!   `producer-n`, when its profile is not the empty one; and a `case_outcome` record with its
 //!   `child_case`, the record's own id, and an outcome no predicate names in place of no result
-//!   (`crate::check`, "Child cases");
+//!   (`crate::check`, "Child cases"); and, for a protocol with a `descended` form, every record
+//!   with the one `item` the state space gives it, and every artifact of the case with the
+//!   `descends_from` it gives (`[r0]`, story:revision-ordering);
 //! - `authority`, each decided capability, when the witness decides one;
 //! - `decisions`, each taken decision for every outcome that requires it, by the principal
 //!   `canon-generate` at case revision `r`, when the witness takes one;
@@ -82,7 +84,7 @@
 //! - Every refusal [`crate::check::check`] makes, with its code: a slice above the bound
 //!   (`state-space-bound`), a protocol that reads `case_outcome` with a `children` form and
 //!   an order form (`ordered-child-outcomes`) and an evaluation the evaluator refuses.
-//! - `state-space-bound`: the whole product, which this enumerates, is above the bound though
+//! - `state-space-bound`: the whole product, which generation is held to, is above the bound though
 //!   every slice `canon check` decides fits. The refusal names the whole product's count, the
 //!   bound and each dimension, as `canon check` did before it decided subjects over slices.
 
@@ -204,34 +206,49 @@ pub fn generate(ir: &Ir, fixture: &str, source: &str) -> Result<Vec<Scenario>, R
             ),
         ));
     }
-    check::check(ir, None)?;
-    let space = Space::new(ir);
-    // `canon check` decides each subject over its slice; this enumerates the whole product, so it
-    // keeps the whole product's bound.
-    let size = check::whole_product(ir, &space)?;
-    let states: Vec<State> = (0..size).map(|index| space.state(index)).collect();
-    let evaluated = states
+    let (_, enumerations) = check::check_keeping(ir, None, check::Strategy::Chosen)?;
+    let whole = Space::new(ir);
+    // `canon check` decides each subject over its slice. Generation keeps the whole product's
+    // bound, and finds each subject's witness over the space the check decided it over: a state of
+    // a slice is written, and evaluated, as the whole product's state, and the whole product's
+    // witness lies in the slice, since what lies outside it weighs least and changes no status.
+    check::whole_product(ir, &whole)?;
+    let spaces: Vec<Space<'_>> = enumerations
         .iter()
-        .map(|state| check::evaluate(ir, &space, state))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|enumeration| match &enumeration.slice {
+            Some(slice) => whole.slice(slice),
+            None => Space::new(ir),
+        })
+        .collect();
+    // The space subject `at` (outcomes first, then actions) was decided over.
+    let over = |at: usize| {
+        enumerations
+            .iter()
+            .position(|enumeration| enumeration.members.contains(&at))
+            .expect("the check decides every subject over one space")
+    };
 
     let mut witnessed = Vec::new();
     for (at, id) in ir.actions.keys().enumerate() {
+        let p = over(ir.outcomes.len() + at);
+        let (states, evaluated) = (&enumerations[p].states, &enumerations[p].evaluated);
         let blocked = (0..states.len()).filter(|index| evaluated[*index].actions[at] == "blocked");
-        if let Some(index) = check::witness(&space, &states, blocked) {
+        if let Some(index) = check::witness(&spaces[p], states, blocked) {
             let subject = Subject {
                 kind: "action",
                 id: id.as_str(),
                 status: "blocked",
                 section: "actions",
             };
-            witnessed.push((subject, index));
+            witnessed.push((subject, (p, index)));
         }
     }
     for (at, id) in ir.outcomes.keys().enumerate() {
+        let p = over(at);
+        let (states, evaluated) = (&enumerations[p].states, &enumerations[p].evaluated);
         let legitimate =
             (0..states.len()).filter(|index| evaluated[*index].outcomes[at] == "legitimate");
-        let Some(index) = check::witness(&space, &states, legitimate) else {
+        let Some(index) = check::witness(&spaces[p], states, legitimate) else {
             return Err(Refusal::new(
                 "unreachable-outcome",
                 format!(
@@ -246,7 +263,7 @@ pub fn generate(ir: &Ir, fixture: &str, source: &str) -> Result<Vec<Scenario>, R
             status: "legitimate",
             section: "outcomes",
         };
-        witnessed.push((subject, index));
+        witnessed.push((subject, (p, index)));
     }
 
     if witnessed.is_empty() {
@@ -295,7 +312,10 @@ pub fn generate(ir: &Ir, fixture: &str, source: &str) -> Result<Vec<Scenario>, R
     }
     witnessed
         .iter()
-        .map(|(subject, index)| scenario(ir, &space, &states[*index], subject, fixture, source))
+        .map(|(subject, (p, index))| {
+            let state = &enumerations[*p].states[*index];
+            scenario(ir, &spaces[*p], state, subject, fixture, source)
+        })
         .collect()
 }
 
@@ -334,6 +354,7 @@ fn scenario(
                 .map(|artifact| {
                     let current = CaseArtifact {
                         revision: revision.clone(),
+                        descends_from: space.descends_from(),
                     };
                     (artifact.clone(), current)
                 })
@@ -376,9 +397,20 @@ fn scenario(
         line(8, "artifacts: {}");
     } else {
         line(8, "artifacts:");
+        let ancestors = case
+            .artifacts
+            .iter()
+            .find_map(|(_, current)| current.descends_from.as_ref());
         for artifact in ir.artifacts.keys() {
             line(10, &format!("{}:", quote(artifact.as_str())));
             line(12, &format!("revision: {}", quote(REVISION)));
+            if let Some(ancestors) = ancestors {
+                let listed: Vec<String> = ancestors
+                    .iter()
+                    .map(|revision| quote(revision.as_str()))
+                    .collect();
+                line(12, &format!("descends_from: [{}]", listed.join(", ")));
+            }
         }
     }
     if !case.inputs.is_empty() {
@@ -430,6 +462,9 @@ fn scenario(
             }
             if let Some(child) = &record.child_case {
                 line(10, &format!("child_case: {}", quote(child.as_str())));
+            }
+            if let Some(item) = &record.item {
+                line(10, &format!("item: {}", quote(item.as_str())));
             }
             if !record.upstream_revisions.is_empty() {
                 line(10, "upstream_revisions:");

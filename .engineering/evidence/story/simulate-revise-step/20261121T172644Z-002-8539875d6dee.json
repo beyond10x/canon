@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-21T17:26:44Z",
+  "actor": "human:timo",
+  "artifact": "story:simulate-revise-step",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "finding 3, crates/canon-cli/src/lib.rs:202, contract-drift: the help text of canon simulate left out that a waiting state has no legitimate outcome and no approval-required action; the help text, the response comment of canon.cli.Simulate and the regenerated reference state all three conditions",
+    "reference": "80168ba9",
+    "review": "review-result:adversary-simulate-revise-step-pass-1",
+    "outcome": "fixed"
+  }
+}

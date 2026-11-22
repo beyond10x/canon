@@ -26,7 +26,8 @@ does not depend on the order the sections are written in:
    dimensions, in that section order, then the capabilities actions name, each followed by the
    keys and values of its scope in the order written, the effect classes actions name and the
    protocol each action's `case_open` names, in action order, then the protocol each evidence
-   kind's `supplied_by` names, in evidence kind order, then the decisions outcomes require, in
+   kind's `supplied_by` names, in evidence kind order, then the protocol each artifact's
+   `revised_by` names, in artifact order, then the decisions outcomes require, in
    outcome order, then the values case inputs declare, in input order;
 4. duplicate identifiers, in the same section order;
 5. capability requirements whose scope names a key more than once (`duplicate-scope-key`,
@@ -37,7 +38,9 @@ does not depend on the order the sections are written in:
    evidence kinds whose `supplied_by` names the protocol's own id (`self-supplied-evidence`,
    naming the kind; story:supplied-evidence), each kind's in that order, in the order the
    evidence kinds are written. Any other protocol may supply a kind, and nothing resolves the
-   name;
+   name; then artifacts whose `revised_by` names the protocol's own id
+   (`self-revised-artifact`, naming the artifact; story:artifact-revised-by), in the order the
+   artifacts are written, and any other protocol may revise an artifact;
 7. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
    more than once (`duplicate-input-value`, naming the input and the value, once for every
    listing after its first), in the order the inputs are written;
@@ -75,8 +78,18 @@ does not depend on the order the sections are written in:
    precondition, then each evidence kind it may produce, then each artifact it `revises`
    (story:judgement-marking), `undeclared-artifact`, once for every listing, in the order
    listed, then the subject of the case it opens, `undeclared-artifact`, then an opening under
-   the protocol's own id, `self-opened-case`, every one naming the action), then those in
-   outcomes, then those in invalidation rules (the upstream
+   the protocol's own id, `self-opened-case`, then each group of its `records_together`
+   (story:simulate-record-groups), in the order written, `invalid-record-group`: a group with
+   fewer than two distinct kinds, then for each kind it names, once, in the order named:
+   `case_outcome` on an action that opens a child case (a child's outcome arrives when the
+   child ends, never with a record of the run that opened it), or else a kind its
+   `may_produce` does not list, and then a kind an earlier group of the action names, every
+   one naming the action and the group, counted from 1), then those in
+   outcomes (each outcome's requirement, when it is a predicate; when it is a decision, its
+   condition `when`, followed by every evidence match, order form and `children` form it holds,
+   `evidence-in-decision-condition`, naming the outcome: it tests only claim values and case
+   inputs, as an applicability predicate does; story:decision-condition), then those in
+   invalidation rules (the upstream
    artifact, then each claim the rule invalidates); within a section, in the order its
    declarations are written, and within a declaration, in the order its references are
    written;
@@ -228,6 +241,7 @@ differently in these cases only:
 | `invalid-max-age` | An evidence kind's `max_age` is not a whole number without leading zeros, followed by `s`, `m`, `h` or `d`, or is too long to count in seconds. |
 | `evidence-in-discharge` | A discharge predicate tests evidence; it may test only claim values. `path` locates the evidence match or order form inside the predicate, as `discharged_when.all[1].evidence` or `discharged_when.first`. |
 | `evidence-in-applicability` | An applicability predicate tests evidence; it may test only claim values and case inputs. `path` locates the evidence match or order form inside the predicate, as `applicable_when.not.evidence` or `applicable_when.before`. |
+| `evidence-in-decision-condition` | An outcome's decision condition tests evidence; it may test only claim values and case inputs (story:decision-condition). `path` locates the evidence match or order form inside the predicate, as `when.not.evidence` or `when.before`. |
 | `duplicate-scope-key` | A capability requirement's scope names a key more than once. |
 | `empty-input-values` | A case input declares no value, so no case could give it one. |
 | `duplicate-input-value` | A case input lists a value more than once. |
@@ -243,7 +257,9 @@ differently in these cases only:
 | `duplicate-child-outcome` | A `children` form lists an outcome more than once. |
 | `open-child-outcome` | A `children` form lists `open`, which is a running child case's outcome, never a terminal one: the form is unknown while a child is open. |
 | `self-opened-case` | An action opens a child case under the protocol's own id: a case could then open cases under its own protocol without end (D206). |
+| `invalid-record-group` | A group of an action's `records_together` (story:simulate-record-groups) is not one run's records: `group` counts the action's groups from 1, in the order written. |
 | `self-supplied-evidence` | An evidence kind names the protocol's own id as the protocol that supplies its records (story:supplied-evidence): records of it come from outside the protocol, or from its own actions, never from a case of the same protocol through `supplied_by`. |
+| `self-revised-artifact` | An artifact names the protocol's own id as the protocol whose cases revise it (story:artifact-revised-by): the protocol's own actions revise through `revises`, and a self-name would hide the dead end a revising action that no state admits leaves. |
 | `claim-cycle` | Claims whose predicates test each other in a cycle; the first claim is repeated at the end. |
 | `action-arguments` | An action's argument schema is outside the argument-schema dialect: `pointer` is the JSON Pointer of the offending keyword inside the schema (`""` for the schema itself) and `reason` why it is refused. |
 | `invalid-import-digest` | An import pins a digest not written `sha256:` followed by 64 lowercase hexadecimal digits. |
