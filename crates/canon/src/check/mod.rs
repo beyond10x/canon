@@ -115,7 +115,16 @@
 //!   classes, one earlier record each, observed first; the current records come after them. An
 //!   earlier record is about the dimension's artifact at a superseded revision (`r0`), so revision
 //!   binding keeps it from every evidence match, as a record observed before a fix moved the
-//!   artifact is kept;
+//!   artifact is kept. In a protocol with a `descended` form (story:revision-ordering) the records
+//!   of the dimensions in value 1 name no item, and every other record names one; a dimension
+//!   that a `descended` form and another order form both read has `3 * (2^classes + 1)` values:
+//!   the values above, then again with every record naming no item, then again with the earlier
+//!   records observed after the current ones, which are the first observations (value 1 then
+//!   names an item and has no instant in the first run), so a `descended` form can be `unknown`
+//!   beside a `first`, a `before`, an `after` or a `since` that has instants, `true` beside a
+//!   first observation that is a current record, and `true` or `false` beside none. Such a state
+//!   writes `` evidence `k` naming no item `` or `` evidence `k` earlier observed last `` and
+//!   weighs one more;
 //! - when two or more dimensions have a history dimension, an order dimension last: every weak
 //!   order of those dimensions (their first observations earlier, later or at one instant), in
 //!   lexicographic order of their ranks, as many values as the ordered Bell number of their count
@@ -260,7 +269,9 @@
 //! dimensions above that it reads (story:check-subject-slices).
 //!
 //! - An outcome's slice is the evidence dimensions its requirement reads, directly or through the
-//!   claims it tests, and the case inputs it tests, likewise; or its one decision dimension.
+//!   claims it tests, and the case inputs it tests, likewise; or, for an outcome that requires a
+//!   decision, its decision dimension and what the decision's `when` reads, as a requirement's
+//!   slice does (story:decision-condition).
 //! - An action's slice is the evidence dimensions and case inputs its precondition reads, likewise,
 //!   and one capability dimension per capability it requires.
 //! - A property's slice is its subject's, together with the evidence dimensions and case inputs its
@@ -276,8 +287,8 @@
 //! `` input `s` `v` ``, the `` v` `` first in code-point order), and stays in the slice when one
 //! value's text begins another's. A state of a slice is written, and evaluated, as the whole
 //! product's state with those values. An action's status depends only on its precondition and the
-//! authority given for its requirements, and an outcome's only on its requirement or its decision,
-//! so each subject has in its slice every status it has in the whole product, the same pairs of
+//! authority given for its requirements, and an outcome's only on its requirement, or on its
+//! decision and what the decision's `when` reads, so each subject has in its slice every status it has in the whole product, the same pairs of
 //! statuses across its `independent_of` claim, and the same witnesses: a state that differs outside
 //! the slice weighs more, or, by an input, is written after one that does not.
 //! `unproduced-evidence` reads no state. When the whole product is within the bound and holds no
