@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-22T17:21:43Z",
+  "actor": "human:timo",
+  "artifact": "story:evaluate-without-thread-per-call",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "canon / task check on pull request 29, head 0b916be02",
+    "reference": "https://github.com/beyond10x/canon/actions/runs/45040110402/job/137262423362"
+  }
+}

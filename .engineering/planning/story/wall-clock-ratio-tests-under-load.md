@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:wall-clock-ratio-tests-under-load
 kind: story
-status: draft
+status: active
 title: The invalidation chain test passes or fails by what the code does, not by the machine's load
 tags:
 - from-finding
@@ -11,12 +11,16 @@ refs:
   reference: D131
 relations:
 - decomposes: epic:canon-kernel
+- serves: vision:governed-autonomy
 scope:
 - confidence: cited
   path: crates/canon/src/eval/mod.rs
 - confidence: cited
   path: crates/canon/tests/invalidation_evaluation_cost.rs
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-22T17:21:51Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
+- {from: "proposed", to: "active", at: "2026-11-22T17:21:51Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
 ---
 ## Outcome
 

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:simulate-child-about-own-artifact
 kind: story
-status: draft
+status: active
 title: canon simulate ends a child about the space's own artifact against the revision it was opened at
 tags:
 - from-finding
@@ -11,6 +11,7 @@ refs:
   reference: D125
 relations:
 - decomposes: epic:canon-kernel
+- serves: vision:governed-autonomy
 scope:
 - confidence: cited
   path: crates/canon-cli/src/lib.rs
@@ -18,7 +19,10 @@ scope:
   path: crates/canon/src/simulate/recovery.rs
 - confidence: cited
   path: crates/canon/tests/adversary3_simulate_recovery.rs
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-22T17:21:51Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
+- {from: "proposed", to: "active", at: "2026-11-22T17:21:51Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
 ---
 ## Outcome
 

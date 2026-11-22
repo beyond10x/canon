@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:floor-guards-added-actions
 kind: story
-status: draft
+status: active
 title: canon floor refuses an added action that produces the floor's finding without its capability
 tags:
 - from-finding
@@ -11,6 +11,7 @@ refs:
   reference: D124
 relations:
 - decomposes: epic:canon-kernel
+- serves: vision:governed-autonomy
 scope:
 - confidence: cited
   path: crates/canon-cli/src/lib.rs
@@ -20,7 +21,10 @@ scope:
   path: crates/canon/src/floor/mod.rs
 - confidence: cited
   path: fixtures/investigation/floor
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-22T17:21:51Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
+- {from: "proposed", to: "active", at: "2026-11-22T17:21:51Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
 ---
 ## Outcome
 
