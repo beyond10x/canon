@@ -79,7 +79,7 @@ fn ess(dir: &Path, args: &[&str]) -> Vec<u8> {
     let output = match Command::new("ess").args(args).current_dir(dir).output() {
         Ok(output) => output,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => panic!(
-            "`ess` is not on PATH: comparing the command surface with ess/ needs ess 0.97.3, the \
+            "`ess` is not on PATH: comparing the command surface with ess/ needs ess 0.97.4, the \
              release ess/ess-inputs.yaml pins"
         ),
         Err(error) => panic!("cannot run `ess {}`: {error}", args.join(" ")),
