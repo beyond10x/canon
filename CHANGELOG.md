@@ -26,6 +26,10 @@ Evaluation.
   `crates/canon/tests/evaluate_many_small_cases.rs` holds that many small cases from such a thread
   give the decisions of the large-stack caller. Results and refusals are unchanged, and a protocol
   nested to the bound still evaluates from a small stack.
+- Measured on the `loom` harness (release build, 2,000 one-record `evaluate_with` calls, host load
+  140 to 175, 5 runs each): 186 to 769 µs a call in 0.11.0 and 21.7 to 25.5 µs in 0.11.1. With 8
+  calling threads of 2,000 calls each, a worker per calling thread cost 4.9 to 7.1 µs a call across
+  threads; a single worker for the process, tried and not kept, cost 16.6 to 24.8 µs.
 - Callers on different threads have a worker each and run at the same time. A call made by work
   already on the worker runs where it is and waits for nothing. A panic in the work reaches the
   caller with its payload and the worker serves the next call. A call made while the calling
