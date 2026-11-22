@@ -107,6 +107,7 @@ pub(super) fn values(
     let claims: Vec<(&ClaimId, &Claim)> = ir.claims.iter().collect();
     let mut walk = Walk {
         evidence,
+        timeline: super::order::Timeline::new(evidence.history),
         inputs,
         place_of: evidence
             .left
@@ -196,6 +197,9 @@ impl Hasher for MultiplyRotate {
 /// alone; one decided in a context several walks share is kept for all of them.
 struct Walk<'a> {
     evidence: EvidenceSets<'a>,
+    /// The order of `evidence.history`, read once for every order form of every claim
+    /// (story:order-timeline-built-once).
+    timeline: super::order::Timeline<'a>,
     /// The case's input values, which input tests read.
     inputs: &'a Inputs,
     /// For each record of `evidence.left`, its place among the records the invalidation stage
@@ -330,10 +334,10 @@ impl<'a> Walk<'a> {
             | Predicate::Before(_)
             | Predicate::After(_)
             | Predicate::Since(_)
-            | Predicate::Descended(_) => {
-                super::order::value(predicate, self.evidence.history, self.evidence.artifacts)
-                    .unwrap_or(Truth::Unknown)
-            }
+            | Predicate::Descended(_) => self
+                .timeline
+                .value(predicate, self.evidence.artifacts)
+                .unwrap_or(Truth::Unknown),
             // The case_outcome records the form reads of the history, likewise: a child's outcome
             // is not invalidated.
             Predicate::Children(form) => {
