@@ -388,10 +388,19 @@
 //! state with one dimension alone off its least value that can hold a refused record, capability,
 //! decision or case input value, are evaluated first, in the order of the whole product.
 
+#[cfg(test)]
+mod peak;
 mod properties;
 mod space;
 #[cfg(test)]
 mod tests;
+
+// The most enumerations held at once by the last check this thread ran: the one being decided
+// and every one kept before it (test builds only; E4 of the wave 9 review).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static ENUMERATIONS_HELD: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -676,7 +685,7 @@ pub(crate) fn check_by(
     properties: Option<&Properties>,
     strategy: Strategy,
 ) -> Result<Report, Refusal> {
-    check_keeping(ir, properties, strategy).map(|(report, _)| report)
+    check_enumerating(ir, properties, strategy, false).map(|(report, _)| report)
 }
 
 /// One space a check enumerated: its slice of `Space::new(ir)` (`None` for the whole product), the
@@ -695,6 +704,17 @@ pub(crate) fn check_keeping(
     ir: &Ir,
     properties: Option<&Properties>,
     strategy: Strategy,
+) -> Result<(Report, Vec<Enumeration>), Refusal> {
+    check_enumerating(ir, properties, strategy, true)
+}
+
+/// [`check_keeping`] when `keep`; otherwise each space is dropped once its subjects are decided,
+/// so the check holds one space at a time and gives no [`Enumeration`].
+fn check_enumerating(
+    ir: &Ir,
+    properties: Option<&Properties>,
+    strategy: Strategy,
+    keep: bool,
 ) -> Result<(Report, Vec<Enumeration>), Refusal> {
     eval::check_depth(ir).map_err(|refusal| Refusal::new(refusal.code(), refusal.to_string()))?;
     if let Some(properties) = properties {
@@ -795,6 +815,8 @@ pub(crate) fn check_keeping(
 
     let mut decided: Vec<Decided> = subjects.iter().map(|_| Decided::default()).collect();
     let mut kept: Vec<Enumeration> = Vec::new();
+    #[cfg(test)]
+    ENUMERATIONS_HELD.with(|held| held.set(0));
     for (slice, members) in &plan {
         let sliced;
         let space = match slice {
@@ -805,6 +827,8 @@ pub(crate) fn check_keeping(
             None => &whole,
         };
         let enumerated = enumerate(ir, space)?;
+        #[cfg(test)]
+        ENUMERATIONS_HELD.with(|held| held.set(held.get().max(kept.len() + 1)));
         for at in members {
             decided[*at] = match &subjects[*at].0 {
                 Subject::Outcome(position, id, outcome) => Decided {
@@ -829,12 +853,14 @@ pub(crate) fn check_keeping(
                 },
             };
         }
-        kept.push(Enumeration {
-            slice: slice.clone(),
-            members: members.clone(),
-            states: enumerated.states,
-            evaluated: enumerated.evaluated,
-        });
+        if keep {
+            kept.push(Enumeration {
+                slice: slice.clone(),
+                members: members.clone(),
+                states: enumerated.states,
+                evaluated: enumerated.evaluated,
+            });
+        }
     }
 
     let mut findings = Vec::new();

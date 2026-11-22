@@ -39,6 +39,13 @@ jobs:
           if [ "$EVENT_NAME" = pull_request ]; then
             class=$(sh scripts/classify-changes.sh --diff "origin/$BASE_REF" || echo code)
           fi
+          case "$class" in
+            code | docs-site-only | planning-only) ;;
+            *)
+              echo "the classifier answered \`$class\`, none of code, docs-site-only, planning-only" >&2
+              exit 1
+              ;;
+          esac
           echo "class=$class" >> "$GITHUB_OUTPUT"
           echo "changed files classified: $class"
 
