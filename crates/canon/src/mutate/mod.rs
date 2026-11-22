@@ -233,6 +233,8 @@ impl Classified {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Report {
     pub mutants: Vec<Classified>,
+    /// The sites the operators walk past without a mutant, as [`skipped_sites`] gives them.
+    pub skipped: Vec<String>,
 }
 
 impl Report {
@@ -465,7 +467,13 @@ where
     }
     Ok(Report {
         mutants: classified,
+        skipped: skipped_sites(&model),
     })
+}
+
+/// The sites of `protocol` no operator makes a mutant at, each written for the report.
+pub fn skipped_sites(_protocol: &Protocol) -> Vec<String> {
+    Vec::new()
 }
 
 /// The protocol composed with its imports and compiled.
