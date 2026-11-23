@@ -14,6 +14,17 @@
 //!   ([`super::missing::applicable`], the one rule `missing_evidence` reads). An id no given
 //!   record has does not hold, and is not refused.
 //!
+//! An evidence ground is checked by its id and by the fields that decide whether the record given
+//! under it is applicable (story:approvals-bound-to-evidence-content): its `subject_revision`,
+//! `observed_at` and `upstream_revisions`, read by the revision-binding, freshness and
+//! invalidation rules, and its `producer` where a claim demands independence of it; not by the
+//! rest of its contents. No supplied document carries a digest of a record's contents, so Canon
+//! cannot tell that the record given under an id now is not the one an entry rested on: with other
+//! contents under the same id, still applicable, the entry still applies, and the decision changes
+//! only where a claim reads the replaced contents (a claim over its `result`, say). Evidence IDs
+//! must be immutable once an approval cites them: whoever stores the records and passes them as
+//! `--evidence` keeps each id bound to one content, and gives a changed observation a new id.
+//!
 //! An entry applies only when every ground holds and, when it has a case revision, that revision
 //! is the case snapshot's `revision`, whatever it decided. `authority.rs` and `decisions.rs` decide
 //! that once, before coverage, precedence and `decided_by` read the entries ([`Standing`] says

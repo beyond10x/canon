@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-23T03:03:13Z",
+  "actor": "human:timo",
+  "artifact": "story:check-evaluates-statuses-only",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "full gate on wave/2026-11-22-w12 c182256f8: build, ess-gate, fmt, clippy, test (1271 passed), conform, docs-check exit 0; test-slow 63 of 66 passed, 3 timed out under load and passed alone",
+    "reference": ".engineering/planning/story/check-evaluates-statuses-only.md#scope-as-built"
+  }
+}

@@ -96,12 +96,22 @@ pub enum Command {
         /// approval or denied, each at a scope or at every scope. An action is admissible only when
         /// every capability it requires is granted at the scope it requires it; without it, none
         /// is granted. A decision that gives a case revision applies only while the case snapshot
-        /// is at that revision; its principal is recorded as given.
+        /// is at that revision; its principal is recorded as given. A `ground_evidence` id is
+        /// checked by id and by the `subject_revision`, `observed_at`, `upstream_revisions` and,
+        /// where a claim demands independence, `producer` of the record under it, not by the rest
+        /// of its contents: with other contents the entry still applies, and the decision changes
+        /// only where a claim reads them. Evidence IDs must be immutable once an approval cites
+        /// them.
         #[arg(long)]
         authority: Option<PathBuf>,
         /// A `canon-decisions/1` document: the explicit decisions taken, each naming the decision,
         /// the outcome, the principal and the case revision it was taken at. An outcome that requires
-        /// a decision is legitimate only with one taken at the case snapshot's revision.
+        /// a decision is legitimate only with one taken at the case snapshot's revision. A
+        /// `ground_evidence` id is checked by id and by the `subject_revision`, `observed_at`,
+        /// `upstream_revisions` and, where a claim demands independence, `producer` of the record
+        /// under it, not by the rest of its contents: with other contents the entry still applies,
+        /// and the decision changes only where a claim reads them. Evidence IDs must be immutable
+        /// once an approval cites them.
         #[arg(long)]
         decisions: Option<PathBuf>,
         /// The evaluation instant, in UTC as `YYYY-MM-DDTHH:MM:SSZ`, or `YYYY-MM-DDTHH:MM:SS.fffZ`
@@ -109,6 +119,15 @@ pub enum Command {
         /// instant, counted in whole seconds, does not apply; without it, no evidence expires.
         #[arg(long)]
         at: Option<String>,
+        /// Strict freshness, for a caller that relies on it: refuse a record of a kind with a
+        /// `max_age` that gives no `observed_at` (`undated-evidence`) or was observed later than
+        /// `--at` by more than SKEW (`future-evidence`), and a run without `--at` of a protocol
+        /// with such a kind (`missing-instant`). SKEW is the clock skew allowed, written as a
+        /// `max_age` is (`30s`, `5m`), `0s` when not given; other text is refused as
+        /// `invalid-skew`. Without this flag, such records apply and nothing expires without
+        /// `--at`.
+        #[arg(long, value_name = "SKEW", num_args = 0..=1, default_missing_value = "0s")]
+        strict: Option<String>,
     },
     /// Check a `protocol/1` document over its whole finite state space: report outcomes no state
     /// reaches, actions whose precondition holds in no state, claims, obligations, preconditions and

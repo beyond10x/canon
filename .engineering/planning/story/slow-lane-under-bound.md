@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slow-lane-under-bound
 kind: story
-status: active
+status: implemented
 title: Every test of the slow lane ends within 60 s, so its CI step can fail the job again
 tags:
 - from-finding
@@ -20,10 +20,11 @@ scope:
   path: .github/workflows/check.yml
 - confidence: inferred
   path: crates/canon/src/check/mod.rs
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-22T17:21:51Z", actor: "human:timo", revision: 5, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
 - {from: "proposed", to: "active", at: "2026-11-22T17:21:51Z", actor: "human:timo", revision: 6, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w11"}
+- {from: "active", to: "implemented", at: "2026-11-22T21:20:35Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
 ---
 ## Outcome
 

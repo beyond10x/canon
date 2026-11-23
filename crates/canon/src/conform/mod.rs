@@ -525,14 +525,17 @@ pub fn run_with_imports(
     fixture: Result<&str, &str>,
     imports: &[Result<String, String>],
 ) -> Verdict {
+    run_compiled(scenario, &compiled_fixture(scenario, fixture, imports))
+}
+
+/// Runs a scenario's steps against its fixture compiled once, or against why it did not compile.
+/// Every step of a scenario reads the same fixture and imports, so one compile serves them all and
+/// each step sees what a compile of its own would give.
+fn run_compiled(scenario: &Scenario, compiled: &Result<ir::Ir, String>) -> Verdict {
     for step in &scenario.steps {
         let failure = match &step.kind {
-            StepKind::Compile { expected_ir } => {
-                compile_step(scenario, fixture, imports, expected_ir)
-            }
-            StepKind::Evaluate { inputs, expected } => {
-                evaluate_step(scenario, fixture, imports, inputs, expected)
-            }
+            StepKind::Compile { expected_ir } => compile_step(compiled, expected_ir),
+            StepKind::Evaluate { inputs, expected } => evaluate_step(compiled, inputs, expected),
         };
         if let Some(reason) = failure {
             return Verdict::Failed {
@@ -542,6 +545,12 @@ pub fn run_with_imports(
         }
     }
     Verdict::Passed
+}
+
+#[cfg(test)]
+thread_local! {
+    /// How many fixtures this thread composed and compiled; the count tests read it.
+    static COMPILES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// The fixture's compiled protocol, composed with its imports, or why the step that needs it fails.
@@ -573,6 +582,8 @@ fn compiled_fixture(
         })?;
         imported.push(document);
     }
+    #[cfg(test)]
+    COMPILES.with(|count| count.set(count.get() + 1));
     ir::compose(&protocol, &imported)
         .and_then(|composed| ir::compile(&composed))
         .map_err(|problems| {
@@ -584,32 +595,25 @@ fn compiled_fixture(
         })
 }
 
-fn compile_step(
-    scenario: &Scenario,
-    fixture: Result<&str, &str>,
-    imports: &[Result<String, String>],
-    expected_ir: &str,
-) -> Option<String> {
-    let compiled = match compiled_fixture(scenario, fixture, imports) {
+fn compile_step(compiled: &Result<ir::Ir, String>, expected_ir: &str) -> Option<String> {
+    let compiled = match compiled {
         Ok(compiled) => compiled.canonical_json(),
-        Err(why) => return Some(why),
+        Err(why) => return Some(why.clone()),
     };
     first_difference(&compiled, expected_ir)
         .map(|line| format!("canon-ir/1 differs from the expectation at line {line}"))
 }
 
 fn evaluate_step(
-    scenario: &Scenario,
-    fixture: Result<&str, &str>,
-    imports: &[Result<String, String>],
+    compiled: &Result<ir::Ir, String>,
     inputs: &EvaluateInputs,
     expected: &EvaluateExpectation,
 ) -> Option<String> {
-    let compiled = match compiled_fixture(scenario, fixture, imports) {
+    let compiled = match compiled {
         Ok(compiled) => compiled,
-        Err(why) => return Some(why),
+        Err(why) => return Some(why.clone()),
     };
-    let evaluation = match evaluation(&compiled, inputs) {
+    let evaluation = match evaluation(compiled, inputs) {
         Ok(evaluation) => evaluation,
         Err(why) => return Some(why),
     };
@@ -1022,16 +1026,13 @@ where
             }
         }
         let fixture = fixture.as_deref().map_err(String::as_str);
-        let verdict = run_with_imports(&scenario, fixture, &imports);
-        let compiled = match fixture {
-            Ok(text) => compiled_fixture(&scenario, Ok(text), &imports).ok(),
-            Err(_) => None,
-        };
+        let compiled = compiled_fixture(&scenario, fixture, &imports);
+        let verdict = run_compiled(&scenario, &compiled);
         report.scenario(&scenario.id, &verdict);
         ran.push(requirements::Ran {
             passed: verdict == Verdict::Passed,
             scenario,
-            compiled,
+            compiled: compiled.ok(),
         });
     }
     (report, ran)
@@ -1547,6 +1548,74 @@ mod tests {
                     + 1
             )
         );
+    }
+
+    /// A scenario of one compile step and `evaluate_steps` evaluate steps, all of which pass on
+    /// [`PROTOCOL`].
+    fn many_step_scenario(id: &str, evaluate_steps: usize) -> String {
+        let mut source = scenario_text(id, &compiled());
+        for n in 0..evaluate_steps {
+            source.push_str(&format!(
+                "  - id: e{n}\n    evaluate:\n      case: {CASE}\n      evidence: []\n    expect:\n      decision: |\n{DECISION}"
+            ));
+        }
+        source
+    }
+
+    fn compiles_during<T>(work: impl FnOnce() -> T) -> (T, usize) {
+        let before = COMPILES.with(std::cell::Cell::get);
+        let result = work();
+        (result, COMPILES.with(std::cell::Cell::get) - before)
+    }
+
+    #[test]
+    fn a_scenario_compiles_its_fixture_once_however_many_steps_it_has() {
+        let scenario = parse(&many_step_scenario("S", 21)).expect("parses");
+        assert_eq!(scenario.steps.len(), 22);
+        let (verdict, compiles) = compiles_during(|| run(&scenario, Ok(PROTOCOL)));
+        assert_eq!(verdict, Verdict::Passed);
+        assert_eq!(compiles, 1, "a 22-step scenario run on its own");
+
+        let files = [
+            ScenarioFile {
+                path: "a.yaml".to_owned(),
+                text: Ok(many_step_scenario("A", 21)),
+            },
+            ScenarioFile {
+                path: "b.yaml".to_owned(),
+                text: Ok(many_step_scenario("B", 2)),
+            },
+        ];
+        let (report, compiles) =
+            compiles_during(|| run_registry(&files, |_| Ok(PROTOCOL.to_owned())));
+        assert_eq!(
+            report.render(),
+            "passed: scenario `A`\npassed: scenario `B`\nconform: 2 passed, 0 failed, 0 unreadable\n"
+        );
+        assert_eq!(compiles, 2, "a registry of two scenarios, 22 and 3 steps");
+    }
+
+    /// The scenario of the review that found the repeated compile, `CANON-GROUND-001`: 22 steps.
+    #[test]
+    fn the_decision_grounds_scenario_compiles_its_fixture_once() {
+        let files = [ScenarioFile {
+            path: "conformance/scenarios/decision-grounds.yaml".to_owned(),
+            text: Ok(
+                include_str!("../../../../conformance/scenarios/decision-grounds.yaml").to_owned(),
+            ),
+        }];
+        let fixture = include_str!("../../../../fixtures/investigation/decision-grounds.yaml");
+        let (report, compiles) = compiles_during(|| {
+            run_registry(&files, |path| {
+                assert_eq!(path, "fixtures/investigation/decision-grounds.yaml");
+                Ok(fixture.to_owned())
+            })
+        });
+        assert_eq!(
+            report.render(),
+            "passed: scenario `CANON-GROUND-001`\nconform: 1 passed, 0 failed, 0 unreadable\n"
+        );
+        assert_eq!(compiles, 1, "CANON-GROUND-001 in a registry");
     }
 
     #[test]

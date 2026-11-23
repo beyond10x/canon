@@ -530,12 +530,54 @@ pub fn evaluate_with(
     evidence: &[EvidenceRecord],
     supplied: Supplied<'_>,
 ) -> Result<Decision, Refusal> {
+    evaluate_with_freshness(ir, case, evidence, supplied, None)
+}
+
+/// [`evaluate_with`], in the strict freshness mode when `strict_freshness` gives the clock skew
+/// allowed, written as a `max_age` is (`0s`, `30s`, `5m`; `canon evaluate --strict`).
+/// The mode refuses, where the default accepts, an undated record of a kind with a `max_age`
+/// (`undated-evidence`), one observed later than the instant by more than the skew
+/// (`future-evidence`) and no instant for a protocol with such a kind (`missing-instant`), and a
+/// skew it cannot read (`invalid-skew`); `freshness.rs` gives the order. Where it refuses nothing,
+/// the decision is [`evaluate_with`]'s; `None` is [`evaluate_with`].
+pub fn evaluate_with_freshness(
+    ir: &Ir,
+    case: &Case,
+    evidence: &[EvidenceRecord],
+    supplied: Supplied<'_>,
+    strict_freshness: Option<&str>,
+) -> Result<Decision, Refusal> {
+    decide(ir, case, evidence, supplied, strict_freshness, true)
+}
+
+/// [`evaluate_with`] without the explanation (`explanation` is `None`): every other section, and
+/// every refusal, as it gives them. What `canon check` reads, the statuses of the actions and
+/// outcomes, needs no explanation (story:check-evaluates-statuses-only).
+pub(crate) fn evaluate_unexplained(
+    ir: &Ir,
+    case: &Case,
+    evidence: &[EvidenceRecord],
+    supplied: Supplied<'_>,
+) -> Result<Decision, Refusal> {
+    decide(ir, case, evidence, supplied, None, false)
+}
+
+/// [`evaluate_with_freshness`], building the explanation only when `explaining`.
+fn decide(
+    ir: &Ir,
+    case: &Case,
+    evidence: &[EvidenceRecord],
+    supplied: Supplied<'_>,
+    strict_freshness: Option<&str>,
+    explaining: bool,
+) -> Result<Decision, Refusal> {
     depth::check(ir)?;
     case::check(ir, case)?;
     let distinct = evidence::check(ir, evidence)?;
     let evidence = distinct.as_slice();
     let authority = authority::read(supplied.authority)?;
     let at = freshness::instant(supplied.at)?;
+    let strict = freshness::strict(strict_freshness, supplied.at)?;
     let decisions = decisions::read(supplied.decisions)?;
     grounds::declared(ir, authority.as_ref(), decisions.as_ref())?;
     on_deep_stack(|| {
@@ -549,6 +591,9 @@ pub fn evaluate_with(
         let stage = binding::exclude(ir, case, &applicable)?;
         set_aside(&mut applicable, &mut excluded, stage);
         let stage = freshness::exclude(ir, case, &applicable, at.as_ref())?;
+        // The strict mode reads what the order forms read, every record the evidence check
+        // accepted, not only what revision binding left.
+        freshness::refuse_untrusted(ir, evidence, at.as_ref(), strict.as_ref())?;
         set_aside(&mut applicable, &mut excluded, stage);
         let invalidated = invalidation::exclude(ir, case, &applicable)?;
 
@@ -636,6 +681,11 @@ pub fn evaluate_with(
             missing_evidence,
             pending_decisions,
         };
+        if !explaining {
+            return Ok(decision);
+        }
+        #[cfg(test)]
+        explained(ir);
         let inputs = crate::explain::Inputs {
             authority: authority.as_ref(),
             decisions: decisions.as_ref(),
@@ -652,6 +702,24 @@ pub fn evaluate_with(
         );
         Ok(decision)
     })
+}
+
+/// The explanations built, by protocol id, since the process began (test builds only,
+/// story:check-evaluates-statuses-only). Keyed by protocol so a test that gives its protocol an id
+/// of its own reads its count beside tests that run at the same time.
+#[cfg(test)]
+pub(crate) static EXPLAINED: std::sync::Mutex<BTreeMap<String, usize>> =
+    std::sync::Mutex::new(BTreeMap::new());
+
+/// Counts one explanation built under `ir` in [`EXPLAINED`].
+#[cfg(test)]
+fn explained(ir: &Ir) {
+    let mut explained = EXPLAINED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    *explained
+        .entry(ir.protocol.id.as_str().to_owned())
+        .or_default() += 1;
 }
 
 /// The reasons `predicate` is not `true` over the claim `values`, the case's `inputs` and the

@@ -120,7 +120,7 @@ steps:
               "protocol": "investigation",
               "protocol_revision": 1,
               "semantics": {
-                "canon": "0.12.0",
+                "canon": "0.13.0",
                 "format": "canon-decision/1"
               }
             },
@@ -244,7 +244,7 @@ steps:
               "protocol": "investigation",
               "protocol_revision": 1,
               "semantics": {
-                "canon": "0.12.0",
+                "canon": "0.13.0",
                 "format": "canon-decision/1"
               }
             },
@@ -368,7 +368,7 @@ steps:
               "protocol": "investigation",
               "protocol_revision": 1,
               "semantics": {
-                "canon": "0.12.0",
+                "canon": "0.13.0",
                 "format": "canon-decision/1"
               }
             },

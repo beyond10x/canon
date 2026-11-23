@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-22T21:20:36Z",
+  "actor": "human:timo",
+  "artifact": "story:scenario-generation-assertions",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "canon / task check on pull request 30, head f995f4f3b",
+    "reference": "https://github.com/beyond10x/canon/actions/runs/45066264495/job/137342978160"
+  }
+}

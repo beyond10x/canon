@@ -31,6 +31,10 @@ not (
     | test(=check::tests::generated_protocols_check_alike_sliced_and_whole_3)
     | test(=check::tests::order_forms_are_checked_over_the_history_and_order_dimensions)
     | test(=check::tests::since_is_checked_over_last_records_and_counts_for_authority_bypass)
+    | test(=check::unexplained::slow::the_checker_reads_the_full_statuses_in_every_state_of_another_large_fixture_0)
+    | test(=check::unexplained::slow::the_checker_reads_the_full_statuses_in_every_state_of_another_large_fixture_1)
+    | test(=check::unexplained::slow::the_checker_reads_the_full_statuses_in_every_state_of_child_outcome_large)
+    | test(=check::unexplained::slow::the_checker_reads_the_full_statuses_in_every_state_of_record_group_large)
     | test(=eval::depth::tests::the_bound_holds_for_the_effective_depth_along_claim_references)
   ))
   | (binary_id(b10x-canon::main) & (
@@ -113,6 +117,10 @@ filter = """
     | test(=check::tests::generated_protocols_check_alike_sliced_and_whole_3)
     | test(=check::tests::order_forms_are_checked_over_the_history_and_order_dimensions)
     | test(=check::tests::since_is_checked_over_last_records_and_counts_for_authority_bypass)
+    | test(=check::unexplained::slow::the_checker_reads_the_full_statuses_in_every_state_of_another_large_fixture_0)
+    | test(=check::unexplained::slow::the_checker_reads_the_full_statuses_in_every_state_of_another_large_fixture_1)
+    | test(=check::unexplained::slow::the_checker_reads_the_full_statuses_in_every_state_of_child_outcome_large)
+    | test(=check::unexplained::slow::the_checker_reads_the_full_statuses_in_every_state_of_record_group_large)
     | test(=eval::depth::tests::the_bound_holds_for_the_effective_depth_along_claim_references)
   ))
   | (binary_id(b10x-canon::main) & (

@@ -87,6 +87,8 @@ mod adversary_subject_probes;
 mod adversary_subject_reasons;
 mod adversary_supplied_evidence;
 mod adversary_tvc_eval;
+mod approvals_cite_evidence_by_id;
+mod approvals_cite_evidence_replaced_contents;
 mod argument_validation;
 mod case_composition;
 mod check_independence;
@@ -109,6 +111,8 @@ mod review_outcome_reasons_docs;
 mod review_properties;
 mod review_refusal_naming;
 mod source_model;
+mod strict_freshness;
+mod strict_order_forms_read_trusted_records;
 mod unsafe_confined;
 
 /// Helpers shared by the modules above, holding no test of their own.

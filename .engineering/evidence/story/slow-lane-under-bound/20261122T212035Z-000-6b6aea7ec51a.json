@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-22T21:20:35Z",
+  "actor": "human:timo",
+  "artifact": "story:slow-lane-under-bound",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "canon / task check on pull request 30, head f995f4f3b",
+    "reference": "https://github.com/beyond10x/canon/actions/runs/45066264495/job/137342978160"
+  }
+}
