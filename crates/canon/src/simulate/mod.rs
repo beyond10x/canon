@@ -395,6 +395,8 @@ use crate::model::{
     OutcomeId, Predicate, ProtocolId, one_line,
 };
 
+#[cfg(test)]
+mod count_tests;
 mod recovery;
 #[cfg(test)]
 mod tests;
