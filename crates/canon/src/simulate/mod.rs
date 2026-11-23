@@ -51,21 +51,24 @@
 //! record. When a counting form with `revision: current` reads the dimension, the state holds a
 //! second count, of the children counted at the current revision: raised with the first, zeroed
 //! by a revision of the dimension's artifact and by an expiry of one of its classes, raised by a
-//! child that ends replacing an `open` record held as expired or earlier, which then records at
-//! the current revision, and lowered by one that ends against the earlier revision replacing a
-//! current `open` record. The state is evaluated with as many records as it counts: its records,
-//! then copies of its least current record up to the current count and of its least earlier one
-//! up to the rest; with one count, copies of its least current record, or of its least earlier
-//! one when it holds no current record. A count is in containment and size by its value, and a
-//! state writes it after the marks, `` 3 children in evidence `case_outcome` about `b` ``
-//! (`` 1 child ``, `` 5 or more children `` at N), with `` (1 at the current revision) `` when it
-//! holds the second count. Each count stays at or below the case's, never above it, so a counting
+//! child that ends replacing only an `open` record held as expired or earlier, its own, which then
+//! records at the current revision, and lowered by one that ends against the earlier revision
+//! replacing a current `open` record. A child that ends replacing the current `open` record and
+//! the earlier one raises nothing: the current one may be its own, counted when it opened. The
+//! state is evaluated with as many records as it counts and never more: its records, then copies
+//! of its least current record up to the current count and of its least earlier one up to the
+//! rest, the copies at the current revision no more than the children its records leave; with
+//! one count, copies of its least current record, or of its least earlier one when it holds no
+//! current record. A count is in containment and size by its value, and a state writes it after
+//! the marks, `` 3 children in evidence `case_outcome` about `b` `` (`` 1 child ``, `` 5 or more
+//! children `` at N), with `` (1 at the current revision) `` when it holds the second count. Each count stays at or below the case's, never above it, so a counting
 //! form is never true in the walk where it is not in the case. Not covered, where it may stay
 //! `unknown` in the walk though true in the case: a `case_outcome` record no opening step opens
 //! (a supplied one) is counted once per class; and, with `revision: current`, a child that was
 //! open when its artifact was revised and ends beside the `open` record of a child that has not
-//! ended, or a class that expires, is no longer counted at the current revision. A protocol
-//! without the key has no count and walks as before.
+//! ended, or replacing that record too, or a class that expires, is no longer counted at the
+//! current revision. A protocol without the key has no count and walks as before. A count above
+//! 64 is refused (see Refusals).
 //!
 //! A state that holds a `case_outcome` record of the class `open`, current or held as expired,
 //! holds some mark above none ("Decided in review, D5") on an action whose children record in
@@ -348,6 +351,10 @@
 //! protocol with an order form (`first`, `before`, `after`, `since`, `descended`) is refused as
 //! `ordered-evidence`, naming the first declaration that has one: the space puts a dimension's
 //! current records at one instant, so a sequence of records of one dimension has no state there.
+//! Then a protocol with a `children` form whose `count` is above 64 is refused as
+//! `child-count-bound`, naming the first declaration that holds one: each state is evaluated with
+//! a record per child it counts, so the walk's cost grows with the square of the count
+//! (story:children-form-counts-unopened-children, W14-4: count 1000 took 53 s in a debug build).
 //! Then the walk is refused as `reachable-state-bound` when it would visit more than
 //! [`check::STATE_BOUND`] states, states that differ only in marks counted apart. A walk that
 //! stops early reports nothing: no partial walk is
@@ -400,6 +407,11 @@ mod count_tests;
 mod recovery;
 #[cfg(test)]
 mod tests;
+
+/// The greatest `count` of a `children` form that a walk counts children up to (W14-4): each
+/// state is evaluated with a record per child it counts, so a greater count is refused as
+/// `child-count-bound`.
+const CHILD_COUNT_BOUND: u64 = 64;
 
 /// Why a walk was refused: a stable machine-readable code and a one-line message.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -998,9 +1010,11 @@ impl<'d, 'a> Layout<'d, 'a> {
     }
 
     /// `state` after a child-outcome step in `dimension` that replaced `replacing`: a child that
-    /// ends at the current revision replacing an `open` record held as expired or earlier is now
-    /// counted at the current revision; one that ends against the earlier revision (`late`)
-    /// replacing a current `open` record no longer is.
+    /// ends at the current revision replacing only an `open` record held as expired or earlier,
+    /// its own, was not counted there and now is; one that ends against the earlier revision
+    /// (`late`) replacing a current `open` record no longer is. A child that ends replacing the
+    /// current `open` record and the earlier one may be the one whose current record it was,
+    /// counted when it opened, so the count stays: at or below the case's, never above it.
     fn ended(
         &self,
         state: State,
@@ -1009,9 +1023,10 @@ impl<'d, 'a> Layout<'d, 'a> {
         late: bool,
     ) -> State {
         match replacing {
-            Some(Replacing { expired: true, .. }) if !late => {
-                self.recount(state, dimension, |current| current.saturating_add(1))
-            }
+            Some(Replacing {
+                current: false,
+                expired: true,
+            }) if !late => self.recount(state, dimension, |current| current.saturating_add(1)),
             Some(Replacing { current: true, .. }) if late => {
                 self.recount(state, dimension, |current| current.saturating_sub(1))
             }
@@ -1021,10 +1036,12 @@ impl<'d, 'a> Layout<'d, 'a> {
 
     /// `held` and `expired`, the records of `state`, with as many more as its counts of children
     /// say (story:children-form-counts-unopened-children): in each counted dimension, copies of
-    /// its least current record up to the count at the current revision and of its least record
-    /// held as earlier up to the rest; with one count, copies of its least current record, or of
-    /// its least earlier one when it holds no current record, up to the count. The evaluator
-    /// gives each copy a child case of its own.
+    /// its least current record up to the count at the current revision, but no more than the
+    /// children its records leave, and of its least record held as earlier up to the rest; with
+    /// one count, copies of its least current record, or of its least earlier one when it holds
+    /// no current record, up to the count. No dimension is evaluated with more records than it
+    /// counts children, or than it holds when that is more. The evaluator gives each copy a
+    /// child case of its own.
     fn with_children(
         &self,
         state: &State,
@@ -1050,10 +1067,15 @@ impl<'d, 'a> Layout<'d, 'a> {
                 .map(|(at, class, vector, profiles)| (*at, *class, *vector, vec![profiles[0]]));
             let first_earlier = expired.iter().find(|(at, _)| *at == dimension).copied();
             let (more_current, more_earlier) = match current {
-                Some(current) => (
-                    current.saturating_sub(current_records),
-                    total.saturating_sub(current.max(current_records) + earlier_records),
-                ),
+                Some(current) => {
+                    let more_current = current
+                        .saturating_sub(current_records)
+                        .min(total.saturating_sub(current_records + earlier_records));
+                    (
+                        more_current,
+                        total.saturating_sub(current_records + more_current + earlier_records),
+                    )
+                }
                 None => {
                     let more = total.saturating_sub(current_records + earlier_records);
                     if first_current.is_some() {
@@ -1466,6 +1488,15 @@ fn walk(ir: &Ir, with_record: bool) -> Result<Walk, Refusal> {
             format!(
                 "{protocol}: {reader} reads evidence with an order form (`first`, `before`, \
                  `after`, `since` or `descended`), which canon simulate does not walk"
+            ),
+        ));
+    }
+    if let Some((reader, count)) = counting_beyond_bound(ir) {
+        return Err(Refusal::new(
+            "child-count-bound",
+            format!(
+                "{protocol}: {reader} counts {count} children (`count: {count}`), more than the \
+                 bound of {CHILD_COUNT_BOUND} that canon simulate walks"
             ),
         ));
     }
@@ -2519,10 +2550,9 @@ fn case_outcome_readers(ir: &Ir) -> (bool, bool) {
     (children, matched)
 }
 
-/// The first declaration whose predicate holds an order form: each claim's `true_when`, each
-/// obligation's `discharged_when`, each action's precondition and each outcome's requirement, in
-/// that order, each section in identifier order.
-fn ordered(ir: &Ir) -> Option<Reader> {
+/// Each claim's `true_when`, each obligation's `discharged_when` and each action's precondition,
+/// with its declaration, in that order, each section in identifier order.
+fn declarations(ir: &Ir) -> impl Iterator<Item = (Reader, &Predicate)> {
     let claims = ir
         .claims
         .iter()
@@ -2535,13 +2565,45 @@ fn ordered(ir: &Ir) -> Option<Reader> {
         .actions
         .iter()
         .map(|(id, action)| (Reader::Action(id.clone()), &action.precondition));
+    claims.chain(obligations).chain(actions)
+}
+
+/// The first declaration whose predicate holds an order form: each claim's `true_when`, each
+/// obligation's `discharged_when`, each action's precondition and each outcome's requirement, in
+/// that order, each section in identifier order.
+fn ordered(ir: &Ir) -> Option<Reader> {
     let outcomes = ir.outcomes.iter().filter_map(|(id, outcome)| {
         Some((Reader::Outcome(id.clone()), outcome.requires.predicate()?))
     });
-    claims
-        .chain(obligations)
-        .chain(actions)
+    declarations(ir)
         .chain(outcomes)
         .find(|(_, predicate)| !predicate.order_forms().is_empty())
         .map(|(reader, _)| reader)
+}
+
+/// The first declaration, in the order of [`ordered`], with an outcome's `when` read as its
+/// requirement, that holds a `children` form whose `count` is above [`CHILD_COUNT_BOUND`], with
+/// the greatest such count it holds (W14-4).
+fn counting_beyond_bound(ir: &Ir) -> Option<(Reader, u64)> {
+    let outcomes = ir.outcomes.iter().filter_map(|(id, outcome)| {
+        let requirement = outcome
+            .requires
+            .predicate()
+            .or_else(|| outcome.requires.when())?;
+        Some((Reader::Outcome(id.clone()), requirement))
+    });
+    declarations(ir)
+        .chain(outcomes)
+        .find_map(|(reader, predicate)| {
+            let mut greatest = None;
+            predicate.visit(&mut |node| {
+                if let Predicate::Children(form) = node
+                    && let Some(count) = form.count
+                    && count > CHILD_COUNT_BOUND
+                {
+                    greatest = greatest.max(Some(count));
+                }
+            });
+            greatest.map(|count| (reader, count))
+        })
 }
