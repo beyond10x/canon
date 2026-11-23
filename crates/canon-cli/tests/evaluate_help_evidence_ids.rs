@@ -1,6 +1,7 @@
 //! story:approvals-bound-to-evidence-content, documented form: `canon evaluate --help` says, at
 //! both flags that take an approval (`--authority` and `--decisions`), that Canon checks a cited
-//! evidence record by id only and that evidence IDs must be immutable once an approval cites them.
+//! evidence record by id and by the fields that decide whether it is applicable, not by the rest of
+//! its contents, and that evidence IDs must be immutable once an approval cites them.
 
 use clap::CommandFactory;
 

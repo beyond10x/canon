@@ -97,15 +97,21 @@ pub enum Command {
         /// every capability it requires is granted at the scope it requires it; without it, none
         /// is granted. A decision that gives a case revision applies only while the case snapshot
         /// is at that revision; its principal is recorded as given. A `ground_evidence` id is
-        /// checked by id only, not by the record's contents: evidence IDs must be immutable once
-        /// an approval cites them.
+        /// checked by id and by the `subject_revision`, `observed_at`, `upstream_revisions` and,
+        /// where a claim demands independence, `producer` of the record under it, not by the rest
+        /// of its contents: with other contents the entry still applies, and the decision changes
+        /// only where a claim reads them. Evidence IDs must be immutable once an approval cites
+        /// them.
         #[arg(long)]
         authority: Option<PathBuf>,
         /// A `canon-decisions/1` document: the explicit decisions taken, each naming the decision,
         /// the outcome, the principal and the case revision it was taken at. An outcome that requires
         /// a decision is legitimate only with one taken at the case snapshot's revision. A
-        /// `ground_evidence` id is checked by id only, not by the record's contents: evidence IDs
-        /// must be immutable once an approval cites them.
+        /// `ground_evidence` id is checked by id and by the `subject_revision`, `observed_at`,
+        /// `upstream_revisions` and, where a claim demands independence, `producer` of the record
+        /// under it, not by the rest of its contents: with other contents the entry still applies,
+        /// and the decision changes only where a claim reads them. Evidence IDs must be immutable
+        /// once an approval cites them.
         #[arg(long)]
         decisions: Option<PathBuf>,
         /// The evaluation instant, in UTC as `YYYY-MM-DDTHH:MM:SSZ`, or `YYYY-MM-DDTHH:MM:SS.fffZ`

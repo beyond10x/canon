@@ -93,7 +93,7 @@ fn an_approval_holds_when_the_contents_under_its_evidence_id_are_replaced() {
     assert_eq!(
         eval::render(&after),
         eval::render(&before),
-        "Canon checks an evidence ground by id only, so replaced contents change no byte"
+        "no claim of the fixture reads the replaced contents, so they change no byte"
     );
 
     let without = decide(&[]);
