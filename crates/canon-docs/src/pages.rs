@@ -369,6 +369,17 @@ fn section_anchor(name: &str) -> String {
 /// Where each type's section is: an anchor on this page or a link to another page.
 type Links = BTreeMap<String, String>;
 
+/// `(type, field)`: the integer fields `canon validate` refuses at 0 (`count` of a `children`
+/// form, `zero-child-count`). The reference types each "integer, 1 or more" and the schema bounds
+/// it with `"minimum": 1`. The model reads them as `u64`, and ess 0.97.4 refuses the invariant
+/// `count >= 1` on a struct no view publishes (ESS-SYNTH-013), so neither can say it.
+const AT_LEAST_ONE: &[(&str, &str)] = &[("ChildOutcomes", "count")];
+
+/// Whether `field` of `owner` is an integer of 1 or more ([`AT_LEAST_ONE`]).
+fn at_least_one(owner: &str, field: &source::Field) -> bool {
+    *unwrap_option(&field.ty) == Ty::Count && AT_LEAST_ONE.contains(&(owner, field.name.as_str()))
+}
+
 fn render_ty(ty: &Ty, links: &Links) -> String {
     match ty {
         Ty::Text => "text".to_owned(),
@@ -610,7 +621,13 @@ fn used_identifiers(model: &Model, sections: &[&TypeDef]) -> Result<BTreeSet<Str
     Ok(used)
 }
 
-fn fields_table(fields: &[source::Field], links: &Links, model: &Model, read: bool) -> String {
+fn fields_table(
+    owner: &str,
+    fields: &[source::Field],
+    links: &Links,
+    model: &Model,
+    read: bool,
+) -> String {
     let rows: Vec<Vec<String>> = fields
         .iter()
         .map(|field| {
@@ -624,9 +641,14 @@ fn fields_table(fields: &[source::Field], links: &Links, model: &Model, read: bo
                 (true, true, _) => "optional",
                 (true, false, _) => "required",
             };
+            let value = if at_least_one(owner, field) {
+                "integer, 1 or more".to_owned()
+            } else {
+                render_ty(&field.ty, links)
+            };
             vec![
                 code(&field.name),
-                render_ty(&field.ty, links),
+                value,
                 presence.to_owned(),
                 meaning(&resolve(&field.doc, model)),
             ]
@@ -658,10 +680,10 @@ fn type_sections(
         ));
         match (&def.reading, &def.shape) {
             (Reading::Derived, Shape::Struct(fields)) => {
-                out.push_str(&fields_table(fields, links, model, true));
+                out.push_str(&fields_table(&def.name, fields, links, model, true));
             }
             (Reading::NotRead, Shape::Struct(fields)) => {
-                out.push_str(&fields_table(fields, links, model, false));
+                out.push_str(&fields_table(&def.name, fields, links, model, false));
             }
             (Reading::NotRead, Shape::Enum(variants)) => {
                 let rows: Vec<Vec<String>> = variants
@@ -1051,7 +1073,11 @@ fn schema(model: &Model, document: &Document) -> Result<Json, String> {
                 let properties = fields
                     .iter()
                     .map(|field| {
-                        let mut schema = ty_schema(&field.ty, scalars);
+                        let mut schema = if at_least_one(&def.name, field) {
+                            obj([("type", json::str("integer")), ("minimum", Json::Int(1))])
+                        } else {
+                            ty_schema(&field.ty, scalars)
+                        };
                         if let Some(format) = required_format(&field.doc, model)
                             && let Json::Obj(members) = &mut schema
                         {

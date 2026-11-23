@@ -256,11 +256,14 @@ pub struct Action {
     pub precondition: Option<Predicate>,
     /// An assertion about when the action runs (story:ordering-guards-provable-by-check): it is
     /// `admissible` or `approval-required` only in a state where this predicate is `true`. Absent:
-    /// no assertion. The grammar and reference checks of `precondition`; `all: []`, true in every
-    /// state, is refused (`vacuous-runs-only-when`). No evaluation reads it: only `canon check`
-    /// does, proving it in every state (`ordering-guard-failed`), per state and not along an order
-    /// of actions, so a guard that holds only through the preconditions of earlier actions is
-    /// proved only when the action's own precondition names it.
+    /// no assertion. The grammar and reference checks of `precondition`; the literal `all: []`,
+    /// true in every state, is refused (`vacuous-runs-only-when`), and only that literal: another
+    /// guard true in every state (`{any: [{all: []}]}`, `{not: {any: []}}`) is not detected. No
+    /// evaluation reads it: only `canon check` does, proving it in every state
+    /// (`ordering-guard-failed`), per state and not along an order of actions, so a guard that
+    /// holds only through the preconditions of earlier actions is proved only when the action's
+    /// own precondition names it. A floor does not pin it: `canon floor` holds for a protocol that
+    /// drops a guard its floor declares.
     #[serde(default, deserialize_with = "present::optional")]
     pub runs_only_when: Option<Predicate>,
     #[serde(default, deserialize_with = "present::defaulted")]

@@ -272,7 +272,8 @@ pub enum Command {
     /// counts the reachable states, per outcome those in which it is legitimate, the waiting
     /// states, the findings and the stuck and cycle states they stand for. A protocol with an
     /// order form (`first`, `before`, `after`, `since`, `descended`) is refused (`ordered-evidence`),
-    /// and so is
+    /// and so is a protocol whose `children` form counts more than 64 children
+    /// (`child-count-bound`), naming the first declaration that holds one, and
     /// a walk that would visit more than 65536 states (`reachable-state-bound`), which reports
     /// nothing of what it saw.
     Simulate {

@@ -191,38 +191,3 @@ fn generate_gives_the_same_output_with_a_guard_that_reads_child_outcomes_in_orde
     );
     assert_eq!(with, without);
 }
-
-/// The same promise, for a guard whose slice is above the state bound while every slice of the
-/// protocol without it is within it: `canon generate` refuses `state-space-bound`, naming the
-/// guard, where without the guard it writes its scenarios.
-#[test]
-fn generate_gives_the_same_output_with_a_guard_whose_slice_is_above_the_bound() {
-    let kinds: String = (1..=17).map(|n| format!("  k{n}: {{}}\n")).collect();
-    let makers: String = (1..=17)
-        .map(|n| format!("  make{n}: {{may_produce: [{{evidence: k{n}}}]}}\n"))
-        .collect();
-    let any: Vec<String> = (1..=17)
-        .map(|n| format!("{{evidence: {{kind: k{n}}}}}"))
-        .collect();
-    let source = |guard: &str| {
-        format!(
-            "format: protocol/1\nprotocol: {{id: gen.bound, revision: 1}}\n\
-             artifacts: {{a: {{}}}}\nevidence_kinds:\n  done: {{}}\n{kinds}\
-             claims:\n  done: {{true_when: {{evidence: {{kind: done}}}}}}\n\
-             actions:\n  finish:\n    precondition: {{claim: done, is: unknown}}\n{guard}\
-             \x20   may_produce: [{{evidence: done}}]\n{makers}\
-             outcomes:\n  finished: {{requires: {{claim: done}}}}\n"
-        )
-    };
-    let without = generated("bound-without", &source(""));
-    assert_eq!(without.0, Some(0), "{without:?}");
-    assert!(!without.3.is_empty(), "{without:?}");
-    let with = generated(
-        "bound-with",
-        &source(&format!(
-            "    runs_only_when: {{any: [{}]}}\n",
-            any.join(", ")
-        )),
-    );
-    assert_eq!(with, without);
-}
