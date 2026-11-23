@@ -74,7 +74,14 @@ fn reader(n: usize, result: &str) -> EvidenceRecord {
 fn opened(letters: &str) -> Vec<EvidenceRecord> {
     letters
         .chars()
-        .map(|letter| record(&format!("o{letter}"), &format!("{letter}_opened"), None, None))
+        .map(|letter| {
+            record(
+                &format!("o{letter}"),
+                &format!("{letter}_opened"),
+                None,
+                None,
+            )
+        })
         .collect()
 }
 
@@ -109,7 +116,9 @@ fn validate_refuses_a_count_of_zero_naming_the_declaration() {
     assert_ne!(zero, fixture(), "the claim's count was replaced");
     assert_eq!(
         problems(&zero),
-        ["zero-child-count: claim `readers.complete` waits for 0 child cases; a count is 1 or more"]
+        [
+            "zero-child-count: claim `readers.complete` waits for 0 child cases; a count is 1 or more"
+        ]
     );
     let in_action = fixture().replacen(
         "- {children: {in: [complete], subject: sources, count: 5}}",
@@ -158,7 +167,10 @@ fn the_ir_writes_count_only_when_declared_and_reads_it_back() {
     let uncounted = compiled(&fixture().replace(", count: 5}}", "}}"));
     let plain = uncounted.canonical_json();
     assert!(!plain.contains("\"count\""), "{plain}");
-    assert_eq!(text.replace("\"count\": 5,\n", "").replace(' ', ""), plain.replace(' ', ""));
+    assert_eq!(
+        text.replace("\"count\": 5,\n", "").replace(' ', ""),
+        plain.replace(' ', "")
+    );
 
     let written = "\"count\": 5,\n          \"in\": [\n            \"complete\"\n          ],";
     assert!(text.contains(written), "{text}");
@@ -169,11 +181,7 @@ fn the_ir_writes_count_only_when_declared_and_reads_it_back() {
         ("\"count\": -5,", "a negative count"),
         ("\"count\": 5.5,", "a fraction"),
     ] {
-        let changed = text.replacen(
-            written,
-            &written.replacen("\"count\": 5,", other, 1),
-            1,
-        );
+        let changed = text.replacen(written, &written.replacen("\"count\": 5,", other, 1), 1);
         assert_ne!(changed, text, "{why}: the text was changed");
         assert_eq!(
             eval::read_ir(&changed).expect_err(why).code(),
@@ -275,9 +283,19 @@ fn the_form_waits_for_count_records() {
         "{in: [complete], subject: sources, count: 2, revision: current}}\n  merged.none",
         1,
     ));
-    let earlier = record_at("r1", "case_outcome", Some("complete"), Some("READER-1"), "s0");
+    let earlier = record_at(
+        "r1",
+        "case_outcome",
+        Some("complete"),
+        Some("READER-1"),
+        "s0",
+    );
     for (records, value, why) in [
-        (vec![earlier.clone(), reader(2, "complete")], Truth::Unknown, "one current, one earlier"),
+        (
+            vec![earlier.clone(), reader(2, "complete")],
+            Truth::Unknown,
+            "one current, one earlier",
+        ),
         (
             vec![earlier, reader(2, "complete"), reader(3, "complete")],
             Truth::True,
@@ -397,11 +415,17 @@ fn counted(requirement: &str, requires: &str) -> String {
 #[test]
 fn check_counts_records_beyond_one_per_class() {
     assert_eq!(
-        checked(&counted("{children: {in: [passed], subject: sources, count: 3}}", "")),
+        checked(&counted(
+            "{children: {in: [passed], subject: sources, count: 3}}",
+            ""
+        )),
         "checked: protocol `p` revision 1: 216 states, 0 properties, 0 findings\n"
     );
     assert_eq!(
-        checked(&counted("{children: {in: [passed], subject: sources, count: 1}}", "")),
+        checked(&counted(
+            "{children: {in: [passed], subject: sources, count: 1}}",
+            ""
+        )),
         "checked: protocol `p` revision 1: 72 states, 0 properties, 0 findings\n"
     );
     assert_eq!(
@@ -412,8 +436,9 @@ fn check_counts_records_beyond_one_per_class() {
 
 /// The witness of a finding writes the more records after the class they repeat: with a second,
 /// free opener about `sources`, the least state in which `done` is legitimate without authority
-/// holds one current `passed` record and two more of it (weight 3, as one current, one more and
-/// one earlier, which renders after it).
+/// holds one `passed` record and two more of it, weight 3. Of the states of that weight, one
+/// earlier record and two more renders first (`` earlier `` before `` , ``), ahead of one current
+/// record and two more: a form without `revision: current` reads both alike.
 #[test]
 fn check_writes_the_more_records_of_a_witness() {
     let source = counted(
@@ -428,8 +453,8 @@ fn check_writes_the_more_records_of_a_witness() {
     assert_eq!(
         checked(&source),
         "authority-bypass: outcome `done` is legitimate without authority in state {evidence \
-         `case_outcome` about `sources` result `passed`, evidence `case_outcome` about `sources` \
-         result `passed` 2 more times}\n\
+         `case_outcome` about `sources` result `passed` earlier, evidence `case_outcome` about \
+         `sources` result `passed` earlier 2 more times}\n\
          checked: protocol `p` revision 1: 648 states, 0 properties, 1 finding\n"
     );
 }
@@ -496,4 +521,26 @@ fn simulate_counts_every_child_an_unguarded_opener_opens() {
         report.contains("2 or more children in evidence `case_outcome` about `sources`"),
         "{report}"
     );
+}
+
+/// With `revision: current` the walk counts the children at the current revision apart: two
+/// children that pass after the last revision make `done` legitimate, and a printed state writes
+/// that count beside the other. `redo` revises `sources` only while every child passed, so a
+/// child that ends outside the set leaves a cycle state to print.
+#[test]
+fn simulate_counts_the_children_at_the_current_revision_apart() {
+    let report = simulated(
+        &counted(
+            "{children: {in: [passed], subject: sources, revision: current, count: 2}}",
+            "",
+        )
+        .replacen(
+            "outcomes:\n",
+            "\x20\x20redo: {precondition: {children: {in: [passed], subject: sources}}, \
+             revises: [sources]}\noutcomes:\n",
+            1,
+        ),
+    );
+    assert!(!report.contains("unreached-outcome"), "{report}");
+    assert!(report.contains(" at the current revision)"), "{report}");
 }

@@ -59,28 +59,35 @@ fn at_current_revision(record: &EvidenceRecord, artifacts: Option<&Artifacts>) -
         .is_some_and(|artifact| artifact.revision == record.subject_revision)
 }
 
+/// A `children` form as its reason names it: its outcome list, whether it reads only the current
+/// revision, its subject and its count.
+type FormKey<'a> = (&'a [String], bool, Option<&'a ArtifactId>, Option<u64>);
+
 /// The `children` form's value over the records it reads ([`read`]) of `history`, every record
 /// the evidence check accepted, with `artifacts` the case snapshot's current revisions: `unknown`
 /// with no record read; `false` when a record's outcome is neither listed nor `open` (a child that
 /// ended outside the set; a record without an outcome, which the evidence check refuses, counts as
-/// one); otherwise `unknown` while a child is `open`, and `true` when every child ended with a
-/// listed outcome.
+/// one); otherwise `unknown` while a child is `open` or, with `count: N`
+/// (story:children-form-counts-unopened-children), while fewer than N records are read, and
+/// `true` when every child ended with a listed outcome. A child not yet opened has no record, so
+/// with a count the form is never true before N children ended.
 pub(crate) fn value(
     form: &ChildOutcomes,
     history: &[EvidenceRecord],
     artifacts: Option<&Artifacts>,
 ) -> Truth {
-    let mut any = false;
+    let mut read_records: u64 = 0;
     let mut open = false;
     for record in read(form, history, artifacts) {
-        any = true;
+        read_records = read_records.saturating_add(1);
         match record.result.as_deref() {
             Some(outcome) if form.r#in.iter().any(|listed| listed == outcome) => {}
             Some(OPEN_OUTCOME) => open = true,
             _ => return Truth::False,
         }
     }
-    if !any || open {
+    let short = form.count.is_some_and(|count| read_records < count);
+    if read_records == 0 || open || short {
         Truth::Unknown
     } else {
         Truth::True
@@ -91,32 +98,36 @@ pub(crate) fn value(
 /// it and by its `revision` and `subject` when the IR writes them, with its value over `history`
 /// and `artifacts`: `{"children": [<outcome>, ...], "value": <value>}`, with `"revision":
 /// "current"` added for a form that reads only the current revision and `"subject": <artifact>`
-/// for a form that names one. Each form once, two that differ only in `revision` or only in
-/// `subject` being two, in the order of their outcome lists, then no `revision` first, then no
-/// `subject` first and then in subject order.
+/// for a form that names one, and `"count": N` for a form that declares one
+/// (story:children-form-counts-unopened-children). Each form once, two that differ only in
+/// `revision`, only in `subject` or only in `count` being two, in the order of their outcome
+/// lists, then no `revision` first, then no `subject` first and then in subject order, then no
+/// `count` first and then the smaller.
 pub(crate) fn reasons<'a>(
     forms: impl IntoIterator<Item = &'a ChildOutcomes>,
     history: &[EvidenceRecord],
     artifacts: Option<&Artifacts>,
 ) -> Vec<Json> {
     // `any` and no key are one form, as the IR writes them.
-    let forms: BTreeSet<(&[String], bool, Option<&ArtifactId>)> = forms
+    let forms: BTreeSet<FormKey<'_>> = forms
         .into_iter()
         .map(|form| {
             (
                 form.r#in.as_slice(),
                 form.current_only(),
                 form.subject.as_ref(),
+                form.count,
             )
         })
         .collect();
     forms
         .into_iter()
-        .map(|(outcomes, current, subject)| {
+        .map(|(outcomes, current, subject, count)| {
             let form = ChildOutcomes {
                 r#in: outcomes.to_vec(),
                 revision: current.then(|| "current".parse().expect("a revision")),
                 subject: subject.cloned(),
+                count,
             };
             let listed = outcomes.iter().map(|outcome| Json::from(outcome.as_str()));
             let mut reason = Map::from_iter([
@@ -131,6 +142,9 @@ pub(crate) fn reasons<'a>(
             }
             if let Some(subject) = subject {
                 reason.insert("subject".to_owned(), Json::from(subject.as_str()));
+            }
+            if let Some(count) = count {
+                reason.insert("count".to_owned(), Json::from(count));
             }
             Json::Object(reason)
         })
@@ -329,7 +343,118 @@ mod tests {
             r#in: vec!["accepted".to_owned(), "declined".to_owned()],
             revision: None,
             subject: None,
+            count: None,
         }
+    }
+
+    fn counting(count: u64, form: ChildOutcomes) -> ChildOutcomes {
+        ChildOutcomes {
+            count: Some(count),
+            ..form
+        }
+    }
+
+    /// story:children-form-counts-unopened-children: with `count: N` the form stays UNKNOWN while
+    /// it reads fewer than N records, even when each ended with a listed outcome, is TRUE over N
+    /// or more listed ones, and FALSE once one ended outside the set, however few were read.
+    /// Records the form does not read do not count.
+    #[test]
+    fn a_counting_form_waits_for_its_count_of_records() {
+        let three = counting(3, resolved());
+        let accepted = |n: usize| outcome(&format!("o{n}"), &format!("c{n}"), "accepted");
+        let at = findings_at("f2");
+        for (records, counted, plain, why) in [
+            (vec![], Truth::Unknown, Truth::Unknown, "no record"),
+            (
+                vec![accepted(1)],
+                Truth::Unknown,
+                Truth::True,
+                "one of three",
+            ),
+            (
+                vec![accepted(1), accepted(2)],
+                Truth::Unknown,
+                Truth::True,
+                "two of three",
+            ),
+            (
+                vec![accepted(1), accepted(2), accepted(3)],
+                Truth::True,
+                Truth::True,
+                "three of three",
+            ),
+            (
+                vec![accepted(1), accepted(2), accepted(3), accepted(4)],
+                Truth::True,
+                Truth::True,
+                "more than three",
+            ),
+            (
+                vec![outcome("o1", "c1", "abandoned")],
+                Truth::False,
+                Truth::False,
+                "one outside the set",
+            ),
+            (
+                vec![accepted(1), accepted(2), outcome("o3", "c3", "open")],
+                Truth::Unknown,
+                Truth::Unknown,
+                "three with one open",
+            ),
+        ] {
+            assert_eq!(super::value(&three, &records, Some(&at)), counted, "{why}");
+            assert_eq!(
+                super::value(&resolved(), &records, Some(&at)),
+                plain,
+                "{why}"
+            );
+        }
+        let bound = current(three.clone());
+        let mixed = [
+            accepted(1),
+            accepted(2),
+            about("f2", accepted(3)),
+            about("f2", accepted(4)),
+        ];
+        assert_eq!(super::value(&bound, &mixed, Some(&at)), Truth::Unknown);
+        assert_eq!(super::value(&three, &mixed, Some(&at)), Truth::True);
+        let elsewhere = [
+            accepted(1),
+            accepted(2),
+            about_artifact("report", "f1", accepted(3)),
+        ];
+        let on_findings = naming("findings", three);
+        assert_eq!(
+            super::value(&on_findings, &elsewhere, Some(&at)),
+            Truth::Unknown
+        );
+    }
+
+    /// Two forms that differ only in `count` give two reasons, no count first, then the smaller,
+    /// each with its `"count"`.
+    #[test]
+    fn reasons_name_the_form_with_its_count() {
+        let records = [
+            outcome("o1", "c1", "accepted"),
+            outcome("o2", "c2", "accepted"),
+        ];
+        let reasons = super::reasons(
+            [
+                &counting(3, resolved()),
+                &resolved(),
+                &counting(2, resolved()),
+            ],
+            &records,
+            None,
+        );
+        assert_eq!(
+            Json::Array(reasons),
+            serde_json::json!([
+                {"children": ["accepted", "declined"], "value": "true"},
+                {"children": ["accepted", "declined"], "count": 2, "value": "true"},
+                {"children": ["accepted", "declined"], "count": 3, "value": "unknown"},
+            ])
+        );
     }
 
     fn about_artifact(subject: &str, revision: &str, record: EvidenceRecord) -> EvidenceRecord {

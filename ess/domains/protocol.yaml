@@ -1080,7 +1080,7 @@ types:
       # simulate say how. What it means is CANON-COMPOSE-004
       # (conformance/scenarios/children-count.yaml), not this file.
       # read from: .engineering/planning/story/children-form-counts-unopened-children.md:81-92
-      # read from: crates/canon/src/model/predicate.rs:367-373
+      # read from: crates/canon/src/model/predicate.rs:367-372
       - name: count
         type: Optional<Integer>
 

@@ -264,6 +264,27 @@
 //! `authority-bypass`, as for the order forms: with no record the form is `unknown`, and so is its
 //! negation.
 //!
+//! A form with `count: N` (story:children-form-counts-unopened-children) is true only over N
+//! records or more, and a state holds at most one record per class and upstream vector, current
+//! and earlier: so a `case_outcome` dimension a counting form reads, with N of 2 or more for the
+//! greatest such count, has a dimension of more records, after every other dimension (after the
+//! order dimension), in dimension order, of N values: value `m` adds `m` more records of the
+//! dimension's least present current class, or, when it holds no current record, of its least
+//! earlier class, each a child case of its own; with no record it adds none. A form's value
+//! depends only on which classes it reads and how many records, and every evidence match only on
+//! the classes, so every value of every counting form with one count over a dimension, jointly
+//! with the evidence matches and the forms without the key over the same records, is reached by
+//! some state: a current count from one to N, and with earlier records a count of all records
+//! from their number up to N past it. A form with `count: 1` asks what a form without the key
+//! asks, and adds no dimension; a protocol without the key has none and checks as before. A more
+//! record weighs one. A state writes them after the history dimensions, `` evidence `k` about `b`
+//! result `r` 2 more times `` (`` 1 more time ``, `` … result `r` earlier 2 more times `` on the
+//! earlier class), and the bound refusal names them `` more records of evidence kind `k` about
+//! `b` 5 ``. Erasing a dimension erases its more records. Not covered: forms of different counts
+//! over one dimension, one with `revision: current` and one without, read the same more records,
+//! so a state in which the earlier records reach one count while the current ones stay below
+//! another may have no state of its own.
+//!
 //! A state is evaluated as a case snapshot that lists each declared artifact, and the case itself,
 //! at one revision, gives each case input its value in the state and lists each producer its
 //! records name under `independence`, with one evidence record per present class and variant about

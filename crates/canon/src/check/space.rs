@@ -76,6 +76,12 @@ struct Read<'a> {
     /// Whether the read is a `descended` form's: it reads which item a record names, and no
     /// instant.
     descended: bool,
+    /// The count of a `children` form that declares one
+    /// (story:children-form-counts-unopened-children): how many records it waits for.
+    count: Option<u64>,
+    /// Whether a `children` form that declares a count reads only the records about the current
+    /// revision of their subject (`revision: current`).
+    current: bool,
 }
 
 /// The history dimension's value that adds no record: the dimension's current records, if any, are
@@ -252,6 +258,14 @@ struct Kind<'a> {
     /// demands those records meet), as the antichain of its greatest members, no record first.
     /// `None` when there are more than a state space within the bound could hold.
     values: Option<Vec<Producers>>,
+    /// The greatest count of a `children` form that reads this dimension and declares one
+    /// (story:children-form-counts-unopened-children), 0 when none does: with 2 or more the
+    /// dimension has a dimension of more records with that many values.
+    count: u64,
+    /// Whether a `children` form that declares a count of 2 or more and reads only the current
+    /// revision reads this dimension: `canon simulate` then counts its children at the current
+    /// revision too.
+    current_count: bool,
 }
 
 impl<'a> Kind<'a> {
@@ -425,8 +439,10 @@ pub(super) fn set_of_two_or_more(index: u32) -> u32 {
 /// of each result an `after` or a `since` compares the records of a dimension with, the
 /// last-record dimension of each evidence dimension a `since` reads as its `last` kind and, when
 /// there are two or more of the histories an order form reads and later records together, the
-/// order dimension. A `children` form adds no place in the order: its value does not depend on
-/// when a record was observed.
+/// order dimension, then the dimension of more records of each evidence dimension a `children`
+/// form with a count of 2 or more reads (story:children-form-counts-unopened-children). A
+/// `children` form adds no place in the order: its value does not depend on when a record was
+/// observed.
 pub(crate) struct Space<'a> {
     kinds: Vec<Kind<'a>>,
     capabilities: Vec<&'a CapabilityId>,
@@ -455,6 +471,11 @@ pub(crate) struct Space<'a> {
     /// How many weak orders of the `ordered` dimensions and the `later` records there are, when
     /// there are two or more: the values of the order dimension. `None` when it does not fit.
     orders: Option<u128>,
+    /// The position in `kinds` of each evidence dimension a `children` form with a count of 2 or
+    /// more reads, in dimension order (story:children-form-counts-unopened-children): each has a
+    /// dimension of more records, after every other dimension, of [`Kind::count`] values. Empty
+    /// when no form declares such a count, and the space is then the one before the key existed.
+    counted: Vec<usize>,
     /// Each of those weak orders, as the rank of each `ordered` dimension and then each `later`
     /// record, in lexicographic order; listed only when the space is within the bound, empty
     /// otherwise.
@@ -548,6 +569,8 @@ impl<'a> Space<'a> {
                     itemless: false,
                     profiles: vec![Profile::new()],
                     values: Some(vec![Vec::new(), vec![0]]),
+                    count: 0,
+                    current_count: false,
                 });
                 continue;
             }
@@ -589,6 +612,8 @@ impl<'a> Space<'a> {
                     itemless: false,
                     profiles: Vec::new(),
                     values: None,
+                    count: 0,
+                    current_count: false,
                 };
                 let reading: Vec<&Read<'a>> = of_kind
                     .iter()
@@ -605,6 +630,10 @@ impl<'a> Space<'a> {
                     && reading.iter().any(|m| m.ordered && !m.descended);
                 kind.profiles = profiles(reading.iter().map(|m| m.independent_on));
                 kind.values = down_sets(&kind.profiles);
+                kind.count = reading.iter().filter_map(|m| m.count).max().unwrap_or(0);
+                kind.current_count = reading
+                    .iter()
+                    .any(|m| m.current && m.count.is_some_and(|count| count >= 2));
                 kinds.push(kind);
             }
         }
@@ -649,6 +678,12 @@ impl<'a> Space<'a> {
             .iter()
             .enumerate()
             .filter(|(_, kind)| kind.history && !kind.ordered)
+            .map(|(at, _)| at)
+            .collect();
+        let counted: Vec<usize> = kinds
+            .iter()
+            .enumerate()
+            .filter(|(_, kind)| kind.count >= 2)
             .map(|(at, _)| at)
             .collect();
         let mut compared: BTreeSet<(usize, &'a str)> = BTreeSet::new();
@@ -750,6 +785,7 @@ impl<'a> Space<'a> {
             later,
             last,
             orders: orders.flatten(),
+            counted,
             rankings: Vec::new(),
             unlisted: unlisted(ir),
             at_open: ir
@@ -937,6 +973,12 @@ impl<'a> Space<'a> {
             .collect();
         let placeable = ordered.len() + later.len();
         let orders = (placeable >= 2).then(|| weak_orders(placeable));
+        let counted: Vec<usize> = self
+            .counted
+            .iter()
+            .filter(|at| slice.kinds.contains(at))
+            .map(|at| position(*at))
+            .collect();
         let mut fixed = Vec::new();
         let inputs = self
             .inputs
@@ -971,6 +1013,7 @@ impl<'a> Space<'a> {
             later,
             last,
             orders: orders.flatten(),
+            counted,
             rankings: Vec::new(),
             producers: self.producers.clone(),
             unlisted: self.unlisted.clone(),
@@ -1021,6 +1064,44 @@ impl<'a> Space<'a> {
     /// The position of the order dimension, when there is one.
     fn order_at(&self) -> usize {
         self.first_last() + self.last.len()
+    }
+
+    /// The position of the first dimension of more records: after the order dimension, when there
+    /// is one.
+    fn first_count(&self) -> usize {
+        self.order_at() + usize::from(self.placeable() >= 2)
+    }
+
+    /// How many more records `state` adds to the evidence dimension at `at`: the value of its
+    /// dimension of more records, 0 when it has none.
+    fn more(&self, state: &State, at: usize) -> u32 {
+        self.counted
+            .iter()
+            .position(|counted| *counted == at)
+            .map_or(0, |index| state[self.first_count() + index])
+    }
+
+    /// The record of the evidence dimension at `at` that `state`'s more records repeat, as its
+    /// class and whether it is an earlier one: the dimension's least current class, or, when it
+    /// holds no current record, the first earlier record its history dimension adds; `None` when
+    /// it holds no record.
+    fn repeated(&self, state: &State, at: usize) -> Option<(Option<&'a str>, bool)> {
+        let kind = &self.kinds[at];
+        if let Some((class, _, _)) = kind.records(state[at]).first() {
+            return Some((*class, false));
+        }
+        match self.history(state, at)? {
+            CURRENT => None,
+            UNPLACED => Some((None, true)),
+            earlier => kind
+                .classes
+                .iter()
+                .enumerate()
+                .find(|(bit, class)| {
+                    (earlier - UNPLACED) & (1 << bit) != 0 && !self.stood_in(state, at, **class)
+                })
+                .map(|(_, class)| (*class, true)),
+        }
     }
 
     /// Whether `state` observes the current records of `class` of the evidence dimension at `at`
@@ -1179,6 +1260,10 @@ impl<'a> Space<'a> {
             .iter()
             .map(|last| u128::try_from(last.radix()).ok());
         let orders = (self.placeable() >= 2).then_some(self.orders);
+        let counted = self
+            .counted
+            .iter()
+            .map(|at| Some(u128::from(self.kinds[*at].count)));
         kinds
             .chain(capabilities)
             .chain(decisions)
@@ -1187,6 +1272,7 @@ impl<'a> Space<'a> {
             .chain(later)
             .chain(last)
             .chain(orders)
+            .chain(counted)
             .collect()
     }
 
@@ -1383,6 +1469,14 @@ impl<'a> Space<'a> {
                 format!("order of first observations and later records {count}")
             }
         });
+        let counted = self.counted.iter().map(|at| {
+            let kind = &self.kinds[*at];
+            format!(
+                "more records of evidence kind {} {}",
+                kind.name(),
+                kind.count
+            )
+        });
         kinds
             .chain(capabilities)
             .chain(decisions)
@@ -1391,6 +1485,7 @@ impl<'a> Space<'a> {
             .chain(later)
             .chain(last)
             .chain(orders)
+            .chain(counted)
             .collect::<Vec<_>>()
             .join(", ")
     }
@@ -1424,6 +1519,8 @@ impl<'a> Space<'a> {
     ///   revision.
     ///
     /// The order dimension stays at its least value: it moves only instants the evaluator compares.
+    /// So does every dimension of more records: they repeat a record another dimension adds, each
+    /// a child case of its own (story:children-form-counts-unopened-children).
     /// A refusal is raised by one record, capability, decision or input value, which a state holds
     /// whatever its other dimensions are, so the first state that raises a refusal is one of these.
     /// Called only once the size is known to fit.
@@ -1454,7 +1551,7 @@ impl<'a> Space<'a> {
                 } else {
                     radix
                 };
-            if at == self.order_at() && self.placeable() >= 2 {
+            if at == self.order_at() && self.placeable() >= 2 || at >= self.first_count() {
                 continue;
             }
             for value in 1..values {
@@ -1589,7 +1686,8 @@ impl<'a> Space<'a> {
     /// before the move of, so a witness prefers current records. A case input weighs nothing:
     /// every state gives each input a value. An earlier record a history dimension adds weighs one,
     /// and so does leaving a dimension's order unknown; a later record weighs one, and so do
-    /// observing current records first and a last record; the order weighs nothing. A witness is
+    /// observing current records first and a last record; the order weighs nothing; each more
+    /// record a dimension of more records adds weighs one. A witness is
     /// the state of least
     /// weight, ties broken by its rendering.
     pub(super) fn weight(&self, state: &State) -> u32 {
@@ -1598,11 +1696,14 @@ impl<'a> Space<'a> {
         let first_input = self.first_input();
         let first_history = self.first_history();
         let first_later = self.first_later();
+        let first_count = self.first_count();
         state
             .iter()
             .enumerate()
             .map(|(at, value)| {
-                if at >= first_later {
+                if at >= first_count {
+                    *value
+                } else if at >= first_later {
                     let first_last = self.first_last();
                     if at < first_last {
                         u32::from(*value != NO_LATER)
@@ -1757,6 +1858,25 @@ impl<'a> Space<'a> {
                 }
             }
         }
+        for at in &self.counted {
+            let more = self.more(state, *at);
+            let Some((class, earlier)) = self.repeated(state, *at).filter(|_| more > 0) else {
+                continue;
+            };
+            let mut item = format!("evidence {}", self.kinds[*at].name());
+            if let Some(result) = class {
+                item.push_str(&format!(" result `{}`", one_line(result)));
+            }
+            if earlier {
+                item.push_str(" earlier");
+            }
+            if more == 1 {
+                item.push_str(" 1 more time");
+            } else {
+                item.push_str(&format!(" {more} more times"));
+            }
+            items.push(item);
+        }
         let first_later = self.first_later();
         for (index, later) in self.later.iter().enumerate() {
             let name = format!(
@@ -1824,7 +1944,11 @@ impl<'a> Space<'a> {
     /// A `case_outcome` record (story:case-composition) is the outcome of a child case of its own:
     /// it names its own id as its `child_case`, so no two records name one child, and a record of
     /// the class without a result carries [`Space::unlisted`] instead, an outcome no predicate
-    /// names, since a `case_outcome` record must give one.
+    /// names, since a `case_outcome` record must give one. A dimension of more records
+    /// (story:children-form-counts-unopened-children) adds, after the earlier records and before
+    /// the later ones, its value's number of copies of the first record of its evidence
+    /// dimension, a current one or else an earlier one, each with its own id and so a child case
+    /// of its own.
     pub(crate) fn evidence(&self, state: &State) -> Vec<EvidenceRecord> {
         let ranks = self.ranks(state);
         let late = u32::try_from(self.ordered.len()).expect("few ordered dimensions");
@@ -1917,6 +2041,27 @@ impl<'a> Space<'a> {
                         }
                     }
                 }
+            }
+        }
+        // The more records of each dimension a counting `children` form reads, each a copy of the
+        // first record of the dimension, current or else earlier, with its own id.
+        for at in &self.counted {
+            let more = self.more(state, *at);
+            let Some(record) = &self.kinds[*at].record else {
+                continue;
+            };
+            let Some(repeated) = records
+                .iter()
+                .find(|held| held.kind == record.kind && held.subject == record.subject)
+                .cloned()
+            else {
+                continue;
+            };
+            for _ in 0..more {
+                records.push(EvidenceRecord {
+                    id: EvidenceId::new(format!("e{}", records.len())),
+                    ..repeated.clone()
+                });
             }
         }
         let first_later = self.first_later();
@@ -2072,6 +2217,7 @@ impl<'a> Space<'a> {
         let first_history = self.first_history();
         let first_later = self.first_later();
         let first_last = self.first_last();
+        let first_count = self.first_count();
         let mut erased_state: State = state
             .iter()
             .enumerate()
@@ -2087,10 +2233,14 @@ impl<'a> Space<'a> {
                     .checked_sub(first_last)
                     .and_then(|index| self.last.get(index))
                     .map(|last| &last.at);
+                let count_of = at
+                    .checked_sub(first_count)
+                    .and_then(|index| self.counted.get(index));
                 if erased.contains(&at)
                     || history_of.is_some_and(|of| erased.contains(of))
                     || later_of.is_some_and(|of| erased.contains(of))
                     || last_of.is_some_and(|of| erased.contains(of))
+                    || count_of.is_some_and(|of| erased.contains(of))
                 {
                     0
                 } else {
@@ -2486,6 +2636,8 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
                         ordered: false,
                         history: true,
                         descended: false,
+                        count: form.count,
+                        current: form.current_only(),
                     });
                 }
             }
@@ -2498,6 +2650,8 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
             ordered: false,
             history: false,
             descended: false,
+            count: None,
+            current: false,
         }),
         Predicate::First(form) => found.push(Read {
             kind: &form.kind,
@@ -2507,6 +2661,8 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
             ordered: true,
             history: false,
             descended: false,
+            count: None,
+            current: false,
         }),
         // Each record it pairs, as `first` reads its kind and result: an earlier record is an
         // earlier record of the class (story:revision-ordering).
@@ -2520,6 +2676,8 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
                     ordered: true,
                     history: false,
                     descended: true,
+                    count: None,
+                    current: false,
                 });
             }
         }
@@ -2533,6 +2691,8 @@ fn reads_in<'a>(ir: &'a Ir, predicate: &'a Predicate) -> Vec<Read<'a>> {
                     ordered: true,
                     history: false,
                     descended: false,
+                    count: None,
+                    current: false,
                 });
             }
         }
@@ -2686,6 +2846,13 @@ pub(crate) struct Walked<'a> {
     pub(crate) upstreams: Vec<&'a ArtifactId>,
     /// Whether a `children` form reads the dimension, which then has earlier records.
     pub(crate) history: bool,
+    /// The greatest count of a `children` form that reads the dimension
+    /// (story:children-form-counts-unopened-children), 0 when none declares one: with 2 or more a
+    /// walk counts the dimension's children up to it.
+    pub(crate) count: u64,
+    /// Whether a `children` form with a count of 2 or more that reads only the current revision
+    /// reads the dimension: a walk then counts its children at the current revision too.
+    pub(crate) current_count: bool,
 }
 
 /// What `canon simulate` needs of the space (story:canon-simulate). A walk holds its own records:
@@ -2731,6 +2898,8 @@ impl<'a> Space<'a> {
                 subject: kind.record.as_ref().map(|record| record.subject.clone()),
                 upstreams: kind.upstreams.clone(),
                 history: kind.history,
+                count: kind.count,
+                current_count: kind.current_count,
             })
             .collect()
     }

@@ -190,6 +190,18 @@ fn absent_or_true(value: &Json, key: &str) -> Shape<bool> {
     }
 }
 
+/// A number the IR writes only when it has one, as a non-negative integer: absent is `None`, and
+/// any other value, `null`, a string or a fraction included, is refused.
+fn absent_or_count(value: &Json, key: &str) -> Shape<Option<u64>> {
+    match field(value, key) {
+        None => Ok(None),
+        Some(number) => number
+            .as_u64()
+            .map(Some)
+            .ok_or_else(|| format!("`{key}` is not a non-negative integer")),
+    }
+}
+
 fn section<'a>(value: &'a Json, key: &str) -> Shape<&'a Map<String, Json>> {
     required(value, key)?
         .as_object()
@@ -560,7 +572,8 @@ fn predicate(value: &Json) -> Shape<Predicate> {
         }
         // `"revision"` is written only as `current`; an `any` read here compiles to no key, so
         // the bytes differ and the text is refused. `"subject"` is written only when the form
-        // names one, as a string, as an evidence match's is.
+        // names one, as a string, as an evidence match's is. `"count"` is written only when the
+        // form declares one; a 0 read here is refused when the rebuilt model compiles.
         "children" => Ok(Predicate::Children(ChildOutcomes {
             r#in: values(inner, "in")?
                 .into_iter()
@@ -570,6 +583,7 @@ fn predicate(value: &Json) -> Shape<Predicate> {
                 .map(|revision| revision.parse())
                 .transpose()?,
             subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
+            count: absent_or_count(inner, "count")?,
         })),
         _ => Err(
             "a predicate is not one of all, any, not, evidence, claim, input, first, before, after, since, descended or children"

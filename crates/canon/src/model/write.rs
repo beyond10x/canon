@@ -25,7 +25,7 @@
 //!   `evidence_kinds`, `claims`, `obligations`, `actions`, `outcomes`, `invalidation`, `case`,
 //!   `independence_dimensions`, `imports`. A predicate is an object of its form's key, then `is`
 //!   beside `claim` and `in` beside `input`; inside an order form, `kind`, `result`, `first`,
-//!   `then`, `last`, `in`, `revision` and `subject` follow the struct.
+//!   `then`, `last`, `in`, `revision`, `subject` and `count` follow the struct.
 //! - Keys inside `arguments` follow the iteration order of `serde_json::Map` (sorted by key,
 //!   unless the build keeps insertion order).
 //!
@@ -780,6 +780,7 @@ fn predicate(depth: usize, predicate: &Predicate) -> String {
                 r#in,
                 revision,
                 subject,
+                count,
             } = form;
             let mut body = Members::new();
             put(&mut body, "in", names(depth + 2, r#in));
@@ -793,6 +794,7 @@ fn predicate(depth: usize, predicate: &Predicate) -> String {
                 "subject",
                 subject.as_ref().map(|id| quote(id.as_str())),
             );
+            put_some(&mut body, "count", count.map(|count| count.to_string()));
             put(&mut members, "children", object(depth + 1, body));
         }
         Predicate::Claim(test) => {

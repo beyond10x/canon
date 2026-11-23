@@ -1,4 +1,4 @@
-digest: f1f204d5dd06a242ba001c94413c2d67da4c47a794582124fee76163c7590f69
+digest: f59ff22a60acc289b94fc189374b75528ac7b01e7775a0905392792c2c1cb16f
 regenerate: task regenerate-scenarios
 === fixture fixtures/investigation/action-admissibility.yaml
 === scenario action.publish_finding.blocked.yaml
@@ -7318,6 +7318,8 @@ steps:
             }
           }
         }
+=== fixture fixtures/investigation/simulate/children-count/protocol.yaml
+=== refused state-space-bound: protocol `simulate.children-count` revision 1 has 348160 states, more than the bound of 65536: evidence kind `a_opened` 2, evidence kind `b_opened` 2, evidence kind `c_opened` 2, evidence kind `case_outcome` about `merged` 4, evidence kind `case_outcome` about `sources` 16, evidence kind `d_opened` 2, evidence kind `e_opened` 2, evidence kind `merge_opened` 2, history of evidence kind `case_outcome` about `sources` 17, more records of evidence kind `case_outcome` about `sources` 5
 === fixture fixtures/investigation/simulate/children-open-record/protocol.yaml
 === scenario action.a.open.blocked.yaml
 format: "canon-conformance/1"
