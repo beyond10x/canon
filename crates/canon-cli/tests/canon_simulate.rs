@@ -42,6 +42,11 @@
 //! record as it opens the child, is held by `simulate_opens_a_child_with_its_open_record` over
 //! `children-open-record` and its one-reader twin.
 //!
+//! A refused approval (story:refused-approval-is-not-stuck) that a decision ends is no finding,
+//! held by `simulate_ends_a_refused_approval_by_a_decision` over `denied-decision`; a printed
+//! finding with a denial names the forms that end the case after it, held by
+//! `simulate_names_the_forms_that_end_a_refused_approval`.
+//!
 //! Each fixture directory carries `protocol.yaml` and the exact output: `report.txt` on standard
 //! output with nothing on standard error, or `refusal.txt` on standard error with nothing on
 //! standard output. Both were written by hand from the story before `canon simulate` existed.
@@ -63,7 +68,7 @@ enum Expected {
 
 /// Every fixture directory, the exit status and where the expected text goes. A walk that finds
 /// nothing exits 0; findings and a refusal exit 1 (`REJECTED`).
-const CASES: [(&str, i32, Expected); 31] = [
+const CASES: [(&str, i32, Expected); 33] = [
     ("clean", 0, Expected::Report),
     ("mutual", 1, Expected::Report),
     ("denied", 1, Expected::Report),
@@ -95,6 +100,8 @@ const CASES: [(&str, i32, Expected); 31] = [
     ("revise-child-late", 1, Expected::Report),
     ("children-open-record", 1, Expected::Report),
     ("children-open-record-one-reader", 1, Expected::Report),
+    ("denied-decision", 0, Expected::Report),
+    ("denied-no-decision", 1, Expected::Report),
 ];
 
 /// The cases of story:child-outcome-recovery, expectations 1 to 4.
@@ -449,6 +456,73 @@ fn simulate_opens_a_child_with_its_open_record() {
             line == "unreached-outcome: outcome `probe` is legitimate in no reachable state"
         }) {
             failures.push(format!("{case}: outcome `probe` is reached: {report:?}"));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// story:refused-approval-is-not-stuck, option B: in `denied-decision` the approval requires
+/// `owner.approve` and outcome `unapproved` requires a decision. The state in which the capability
+/// is denied is not open, yet the decision step leads from it to a legitimate outcome: it is no
+/// finding, the walk exits 0 and the summary counts it, `1 ending by a decision after a denial`.
+/// `decision-exit`, a stuck state with a decision exit and no denial, keeps its bytes (R4). Two
+/// runs give the same bytes (`failures`).
+#[test]
+fn simulate_ends_a_refused_approval_by_a_decision() {
+    let cases = ["denied-decision", "decision-exit"];
+    let mut failures = failures(&cases);
+    let report = read(&format!("{FIXTURES}/denied-decision/report.txt"));
+    if !report.lines().any(|line| {
+        line.starts_with("simulated:")
+            && line.contains(", 1 ending by a decision after a denial, 0 findings")
+    }) {
+        failures.push(format!(
+            "denied-decision: the summary does not count 1 ending by a decision: {report:?}"
+        ));
+    }
+    let decision = read(&format!("{FIXTURES}/decision-exit/report.txt"));
+    if decision.contains("ending by a decision") {
+        failures.push(format!("decision-exit: counts an ending: {decision:?}"));
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// story:refused-approval-is-not-stuck, option A: a printed stuck state or cycle in which a
+/// denied capability blocks an action whose precondition is true names that block and the two
+/// existing forms that end the case after the denial, and still exits 1. `denied` has one such
+/// line; `contained`, `cycle` and `revise-denied` carry the same clause, before the count of
+/// containing states and the revision suffix. `denied-no-decision` has a decision that counts only
+/// after an approval, so no decision step leads from the denial to a legitimate outcome: the
+/// state is still a finding (option B does not apply). Each report is held byte for byte.
+#[test]
+fn simulate_names_the_forms_that_end_a_refused_approval() {
+    let cases = [
+        "denied",
+        "contained",
+        "cycle",
+        "revise-denied",
+        "denied-no-decision",
+    ];
+    let mut failures = failures(&cases);
+    let report = read(&format!("{FIXTURES}/denied/report.txt"));
+    let stuck: Vec<&str> = report
+        .lines()
+        .filter(|line| line.starts_with("stuck-state: "))
+        .collect();
+    let named = [
+        "capability `sign` denied blocks action `approve`, whose precondition is true",
+        "an outcome with `requires: {decision: ..., when: ...}`",
+        "an action without capability `sign` whose record an outcome reads",
+    ];
+    if stuck.len() != 1 || !named.iter().all(|part| stuck[0].contains(part)) {
+        failures.push(format!(
+            "denied: expected one stuck-state line naming {named:?}, got {report:?}"
+        ));
+    }
+    for case in &cases[1..] {
+        let report = read(&format!("{FIXTURES}/{case}/report.txt"));
+        if report.contains("ending by a decision") {
+            failures.push(format!("{case}: counts an ending: {report:?}"));
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));

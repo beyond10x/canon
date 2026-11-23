@@ -71,6 +71,7 @@ fn agrees(ir: &Ir, space: &Space<'_>, state: &State, read: &Evaluated) {
     let decided = full(ir, space, state);
     assert_eq!(read.actions, decided.actions, "{}", space.render(state));
     assert_eq!(read.outcomes, decided.outcomes, "{}", space.render(state));
+    assert_eq!(read.denied, decided.denied, "{}", space.render(state));
 }
 
 /// How many states of `ir` under `properties` were compared: each state of each space `canon
