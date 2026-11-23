@@ -188,6 +188,26 @@ types:
       # read from: crates/canon/src/model/mod.rs:100
       - name: precondition
         type: Optional<canon.protocol.Predicate>
+      # An assertion about when the action runs (story:ordering-guards-provable-by-check, decision
+      # D8 A): the action runs, admissible or approval-required, only in a state where this
+      # predicate is true. Absent: no assertion, and canon-ir/1 has no `runs_only_when` key for the
+      # action, so the IR of every earlier protocol is unchanged. Same grammar as `precondition`
+      # and the same reference checks in canon validate: an undeclared claim is undeclared-claim
+      # naming `action `a` runs_only_when`; `all: []`, true in every state, asserts nothing and
+      # is refused as vacuous-runs-only-when. canon evaluate, canon simulate, canon generate and
+      # canon conform never read it. canon check proves it in every state of its slice (the
+      # action's slice together with what the predicate reads): ordering-guard-failed, after
+      # every other finding, names the action, its status and the state of least weight in which
+      # the action is admissible or approval-required while the predicate is not true (unknown
+      # counts as not true; blocked, by its precondition or by a denial, is not running). Per
+      # state, not along an order of actions: a guard that holds only through a chain of earlier
+      # preconditions is proved only when the action's own precondition names it. canon-ir/1
+      # writes `"runs_only_when"` only when declared, normalized like every predicate. canon diff
+      # reports it introduced, removed or changed as NO SEMANTIC CHANGE, naming the action.
+      # read from: .engineering/planning/story/ordering-guards-provable-by-check.md
+      # read from: crates/canon/src/model/mod.rs:246-257
+      - name: runs_only_when
+        type: Optional<canon.protocol.Predicate>
       # read from: crates/canon/src/model/mod.rs:102
       - name: requires
         type: List<canon.protocol.CapabilityRequirement>

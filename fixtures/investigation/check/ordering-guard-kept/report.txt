@@ -1,0 +1,1 @@
+checked: protocol `investigation` revision 1: 24 states, 0 properties, 0 findings

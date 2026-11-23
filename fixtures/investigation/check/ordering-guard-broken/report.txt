@@ -1,0 +1,2 @@
+ordering-guard-failed: action `publish_finding` is approval-required in state {evidence `falsification_attempt`}, where its runs_only_when is not true
+checked: protocol `investigation` revision 1: 24 states, 0 properties, 1 finding

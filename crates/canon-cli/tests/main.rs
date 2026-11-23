@@ -58,6 +58,7 @@ mod floor;
 mod generate_staging;
 mod imports;
 mod invalidation_rules;
+mod ordering_guards;
 mod reference_table_writes_values_as_the_help;
 mod review_cli_contract;
 mod revised_by;

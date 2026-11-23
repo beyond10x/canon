@@ -3287,3 +3287,184 @@ fn adversary_descended_unknown_beside_a_placed_first_of_its_kind_is_reached() {
          revision without an item, yet canon check reports:\n{report}"
     );
 }
+
+/// story:ordering-guards-provable-by-check: a protocol whose action `run` is `RUN`. `make`
+/// produces `k` and `l` without authority; `c` is true on a record of `k` with result `pass`,
+/// unknown on none and false on a record of another result.
+const GUARDED: &str = "format: protocol/1\n\
+    protocol: {id: g, revision: 1}\n\
+    artifacts: {a: {}}\n\
+    evidence_kinds: {k: {}, l: {}}\n\
+    claims: {c: {true_when: {evidence: {kind: k, result: pass}}}}\n\
+    actions: {make: {may_produce: [{evidence: k}, {evidence: l}]}, run: RUN}\n\
+    outcomes: {done: {requires: {claim: c}}}\n";
+
+/// `GUARDED` with `run` declared as `run`.
+fn guarded(run: &str) -> String {
+    GUARDED.replace("RUN", run)
+}
+
+/// The report of `run` with `guard` as its `runs_only_when`, checked by every strategy alike, and
+/// the summary line the same protocol without the guard gives, which the guard leaves as it is.
+fn guard_report(run: &str, guard: &str) -> String {
+    let source = guarded(&format!("{{{run}, runs_only_when: {guard}}}"));
+    let ir = compiled(&source);
+    let (_, _, report) = slices_agree(&ir, None, &source, false);
+    let report = report.expect("checked").to_string();
+    let unguarded = check(&compiled(&guarded(&format!("{{{run}}}"))), None)
+        .expect("checked")
+        .to_string();
+    let summary = |report: &str| {
+        report.lines().last().map(|line| {
+            line.rsplit_once(", ")
+                .map_or(line, |(head, _)| head)
+                .to_owned()
+        })
+    };
+    assert_eq!(summary(&report), summary(&unguarded), "{report}");
+    report
+}
+
+/// `unknown` is not `true`: an action that runs while the claim its guard tests is unknown breaks
+/// the guard, in the state of least weight, `{}`.
+#[test]
+fn a_guard_that_is_unknown_where_the_action_runs_fails() {
+    assert_eq!(
+        guard_report("precondition: {claim: c, is: unknown}", "{claim: c}"),
+        "ordering-guard-failed: action `run` is admissible in state {}, where its runs_only_when \
+         is not true\n\
+         checked: protocol `g` revision 1: 8 states, 0 properties, 1 finding\n"
+    );
+}
+
+/// A guard that is false where the action runs fails, naming the state.
+#[test]
+fn a_guard_that_is_false_where_the_action_runs_fails() {
+    assert_eq!(
+        guard_report("precondition: {claim: c, is: false}", "{claim: c}"),
+        "ordering-guard-failed: action `run` is admissible in state {evidence `k`}, where its \
+         runs_only_when is not true\n\
+         checked: protocol `g` revision 1: 8 states, 0 properties, 1 finding\n"
+    );
+}
+
+/// An action that waits for approval runs too: `approval-required` breaks the guard like
+/// `admissible`, and the witness takes no authority decision. A denial blocks the action, which
+/// then does not run: the states that deny `x` weigh more and are never the witness.
+#[test]
+fn an_action_that_waits_for_approval_breaks_its_guard_too() {
+    assert_eq!(
+        guard_report(
+            "precondition: {claim: c, is: unknown}, requires: [{capability: x}]",
+            "{claim: c}"
+        ),
+        "ordering-guard-failed: action `run` is approval-required in state {}, where its \
+         runs_only_when is not true\n\
+         checked: protocol `g` revision 1: 24 states, 0 properties, 1 finding\n"
+    );
+}
+
+/// A guard the precondition names holds in every state in which the action runs: nothing is
+/// reported, with or without a capability, and a guard on an action that never runs is never
+/// broken.
+#[test]
+fn a_guard_the_precondition_names_holds() {
+    for (run, states, findings) in [
+        ("precondition: {claim: c}", 8, "0 findings"),
+        (
+            "precondition: {claim: c}, requires: [{capability: x}]",
+            24,
+            "0 findings",
+        ),
+        (
+            "precondition: {all: [{claim: c}, {claim: c, is: false}]}",
+            8,
+            "1 finding",
+        ),
+    ] {
+        let report = guard_report(run, "{claim: c}");
+        assert!(
+            !report.contains("ordering-guard-failed")
+                && report.ends_with(&format!(
+                    "checked: protocol `g` revision 1: {states} states, 0 properties, {findings}\n"
+                )),
+            "{run}: {report}"
+        );
+    }
+}
+
+/// The guard is decided over the classes it reads itself: here only the guard reads the result
+/// `bad` of `l`, which the precondition cannot tell from another result. A record of `l` with
+/// result `bad` lets the action run while the guard is false; the summary still counts the states
+/// of the protocol without the guard.
+#[test]
+fn a_guard_is_decided_over_the_classes_it_reads() {
+    assert_eq!(
+        guard_report(
+            "precondition: {evidence: {kind: l}}",
+            "{not: {evidence: {kind: l, result: bad}}}"
+        ),
+        "ordering-guard-failed: action `run` is admissible in state {evidence `l` result `bad`}, \
+         where its runs_only_when is not true\n\
+         checked: protocol `g` revision 1: 8 states, 0 properties, 1 finding\n"
+    );
+}
+
+/// `ordering-guard-failed` comes after every other finding, the property's included.
+#[test]
+fn a_failed_guard_is_reported_after_every_other_finding() {
+    let source = guarded("{precondition: {claim: c, is: unknown}, runs_only_when: {claim: c}}")
+        .replace(
+            "outcomes: {done: {requires: {claim: c}}}\n",
+            "outcomes: {done: {requires: {claim: c}}, \
+             never: {requires: {all: [{claim: c}, {claim: c, is: false}]}}}\n",
+        );
+    let body = format!(
+        "{HEAD}properties: {{x: {{subject: {{action: run}}, independent_of: {{claim: c}}}}}}\n"
+    )
+    .replace("protocol: p", "protocol: g");
+    let report = check(&compiled(&source), Some(&properties(&body)))
+        .expect("checked")
+        .to_string();
+    let codes: Vec<&str> = report
+        .lines()
+        .map(|line| line.split_once(": ").map_or(line, |(code, _)| code))
+        .collect();
+    assert_eq!(
+        codes,
+        [
+            "unreachable-outcome",
+            "property-failed",
+            "ordering-guard-failed",
+            "checked"
+        ],
+        "{report}"
+    );
+    assert!(
+        report.ends_with("8 states, 1 property, 3 findings\n"),
+        "{report}"
+    );
+}
+
+/// A guard whose slice holds more states than the bound refuses the check, naming the action's
+/// guard as its subject, while every other slice fits.
+#[test]
+fn a_guard_slice_above_the_bound_is_refused_naming_it() {
+    let results: Vec<String> = (0..16)
+        .map(|n| format!("{{evidence: {{kind: l, result: r{n:02}}}}}"))
+        .collect();
+    let source = guarded(&format!(
+        "{{precondition: {{evidence: {{kind: l}}}}, runs_only_when: {{any: [{}]}}}}",
+        results.join(", ")
+    ));
+    let refusal = check(&compiled(&source), None).expect_err("refused");
+    assert_eq!(
+        (refusal.code(), refusal.to_string()),
+        (
+            "state-space-bound",
+            "protocol `g` revision 1: action `run` runs_only_when reads 131072 states, more than \
+             the bound of 65536: evidence kind `l` 131072"
+                .to_owned()
+        )
+    );
+}

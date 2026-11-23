@@ -1,7 +1,7 @@
 //! Acceptance for story:canon-check: `canon check` enumerates a protocol's finite state space,
 //! evaluates every state with Canon's own evaluator and reports what no single evaluation shows.
 //!
-//! Nine expectations, each over one fixture directory in `fixtures/investigation/check/`: the
+//! Eleven expectations, each over one fixture directory in `fixtures/investigation/check/`: the
 //! base investigation protocol reports nothing; a variant with an outcome whose requirement
 //! contradicts itself reports that outcome unreachable; a variant with an unsatisfiable
 //! precondition reports that action; a variant with a claim over an evidence kind no action
@@ -11,7 +11,9 @@
 //! subject's slice fits reports one finding of each code, exactly as an enumeration of the whole
 //! product does (story:check-subject-slices); a protocol whose only large dimension no subject
 //! reads is checked; and a protocol in which one subject's slice exceeds the bound is refused
-//! naming that subject. Two runs give identical bytes.
+//! naming that subject; a protocol whose action declares `runs_only_when` and can run while it is
+//! not true reports the action and the state, and one whose precondition names the guard reports
+//! nothing (story:ordering-guards-provable-by-check). Two runs give identical bytes.
 //!
 //! Each fixture directory carries `protocol.yaml`, a `properties.yaml` (`canon-properties/1`) when
 //! the case declares properties, and the exact output `canon check` must give: `report.txt` on
@@ -37,9 +39,9 @@ enum Expected {
     Refusal,
 }
 
-/// The nine expectations: fixture directory, whether it declares properties, the exit status and
+/// The eleven expectations: fixture directory, whether it declares properties, the exit status and
 /// where the expected text goes. A clean check exits 0; findings and a refusal exit 1 (`REJECTED`).
-const CASES: [(&str, bool, i32, Expected); 9] = [
+const CASES: [(&str, bool, i32, Expected); 11] = [
     ("base", true, 0, Expected::Report),
     ("unreachable-outcome", false, 1, Expected::Report),
     ("unsatisfiable-precondition", false, 1, Expected::Report),
@@ -49,6 +51,8 @@ const CASES: [(&str, bool, i32, Expected); 9] = [
     ("sliced", true, 1, Expected::Report),
     ("unread-dimension", false, 0, Expected::Report),
     ("state-space-bound", false, 1, Expected::Refusal),
+    ("ordering-guard-broken", false, 1, Expected::Report),
+    ("ordering-guard-kept", false, 0, Expected::Report),
 ];
 
 /// The whole-product state count the `sliced` summary gives, above the bound of 65536.
@@ -96,41 +100,74 @@ fn check(case: &str, properties: bool) -> Output {
     canon(&args)
 }
 
+/// Runs `canon check` twice over one expectation's fixture; `None` when both runs give exactly the
+/// expected exit status and text, otherwise what went wrong.
+fn expectation(case: &str, properties: bool, status: i32, expected: Expected) -> Option<String> {
+    let first = check(case, properties);
+    let (stdout, stderr) = match expected {
+        Expected::Report => (
+            read(&format!("{FIXTURES}/{case}/report.txt")),
+            String::new(),
+        ),
+        Expected::Refusal => (
+            String::new(),
+            read(&format!("{FIXTURES}/{case}/refusal.txt")),
+        ),
+    };
+    if first.status.code() != Some(status)
+        || text(&first.stdout) != stdout
+        || text(&first.stderr) != stderr
+    {
+        return Some(format!(
+            "{case}: expected exit {status}, stdout {stdout:?}, stderr {stderr:?}; \
+             got exit {:?}, stdout {:?}, stderr {:?}",
+            first.status.code(),
+            text(&first.stdout),
+            text(&first.stderr),
+        ));
+    }
+    let second = check(case, properties);
+    ((second.status.code(), &second.stdout, &second.stderr)
+        != (first.status.code(), &first.stdout, &first.stderr))
+        .then(|| format!("{case}: a second run gave different bytes"))
+}
+
+/// The expectation of `CASES` named `case`, run alone.
+fn expect_case(case: &str) {
+    let (_, properties, status, expected) = CASES
+        .into_iter()
+        .find(|(name, ..)| *name == case)
+        .unwrap_or_else(|| panic!("{case} is an expectation"));
+    if let Some(failure) = expectation(case, properties, status, expected) {
+        panic!("{failure}");
+    }
+}
+
+/// story:ordering-guards-provable-by-check: `publish_finding` declares `runs_only_when: {claim:
+/// explanation.survived}`, and its precondition asks for an attempt to falsify the explanation,
+/// not one it survived. `canon check` names the action, its status and the state of least weight
+/// in which it can run while the guard is not true, after every other finding, and exits 1; the
+/// summary line is the one the protocol without the guard gives.
+#[test]
+fn ordering_guard_broken() {
+    expect_case("ordering-guard-broken");
+}
+
+/// The same protocol whose precondition names the guard: the guard holds in every state in which
+/// the action can run, and `canon check` reports nothing and exits 0.
+#[test]
+fn ordering_guard_kept() {
+    expect_case("ordering-guard-kept");
+}
+
 #[test]
 fn canon_check_reports_investigation_defects() {
-    let mut failures = Vec::new();
-    for (case, properties, status, expected) in CASES {
-        let first = check(case, properties);
-        let (stdout, stderr) = match expected {
-            Expected::Report => (
-                read(&format!("{FIXTURES}/{case}/report.txt")),
-                String::new(),
-            ),
-            Expected::Refusal => (
-                String::new(),
-                read(&format!("{FIXTURES}/{case}/refusal.txt")),
-            ),
-        };
-        if first.status.code() != Some(status)
-            || text(&first.stdout) != stdout
-            || text(&first.stderr) != stderr
-        {
-            failures.push(format!(
-                "{case}: expected exit {status}, stdout {stdout:?}, stderr {stderr:?}; \
-                 got exit {:?}, stdout {:?}, stderr {:?}",
-                first.status.code(),
-                text(&first.stdout),
-                text(&first.stderr),
-            ));
-            continue;
-        }
-        let second = check(case, properties);
-        if (second.status.code(), &second.stdout, &second.stderr)
-            != (first.status.code(), &first.stdout, &first.stderr)
-        {
-            failures.push(format!("{case}: a second run gave different bytes"));
-        }
-    }
+    let failures: Vec<String> = CASES
+        .into_iter()
+        .filter_map(|(case, properties, status, expected)| {
+            expectation(case, properties, status, expected)
+        })
+        .collect();
     assert!(
         failures.is_empty(),
         "{} of {} expectations failed:\n{}",
@@ -250,7 +287,7 @@ fn every_check_fixture_protocol_validates() {
     }
 }
 
-/// Every fixture directory is one of the nine expectations, so none is skipped silently, and each
+/// Every fixture directory is one of the eleven expectations, so none is skipped silently, and each
 /// carries exactly the files its expectation reads.
 #[test]
 fn every_check_fixture_is_an_expectation() {

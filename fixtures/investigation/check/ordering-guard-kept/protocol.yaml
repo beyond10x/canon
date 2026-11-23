@@ -1,0 +1,57 @@
+format: protocol/1
+
+protocol:
+  id: investigation
+  revision: 1
+  description: Publish a finding only after the explanation survived an attempt to falsify it.
+
+artifacts:
+  explanation:
+    description: The explanation under investigation.
+
+evidence_kinds:
+  falsification_attempt:
+    description: An attempt to refute the explanation; its result is survived or refuted.
+  finding_published:
+    description: The finding was published.
+
+claims:
+  explanation.survived:
+    description: The explanation survived an attempt to falsify it.
+    true_when:
+      evidence:
+        kind: falsification_attempt
+        result: survived
+  finding.published:
+    description: The finding is published.
+    true_when:
+      evidence:
+        kind: finding_published
+
+actions:
+  attempt_falsification:
+    description: Try to refute the explanation.
+    may_produce:
+      - evidence: falsification_attempt
+
+  publish_finding:
+    description: The precondition names the guard, so the finding is published only after it holds.
+    precondition:
+      all:
+        - claim: explanation.survived
+        - claim: finding.published
+          is: unknown
+    runs_only_when:
+      claim: explanation.survived
+    requires:
+      - capability: finding.publish
+    may_produce:
+      - evidence: finding_published
+
+outcomes:
+  published:
+    description: The finding is published about an explanation that survived.
+    requires:
+      all:
+        - claim: finding.published
+        - claim: explanation.survived
