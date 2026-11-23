@@ -1,4 +1,4 @@
-digest: e1e70c2d25be00e2e21c0b250e9a6a32a7ecc516fc1725cce40084a643a2a5b5
+digest: 8236454217d8779c6327babb7dfe73be48cac329c7130a18c60435961debcfe2
 regenerate: task regenerate-scenarios
 === fixture fixtures/investigation/action-admissibility.yaml
 === scenario action.publish_finding.blocked.yaml
@@ -926,6 +926,152 @@ steps:
               "status": "blocked"
             },
             "supported": {
+              "status": "legitimate"
+            }
+          }
+        }
+=== fixture fixtures/investigation/check/ordering-guard-broken/protocol.yaml
+=== scenario action.publish_finding.blocked.yaml
+format: "canon-conformance/1"
+id: "investigation.action.publish_finding.blocked"
+covers: []
+fixture: "fixtures/investigation/check/ordering-guard-broken/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "investigation"
+        revision: "r"
+        artifacts:
+          "explanation":
+            revision: "r"
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "status": "admissible"
+            },
+            "publish_finding": {
+              "reasons": [
+                {
+                  "evidence": "falsification_attempt",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+=== scenario outcome.published.legitimate.yaml
+format: "canon-conformance/1"
+id: "investigation.outcome.published.legitimate"
+covers: []
+fixture: "fixtures/investigation/check/ordering-guard-broken/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "investigation"
+        revision: "r"
+        artifacts:
+          "explanation":
+            revision: "r"
+      evidence:
+        - format: "canon-evidence/1"
+          id: "e0"
+          kind: "falsification_attempt"
+          result: "survived"
+          subject: "explanation"
+          subject_revision: "r"
+        - format: "canon-evidence/1"
+          id: "e1"
+          kind: "finding_published"
+          subject: "explanation"
+          subject_revision: "r"
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "published": {
+              "status": "legitimate"
+            }
+          }
+        }
+=== fixture fixtures/investigation/check/ordering-guard-kept/protocol.yaml
+=== scenario action.publish_finding.blocked.yaml
+format: "canon-conformance/1"
+id: "investigation.action.publish_finding.blocked"
+covers: []
+fixture: "fixtures/investigation/check/ordering-guard-kept/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "investigation"
+        revision: "r"
+        artifacts:
+          "explanation":
+            revision: "r"
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "attempt_falsification": {
+              "status": "admissible"
+            },
+            "publish_finding": {
+              "reasons": [
+                {
+                  "claim": "explanation.survived",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+=== scenario outcome.published.legitimate.yaml
+format: "canon-conformance/1"
+id: "investigation.outcome.published.legitimate"
+covers: []
+fixture: "fixtures/investigation/check/ordering-guard-kept/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "investigation"
+        revision: "r"
+        artifacts:
+          "explanation":
+            revision: "r"
+      evidence:
+        - format: "canon-evidence/1"
+          id: "e0"
+          kind: "falsification_attempt"
+          result: "survived"
+          subject: "explanation"
+          subject_revision: "r"
+        - format: "canon-evidence/1"
+          id: "e1"
+          kind: "finding_published"
+          subject: "explanation"
+          subject_revision: "r"
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "published": {
               "status": "legitimate"
             }
           }

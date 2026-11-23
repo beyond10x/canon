@@ -75,7 +75,10 @@ does not depend on the order the sections are written in:
    `case_outcome` for a `children` form; then its applicability predicate, followed likewise by
    every evidence match, order form and `children` form it holds, `evidence-in-applicability`:
    it tests only claim values and case inputs), then those in actions (each action's
-   precondition, then each evidence kind it may produce, then each artifact it `revises`
+   precondition, then its `runs_only_when` (story:ordering-guards-provable-by-check), whose
+   references are checked as the precondition's are, each problem naming `` action `a` runs_only_when ``, followed by `vacuous-runs-only-when` when it is `all: []`, true in every
+   state, so it asserts nothing, then each evidence kind it may produce, then each artifact it
+   `revises`
    (story:judgement-marking), `undeclared-artifact`, once for every listing, in the order
    listed, then the subject of the case it opens, `undeclared-artifact`, then an opening under
    the protocol's own id, `self-opened-case`, then each group of its `records_together`
@@ -256,6 +259,7 @@ differently in these cases only:
 | `empty-child-outcomes` | A `children` form lists no outcome, so no child case could end with one of them. |
 | `duplicate-child-outcome` | A `children` form lists an outcome more than once. |
 | `open-child-outcome` | A `children` form lists `open`, which is a running child case's outcome, never a terminal one: the form is unknown while a child is open. |
+| `vacuous-runs-only-when` | An action's `runs_only_when` (story:ordering-guards-provable-by-check) is `all: []`, which is true in every state and so asserts nothing. |
 | `self-opened-case` | An action opens a child case under the protocol's own id: a case could then open cases under its own protocol without end (D206). |
 | `invalid-record-group` | A group of an action's `records_together` (story:simulate-record-groups) is not one run's records: `group` counts the action's groups from 1, in the order written. |
 | `self-supplied-evidence` | An evidence kind names the protocol's own id as the protocol that supplies its records (story:supplied-evidence): records of it come from outside the protocol, or from its own actions, never from a case of the same protocol through `supplied_by`. |
