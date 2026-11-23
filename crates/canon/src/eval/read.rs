@@ -697,6 +697,43 @@ mod tests {
         );
     }
 
+    /// story:supplied-evidence-required-at-open: a kind required at open reads back as written;
+    /// the compiler writes the key only as `true`, so `false`, `null` and any other value are
+    /// refused, and so is the key on a kind without a supplier, as the validator refuses it.
+    #[test]
+    fn a_kind_required_at_open_reads_back_and_any_other_value_is_refused() {
+        let ir = ir::compile(
+            &model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 evidence_kinds: {k: {supplied_by: q, required_at_open: true}, l: {}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let text = ir.canonical_json();
+        let key = "\"required_at_open\": true,\n      \"supplied_by\": \"q\"\n";
+        assert!(text.contains(key), "{text}");
+        assert_eq!(read_ir(&text), Ok(ir));
+        for replacement in ["false", "null", "\"true\"", "1"] {
+            let refusal = read_ir(&text.replace(
+                "\"required_at_open\": true",
+                &format!("\"required_at_open\": {replacement}"),
+            ))
+            .expect_err(replacement);
+            assert_eq!(refusal.code(), "malformed-input", "{refusal}");
+            assert_eq!(
+                refusal.to_string(),
+                "not canon-ir/1: `required_at_open` is not true"
+            );
+        }
+        let refusal = read_ir(&text.replace(",\n      \"supplied_by\": \"q\"", ""))
+            .expect_err("without a supplier");
+        assert!(
+            refusal.to_string().contains("at-open-without-supplier"),
+            "{refusal}"
+        );
+    }
+
     /// A reviser reads back as written; one that is not a string, or an explicit null the
     /// compiler never writes, is refused, and so is the protocol's own id, as the validator
     /// refuses it.

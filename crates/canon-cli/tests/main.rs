@@ -68,6 +68,7 @@ mod simulate_child_outcome;
 mod simulate_record_groups;
 mod strict_freshness_cli;
 mod subject_bound_evidence_match;
+mod supplied_at_open;
 mod supplied_evidence;
 mod three_valued_claims;
 mod usage_exit;

@@ -1917,6 +1917,26 @@ mod tests {
         );
     }
 
+    /// story:supplied-evidence-required-at-open: a kind required at open needs a supplier on the
+    /// same kind, else `at-open-without-supplier`, naming the kind, after the kind's maximum age and
+    /// its own supplier check, each kind's in the order written; `false` asks nothing.
+    #[test]
+    fn a_kind_required_at_open_needs_a_supplier() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            evidence_kinds: {z: {required_at_open: true, max_age: 5x}, \
+            a: {supplied_by: p, required_at_open: true}, k: {required_at_open: true}, \
+            off: {required_at_open: false}, ok: {supplied_by: q, required_at_open: true}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "invalid-max-age: evidence kind `z` has max_age `5x`, which is not a whole number without leading zeros, followed by s, m, h or d",
+                "at-open-without-supplier: evidence kind `z` is required at open and names no protocol that supplies it (`supplied_by`)",
+                "self-supplied-evidence: evidence kind `a` is supplied by protocol `p`, the protocol's own id",
+                "at-open-without-supplier: evidence kind `k` is required at open and names no protocol that supplies it (`supplied_by`)",
+            ]
+        );
+    }
+
     /// A reviser is a protocol identifier, checked after every supplier; the protocol's own id is
     /// refused as `self-revised-artifact`, naming the artifact, after the suppliers' own check.
     /// Any other id is valid, resolved by nothing, and an artifact an action also lists in

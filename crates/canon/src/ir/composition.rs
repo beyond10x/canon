@@ -978,4 +978,243 @@ mod tests {
         );
         assert_eq!(three.findings[0].code(), "duplicate-protocol-id");
     }
+
+    /// The supplier `s` of the kinds `k` and `l`, and a child `c` about `thing` that requires `k`
+    /// at open and only reads `l`, with the outcome `done`.
+    fn at_open_family() -> [Ir; 2] {
+        [
+            written(
+                "s",
+                "artifacts: {thing: {}}\nevidence_kinds: {k: {}, l: {}}\n\
+                 actions: {make: {may_produce: [{evidence: k}, {evidence: l}]}}\n",
+            ),
+            written(
+                "c",
+                "artifacts: {thing: {}}\n\
+                 evidence_kinds: {k: {supplied_by: s, required_at_open: true}, l: {supplied_by: s}}\n\
+                 claims: {c.k: {true_when: {evidence: {kind: k}}}}\n\
+                 outcomes: {done: {requires: {claim: c.k}}}\n",
+            ),
+        ]
+    }
+
+    /// The `unsupplied-at-open` lines of a set of `p`, written from `sections`, with the
+    /// [`at_open_family`].
+    fn unsupplied(sections: &str) -> Vec<String> {
+        let [supplier, child] = at_open_family();
+        let parent = written("p", sections);
+        checked([&parent, &supplier, &child])
+            .findings
+            .iter()
+            .filter(|finding| finding.code() == "unsupplied-at-open")
+            .map(ToString::to_string)
+            .collect()
+    }
+
+    /// A parent `p` that declares `k`, `other` and `case_outcome`, the input `mode`, the claims
+    /// written and one action per `(id, precondition)` of `actions`, each opening `c` about
+    /// `thing`.
+    fn opener(claims: &str, actions: &[(&str, &str)]) -> String {
+        let actions: String = actions
+            .iter()
+            .map(|(id, precondition)| {
+                format!(
+                    "  {id}: {{precondition: {precondition}, case_open: {{protocol: c, subject: thing}}}}\n"
+                )
+            })
+            .collect();
+        format!(
+            "case: {{inputs: {{mode: {{values: [fast, slow]}}}}}}\n\
+             artifacts: {{thing: {{}}}}\n\
+             evidence_kinds: {{k: {{supplied_by: s}}, other: {{}}, case_outcome: {{}}}}\n\
+             claims:\n{claims}actions:\n{actions}"
+        )
+    }
+
+    /// The actions of `p` that [`unsupplied`] names, in finding order.
+    fn unproved(claims: &str, actions: &[(&str, &str)]) -> Vec<String> {
+        unsupplied(&opener(claims, actions))
+            .iter()
+            .map(|line| {
+                line.strip_prefix("protocol `p` action `")
+                    .and_then(|rest| rest.split('`').next())
+                    .unwrap_or(line)
+                    .to_owned()
+            })
+            .collect()
+    }
+
+    const CLAIMS: &str = "  has.k: {true_when: {evidence: {kind: k}}}\n  \
+         k.approved: {true_when: {evidence: {kind: k, result: approved}}}\n  \
+         has.other: {true_when: {evidence: {kind: other}}}\n  \
+         both: {true_when: {all: [{evidence: {kind: k}}, {evidence: {kind: other}}]}}\n  \
+         either: {true_when: {any: [{evidence: {kind: k, result: approved}}, {evidence: {kind: other}}]}}\n  \
+         chained: {true_when: {claim: has.k}}\n";
+
+    /// story:supplied-evidence-required-at-open: an evidence match of the kind implies a record of
+    /// it at either value, so a claim test `is: true` or `is: false` implies one through the
+    /// claim's `true_when`; `all` implies it when one member does, `any` when every member does;
+    /// an order form naming the kind implies it. `not`, `is: unknown`, an input test, a `children`
+    /// form, a match of another kind and the always-true precondition do not, and neither does an
+    /// action's `runs_only_when`, which no evaluation reads.
+    #[test]
+    fn the_precondition_of_an_opening_action_implies_a_record_of_the_kind() {
+        let found = unproved(
+            CLAIMS,
+            &[
+                ("match", "{evidence: {kind: k}}"),
+                ("match.result", "{evidence: {kind: k, result: approved}}"),
+                ("claim.true", "{claim: has.k}"),
+                ("claim.false", "{claim: k.approved, is: \"false\"}"),
+                ("claim.chained", "{claim: chained}"),
+                ("claim.unknown", "{claim: has.k, is: unknown}"),
+                ("all.one", "{all: [{claim: has.other}, {claim: has.k}]}"),
+                ("any.one", "{any: [{claim: has.other}, {claim: has.k}]}"),
+                (
+                    "any.every",
+                    "{any: [{claim: has.k}, {evidence: {kind: k, result: approved}}]}",
+                ),
+                ("false.all", "{claim: both, is: \"false\"}"),
+                ("false.any", "{claim: either, is: \"false\"}"),
+                ("not", "{not: {claim: has.k, is: unknown}}"),
+                (
+                    "not.match",
+                    "{not: {evidence: {kind: k, result: approved}}}",
+                ),
+                ("children", "{children: {in: [done], subject: thing}}"),
+                ("input", "{input: mode, in: [fast]}"),
+                ("order", "{first: {kind: k, result: approved}}"),
+                ("order.before", "{before: {first: other, then: k}}"),
+                ("order.other", "{first: {kind: other, result: x}}"),
+                ("order.not", "{not: {first: {kind: k, result: approved}}}"),
+                ("other", "{evidence: {kind: other}}"),
+                ("always", "{all: []}"),
+            ],
+        );
+        assert_eq!(
+            found,
+            [
+                "always",
+                "any.one",
+                "children",
+                "claim.unknown",
+                "false.all",
+                "input",
+                "not",
+                "not.match",
+                "order.not",
+                "order.other",
+                "other",
+            ]
+        );
+    }
+
+    /// A guard of story:ordering-guards-provable-by-check is no part of the proof: the precondition
+    /// is what decides whether the action is admissible.
+    #[test]
+    fn a_runs_only_when_guard_proves_nothing() {
+        let sections = opener(CLAIMS, &[]).replace(
+            "actions:\n",
+            "actions:\n  guarded: {precondition: {claim: has.other}, runs_only_when: {claim: has.k}, \
+             case_open: {protocol: c, subject: thing}}\n",
+        );
+        assert_eq!(
+            unsupplied(&sections),
+            [
+                "protocol `p` action `guarded` opens a case under protocol `c`, which requires evidence kind `k` at open, and the action's precondition does not imply a record of it"
+            ]
+        );
+    }
+
+    /// An opener that does not declare the kind cannot hold a record of it: the finding says so.
+    /// One finding per action and kind, a kind the child only reads (`l`) asks nothing.
+    #[test]
+    fn an_opener_that_declares_no_such_kind_is_a_finding() {
+        assert_eq!(
+            unsupplied(
+                "artifacts: {thing: {}}\nevidence_kinds: {l: {}}\n\
+                 claims: {has.l: {true_when: {evidence: {kind: l}}}}\n\
+                 actions:\n  \
+                 b: {precondition: {claim: has.l}, case_open: {protocol: c, subject: thing}}\n  \
+                 a: {case_open: {protocol: c, subject: thing}}\n"
+            ),
+            [
+                "protocol `p` action `a` opens a case under protocol `c`, which requires evidence kind `k` at open, and protocol `p` declares no evidence kind `k`",
+                "protocol `p` action `b` opens a case under protocol `c`, which requires evidence kind `k` at open, and protocol `p` declares no evidence kind `k`",
+            ]
+        );
+    }
+
+    /// The finding comes after every other finding, by protocol, action and kind. A child outside
+    /// the set, or of an id two files declare, requires nothing known, and a protocol nothing in
+    /// the set opens is held to nothing.
+    #[test]
+    fn findings_come_last_and_only_a_known_child_requires_anything() {
+        let [supplier, child] = at_open_family();
+        let two = written(
+            "c2",
+            "artifacts: {thing: {}}\n\
+             evidence_kinds: {k2: {supplied_by: s, required_at_open: true}, k1: {supplied_by: s, required_at_open: true}}\n",
+        );
+        let parent = written(
+            "p",
+            "artifacts: {thing: {}}\nevidence_kinds: {k: {supplied_by: ghost}}\n\
+             actions:\n  \
+             open.c: {case_open: {protocol: c, subject: thing}}\n  \
+             open.c2: {case_open: {protocol: c2, subject: thing}}\n  \
+             open.absent: {case_open: {protocol: absent, subject: thing}}\n",
+        );
+        let report = checked([&parent, &supplier, &child, &two]);
+        let codes: Vec<&str> = report.findings.iter().map(SetFinding::code).collect();
+        assert_eq!(
+            codes,
+            [
+                "unknown-opened-protocol",
+                "unknown-supplier",
+                "unproduced-supplied-kind",
+                "unproduced-supplied-kind",
+                "unsupplied-at-open",
+                "unsupplied-at-open",
+                "unsupplied-at-open",
+            ]
+        );
+        let at_open: Vec<String> = report.findings[4..]
+            .iter()
+            .map(|finding| {
+                let line = finding.to_string();
+                let (action, rest) = line
+                    .strip_prefix("protocol `p` action `")
+                    .and_then(|rest| rest.split_once('`'))
+                    .expect("a finding of p");
+                let kind = rest
+                    .split("evidence kind `")
+                    .nth(1)
+                    .and_then(|rest| rest.split('`').next())
+                    .expect("a kind");
+                format!("{action} {kind}")
+            })
+            .collect();
+        assert_eq!(at_open, ["open.c k", "open.c2 k1", "open.c2 k2"]);
+
+        let duplicate = written("c", "artifacts: {thing: {}}\n");
+        let pooled = check_set([
+            ("p.yaml", &parent),
+            ("s.yaml", &supplier),
+            ("c.yaml", &child),
+            ("c-other.yaml", &duplicate),
+        ]);
+        assert!(
+            pooled
+                .findings
+                .iter()
+                .all(|finding| finding.code() != "unsupplied-at-open"),
+            "{pooled}"
+        );
+        let alone = checked([&supplier, &child]);
+        assert!(alone.is_clean(), "{alone}");
+        assert_eq!(
+            alone.to_string(),
+            "checked: 2 protocols, 0 openings, 2 supplied kinds, 0 findings\n"
+        );
+    }
 }
