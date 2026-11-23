@@ -1,4 +1,4 @@
-digest: 960fead2c27e055e4f8213f697832afbd664c0bca4c551388df62375da5411f6
+digest: e1e70c2d25be00e2e21c0b250e9a6a32a7ecc516fc1725cce40084a643a2a5b5
 regenerate: task regenerate-scenarios
 === fixture fixtures/investigation/action-admissibility.yaml
 === scenario action.publish_finding.blocked.yaml
@@ -7108,6 +7108,594 @@ steps:
             }
           }
         }
+=== fixture fixtures/investigation/simulate/children-open-record/protocol.yaml
+=== scenario action.a.open.blocked.yaml
+format: "canon-conformance/1"
+id: "simulate.children-open-record.action.a.open.blocked"
+covers: []
+fixture: "fixtures/investigation/simulate/children-open-record/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.children-open-record"
+        revision: "r"
+        artifacts:
+          "merged":
+            revision: "r"
+          "sources":
+            revision: "r"
+      evidence:
+        - format: "canon-evidence/1"
+          id: "e0"
+          kind: "a_opened"
+          subject: "merged"
+          subject_revision: "r"
+    expect:
+      decision: |
+        {
+          "actions": {
+            "a.open": {
+              "reasons": [
+                {
+                  "claim": "a.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "b.open": {
+              "status": "admissible"
+            },
+            "c.open": {
+              "reasons": [
+                {
+                  "claim": "b.opened",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "d.open": {
+              "reasons": [
+                {
+                  "claim": "c.opened",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "merge.open": {
+              "reasons": [
+                {
+                  "claim": "d.opened",
+                  "value": "unknown"
+                },
+                {
+                  "claim": "readers.complete",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+=== scenario action.b.open.blocked.yaml
+format: "canon-conformance/1"
+id: "simulate.children-open-record.action.b.open.blocked"
+covers: []
+fixture: "fixtures/investigation/simulate/children-open-record/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.children-open-record"
+        revision: "r"
+        artifacts:
+          "merged":
+            revision: "r"
+          "sources":
+            revision: "r"
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "a.open": {
+              "status": "admissible"
+            },
+            "b.open": {
+              "reasons": [
+                {
+                  "claim": "a.opened",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "c.open": {
+              "reasons": [
+                {
+                  "claim": "b.opened",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "d.open": {
+              "reasons": [
+                {
+                  "claim": "c.opened",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "merge.open": {
+              "reasons": [
+                {
+                  "claim": "d.opened",
+                  "value": "unknown"
+                },
+                {
+                  "claim": "readers.complete",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+=== scenario action.c.open.blocked.yaml
+format: "canon-conformance/1"
+id: "simulate.children-open-record.action.c.open.blocked"
+covers: []
+fixture: "fixtures/investigation/simulate/children-open-record/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.children-open-record"
+        revision: "r"
+        artifacts:
+          "merged":
+            revision: "r"
+          "sources":
+            revision: "r"
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "a.open": {
+              "status": "admissible"
+            },
+            "b.open": {
+              "reasons": [
+                {
+                  "claim": "a.opened",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "c.open": {
+              "reasons": [
+                {
+                  "claim": "b.opened",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "d.open": {
+              "reasons": [
+                {
+                  "claim": "c.opened",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "merge.open": {
+              "reasons": [
+                {
+                  "claim": "d.opened",
+                  "value": "unknown"
+                },
+                {
+                  "claim": "readers.complete",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+=== scenario action.d.open.blocked.yaml
+format: "canon-conformance/1"
+id: "simulate.children-open-record.action.d.open.blocked"
+covers: []
+fixture: "fixtures/investigation/simulate/children-open-record/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.children-open-record"
+        revision: "r"
+        artifacts:
+          "merged":
+            revision: "r"
+          "sources":
+            revision: "r"
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "a.open": {
+              "status": "admissible"
+            },
+            "b.open": {
+              "reasons": [
+                {
+                  "claim": "a.opened",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "c.open": {
+              "reasons": [
+                {
+                  "claim": "b.opened",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "d.open": {
+              "reasons": [
+                {
+                  "claim": "c.opened",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "merge.open": {
+              "reasons": [
+                {
+                  "claim": "d.opened",
+                  "value": "unknown"
+                },
+                {
+                  "claim": "readers.complete",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+=== scenario action.merge.open.blocked.yaml
+format: "canon-conformance/1"
+id: "simulate.children-open-record.action.merge.open.blocked"
+covers: []
+fixture: "fixtures/investigation/simulate/children-open-record/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.children-open-record"
+        revision: "r"
+        artifacts:
+          "merged":
+            revision: "r"
+          "sources":
+            revision: "r"
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "a.open": {
+              "status": "admissible"
+            },
+            "b.open": {
+              "reasons": [
+                {
+                  "claim": "a.opened",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "c.open": {
+              "reasons": [
+                {
+                  "claim": "b.opened",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "d.open": {
+              "reasons": [
+                {
+                  "claim": "c.opened",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "merge.open": {
+              "reasons": [
+                {
+                  "claim": "d.opened",
+                  "value": "unknown"
+                },
+                {
+                  "claim": "readers.complete",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+=== scenario outcome.nothing.legitimate.yaml
+format: "canon-conformance/1"
+id: "simulate.children-open-record.outcome.nothing.legitimate"
+covers: []
+fixture: "fixtures/investigation/simulate/children-open-record/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.children-open-record"
+        revision: "r"
+        artifacts:
+          "merged":
+            revision: "r"
+          "sources":
+            revision: "r"
+      evidence:
+        - format: "canon-evidence/1"
+          id: "e0"
+          kind: "case_outcome"
+          result: "none"
+          subject: "merged"
+          subject_revision: "r"
+          child_case: "e0"
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "nothing": {
+              "status": "legitimate"
+            },
+            "probe": {
+              "status": "legitimate"
+            }
+          }
+        }
+=== scenario outcome.probe.legitimate.yaml
+format: "canon-conformance/1"
+id: "simulate.children-open-record.outcome.probe.legitimate"
+covers: []
+fixture: "fixtures/investigation/simulate/children-open-record/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.children-open-record"
+        revision: "r"
+        artifacts:
+          "merged":
+            revision: "r"
+          "sources":
+            revision: "r"
+      evidence:
+        - format: "canon-evidence/1"
+          id: "e0"
+          kind: "case_outcome"
+          result: "none"
+          subject: "merged"
+          subject_revision: "r"
+          child_case: "e0"
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "nothing": {
+              "status": "legitimate"
+            },
+            "probe": {
+              "status": "legitimate"
+            }
+          }
+        }
+=== fixture fixtures/investigation/simulate/children-open-record-one-reader/protocol.yaml
+=== scenario action.a.open.blocked.yaml
+format: "canon-conformance/1"
+id: "simulate.children-open-record-one-reader.action.a.open.blocked"
+covers: []
+fixture: "fixtures/investigation/simulate/children-open-record-one-reader/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.children-open-record-one-reader"
+        revision: "r"
+        artifacts:
+          "merged":
+            revision: "r"
+          "sources":
+            revision: "r"
+      evidence:
+        - format: "canon-evidence/1"
+          id: "e0"
+          kind: "a_opened"
+          subject: "merged"
+          subject_revision: "r"
+    expect:
+      decision: |
+        {
+          "actions": {
+            "a.open": {
+              "reasons": [
+                {
+                  "claim": "a.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "merge.open": {
+              "reasons": [
+                {
+                  "claim": "readers.complete",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+=== scenario action.merge.open.blocked.yaml
+format: "canon-conformance/1"
+id: "simulate.children-open-record-one-reader.action.merge.open.blocked"
+covers: []
+fixture: "fixtures/investigation/simulate/children-open-record-one-reader/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.children-open-record-one-reader"
+        revision: "r"
+        artifacts:
+          "merged":
+            revision: "r"
+          "sources":
+            revision: "r"
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "a.open": {
+              "status": "admissible"
+            },
+            "merge.open": {
+              "reasons": [
+                {
+                  "claim": "a.opened",
+                  "value": "unknown"
+                },
+                {
+                  "claim": "readers.complete",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+=== scenario outcome.nothing.legitimate.yaml
+format: "canon-conformance/1"
+id: "simulate.children-open-record-one-reader.outcome.nothing.legitimate"
+covers: []
+fixture: "fixtures/investigation/simulate/children-open-record-one-reader/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.children-open-record-one-reader"
+        revision: "r"
+        artifacts:
+          "merged":
+            revision: "r"
+          "sources":
+            revision: "r"
+      evidence:
+        - format: "canon-evidence/1"
+          id: "e0"
+          kind: "case_outcome"
+          result: "none"
+          subject: "merged"
+          subject_revision: "r"
+          child_case: "e0"
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "nothing": {
+              "status": "legitimate"
+            },
+            "probe": {
+              "status": "legitimate"
+            }
+          }
+        }
+=== scenario outcome.probe.legitimate.yaml
+format: "canon-conformance/1"
+id: "simulate.children-open-record-one-reader.outcome.probe.legitimate"
+covers: []
+fixture: "fixtures/investigation/simulate/children-open-record-one-reader/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.children-open-record-one-reader"
+        revision: "r"
+        artifacts:
+          "merged":
+            revision: "r"
+          "sources":
+            revision: "r"
+      evidence:
+        - format: "canon-evidence/1"
+          id: "e0"
+          kind: "case_outcome"
+          result: "none"
+          subject: "merged"
+          subject_revision: "r"
+          child_case: "e0"
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "nothing": {
+              "status": "legitimate"
+            },
+            "probe": {
+              "status": "legitimate"
+            }
+          }
+        }
 === fixture fixtures/investigation/simulate/clean/protocol.yaml
 === scenario action.review_report.blocked.yaml
 format: "canon-conformance/1"
@@ -7673,6 +8261,249 @@ steps:
         {
           "outcomes": {
             "approved": {
+              "status": "legitimate"
+            }
+          }
+        }
+=== fixture fixtures/investigation/simulate/denied-decision/protocol.yaml
+=== scenario action.approve.blocked.yaml
+format: "canon-conformance/1"
+id: "simulate.denied.decision.action.approve.blocked"
+covers: []
+fixture: "fixtures/investigation/simulate/denied-decision/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.denied.decision"
+        revision: "r"
+        artifacts:
+          "post":
+            revision: "r"
+      evidence: []
+      authority:
+        - capability: "owner.approve"
+          decision: "denied"
+    expect:
+      decision: |
+        {
+          "actions": {
+            "approve": {
+              "reasons": [
+                {
+                  "capability": "owner.approve",
+                  "decision": "denied"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+=== scenario outcome.approved.legitimate.yaml
+format: "canon-conformance/1"
+id: "simulate.denied.decision.outcome.approved.legitimate"
+covers: []
+fixture: "fixtures/investigation/simulate/denied-decision/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.denied.decision"
+        revision: "r"
+        artifacts:
+          "post":
+            revision: "r"
+      evidence:
+        - format: "canon-evidence/1"
+          id: "e0"
+          kind: "approval"
+          subject: "post"
+          subject_revision: "r"
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "approved": {
+              "status": "legitimate"
+            },
+            "unapproved": {
+              "reasons": [
+                {
+                  "decision": "unapproved",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+=== scenario outcome.unapproved.legitimate.yaml
+format: "canon-conformance/1"
+id: "simulate.denied.decision.outcome.unapproved.legitimate"
+covers: []
+fixture: "fixtures/investigation/simulate/denied-decision/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.denied.decision"
+        revision: "r"
+        artifacts:
+          "post":
+            revision: "r"
+      evidence: []
+      decisions:
+        - decision: "unapproved"
+          outcome: "unapproved"
+          principal: "canon-generate"
+          case_revision: "r"
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "approved": {
+              "reasons": [
+                {
+                  "claim": "post.approved",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "unapproved": {
+              "decided_by": {
+                "decision": "unapproved",
+                "principals": [
+                  "canon-generate"
+                ]
+              },
+              "status": "legitimate"
+            }
+          }
+        }
+=== fixture fixtures/investigation/simulate/denied-no-decision/protocol.yaml
+=== scenario action.approve.blocked.yaml
+format: "canon-conformance/1"
+id: "simulate.denied.no-decision.action.approve.blocked"
+covers: []
+fixture: "fixtures/investigation/simulate/denied-no-decision/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.denied.no-decision"
+        revision: "r"
+        artifacts:
+          "post":
+            revision: "r"
+      evidence: []
+      authority:
+        - capability: "owner.approve"
+          decision: "denied"
+    expect:
+      decision: |
+        {
+          "actions": {
+            "approve": {
+              "reasons": [
+                {
+                  "capability": "owner.approve",
+                  "decision": "denied"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+=== scenario outcome.approved.legitimate.yaml
+format: "canon-conformance/1"
+id: "simulate.denied.no-decision.outcome.approved.legitimate"
+covers: []
+fixture: "fixtures/investigation/simulate/denied-no-decision/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.denied.no-decision"
+        revision: "r"
+        artifacts:
+          "post":
+            revision: "r"
+      evidence:
+        - format: "canon-evidence/1"
+          id: "e0"
+          kind: "approval"
+          subject: "post"
+          subject_revision: "r"
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "approved": {
+              "status": "legitimate"
+            },
+            "retracted": {
+              "reasons": [
+                {
+                  "decision": "retract",
+                  "present": false
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+=== scenario outcome.retracted.legitimate.yaml
+format: "canon-conformance/1"
+id: "simulate.denied.no-decision.outcome.retracted.legitimate"
+covers: []
+fixture: "fixtures/investigation/simulate/denied-no-decision/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.denied.no-decision"
+        revision: "r"
+        artifacts:
+          "post":
+            revision: "r"
+      evidence:
+        - format: "canon-evidence/1"
+          id: "e0"
+          kind: "approval"
+          subject: "post"
+          subject_revision: "r"
+      decisions:
+        - decision: "retract"
+          outcome: "retracted"
+          principal: "canon-generate"
+          case_revision: "r"
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "approved": {
+              "status": "legitimate"
+            },
+            "retracted": {
+              "decided_by": {
+                "decision": "retract",
+                "principals": [
+                  "canon-generate"
+                ]
+              },
               "status": "legitimate"
             }
           }
