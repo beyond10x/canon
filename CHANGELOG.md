@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.13.0] - 2026-11-23
+
+A minor release: one new option, `canon evaluate --strict`, and four commands that do less work for
+the same bytes. There is no change to `protocol/1`, `canon-ir/1`, `canon-case/1` or the
+`canon-decision/1` model. Install the CLI or depend on the libraries from Git tag `0.13.0`.
+
+What changes, and for whom (read against the diff since 0.12.0):
+
+- Anyone who runs `canon evaluate` on evidence they do not fully trust. `--strict [<SKEW>]` refuses
+  a decision instead of evaluating it when evidence of a kind with `max_age` has no `observed_at`,
+  has one after `--at` plus the skew, or when `--at` is missing. The refusal reasons are
+  `missing-instant`, `undated-evidence`, `future-evidence` and `invalid-skew`. It covers every
+  accepted record, including the ones the order forms (`first`, `before`, `after`, `since`) read.
+  Without `--strict` every byte is as in 0.12.0; with it, where nothing is refused, the bytes are
+  the same too.
+- Anyone who runs `canon conform`, `canon check`, `canon simulate` or `canon evaluate` on large
+  inputs. Output is byte-identical to 0.12.0 on the 173 `protocol/1` fixtures and the hand-written
+  edge cases of the review. Measured on the reviewer's inputs: conform compiles a fixture once per
+  scenario instead of once per step (23 compiles to 1, 31 % fewer instructions); `canon check`
+  builds no explanation (46 to 0 on the 48-state fixture, 33 % fewer); `canon evaluate` reads each
+  timestamp of a history once per claim walk (10,240 reads to 160, 49 % fewer instructions on 256
+  records); authority lookup reads one capability's grants (CPU at 2,048 grants 114.8 ms to
+  62.1 ms).
+- Anyone who runs `canon generate` where another process can write to `--out`. Files are written
+  into a private staging directory `--out/.canon-generate-<pid>-<n>` (mode 0700), placed by hard
+  link and removed on failure only while they still have the identity the run gave them. A
+  filesystem without hard links gets a direct write. A rerun after a killed run exits 1 with
+  `out-not-empty` and now names the leftover staging directory.
+- Anyone who relies on persisted approvals. The documentation of `canon evaluate --help` and of the
+  evidence grounds now states that an approval cites evidence by ID and that the contents under an
+  ID must not change; it also states which fields decide whether a ground holds (`subject_revision`,
+  `observed_at`, `upstream_revisions`, `producer`). No behaviour changed. An optional digest per
+  ground is planned as its own story.
+- Tooling that compares `canon-decision/1` bytes. `computed_from.semantics.canon` reads `0.13.0`.
+  The conformance expectations that pin the version moved to `0.13.0`; other expected output did
+  not change.
+- Rust consumers: `eval::evaluate_with_freshness` is new; no existing public type or function
+  changed. `canon-cli` depends on `libc` on Unix (constants only, already in the lock file).
+- Contributors: the CI gate runs the slow lane after `task check` and fails on it; the four new
+  slow tests of `check` are in it.
+
 ## [0.12.0] - 2026-11-22
 
 A minor release: `canon floor` and `canon simulate` give answers they did not give in 0.11.1, and
