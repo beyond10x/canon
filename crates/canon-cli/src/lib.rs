@@ -329,7 +329,8 @@ pub enum Command {
     /// mutant with its categories, then a summary line. Exits 1 when at least one weak point is
     /// reported, and 0 otherwise. Refused, exit 1, running nothing: no scenario names the protocol
     /// file as its fixture, a scenario file does not parse, the protocol does not compile, or a
-    /// scenario whose fixture it is does not pass on the protocol itself.
+    /// scenario whose fixture it is does not pass on the protocol itself. A protocol, scenario
+    /// directory or scenario file that cannot be read exits 2.
     Mutate {
         /// The protocol document to mutate, the fixture of the scenarios that test it.
         #[arg(long)]
@@ -350,13 +351,20 @@ pub enum Command {
     /// subject checked against every protocol it opens, `open` never one, and a name about an
     /// artifact one of whose opened protocols is not in the set not checked; `unknown-supplier`, an
     /// evidence kind's `supplied_by` names a protocol not in the set; `unproduced-supplied-kind`,
-    /// no action of that supplier lists a kind of the same id in `may_produce`. Each finding names
-    /// the protocol, the action, declaration or kind, and the missing id. Exits 0 when the check
-    /// found nothing and 1 when it found something. Each document is compiled on its own: one that
-    /// does not parse or compile, or that has imports, is refused, naming its path.
+    /// no action of that supplier lists a kind of the same id in `may_produce`;
+    /// `duplicate-protocol-id`, two or more files of the set declare one protocol id, naming the id
+    /// and each file's path: a runner resolves an id to one protocol and `case_open` names no
+    /// revision, so the files are not pooled and nothing is resolved against that id. Each finding
+    /// names the protocol, the action, declaration or kind, and the missing id. Exits 0 when the
+    /// check found nothing, 1 when it found something. Each document is compiled on its own: one
+    /// that does not parse or compile, or that has imports, is refused, exit 1, and a file that
+    /// cannot be read exits 2, each naming its path; the files are read in sorted order of their
+    /// paths, and when more than one is refused, the first of them in sorted order of the paths
+    /// decides the exit status.
     CheckSet {
         /// A protocol document of the set. Repeat it once per document, in any order: the order
-        /// changes no byte of the report, and a path given twice is read once.
+        /// changes no byte of the report, and a path given twice, under two spellings or through
+        /// a symbolic link, is read once.
         #[arg(long, required = true)]
         path: Vec<PathBuf>,
     },

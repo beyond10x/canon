@@ -13,7 +13,8 @@
 //! 2. `clean` exits 0 with no finding: it names `open`, a form without a subject and a supplied
 //!    kind its supplier produces. `other-subject` names an outcome about `work` that only the child
 //!    opened about `notes` declares, and that is a finding.
-//! 3. `cycle` prints `case-open-cycle`.
+//! 3. `cycle` prints `case-open-cycle`. `duplicate-id` holds two files with the protocol id
+//!    `change` and prints `duplicate-protocol-id`, naming both paths, instead of pooling them.
 //! 4. A member with `imports:` is refused, naming it (`protocol-imports`), and an unreadable file
 //!    exits 2; the order of the `--path` flags changes no byte.
 
@@ -25,7 +26,7 @@ const FIXTURES: &str = "fixtures/check-across-protocol-files";
 
 /// Every set with a `report.txt`, the exit status `canon check-set` gives it and the code of its
 /// one finding, `None` for a clean set.
-const SETS: [(&str, i32, Option<&str>); 8] = [
+const SETS: [(&str, i32, Option<&str>); 9] = [
     ("clean", 0, None),
     ("missing-protocol", 1, Some("unknown-opened-protocol")),
     ("undeclared-children", 1, Some("undeclared-child-outcome")),
@@ -34,6 +35,7 @@ const SETS: [(&str, i32, Option<&str>); 8] = [
     ("missing-supplier", 1, Some("unknown-supplier")),
     ("unproduced-supplied", 1, Some("unproduced-supplied-kind")),
     ("cycle", 1, Some("case-open-cycle")),
+    ("duplicate-id", 1, Some("duplicate-protocol-id")),
 ];
 
 fn repository_root() -> PathBuf {

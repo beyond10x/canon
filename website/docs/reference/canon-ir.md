@@ -99,7 +99,9 @@ an artifact, in a `children` form, an evidence match of `case_outcome` or an ord
 no protocol it opens about that artifact declares, a form without a subject checked against
 every protocol it opens and `open` never one (`undeclared-child-outcome`); an evidence kind
 whose `supplied_by` names a protocol outside the set (`unknown-supplier`), or one no action of
-which may produce a kind of the same id (`unproduced-supplied-kind`).
+which may produce a kind of the same id (`unproduced-supplied-kind`); and two or more files of
+the set with one protocol id, which are not pooled and resolve nothing
+(`duplicate-protocol-id`).
 
 A protocol that imports others (`imports:`, story:protocol-imports) compiles only composed with
 the documents it imports, directly or through another import: `compose` turns the root and

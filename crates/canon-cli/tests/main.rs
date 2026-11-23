@@ -39,6 +39,7 @@ mod case_composition;
 mod case_inputs;
 mod check_across_protocol_files_cli;
 mod check_history_modes;
+mod check_set_paths_cli;
 mod ci_watch;
 mod compile;
 mod conform_registry;

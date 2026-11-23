@@ -36,10 +36,14 @@
 //! - `unknown-supplier`: an evidence kind's `supplied_by` names a protocol that is not in the set.
 //! - `unproduced-supplied-kind`: the supplier is in the set, but no action of it may produce a
 //!   kind of the same id (`may_produce`).
+//! - `duplicate-protocol-id`: two or more files of the set declare one protocol id, each file
+//!   named as the caller names it. A runner resolves an id to one protocol and `case_open` names
+//!   no revision, so the files are not pooled: no child outcome and no supplied kind is resolved
+//!   against that id, as for a protocol outside the set. One file given twice under one name is
+//!   that file once, not a duplicate. The cycle check reads the openings of every file of the id.
 //!
-//! A protocol's own openings decide which protocols it opens; two protocols of the set with one id
-//! are one protocol for what the others resolve against it, with the outcomes and the productions
-//! of both. Pure: the report is a function of the set, whatever its order.
+//! A protocol's own openings decide which protocols it opens. Pure: the report is a function of
+//! the set, whatever its order.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -149,14 +153,14 @@ fn cycle_from<'a>(
 /// What [`check_set`] found over a set of compiled protocols, and how much it checked.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetReport {
-    /// The protocols of the set, those with one id counted once.
+    /// The files of the set, each name once: two files with one id count two.
     pub protocols: usize,
     /// The actions of the set that open a child case (`case_open`).
     pub openings: usize,
     /// The evidence kinds of the set that declare `supplied_by`.
     pub supplied: usize,
-    /// Every finding, sorted and each once: a cycle first, then each opening under a protocol
-    /// outside the set, each undeclared child outcome, each supplier outside the set and each
+    /// Every finding, sorted and each once: each protocol id of more than one file first, then a
+    /// cycle, then each opening under a protocol outside the set, each undeclared child outcome, each supplier outside the set and each
     /// supplied kind its supplier does not produce, each by protocol id.
     pub findings: Vec<SetFinding>,
 }
@@ -193,6 +197,12 @@ impl fmt::Display for NamedIn {
 /// protocol, the action, declaration or kind, and the id that is missing.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SetFinding {
+    /// Two or more files of the set declare one protocol id (`duplicate-protocol-id`); `sources`
+    /// are the files' names, sorted, each once.
+    DuplicateProtocolId {
+        protocol: ProtocolId,
+        sources: Vec<String>,
+    },
     /// The set's case openings form a cycle (`case-open-cycle`), as [`check_openings`] names it.
     Cycle(Vec<ProtocolId>),
     /// An action opens a case under a protocol that is not in the set (`unknown-opened-protocol`).
@@ -230,6 +240,7 @@ impl SetFinding {
     /// The stable identifier of the finding.
     pub fn code(&self) -> &'static str {
         match self {
+            SetFinding::DuplicateProtocolId { .. } => "duplicate-protocol-id",
             SetFinding::Cycle(_) => "case-open-cycle",
             SetFinding::UnknownOpenedProtocol { .. } => "unknown-opened-protocol",
             SetFinding::UndeclaredChildOutcome { .. } => "undeclared-child-outcome",
@@ -247,6 +258,20 @@ fn quoted(id: &str) -> String {
 impl fmt::Display for SetFinding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            SetFinding::DuplicateProtocolId { protocol, sources } => {
+                let mut names: Vec<String> = sources.iter().map(|source| quoted(source)).collect();
+                let last = names.pop().unwrap_or_default();
+                let files = if names.is_empty() {
+                    last
+                } else {
+                    format!("{} and {last}", names.join(", "))
+                };
+                write!(
+                    f,
+                    "protocol {} is declared by more than one file of the set: {files}",
+                    quoted(protocol.as_str())
+                )
+            }
             SetFinding::Cycle(protocols) => OpeningCycle {
                 protocols: protocols.clone(),
             }
@@ -413,25 +438,44 @@ fn predicates(ir: &Ir) -> Vec<(NamedIn, &Predicate)> {
 }
 
 /// Checks a set of compiled protocols against each other, as the module docs say, and reports
-/// every finding with what it checked. Pure: the report is a function of the set, whatever its
-/// order; two protocols of the set with one id are one protocol, with the declarations of both.
-pub fn check_set<'a>(protocols: impl IntoIterator<Item = &'a Ir>) -> SetReport {
-    let protocols: Vec<&Ir> = protocols.into_iter().collect();
-    // Per protocol id: the outcomes its protocols declare and the kinds their actions may produce.
+/// every finding with what it checked. Each member is `(source, protocol)`, `source` the name of
+/// the file it was read from as a finding writes it; a source given twice is one member, the
+/// first given. Pure: the report is a function of the set, whatever its order; two files with one
+/// protocol id are the finding `duplicate-protocol-id`, and nothing is resolved against that id.
+pub fn check_set<'a>(members: impl IntoIterator<Item = (&'a str, &'a Ir)>) -> SetReport {
+    let mut by_source: BTreeMap<&str, &Ir> = BTreeMap::new();
+    for (source, ir) in members {
+        by_source.entry(source).or_insert(ir);
+    }
+    let protocols: Vec<&Ir> = by_source.values().copied().collect();
+    // Per protocol id: the files that declare it.
+    let mut sources: BTreeMap<&ProtocolId, Vec<&str>> = BTreeMap::new();
+    for (source, ir) in &by_source {
+        sources.entry(&ir.protocol.id).or_default().push(*source);
+    }
+    let mut findings: BTreeSet<SetFinding> = BTreeSet::new();
+    // Per protocol id of one file: the outcomes it declares and the kinds its actions may produce.
+    // An id of more than one file is a finding and resolves nothing.
     let mut outcomes: BTreeMap<&ProtocolId, BTreeSet<&str>> = BTreeMap::new();
     let mut produces: BTreeMap<&ProtocolId, BTreeSet<&str>> = BTreeMap::new();
     for ir in &protocols {
-        outcomes
-            .entry(&ir.protocol.id)
-            .or_default()
-            .extend(ir.outcomes.keys().map(OutcomeId::as_str));
-        produces.entry(&ir.protocol.id).or_default().extend(
+        let id = &ir.protocol.id;
+        if let Some(files) = sources.get(id).filter(|files| files.len() > 1) {
+            findings.insert(SetFinding::DuplicateProtocolId {
+                protocol: id.clone(),
+                sources: files.iter().map(|file| (*file).to_owned()).collect(),
+            });
+            continue;
+        }
+        outcomes.insert(id, ir.outcomes.keys().map(OutcomeId::as_str).collect());
+        produces.insert(
+            id,
             ir.actions
                 .values()
-                .flat_map(|action| action.may_produce.iter().map(EvidenceKindId::as_str)),
+                .flat_map(|action| action.may_produce.iter().map(EvidenceKindId::as_str))
+                .collect(),
         );
     }
-    let mut findings: BTreeSet<SetFinding> = BTreeSet::new();
     if let Err(cycle) = check_openings(protocols.iter().copied()) {
         findings.insert(SetFinding::Cycle(cycle.protocols));
     }
@@ -450,7 +494,7 @@ pub fn check_set<'a>(protocols: impl IntoIterator<Item = &'a Ir>) -> SetReport {
                 .entry(&opening.subject)
                 .or_default()
                 .insert(&opening.protocol);
-            if !outcomes.contains_key(&opening.protocol) {
+            if !sources.contains_key(&opening.protocol) {
                 findings.insert(SetFinding::UnknownOpenedProtocol {
                     protocol: id.clone(),
                     action: action_id.clone(),
@@ -471,7 +515,8 @@ pub fn check_set<'a>(protocols: impl IntoIterator<Item = &'a Ir>) -> SetReport {
                     Some(subject) => opened.get(subject).unwrap_or(&none),
                     None => &every,
                 };
-                // A child outside the set is already a finding, and its outcomes are not known.
+                // A child outside the set, or of an id more than one file declares, is already a
+                // finding, and its outcomes are not known.
                 if children.iter().any(|child| !outcomes.contains_key(child)) {
                     continue;
                 }
@@ -494,27 +539,29 @@ pub fn check_set<'a>(protocols: impl IntoIterator<Item = &'a Ir>) -> SetReport {
                 continue;
             };
             supplied += 1;
-            match produces.get(supplier) {
-                None => {
-                    findings.insert(SetFinding::UnknownSupplier {
-                        protocol: id.clone(),
-                        kind: kind.clone(),
-                        supplier: supplier.clone(),
-                    });
-                }
-                Some(produced) if !produced.contains(kind.as_str()) => {
-                    findings.insert(SetFinding::UnproducedSuppliedKind {
-                        protocol: id.clone(),
-                        kind: kind.clone(),
-                        supplier: supplier.clone(),
-                    });
-                }
-                Some(_) => {}
+            if !sources.contains_key(supplier) {
+                findings.insert(SetFinding::UnknownSupplier {
+                    protocol: id.clone(),
+                    kind: kind.clone(),
+                    supplier: supplier.clone(),
+                });
+                continue;
+            }
+            // A supplier of an id more than one file declares is already a finding.
+            if produces
+                .get(supplier)
+                .is_some_and(|produced| !produced.contains(kind.as_str()))
+            {
+                findings.insert(SetFinding::UnproducedSuppliedKind {
+                    protocol: id.clone(),
+                    kind: kind.clone(),
+                    supplier: supplier.clone(),
+                });
             }
         }
     }
     SetReport {
-        protocols: outcomes.len(),
+        protocols: by_source.len(),
         openings,
         supplied,
         findings: findings.into_iter().collect(),
@@ -659,6 +706,13 @@ mod tests {
         compile(&parse(&text).expect("parses")).expect("compiles")
     }
 
+    /// [`check_set`] over `set`, each protocol read from a file named by its id: a set whose ids
+    /// differ, so no member is a duplicate of another.
+    fn checked<'a>(set: impl IntoIterator<Item = &'a Ir>) -> SetReport {
+        let set: Vec<&Ir> = set.into_iter().collect();
+        check_set(set.iter().map(|ir| (ir.protocol.id.as_str(), *ir)))
+    }
+
     /// A child protocol `id` about `thing` that declares the outcomes `outcomes`.
     fn child(id: &str, outcomes: &[&str]) -> Ir {
         let outcomes: String = outcomes
@@ -692,7 +746,7 @@ mod tests {
             child("change", &["accepted", "declined"]),
             child("check", &["passed", "failed"]),
         ];
-        check_set(&set)
+        checked(&set)
             .to_string()
             .lines()
             .map(str::to_owned)
@@ -746,7 +800,7 @@ mod tests {
             child("change", &["accepted"]),
         ];
         assert_eq!(
-            check_set(&set).findings[0].to_string(),
+            checked(&set).findings[0].to_string(),
             "protocol `q` claim `c` names outcome `accepted` of a child case about `z`, which no protocol it opens about `z` declares (it opens none)"
         );
     }
@@ -791,7 +845,7 @@ mod tests {
             ),
             child("change", &["accepted"]),
         ];
-        let found: Vec<String> = check_set(&set)
+        let found: Vec<String> = checked(&set)
             .findings
             .iter()
             .map(|finding| finding.to_string())
@@ -820,7 +874,7 @@ mod tests {
                 "artifacts: {a: {}}\nevidence_kinds: {k3: {}}\nactions: {make: {may_produce: [{evidence: k3}]}}\n",
             ),
         ];
-        let report = check_set(&set);
+        let report = checked(&set);
         let codes: Vec<&str> = report.findings.iter().map(SetFinding::code).collect();
         assert_eq!(
             codes,
@@ -841,14 +895,16 @@ mod tests {
     }
 
     /// The cycle of the set is reported with its code, first; the report is the same whatever the
-    /// order of the set, and two protocols with one id pool their productions and outcomes.
+    /// order of the set. Two files with one id are not pooled (they were before the wave review):
+    /// they are the finding `duplicate-protocol-id`, and neither the child outcome `late` nor the
+    /// supplied kind `k` is resolved against the id `s`, as for a protocol outside the set.
     #[test]
     fn a_cycle_is_reported_and_the_order_and_shared_ids_change_nothing() {
         let set = [
             protocol("audit", &["review"]),
             protocol("review", &["audit"]),
         ];
-        let report = check_set(&set);
+        let report = checked(&set);
         assert_eq!(
             report.to_string(),
             "case-open-cycle: protocols open cases under each other in a cycle: audit -> review -> audit\n\
@@ -865,13 +921,61 @@ mod tests {
             "artifacts: {a: {}}\nevidence_kinds: {k: {}}\nactions: {make: {may_produce: [{evidence: k}]}}\n",
         );
         let ender = child("s", &["late"]);
-        let forward = check_set([&parent, &producer, &ender]);
-        let backward = check_set([&ender, &producer, &parent]);
+        let forward = check_set([
+            ("p.yaml", &parent),
+            ("s.yaml", &producer),
+            ("s-late.yaml", &ender),
+        ]);
+        let backward = check_set([
+            ("s-late.yaml", &ender),
+            ("s.yaml", &producer),
+            ("p.yaml", &parent),
+        ]);
         assert_eq!(forward, backward);
         assert_eq!(
             forward.to_string(),
-            "checked: 2 protocols, 1 opening, 1 supplied kind, 0 findings\n"
+            "duplicate-protocol-id: protocol `s` is declared by more than one file of the set: `s-late.yaml` and `s.yaml`\n\
+             checked: 3 protocols, 1 opening, 1 supplied kind, 1 finding\n"
         );
-        assert!(check_set([&parent, &producer]).findings[0].code() == "undeclared-child-outcome");
+        assert!(checked([&parent, &producer]).findings[0].code() == "undeclared-child-outcome");
+    }
+
+    /// One file given twice under one name is that file once, not a duplicate; three files with
+    /// one id are one finding naming the three, sorted; and an id of more than one file is still in
+    /// the set, so an opening under it and a supplier of it are no finding of their own.
+    #[test]
+    fn a_file_named_twice_is_one_and_files_with_one_id_are_one_finding() {
+        let parent = written(
+            "p",
+            "artifacts: {a: {}}\nevidence_kinds: {case_outcome: {}, k: {supplied_by: s}}\n\
+             claims: {c: {true_when: {children: {in: [late], subject: a}}}}\n\
+             actions: {open: {case_open: {protocol: s, subject: a}}}\n",
+        );
+        let producer = written(
+            "s",
+            "artifacts: {a: {}}\nevidence_kinds: {k: {}}\nactions: {make: {may_produce: [{evidence: k}]}}\n",
+        );
+        let once = check_set([
+            ("s.yaml", &producer),
+            ("p.yaml", &parent),
+            ("s.yaml", &producer),
+        ]);
+        assert_eq!(
+            once.to_string(),
+            "undeclared-child-outcome: protocol `p` claim `c` names outcome `late` of a child case about `a`, which no protocol it opens about `a` declares (it opens `s`)\n\
+             checked: 2 protocols, 1 opening, 1 supplied kind, 1 finding\n"
+        );
+        let three = check_set([
+            ("c/s.yaml", &producer),
+            ("a/s.yaml", &child("s", &["late"])),
+            ("b/s.yaml", &child("s", &["early"])),
+            ("p.yaml", &parent),
+        ]);
+        assert_eq!(
+            three.to_string(),
+            "duplicate-protocol-id: protocol `s` is declared by more than one file of the set: `a/s.yaml`, `b/s.yaml` and `c/s.yaml`\n\
+             checked: 4 protocols, 1 opening, 1 supplied kind, 1 finding\n"
+        );
+        assert_eq!(three.findings[0].code(), "duplicate-protocol-id");
     }
 }
