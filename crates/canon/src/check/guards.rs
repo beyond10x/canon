@@ -85,6 +85,10 @@ pub(super) fn lower(ir: &Ir) -> Option<Lowered> {
     })
 }
 
+/// The spaces the guards are decided over: a slice of the lowered protocol's space, or `None` for
+/// its whole product, each with the positions in [`Lowered::guarded`] of the guards decided over it.
+pub(super) type Plan = Vec<(Option<Slice>, Vec<usize>)>;
+
 /// `` action `a` runs_only_when ``, as a bound refusal names the subject.
 fn subject(action: &ActionId) -> String {
     format!("action `{}` runs_only_when", one_line(action.as_str()))
@@ -99,14 +103,14 @@ pub(super) fn plan(
     lowered: &Lowered,
     space: &Space<'_>,
     strategy: Strategy,
-) -> Result<Vec<(Option<Slice>, Vec<usize>)>, Refusal> {
+) -> Result<Plan, Refusal> {
     let ir = &lowered.ir;
     if strategy == Strategy::Whole {
         whole_product(ir, space)?;
         return Ok(vec![(None, (0..lowered.guarded.len()).collect())]);
     }
     let action = |at: usize| ir.actions.values().nth(at).expect("declared");
-    let mut plan: Vec<(Option<Slice>, Vec<usize>)> = Vec::new();
+    let mut plan: Plan = Vec::new();
     for (at, (id, own, guard)) in lowered.guarded.iter().enumerate() {
         let slice = space
             .action_slice(ir, action(*own))
