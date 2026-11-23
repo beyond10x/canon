@@ -1,0 +1,40 @@
+format: protocol/1
+
+protocol:
+  id: simulate.denied.decision
+  revision: 1
+  description: Approve a post under authority; after a denial an explicit decision ends the case as unapproved, with no workaround action.
+
+artifacts:
+  post:
+    description: The post being approved.
+
+evidence_kinds:
+  approval:
+    description: A person's approval of the post.
+
+claims:
+  post.approved:
+    description: The post has been approved.
+    true_when:
+      evidence:
+        kind: approval
+
+actions:
+  approve:
+    description: Approve the post, under authority.
+    requires:
+      - capability: owner.approve
+    may_produce:
+      - evidence: approval
+
+outcomes:
+  approved:
+    description: The post is approved.
+    requires:
+      claim: post.approved
+
+  unapproved:
+    description: No approval came; an explicit decision ends the case with nothing approved.
+    requires:
+      decision: unapproved

@@ -291,7 +291,11 @@ commands:
       # revision: current or an evidence match of case_outcome tells an earlier record from a
       # current one. The external revise step is tried after the supplied steps
       # and before the child-outcome and expiry steps, and a state is open when it leads to a
-      # legitimate outcome through it too.
+      # legitimate outcome through it too. A state that is not open, in which a denied capability
+      # blocks an action whose precondition is true and a decision step leads to a legitimate
+      # outcome, ends by that decision: it is no finding, and the summary counts it after the
+      # waiting states, `D ending by a decision after a denial`, only when D is above 0.
+      # read from: .engineering/planning/story/refused-approval-is-not-stuck.md, section "Scope"
       # read from: .engineering/planning/story/child-outcome-recovery.md, section "Outcome", 1
       # read from: .engineering/planning/story/canon-simulate.md:67
       # read from: .engineering/planning/story/artifact-revised-by.md, section "Outcome", 5 and 6
@@ -319,7 +323,15 @@ commands:
       # held as expired, keeps some count above none, because an open record is a child that has
       # not ended. A stuck state or cycle is printed once per smallest state, with the decisions
       # that would make an outcome legitimate and the number of other such states that contain
-      # it. A case_outcome record that expires stays read by every children form: with no
+      # it. A refused approval (story:refused-approval-is-not-stuck): a state that is not open,
+      # in which a denied capability blocks an action whose precondition is true and a decision
+      # step leads to a state with a legitimate outcome, is no finding; the summary counts it,
+      # `, D ending by a decision after a denial`, only when D is above 0. A printed stuck state
+      # or cycle in which a denied capability blocks an action whose precondition is true names
+      # each such block, `capability c denied blocks action a, whose precondition is true`, and
+      # the two forms that end the case after the denial: an outcome with `requires: {decision:
+      # ..., when: ...}`, or an action without the capability whose record an outcome reads.
+      # A case_outcome record that expires stays read by every children form: with no
       # evidence match reading case_outcome it has no expiry step, otherwise it is held as
       # expired, absent to every evidence match. Limit: a step adds one record, so where an
       # action's guard closes on its first record the walk never holds two records of one taking
@@ -352,6 +364,7 @@ commands:
       # earlier`, or as a current one. A step of the opening action leaves that third value as it
       # is. A parent that revises the artifact a failed child was about, and opens new children,
       # is therefore walked to the outcome the form reads.
+      # read from: .engineering/planning/story/refused-approval-is-not-stuck.md, section "Scope"
       # read from: .engineering/planning/story/child-outcome-recovery.md, section "Outcome", 1 to 3
       # read from: .engineering/planning/story/simulate-revise-step.md, section "Outcome", 1 to 4
       # read from: .engineering/planning/story/simulate-revise-step.md, section "Scope" (one record or one group)

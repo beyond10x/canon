@@ -1,0 +1,1 @@
+simulated: protocol `simulate.denied.decision` revision 1: 8 reachable states, 5 terminable (outcome `approved` 2, outcome `unapproved` 4), 1 ending by a decision after a denial, 0 findings (0 stuck or cycle states)
