@@ -18,7 +18,8 @@
 //!   of unit variants is an `enum`; an enum of one-payload variants is a `union`. A variant's
 //!   specification name is its Rust name in snake case.
 //! * `String` is `String`; `bool` is `Boolean`; `i64` is `Integer`; `u64` is an `Integer` field whose owner states the
-//!   invariant `<field> >= 0`, or one [`NON_NEGATIVE`] lists; `Option<T>` is `Optional<T>`,
+//!   invariant `<field> >= 0`, or one [`NON_NEGATIVE`] lists (an `Optional<Integer>` such a field
+//!   is `Option<u64>`); `Option<T>` is `Optional<T>`,
 //!   `Vec<T>` is `List<T>`, `Box<T>` is `T`, `Declarations<K, V>` is `Map<K, V>` and the model's
 //!   `Json` is `Json`. Any other Rust type matches nothing.
 //! * Each entity is the Rust struct [`ENTITIES`] names. The entity `Protocol` is the Rust struct
@@ -95,7 +96,11 @@ const DOCUMENTS: &[&str] = &[
 /// 0.52.0 refuses an invariant on a struct type no view publishes (ESS-SYNTH-013), and this
 /// specification has no views. Each is read as if its owner stated `<field> >= 0`, so its Rust
 /// type must be `u64`. Remove an entry once `ess/` can state the bound itself.
-const NON_NEGATIVE: &[(&str, &str)] = &[("Decision", "protocol_revision"), ("Import", "revision")];
+const NON_NEGATIVE: &[(&str, &str)] = &[
+    ("ChildOutcomes", "count"),
+    ("Decision", "protocol_revision"),
+    ("Import", "revision"),
+];
 
 /// The tree under test, read at run time: a test binary reused from a shared target directory
 /// would otherwise check the tree it was built from.
@@ -264,7 +269,7 @@ fn ir_ty(value: &Value, map_key: Option<&String>) -> Ty {
 
 /// The fields of a struct or entity whose compiled declaration is `owner_ir`. An `Integer` field
 /// the owner bounds with the invariant `<field> >= 0`, or that [`NON_NEGATIVE`] lists, is a
-/// non-negative integer.
+/// non-negative integer, and an `Optional<Integer>` one an optional non-negative integer.
 fn ir_fields(
     owner: &str,
     owner_ir: &Value,
@@ -286,8 +291,12 @@ fn ir_fields(
             let key = keys.get(&(owner.to_owned(), name.clone()));
             let mut ty = ir_ty(&field["type_ref"], key);
             let listed = NON_NEGATIVE.contains(&(owner, name.as_str()));
-            if ty == integer() && (listed || invariants.contains(&format!("{name} >= 0"))) {
-                ty = non_negative_integer();
+            if listed || invariants.contains(&format!("{name} >= 0")) {
+                if ty == integer() {
+                    ty = non_negative_integer();
+                } else if ty == Ty::Optional(Box::new(integer())) {
+                    ty = Ty::Optional(Box::new(non_negative_integer()));
+                }
             }
             (name, ty)
         })

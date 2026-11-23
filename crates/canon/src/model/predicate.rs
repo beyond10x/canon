@@ -343,8 +343,8 @@ pub const OPEN_OUTCOME: &str = "open";
 /// only those about the current revision of their subject, and with `subject` only those about
 /// that artifact: `unknown` with no record read, `false` when a record's outcome is neither listed
 /// nor `open` (a child that ended outside the set), otherwise `unknown` when a child is still
-/// `open` and `true` when every child ended with a listed outcome. It counts only the records it
-/// is given. Canon does not write them; the runner that opens a child case does, with two duties:
+/// `open` or, with `count: N`, when it reads fewer than N records, and `true` when every child
+/// ended with a listed outcome. It counts only the records it is given. Canon does not write them; the runner that opens a child case does, with two duties:
 /// a record's `subject` is the `case_open` subject of the action that opened the child, and the
 /// runner writes a record with the outcome `open` when it opens the child.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -364,6 +364,12 @@ pub struct ChildOutcomes {
     /// about another artifact is not read: it neither establishes nor contradicts the form.
     #[serde(default, deserialize_with = "super::present::optional")]
     pub subject: Option<ArtifactId>,
+    /// How many child cases the form waits for (story:children-form-counts-unopened-children):
+    /// absent, every child with a record; N, 1 or more, at least N records, so the form stays
+    /// `unknown` while fewer are read, and a child not yet opened, which has no record, never
+    /// lets it become true. `canon validate` refuses 0 (`zero-child-count`).
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub count: Option<u64>,
 }
 
 /// Which `case_outcome` records a `children` form reads (story:child-outcome-revision). A terminal

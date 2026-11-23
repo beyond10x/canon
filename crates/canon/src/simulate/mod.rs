@@ -42,6 +42,31 @@
 //! plus k marks, k the number of opening actions, and the walk reaches at most 3^k times the
 //! states it reaches without marks. A protocol with no opening action has no mark.
 //!
+//! A state also holds, for each `case_outcome` dimension a `children` form with `count: N` reads
+//! and an opening action's children record in (story:children-form-counts-unopened-children), N
+//! of 2 or more the greatest such count, how many children the walk counts in it, from none to N,
+//! N standing for N or more: a record of the walk is one per class, and the form counts children.
+//! Each step of an opening action whose children record in the dimension raises it by one, up to
+//! N, as it raises the action's mark; nothing lowers it, since a child that ends replaces its own
+//! record. When a counting form with `revision: current` reads the dimension, the state holds a
+//! second count, of the children counted at the current revision: raised with the first, zeroed
+//! by a revision of the dimension's artifact and by an expiry of one of its classes, raised by a
+//! child that ends replacing an `open` record held as expired or earlier, which then records at
+//! the current revision, and lowered by one that ends against the earlier revision replacing a
+//! current `open` record. The state is evaluated with as many records as it counts: its records,
+//! then copies of its least current record up to the current count and of its least earlier one
+//! up to the rest; with one count, copies of its least current record, or of its least earlier
+//! one when it holds no current record. A count is in containment and size by its value, and a
+//! state writes it after the marks, `` 3 children in evidence `case_outcome` about `b` ``
+//! (`` 1 child ``, `` 5 or more children `` at N), with `` (1 at the current revision) `` when it
+//! holds the second count. Each count stays at or below the case's, never above it, so a counting
+//! form is never true in the walk where it is not in the case. Not covered, where it may stay
+//! `unknown` in the walk though true in the case: a `case_outcome` record no opening step opens
+//! (a supplied one) is counted once per class; and, with `revision: current`, a child that was
+//! open when its artifact was revised and ends beside the `open` record of a child that has not
+//! ended, or a class that expires, is no longer counted at the current revision. A protocol
+//! without the key has no count and walks as before.
+//!
 //! A state that holds a `case_outcome` record of the class `open`, current or held as expired,
 //! holds some mark above none ("Decided in review, D5") on an action whose children record in
 //! that record's dimension (story:child-outcome-subject): an `open` record is a child that has not
@@ -821,6 +846,15 @@ struct Layout<'d, 'a> {
     /// For each opener, the `open` records a step of it adds with its child
     /// (story:simulate-opens-child-with-its-record); empty before [`Layout::opening`].
     opening: Vec<Vec<Added>>,
+    /// For each dimension, the position of its count of children
+    /// (story:children-form-counts-unopened-children), and of its count at the current revision
+    /// in the word after it when [`Walked::current_count`]: those a counting `children` form
+    /// reads and some opener's children record in, after the third values. `None` for every
+    /// other dimension, and for all before [`Layout::counting`].
+    counters: Vec<Option<usize>>,
+    /// For each opener, the dimensions with a count that its children record in; empty before
+    /// [`Layout::counting`].
+    counting: Vec<Vec<usize>>,
 }
 
 impl<'d, 'a> Layout<'d, 'a> {
@@ -881,7 +915,186 @@ impl<'d, 'a> Layout<'d, 'a> {
             openers: Vec::new(),
             flagged: Vec::new(),
             opening: Vec::new(),
+            counters: vec![None; dimensions.len()],
+            counting: Vec::new(),
         }
+    }
+
+    /// The layout that counts the children of each opener in each dimension of `produced[i]`, the
+    /// dimensions its children record in, that a `children` form with a count of 2 or more reads
+    /// (story:children-form-counts-unopened-children). Called after [`Layout::marking`] and
+    /// [`Layout::flagging`]: the counts follow the third values.
+    fn counting(mut self, produced: &[Vec<usize>]) -> Self {
+        let recorded: BTreeSet<usize> = produced.iter().flatten().copied().collect();
+        let mut at = self.first_counter();
+        self.counters = self
+            .dimensions
+            .iter()
+            .enumerate()
+            .map(|(dimension, walked)| {
+                (walked.count >= 2 && recorded.contains(&dimension)).then(|| {
+                    let start = at;
+                    at += 1 + usize::from(walked.current_count);
+                    start
+                })
+            })
+            .collect();
+        self.counting = produced
+            .iter()
+            .map(|dimensions| {
+                dimensions
+                    .iter()
+                    .copied()
+                    .filter(|dimension| self.counters[*dimension].is_some())
+                    .collect()
+            })
+            .collect();
+        self
+    }
+
+    /// The position of the first count of children, after the marks and the third values.
+    fn first_counter(&self) -> usize {
+        self.marks + (2 * self.openers.len()).div_ceil(32) + self.flag_words()
+    }
+
+    /// How many words the counts of children take: one per counted dimension, two for one that
+    /// counts at the current revision too.
+    fn counter_words(&self) -> usize {
+        self.counters
+            .iter()
+            .zip(self.dimensions)
+            .filter(|(counter, _)| counter.is_some())
+            .map(|(_, walked)| 1 + usize::from(walked.current_count))
+            .sum()
+    }
+
+    /// The greatest count of `dimension`, at which its count stands for that many children or
+    /// more.
+    fn cap(&self, dimension: usize) -> u32 {
+        u32::try_from(self.dimensions[dimension].count).unwrap_or(u32::MAX)
+    }
+
+    /// How many children `state` counts in `dimension`, and how many of them at the current
+    /// revision when it counts those; `None` for a dimension without a count.
+    fn children(&self, state: &State, dimension: usize) -> Option<(u32, Option<u32>)> {
+        let at = self.counters[dimension]?;
+        let current = self.dimensions[dimension]
+            .current_count
+            .then(|| state[at + 1]);
+        Some((state[at], current))
+    }
+
+    /// `state` with the count at the current revision of `dimension`, when it keeps one, changed
+    /// by `change` and held between none and its count of children.
+    fn recount(&self, mut state: State, dimension: usize, change: impl Fn(u32) -> u32) -> State {
+        if let Some(at) = self.counters[dimension]
+            && self.dimensions[dimension].current_count
+        {
+            state[at + 1] = change(state[at + 1]).min(state[at]);
+        }
+        state
+    }
+
+    /// `state` after a child-outcome step in `dimension` that replaced `replacing`: a child that
+    /// ends at the current revision replacing an `open` record held as expired or earlier is now
+    /// counted at the current revision; one that ends against the earlier revision (`late`)
+    /// replacing a current `open` record no longer is.
+    fn ended(
+        &self,
+        state: State,
+        dimension: usize,
+        replacing: Option<Replacing>,
+        late: bool,
+    ) -> State {
+        match replacing {
+            Some(Replacing { expired: true, .. }) if !late => {
+                self.recount(state, dimension, |current| current.saturating_add(1))
+            }
+            Some(Replacing { current: true, .. }) if late => {
+                self.recount(state, dimension, |current| current.saturating_sub(1))
+            }
+            _ => state,
+        }
+    }
+
+    /// `held` and `expired`, the records of `state`, with as many more as its counts of children
+    /// say (story:children-form-counts-unopened-children): in each counted dimension, copies of
+    /// its least current record up to the count at the current revision and of its least record
+    /// held as earlier up to the rest; with one count, copies of its least current record, or of
+    /// its least earlier one when it holds no current record, up to the count. The evaluator
+    /// gives each copy a child case of its own.
+    fn with_children(
+        &self,
+        state: &State,
+        mut held: Vec<recovery::Held>,
+        mut expired: Vec<(usize, usize)>,
+    ) -> (Vec<recovery::Held>, Vec<(usize, usize)>) {
+        for dimension in 0..self.dimensions.len() {
+            let Some((total, current)) = self.children(state, dimension) else {
+                continue;
+            };
+            let of = |entry: &&recovery::Held| entry.0 == dimension;
+            let current_records: u32 = held
+                .iter()
+                .filter(of)
+                .map(|entry| u32::try_from(entry.3.len()).unwrap_or(u32::MAX))
+                .sum();
+            let earlier_records =
+                u32::try_from(expired.iter().filter(|(at, _)| *at == dimension).count())
+                    .unwrap_or(u32::MAX);
+            let first_current = held
+                .iter()
+                .find(of)
+                .map(|(at, class, vector, profiles)| (*at, *class, *vector, vec![profiles[0]]));
+            let first_earlier = expired.iter().find(|(at, _)| *at == dimension).copied();
+            let (more_current, more_earlier) = match current {
+                Some(current) => (
+                    current.saturating_sub(current_records),
+                    total.saturating_sub(current.max(current_records) + earlier_records),
+                ),
+                None => {
+                    let more = total.saturating_sub(current_records + earlier_records);
+                    if first_current.is_some() {
+                        (more, 0)
+                    } else {
+                        (0, more)
+                    }
+                }
+            };
+            if let Some(record) = first_current {
+                held.extend((0..more_current).map(|_| record.clone()));
+            }
+            if let Some(record) = first_earlier {
+                expired.extend((0..more_earlier).map(|_| record));
+            }
+        }
+        (held, expired)
+    }
+
+    /// How a state writes the counts of children of `state`, in dimension order:
+    /// `` 3 children in evidence `k` about `b` `` (`` 1 child ``, `` 5 or more children `` at its
+    /// count), with `` (1 at the current revision) `` when it counts those.
+    fn children_text(&self, state: &State) -> Vec<String> {
+        (0..self.dimensions.len())
+            .filter_map(|dimension| {
+                let (total, current) = self.children(state, dimension)?;
+                if total == 0 {
+                    return None;
+                }
+                let counted = if total >= self.cap(dimension) {
+                    format!("{total} or more children")
+                } else if total == 1 {
+                    "1 child".to_owned()
+                } else {
+                    format!("{total} children")
+                };
+                let mut text = format!("{counted} in evidence {}", self.dimensions[dimension].name);
+                if let Some(current) = current {
+                    text.push_str(&format!(" ({current} at the current revision)"));
+                }
+                Some(text)
+            })
+            .collect()
     }
 
     /// The layout in which a step of opener `i` adds the records `opening[i]` as it raises its
@@ -915,6 +1128,8 @@ impl<'d, 'a> Layout<'d, 'a> {
                 .as_ref()
                 .is_some_and(|subject| artifacts.contains(&subject));
             if about {
+                // Its children set aside are no longer at the current revision.
+                walked = self.recount(walked, dimension, |_| 0);
                 for class in 0..kind.classes.len() {
                     let present = self.present(&walked, dimension, class);
                     for &start in &self.slots[dimension][class] {
@@ -959,7 +1174,7 @@ impl<'d, 'a> Layout<'d, 'a> {
 
     /// The whole length of a walk's state.
     fn length(&self) -> usize {
-        self.marks + (2 * self.openers.len()).div_ceil(32) + self.flag_words()
+        self.first_counter() + self.counter_words()
     }
 
     /// The mark of opener `at` (`openers[at]`) in `state`: 0 for none, 1 for one child that has
@@ -983,17 +1198,27 @@ impl<'d, 'a> Layout<'d, 'a> {
     }
 
     /// `state` after a step of the action at `action`: when it opens a child case, its mark is
-    /// raised by one child, up to two or more, and the child's `open` record is added
-    /// ([`Layout::opening`]).
+    /// raised by one child, up to two or more, the child's `open` record is added
+    /// ([`Layout::opening`]), and each count of children of a dimension its children record in is
+    /// raised by one, up to its count ([`Layout::counting`]).
     fn raise(&self, state: &State, action: usize) -> State {
         match self.openers.iter().position(|opener| *opener == action) {
             Some(at) => {
                 let raised = self.marked(state, at, (self.mark(state, at) + 1).min(2));
-                self.opening.get(at).map_or(raised.clone(), |records| {
+                let mut opened = self.opening.get(at).map_or(raised.clone(), |records| {
                     records.iter().fold(raised, |added, record| {
                         self.add(&added, record.dimension, record.class, record.profile)
                     })
-                })
+                });
+                for dimension in self.counting.get(at).into_iter().flatten() {
+                    let Some(counter) = self.counters[*dimension] else {
+                        continue;
+                    };
+                    let cap = self.cap(*dimension);
+                    opened[counter] = (opened[counter] + 1).min(cap);
+                    opened = self.recount(opened, *dimension, |current| current.saturating_add(1));
+                }
+                opened
             }
             None => state.clone(),
         }
@@ -1088,7 +1313,9 @@ impl<'d, 'a> Layout<'d, 'a> {
     /// `state` without any current record of `class` in `dimension`; in a dimension that holds
     /// expired records, with one of the class held as expired.
     fn expire(&self, state: &State, dimension: usize, class: usize) -> State {
-        let mut walked = self.remove(state, dimension, class);
+        // How many children of the class expired is not kept, so none is counted at the current
+        // revision any more: the count stays below the case's, never above.
+        let mut walked = self.recount(self.remove(state, dimension, class), dimension, |_| 0);
         let start = self.slots[dimension][class][0];
         let profiles = self.dimensions[dimension].profiles.len();
         if self.holds[dimension] {
@@ -1146,26 +1373,33 @@ impl<'d, 'a> Layout<'d, 'a> {
 
     /// Whether every record of `smaller` is in `larger`, its producer profiles included, and
     /// every mark of `smaller` is at most `larger`'s, its bits a subset (R5): both sit after the
-    /// space's state.
+    /// space's state. Every count of children of `smaller` is at most `larger`'s, as numbers.
     fn records_within(&self, smaller: &State, larger: &State) -> bool {
-        smaller[self.base..]
+        let counts = self.first_counter();
+        smaller[self.base..counts]
             .iter()
-            .zip(&larger[self.base..])
+            .zip(&larger[self.base..counts])
             .all(|(a, b)| a & !b == 0)
+            && smaller[counts..]
+                .iter()
+                .zip(&larger[counts..])
+                .all(|(a, b)| a <= b)
     }
 
     /// How many things `state` holds: records' profiles, the children marks count (a mark's set
     /// bits), decided capabilities and taken decisions, and case inputs off their first value, which two comparable states share.
-    /// A state contained in another holds fewer.
+    /// A state contained in another holds fewer. A count of children adds its value.
     fn size(&self, state: &State) -> u32 {
+        let counts = self.first_counter();
         state[..self.base]
             .iter()
             .map(|value| u32::from(*value != 0))
             .sum::<u32>()
-            + state[self.base..]
+            + state[self.base..counts]
                 .iter()
                 .map(|word| word.count_ones())
                 .sum::<u32>()
+            + state[counts..].iter().sum::<u32>()
     }
 }
 
@@ -1377,7 +1611,8 @@ fn walk(ir: &Ir, with_record: bool) -> Result<Walk, Refusal> {
     let layout = Layout::revising(&dimensions, base, &holds, moving)
         .marking(openers)
         .flagging(ir, &split)
-        .opening(opening);
+        .opening(opening)
+        .counting(&produced);
     // Each action's revise subsets: the non-empty subsets of its `revises`, in order of their
     // sorted ids; none for an action that declares no `revises`.
     let action_subsets: Vec<Vec<Vec<&ArtifactId>>> = ir
@@ -1551,12 +1786,13 @@ fn walk(ir: &Ir, with_record: bool) -> Result<Walk, Refusal> {
     let mut next = 0;
     while next < states.len() {
         let state = states[next].clone();
-        let held = layout.held(&state);
+        let (held, expired) =
+            layout.with_children(&state, layout.held(&state), layout.expired(&state));
         let evaluated = check::evaluate_records(
             ir,
             &space,
             &state[..base].to_vec(),
-            split.evidence(&space, &dimensions, &held, &layout.expired(&state)),
+            split.evidence(&space, &dimensions, &held, &expired),
         )
         .map_err(|refusal| Refusal::new(refusal.code(), refusal.to_string()))?;
         let legitimate: Vec<usize> = (0..ir.outcomes.len())
@@ -1706,7 +1942,12 @@ fn walk(ir: &Ir, with_record: bool) -> Result<Walk, Refusal> {
                         }
                         _ => state.clone(),
                     };
-                    let added = layout.add(&replaced, dimension, class, profile);
+                    let added = layout.ended(
+                        layout.add(&replaced, dimension, class, profile),
+                        dimension,
+                        replacing,
+                        false,
+                    );
                     for lowered in lowered {
                         let walked = layout.marked(&added, at, *lowered);
                         // D5: a state that holds an `open` record holds a child that has not
@@ -2027,6 +2268,14 @@ fn walk(ir: &Ir, with_record: bool) -> Result<Walk, Refusal> {
                 "action `{}` opened {children}}}",
                 action_id(action)
             ));
+        }
+        for counted in layout.children_text(&states[at]) {
+            text.pop();
+            if text.len() > 1 {
+                text.push_str(", ");
+            }
+            text.push_str(&counted);
+            text.push('}');
         }
         text
     };

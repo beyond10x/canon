@@ -57,7 +57,10 @@
 //!   [...], "revision": "current"}}` when it reads only the records about the current revision of
 //!   their subject (story:child-outcome-revision): `revision: any` reads what no key reads and is
 //!   written as no key. A form that reads only the records about one artifact adds `"subject":
-//!   …`, as declared (story:child-outcome-subject). An action's `case_open` is `{"protocol": …,
+//!   …`, as declared (story:child-outcome-subject), and a form that waits for a number of child
+//!   cases adds `"count": N`, as declared, which sorts before `"in"` like every key
+//!   (story:children-form-counts-unopened-children); two forms that differ only in it are two
+//!   members, no count first, then the smaller. An action's `case_open` is `{"protocol": …,
 //!   "subject": …}`, as declared (story:case-composition).
 //!   An action's `arguments` is its JSON Schema as declared, the same JSON value, its object keys
 //!   sorted like every object's (story:action-arguments).
@@ -467,6 +470,7 @@ pub(crate) fn normalize(predicate: &Predicate) -> Predicate {
             r#in: unique(form.r#in.clone()),
             revision: form.revision.filter(|_| form.current_only()),
             subject: form.subject.clone(),
+            count: form.count,
         }),
         Predicate::Claim(_)
         | Predicate::First(_)
@@ -707,6 +711,8 @@ fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
                         right.subject.as_ref().map(|subject| subject.as_str()),
                     )
                 })
+                // No count first, then the smaller (story:children-form-counts-unopened-children).
+                .then_with(|| left.count.cmp(&right.count))
         }
         _ => form(left).cmp(&form(right)),
     }
@@ -1132,12 +1138,14 @@ fn predicate_value(predicate: &Predicate) -> Value {
         )]),
         // `"revision"` only when the form reads the current revision alone, so a form without the
         // key, or with `any`, is written as it was before the key existed; `"subject"` only when
-        // the form names one.
+        // the form names one; `"count"` only when the form declares one, so a protocol without
+        // the key is written as before it existed.
         Predicate::Children(
             form @ ChildOutcomes {
                 r#in,
                 revision: _,
                 subject,
+                count,
             },
         ) => {
             let mut written = vec![("in", Value::Array(r#in.iter().map(Value::string).collect()))];
@@ -1146,6 +1154,9 @@ fn predicate_value(predicate: &Predicate) -> Value {
             }
             if let Some(subject) = subject {
                 written.push(("subject", Value::string(subject.as_str())));
+            }
+            if let Some(count) = count {
+                written.push(("count", Value::Integer(*count)));
             }
             Value::object([("children", Value::object(written))])
         }

@@ -152,7 +152,9 @@ const REGENERATE: &str = "CANON_REGENERATE_SCENARIOS";
 ///   generating enumerates the whole product; `evidence-order-after.yaml` reads its kinds bound to
 ///   a subject and unbound at once, for CANON-ORDER-002's evaluate steps, `after.yaml` above is
 ///   the one generated from; `evidence-order-since.yaml`, for CANON-ORDER-004, likewise with
-///   `since.yaml`);
+///   `since.yaml`; `simulate/children-count`, story:children-form-counts-unopened-children, five
+///   openers' kinds and a `case_outcome` dimension with its more records, 69632 states without the
+///   count and 348160 with it, written for `canon simulate` and checked slice by slice);
 /// - `unreachable-outcome`: an outcome is legitimate in no state;
 /// - `nothing-to-witness`: no outcome and no action blocked in any state (coordinator decision 3,
 ///   adversary pass 1; `invalidation-rules.yaml`, from story:invalidation-rules, declares no
@@ -228,6 +230,10 @@ const REFUSED: &[(&str, &str)] = &[
         "nothing-to-witness",
     ),
     (
+        "fixtures/investigation/simulate/children-count/protocol.yaml",
+        "state-space-bound",
+    ),
+    (
         "fixtures/investigation/simulate/reachable-state-space-bound/protocol.yaml",
         "state-space-bound",
     ),
@@ -244,11 +250,13 @@ const REFUSED: &[(&str, &str)] = &[
 /// The fixtures whose generation takes over 5 s in a debug build (a state space in the thousands,
 /// measured 2026-11-22 on a loaded host: 7.8 to 17.9 s each, the other fixtures 2 s or less): only
 /// the slow lane regenerates them and compares them with the committed file. The gate lane
-/// regenerates every other fixture.
+/// regenerates every other fixture. `simulate/children-count/protocol.yaml` is refused, but only
+/// after the check of its 348160 states (19 s, measured 2026-11-23 on a loaded host).
 const SLOW_ONLY: &[&str] = &[
     "fixtures/investigation/child-outcome-subject.yaml",
     "fixtures/investigation/evidence-order-subsecond.yaml",
     "fixtures/investigation/missing-evidence.yaml",
+    "fixtures/investigation/simulate/children-count/protocol.yaml",
     "after.yaml",
     "since.yaml",
 ];

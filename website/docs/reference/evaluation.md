@@ -87,7 +87,10 @@ A claim's value is its `true_when` predicate's value over the evidence set:
   `revision: current` too only those at the current revision of `A`: a record about another
   artifact neither establishes nor contradicts it (CANON-COMPOSE-003). No record is listed in
   `excluded_evidence` because of it, and a reason names it with its `revision` and its
-  `subject` when the IR writes them.
+  `subject` when the IR writes them. With `count: N`
+  (story:children-form-counts-unopened-children) it is `unknown` too while it reads fewer than
+  N records, so a child not yet opened keeps it from `true` (CANON-COMPOSE-004), and a reason
+  names it with its `count`.
 
 `unknown` and `false` are never collapsed, and only `true` satisfies a positive requirement.
 
@@ -279,7 +282,8 @@ declares no obligation has no `obligations` key, and likewise for actions and ou
   is not read by it), then each input test that decides it, `{"input": <id>, "value": <the case's value>}`, then each order form that decides it, `{"after": <kind>, "then": <kind>, "result": <result>, "value": <its value>}`, `{"before": <kind>, "then": <kind>, "value": <its value>}`, `{"first": <kind>, "result": <result>, "value": <its value>}` or `{"since": <kind>, "then": <kind>, "result": <result>, "value": <its value>}`, with `"subject"` added
   when it names one, then each form over the child cases that decides it, `{"children": [<outcome>, ...], "value": <its value>}`, with `"revision": "current"` added when the form
   reads only the current revision (story:child-outcome-revision) and `"subject": <artifact>`
-  when it names one (story:child-outcome-subject), or
+  when it names one (story:child-outcome-subject) and `"count": N` when it declares one
+  (story:children-form-counts-unopened-children), or
   `{"requirement": "unsatisfiable"}` when none does. `blocked` too when the precondition is
   `true` and the authority decisions deny a requirement of the action, each a reason
   `{"capability": <id>, "decision": "denied"}`. `approval-required` when the precondition is

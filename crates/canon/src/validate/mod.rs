@@ -58,7 +58,9 @@
 //!    naming the declaration the test is written in and the input; for a `children` form, first
 //!    an empty `in` list, `empty-child-outcomes`, or an outcome it lists more than once,
 //!    `duplicate-child-outcome`, once for every listing after its first, then `open` listed,
-//!    `open-child-outcome`, once, then the evidence kind `case_outcome` when it is not declared,
+//!    `open-child-outcome`, once, then a `count` of 0, `zero-child-count`
+//!    (story:children-form-counts-unopened-children), then the evidence kind `case_outcome` when
+//!    it is not declared,
 //!    `undeclared-evidence-kind`, then the artifact it names as its `subject` when that is not
 //!    declared, `undeclared-artifact` (story:child-outcome-subject), every one naming the
 //!    declaration the form is written in): those
@@ -324,6 +326,9 @@ pub enum Problem {
     /// A `children` form lists `open`, which is a running child case's outcome, never a terminal
     /// one: the form is unknown while a child is open.
     OpenChildOutcome { referrer: Referrer },
+    /// A `children` form waits for 0 child cases (`count: 0`), which every case has, so the count
+    /// would assert nothing.
+    ZeroChildCount { referrer: Referrer },
     /// An action's `runs_only_when` (story:ordering-guards-provable-by-check) is `all: []`, which
     /// is true in every state and so asserts nothing.
     VacuousGuard { action: ActionId },
@@ -459,6 +464,7 @@ impl Problem {
             Problem::EmptyChildOutcomes { .. } => "empty-child-outcomes",
             Problem::DuplicateChildOutcome { .. } => "duplicate-child-outcome",
             Problem::OpenChildOutcome { .. } => "open-child-outcome",
+            Problem::ZeroChildCount { .. } => "zero-child-count",
             Problem::VacuousGuard { .. } => "vacuous-runs-only-when",
             Problem::SelfOpenedCase { .. } => "self-opened-case",
             Problem::InvalidRecordGroup { .. } => "invalid-record-group",
@@ -651,6 +657,10 @@ impl fmt::Display for Problem {
             Problem::OpenChildOutcome { referrer } => write!(
                 f,
                 "{referrer} tests the child cases for outcome `{OPEN_OUTCOME}`, which a running child case has, never a terminal one"
+            ),
+            Problem::ZeroChildCount { referrer } => write!(
+                f,
+                "{referrer} waits for 0 child cases; a count is 1 or more"
             ),
             Problem::VacuousGuard { action } => write!(
                 f,
@@ -1536,6 +1546,11 @@ fn references(
                 .any(|outcome| outcome.as_str() == OPEN_OUTCOME)
             {
                 unresolved.push(Problem::OpenChildOutcome {
+                    referrer: referrer.clone(),
+                });
+            }
+            if form.count == Some(0) {
+                unresolved.push(Problem::ZeroChildCount {
                     referrer: referrer.clone(),
                 });
             }
