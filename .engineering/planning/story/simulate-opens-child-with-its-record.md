@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:simulate-opens-child-with-its-record
 kind: story
-status: active
+status: implemented
 title: canon simulate opens a child together with its running record
 relations:
 - decomposes: epic:canon-kernel
@@ -42,10 +42,11 @@ scope:
   path: fixtures/investigation/simulate
 - confidence: inferred
   path: website/docs/reference/cli.md
-revision: 21
+revision: 22
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T03:55:39Z", actor: "human:timo", revision: 20, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w13"}
 - {from: "proposed", to: "active", at: "2026-11-23T03:55:39Z", actor: "human:timo", revision: 21, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w13"}
+- {from: "active", to: "implemented", at: "2026-11-23T07:14:16Z", actor: "human:timo", revision: 22, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w13"}
 ---
 ## Outcome
 

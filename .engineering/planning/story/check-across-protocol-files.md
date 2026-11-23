@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:check-across-protocol-files
 kind: story
-status: active
+status: implemented
 title: canon check resolves opened protocol ids, named child outcomes and the producers of supplied evidence
 relations:
 - decomposes: epic:canon-kernel
@@ -40,10 +40,11 @@ scope:
   path: website/docs/reference/protocol.md
 - confidence: inferred
   path: website/status.yaml
-revision: 20
+revision: 21
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T03:55:37Z", actor: "human:timo", revision: 19, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w13"}
 - {from: "proposed", to: "active", at: "2026-11-23T03:55:37Z", actor: "human:timo", revision: 20, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w13"}
+- {from: "active", to: "implemented", at: "2026-11-23T07:14:14Z", actor: "human:timo", revision: 21, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w13"}
 ---
 ## Outcome
 

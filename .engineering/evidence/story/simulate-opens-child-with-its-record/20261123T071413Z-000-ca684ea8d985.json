@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-23T07:14:13Z",
+  "actor": "human:timo",
+  "artifact": "story:simulate-opens-child-with-its-record",
+  "kind": "story",
+  "revision": 21,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "full gate on wave/2026-11-23-w13 8d4855c3c: build, ess-gate, fmt, clippy, test (1290 passed in 52 s test time), conform, docs-check exit 0; test-slow 66 of 66 passed",
+    "reference": ".engineering/planning/story/simulate-opens-child-with-its-record.md#scope-as-built"
+  }
+}

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:refused-approval-is-not-stuck
 kind: story
-status: active
+status: implemented
 title: A refused approval ends in a legitimate state, not a stuck one
 relations:
 - decomposes: epic:canon-kernel
@@ -32,10 +32,11 @@ scope:
   path: website/docs/reference/cli.md
 - confidence: inferred
   path: website/status.yaml
-revision: 16
+revision: 17
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T03:55:38Z", actor: "human:timo", revision: 15, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w13"}
 - {from: "proposed", to: "active", at: "2026-11-23T03:55:38Z", actor: "human:timo", revision: 16, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w13"}
+- {from: "active", to: "implemented", at: "2026-11-23T07:14:17Z", actor: "human:timo", revision: 17, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w13"}
 ---
 ## Outcome
 

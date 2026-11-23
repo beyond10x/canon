@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-23T07:14:13Z",
+  "actor": "human:timo",
+  "artifact": "story:check-across-protocol-files",
+  "kind": "story",
+  "revision": 20,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "full gate on wave/2026-11-23-w13 8d4855c3c: build, ess-gate, fmt, clippy, test (1290 passed in 52 s test time), conform, docs-check exit 0; test-slow 66 of 66 passed",
+    "reference": ".engineering/planning/story/check-across-protocol-files.md#scope-as-built"
+  }
+}
