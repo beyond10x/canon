@@ -45,13 +45,16 @@
 //! holds some mark above none ("Decided in review, D5") on an action whose children record in
 //! that record's dimension (story:child-outcome-subject): an `open` record is a child that has not
 //! ended, and with every such mark at none no child is left to end, so no later outcome could
-//! replace it. The reverse holds too (story:simulate-opens-child-with-its-record): a runner
-//! writes a child's `open` record in the step that opens it, so a mark above none comes with an
-//! `open` record in each dimension the action's children record in that has the class, until an
-//! expiry or a revision removes it from a dimension that holds no expired or earlier record, as
-//! it leaves every evidence match of a real case. A child-outcome successor that would break
-//! either is not a successor: a child that ends replaces its own `open` record, and leaves the
-//! one a child that has not ended holds.
+//! replace it. The reverse holds too (story:simulate-opens-child-with-its-record) in each
+//! dimension the action's children record in that has the class and that some reader reads with
+//! no independence demand: a runner writes a child's `open` record in the step that opens it, and
+//! every producer's record meets that reader, so a mark above none comes with an `open` record
+//! there, until an expiry or a revision removes it from a dimension that holds no expired or
+//! earlier record, as it leaves every evidence match of a real case. In a dimension whose every
+//! reader demands independence a runner's `open` record may meet no demand, which no reader reads
+//! and the state without it stands for, so there a mark above none may come without an `open`
+//! record. A child-outcome successor that would break either is not a successor: a child that
+//! ends replaces its own `open` record, and leaves the one a child that has not ended holds.
 //!
 //! # Steps
 //!
@@ -63,9 +66,10 @@
 //!   An action that may produce nothing, or nothing a record can be about, has one step, which
 //!   adds nothing. Every step of an action that opens a child case raises its mark and adds the
 //!   child's `case_outcome` record of the class `open` (story:simulate-opens-child-with-its-record),
-//!   current, from a producer of the dimension's first profile (the empty one when some reader
-//!   demands no independence), in each dimension its children record in that has the class `open`
-//!   (none in a dimension without it, D-b); the step keeps its text (D-a). It is a step when it
+//!   current, from a producer of the empty profile, in each dimension its children record in that
+//!   has the class `open` and that some reader reads with no independence demand (none in a
+//!   dimension without the class, D-b, and none in one whose every reader demands independence,
+//!   where a runner's record may meet no demand); the step keeps its text (D-a). It is a step when it
 //!   only raises the mark or adds that record; a step that adds nothing, raises no mark (none is
 //!   raised past two or more) and finds the `open` record there returns the same state. A child's
 //!   other `case_outcome` records are not among those an opening action's step adds (`canon
@@ -137,8 +141,9 @@
 //!   records a child's outcome when the child ends, whether the opening action's guard is still
 //!   open or not. Canon runs nothing; the step says that a runner may record it
 //!   between two evaluations. A record of the class `open` keeps the mark: the child has not
-//!   ended; the opening step added it already, so it is a step only where an expiry or a
-//!   revision removed it or with another producer profile (D-c). Any other class lowers it, from
+//!   ended; the opening step added it already where it adds one, so it is a step only where an
+//!   expiry or a revision removed it, where the opening added none, or with another producer
+//!   profile (D-c). Any other class lowers it, from
 //!   one to none, and from two or more to one or, since more children may remain, to two or
 //!   more; it is a step when it lowers the mark, even with its class already there. A class
 //!   other than `open`, in a state holding a record of the class `open` in that dimension, has
@@ -147,10 +152,12 @@
 //!   replaced, not joined. A record of the class `open` held as expired (R2a, below) is an open
 //!   child too, and is replaced the same way: when the state holds `open` both current and held
 //!   as expired, the successors replace the current records, the one held as expired, or both,
-//!   since either child may end first. A successor that drops the last `open` record of the
-//!   dimension while a mark above none on an action whose children record in it is left is not
-//!   one: that child has not ended, and its record stays (two children of one action, or of two
-//!   actions about one subject, share the dimension's `open` record). The step is written `` a child of action `a`
+//!   since either child may end first. A successor that drops the last `open` record of a
+//!   dimension the opening step adds it in while a mark above none on an action whose children
+//!   record in it is left is not one: that child has not ended, and its record stays (two
+//!   children of one action, or of two actions about one subject, share the dimension's `open`
+//!   record); in a dimension whose every reader demands independence the child left may be one
+//!   whose record meets no demand. The step is written `` a child of action `a`
 //!   records evidence `case_outcome` result `r` ``, `a` the action whose mark it lowers or keeps,
 //!   followed by `` , replacing result `open` `` (`` result `open` expired ``, `` result `open`
 //!   and result `open` expired ``) for a replacing successor. It is no action step: it makes no
@@ -1189,8 +1196,9 @@ struct Walk {
     #[cfg(test)]
     states: Vec<State>,
     /// The positions of the reachable states in which an `open` record and the marks of the
-    /// actions that produce its dimension do not pair: some such mark is above none with no
-    /// `open` record of the dimension, current or held as earlier, or the reverse.
+    /// actions that produce its dimension do not pair: an `open` record of the dimension, current
+    /// or held as earlier, with every such mark at none, or, in a dimension the opening step adds
+    /// the record in, some such mark above none with no `open` record.
     #[cfg(test)]
     unpaired: Vec<usize>,
 }
@@ -1324,15 +1332,28 @@ fn walk(ir: &Ir, with_record: bool) -> Result<Walk, Refusal> {
                 .position(|class| *class == Some(OPEN_OUTCOME))
         })
         .collect();
+    // For each dimension, whether the step that opens a child adds its `open` record there: it has
+    // the class `open` and some reader demands no independence, so the empty profile is its first
+    // one and every producer's record meets that reader. When every reader demands independence a
+    // runner's `open` record may meet no demand, which no reader reads and the state without it
+    // stands for, so the opening adds none and a child-outcome step adds one that meets a demand.
+    let paired: Vec<bool> = dimensions
+        .iter()
+        .zip(&open_class)
+        .map(|(walked, open)| {
+            open.is_some() && walked.profiles.first().is_some_and(String::is_empty)
+        })
+        .collect();
     // story:simulate-opens-child-with-its-record: the step that opens a child adds its `open`
-    // record in each dimension its children record in that has the class, from a producer of the
-    // dimension's first profile, the empty one when some reader demands no independence (D-b: a
-    // dimension without the class gets no record).
+    // record, from a producer of the empty profile, in each dimension its children record in that
+    // is `paired` (D-b: a dimension without the class gets no record, and neither does one whose
+    // every reader demands independence).
     let opening: Vec<Vec<Added>> = produced
         .iter()
         .map(|at| {
             at.iter()
                 .filter(|_| with_record)
+                .filter(|dimension| paired[**dimension])
                 .filter_map(|dimension| {
                     open_class[*dimension].map(|class| Added {
                         dimension: *dimension,
@@ -1452,14 +1473,17 @@ fn walk(ir: &Ir, with_record: bool) -> Result<Walk, Refusal> {
     // Whether `walked`, a child-outcome successor of `state`, pairs its `open` records with the
     // marks. Every `case_outcome` record of the class `open`, current or held as expired, has a
     // child that has not ended (D5): a mark above none on an action that produces the record's
-    // dimension. And the reverse (story:simulate-opens-child-with-its-record): a child that ends
-    // replaces its own `open` record, so `walked` drops no `open` record of a dimension `state`
-    // held while a mark above none on an action that produces the dimension is left.
+    // dimension. And the reverse (story:simulate-opens-child-with-its-record), in a `paired`
+    // dimension: a child that ends replaces its own `open` record, so `walked` drops no `open`
+    // record of a dimension `state` held while a mark above none on an action that produces the
+    // dimension is left. In a dimension whose every reader demands independence the child left
+    // may be one whose `open` record meets no demand.
     let open_held = |state: &State, walked: &State| {
         (0..dimensions.len()).all(|dimension| {
             !is_case_outcome(&dimensions[dimension])
                 || ((!holds_open(walked, dimension) || marked_on(walked, dimension))
                     && (!with_record
+                        || !paired[dimension]
                         || holds_open(walked, dimension)
                         || !holds_open(state, dimension)
                         || !marked_on(walked, dimension)))
@@ -2123,9 +2147,13 @@ fn walk(ir: &Ir, with_record: bool) -> Result<Walk, Refusal> {
     let unpaired: Vec<usize> = (0..states.len())
         .filter(|at| {
             (0..dimensions.len()).any(|dimension| {
+                let (open, marked) = (
+                    holds_open(&states[*at], dimension),
+                    marked_on(&states[*at], dimension),
+                );
                 is_case_outcome(&dimensions[dimension])
                     && open_class[dimension].is_some()
-                    && holds_open(&states[*at], dimension) != marked_on(&states[*at], dimension)
+                    && ((open && !marked) || (marked && !open && paired[dimension]))
             })
         })
         .collect();
