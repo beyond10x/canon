@@ -96,8 +96,7 @@ fn strict_refuses_a_future_record_every_order_form_reads_though_revision_binding
         if let Some((alone, with_future)) = values {
             let without = decide(&ir, std::slice::from_ref(&review), Some("0s")).expect("decides");
             assert_eq!(value(&without), alone, "{form}");
-            let by_default =
-                decide(&ir, &[review.clone(), future.clone()], None).expect("decides");
+            let by_default = decide(&ir, &[review.clone(), future.clone()], None).expect("decides");
             assert_eq!(value(&by_default), with_future, "{form}");
         }
         match decide(&ir, &[review.clone(), future.clone()], Some("0s")) {

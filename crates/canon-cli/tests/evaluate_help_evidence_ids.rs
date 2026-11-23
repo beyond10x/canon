@@ -55,7 +55,10 @@ fn evaluate_help_states_what_decides_an_evidence_ground() {
             "the entry still applies",
             "the decision changes only where a claim reads them",
         ] {
-            assert!(help.contains(half), "--{flag} help does not say `{half}`: {help}");
+            assert!(
+                help.contains(half),
+                "--{flag} help does not say `{half}`: {help}"
+            );
         }
         assert!(
             !help.contains("not by the record's contents"),
