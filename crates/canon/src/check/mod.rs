@@ -813,7 +813,8 @@ pub(crate) struct Enumeration {
 }
 
 /// [`check_by`], also giving every space it enumerated, so a caller that needs the states and
-/// their evaluations (`canon generate`) does not enumerate them again.
+/// their evaluations (`canon generate`) does not enumerate them again. It decides no ordering
+/// guard: its report has no `ordering-guard-failed`, and a guard refuses nothing here.
 pub(crate) fn check_keeping(
     ir: &Ir,
     properties: Option<&Properties>,
@@ -838,8 +839,10 @@ fn check_enumerating(
         return Err(ordered_child_outcomes(ir, kind));
     }
     // The guards, each lowered to an action of its own (story:ordering-guards-provable-by-check):
-    // held to the same refusals as the protocol, since they read what its predicates may.
-    let lowered = guards::lower(ir);
+    // held to the same refusals as the protocol, since they read what its predicates may. Only
+    // `canon check` decides them: a check that keeps its spaces (`canon generate`) reads no
+    // `runs_only_when`, so its output and refusals are the same with or without a guard.
+    let lowered = if keep { None } else { guards::lower(ir) };
     if let Some(lowered) = &lowered {
         eval::check_depth(&lowered.ir)
             .map_err(|refusal| Refusal::new(refusal.code(), refusal.to_string()))?;

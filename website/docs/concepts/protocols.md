@@ -272,8 +272,9 @@ No check reads them yet; checks that do are planned.
 `approval-required` only in a state where this predicate is `TRUE`. It is written like a
 precondition, and `canon validate` checks its references the same way, naming it (an undeclared
 claim is `` action `report.open` runs_only_when references claim `x`, which is not declared ``).
-`all: []`, which is true in every state, asserts nothing and is refused as
-`vacuous-runs-only-when`.
+The literal `all: []`, which is true in every state, asserts nothing and is refused as
+`vacuous-runs-only-when`. Only that literal is refused: another guard that is true in every state,
+such as `{any: [{all: []}]}` or `{not: {any: []}}`, is not detected and validates.
 
 ```yaml
 actions:
@@ -286,7 +287,9 @@ actions:
 ```
 
 The field is an assertion, not a condition: `canon evaluate`, `canon simulate` and `canon generate`
-never read it, and give the same output with or without it. `canon check` proves it in every state
+never read it, and give the same output and exit status with or without it; a guard that
+`canon check` refuses (`ordered-child-outcomes`, or a slice above the state bound) refuses nothing
+in `canon generate`. `canon check` proves it in every state
 and reports each broken guard, after every other finding, with the state of least weight in which
 the action runs while the guard is not `TRUE`:
 
@@ -304,8 +307,9 @@ the action's own precondition, as above, and the check proves it.
 
 `canon compile` writes `"runs_only_when"` only for an action that declares it, so the `canon-ir/1`
 of every protocol without it is unchanged. `canon diff` reports the guard introduced, removed or
-changed as `NO SEMANTIC CHANGE`, naming the action. A Canon release before the field existed
-refuses an IR that holds it.
+changed as `NO SEMANTIC CHANGE`, naming the action. So a floor does not pin a guard: `canon floor`
+holds for a protocol that drops a guard its floor declares. A Canon release before the field
+existed refuses an IR that holds it.
 
 :::shipped[Ordering guards]
 

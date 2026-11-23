@@ -110,7 +110,12 @@ fn only_the_literal_empty_all_is_refused_as_a_vacuous_guard() {
         "{not: {any: []}}",
     ] {
         let output = validated(&dir, &guarded_by(guard));
-        assert_eq!(output.status.code(), Some(0), "{guard}: {}", text(&output.stderr));
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{guard}: {}",
+            text(&output.stderr)
+        );
         assert_eq!(text(&output.stderr), "", "{guard}");
     }
 }

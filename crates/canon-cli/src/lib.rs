@@ -163,7 +163,11 @@ pub enum Command {
     /// `case_open` subject when the protocol reads `case_outcome` about that artifact by name, in
     /// a `children` form or an evidence match, otherwise without a subject, and a `children` form
     /// naming a `subject` reads only records about it; and a protocol that reads `case_outcome`
-    /// with both a `children` form and an order form is refused (`ordered-child-outcomes`). Each
+    /// with both a `children` form and an order form is refused (`ordered-child-outcomes`). Where
+    /// a `children` form declares `count: N` of 2 or more, its `case_outcome` evidence is also
+    /// there with up to N more records, each a child case of its own, written in a state as
+    /// `` evidence `case_outcome` about `b` result `r` 2 more times `` and in the bound refusal
+    /// as `` more records of evidence kind `case_outcome` about `b` N ``. Each
     /// outcome, action and property is decided over the
     /// evidence, authority, decisions and case inputs it reads (its slice), with the findings and
     /// witness states the whole state space gives, and the summary counts the whole state space; a
@@ -218,7 +222,12 @@ pub enum Command {
     /// subject. A state holding an `open` record, current or held as expired, keeps the count of
     /// some action that produces that record above none, because an `open` record is a child that
     /// has not ended. A state names each action with a count above none
-    /// (`action a opened a child`, `action a opened 2 or more children`). An expired
+    /// (`action a opened a child`, `action a opened 2 or more children`). Where a `children` form
+    /// declares `count: N`, the walk also counts the children it opened per `case_outcome`
+    /// dimension the form reads, up to N, and a state writes the count
+    /// (`` 2 children in evidence `case_outcome` about `b` ``, `1 child`, `3 or more children` at
+    /// N of 3, with `(1 at the current revision)` when a form says `revision: current`). An
+    /// expired
     /// `case_outcome` record still counts for a `children` form: with no evidence match reading
     /// `case_outcome` it does not expire, and otherwise it is held as expired, absent to every
     /// evidence match. A revision of an artifact removes the current records about it, except
@@ -280,8 +289,9 @@ pub enum Command {
     /// a character a file name cannot hold (`/ \ : * ? " < > |` or a control character), two
     /// scenario file names equal up to letter case or Unicode normalisation, a protocol with
     /// imports (a scenario names one fixture), a non-empty `--out`, and a whole state space of
-    /// more than 65536 states, which `canon check` may still decide slice by slice. On failure,
-    /// nothing this run created is left.
+    /// more than 65536 states, which `canon check` may still decide slice by slice. It reads no
+    /// `runs_only_when`: the scenarios, the output and the exit status are the same with or
+    /// without it. On failure, nothing this run created is left.
     Generate {
         /// The protocol document, as a relative path without `..` components.
         #[arg(long)]
@@ -314,7 +324,9 @@ pub enum Command {
     /// with a capability and lacks that capability: its precondition is implied by the floor
     /// action's (the same, the always-true one, or some of its conjuncts) and it produces and
     /// revises at least what that action does (an action that does neither is repeated only by
-    /// one that does neither).
+    /// one that does neither). A floor does not pin a guard: `canon diff` classifies a removed
+    /// `runs_only_when` as `NO SEMANTIC CHANGE`, so the floor holds for a protocol that drops a
+    /// guard the floor declares.
     Floor {
         /// The organization's floor, a `protocol/1` document compiled as `canon compile` prints it.
         #[arg(long)]

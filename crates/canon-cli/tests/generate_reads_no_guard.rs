@@ -69,7 +69,10 @@ fn guard() -> String {
 fn generated(name: &str, source: &str) -> (Option<i32>, String, String, Vec<(String, String)>) {
     let dir = scratch(name);
     std::fs::write(dir.join("protocol.yaml"), source).expect("written");
-    let output = canon_in(&dir, &["generate", "--path", "protocol.yaml", "--out", "out"]);
+    let output = canon_in(
+        &dir,
+        &["generate", "--path", "protocol.yaml", "--out", "out"],
+    );
     let mut files: Vec<(String, String)> = std::fs::read_dir(dir.join("out"))
         .map(|entries| {
             entries
