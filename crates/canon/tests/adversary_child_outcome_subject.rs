@@ -170,6 +170,8 @@ const WITH_AND_WITHOUT: &str = "claims:\n  a.ok: {true_when: {children: {in: [pa
 /// first artifact nothing names. A child of `gamma.open` is still read by `all.ok`: `no.alpha` is
 /// legitimate once one passed and no child about `alpha` exists (real cases: 2 states). Behind
 /// `produced_by` binding the dimension without a subject to its stand-in artifact only.
+/// Re-pinned by story:simulate-opens-child-with-its-record (each child opens with its `open`
+/// record, as in the enumeration of real cases): 144 states, `no.alpha` still legitimate.
 #[test]
 fn simulate_records_a_child_about_an_unnamed_artifact_without_subject() {
     let source = format!(
@@ -181,8 +183,8 @@ fn simulate_records_a_child_about_an_unnamed_artifact_without_subject() {
     );
     assert_eq!(
         summary(&source),
-        "simulated: protocol `gamma` revision 1: 400 reachable states, 9 terminable (outcome \
-         `no.alpha` 9), 3 waiting on supplied evidence, a child outcome or expiry, 4 findings (60 \
+        "simulated: protocol `gamma` revision 1: 144 reachable states, 1 terminable (outcome \
+         `no.alpha` 1), 0 waiting on supplied evidence, a child outcome or expiry, 1 finding (16 \
          stuck or cycle states)"
     );
 }
@@ -190,6 +192,7 @@ fn simulate_records_a_child_about_an_unnamed_artifact_without_subject() {
 /// Only `alpha.open` opens children, and a form names `alpha`: its children record about
 /// `alpha` alone, so `all.ok` true beside `a.ok` unknown is no case (real cases: 0 states).
 /// Behind `produced_by` giving an opener the dimension without a subject as well.
+/// Re-pinned by story:simulate-opens-child-with-its-record: 12 states, `none.alpha` still in none.
 #[test]
 fn simulate_keeps_a_named_child_out_of_the_dimension_without_subject() {
     let source = format!(
@@ -201,9 +204,9 @@ fn simulate_keeps_a_named_child_out_of_the_dimension_without_subject() {
     );
     assert_eq!(
         summary(&source),
-        "simulated: protocol `alpha-only` revision 1: 20 reachable states, 3 terminable (outcome \
-         `none.alpha` 0, outcome `with.alpha` 3), 3 waiting on supplied evidence, a child outcome \
-         or expiry, 2 findings (4 stuck or cycle states)"
+        "simulated: protocol `alpha-only` revision 1: 12 reachable states, 1 terminable (outcome \
+         `none.alpha` 0, outcome `with.alpha` 1), 2 waiting on supplied evidence, a child outcome \
+         or expiry, 2 findings (2 stuck or cycle states)"
     );
 }
 

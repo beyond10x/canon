@@ -673,7 +673,9 @@ fn a_second_child_ends_after_the_first_one_ended() {
 /// none, since an `open` record is a child that has not ended. In `HELD` a second child may
 /// record `open`, the record expire, and that child end accepted: the successor that keeps the
 /// expired `open` record beside the new outcome with every mark at none would stand for a third
-/// child, and is not one. No printed state holds `open` without a mark.
+/// child, and is not one. No printed state holds `open` without a mark, and, since the opening
+/// step adds the child's `open` record (story:simulate-opens-child-with-its-record), none holds a
+/// mark without `open`: 114 states, against 252 when the record arrived by a later step.
 #[test]
 fn an_open_record_keeps_a_mark_above_none() {
     let text = report(HELD);
@@ -682,17 +684,18 @@ fn an_open_record_keeps_a_mark_above_none() {
         .filter(|line| line.starts_with("stuck-state: ") || line.starts_with("cycle: "))
     {
         let state = line.split("}: ").next().expect("a state");
-        assert!(
-            !state.contains("result `open`") || state.contains(" opened "),
+        assert_eq!(
+            state.contains("result `open`"),
+            state.contains(" opened "),
             "{line}"
         );
     }
     assert_eq!(
         text.lines().last(),
         Some(
-            "simulated: protocol `p` revision 1: 252 reachable states, 9 terminable (outcome \
-             `done` 9), 41 waiting on supplied evidence, a child outcome or expiry, 5 findings \
-             (183 stuck or cycle states)"
+            "simulated: protocol `p` revision 1: 114 reachable states, 3 terminable (outcome \
+             `done` 3), 19 waiting on supplied evidence, a child outcome or expiry, 3 findings \
+             (78 stuck or cycle states)"
         ),
         "{text}"
     );
@@ -768,6 +771,9 @@ fn a_revision_of_an_upstream_artifact_keeps_the_record_from_its_claim() {
 /// the earlier one (story:simulate-child-about-own-artifact): the two earlier states are first
 /// reached that way, and the walk holds two states more, the open child after the revision, than
 /// when only a child that ended before it counted (9 before, 11 after; the same three findings).
+/// The opening step adds the child's `open` record (story:simulate-opens-child-with-its-record),
+/// so each child's end replaces it, current or earlier, and the states of an opened child with no
+/// record are gone: 8 states, one waiting, the same three findings.
 #[test]
 fn a_record_a_children_form_reads_becomes_earlier() {
     let source = "format: protocol/1\n\
@@ -791,20 +797,22 @@ fn a_record_a_children_form_reads_becomes_earlier() {
         "cycle: state {evidence `case_outcome` about `doc`, evidence `start` about `b`}: no \
          outcome is legitimate, no action is approval-required, and every record step of action \
          `fix` returns this state; path: action `open_review` produces evidence `start` about \
-         `b`, then a child of action `open_review` records evidence `case_outcome` about `doc`; \
-         every revision by action `fix` leads to a state no outcome is reachable from\n\
+         `b`, then a child of action `open_review` records evidence `case_outcome` about `doc`, \
+         replacing result `open`; every revision by action `fix` leads to a state no outcome is \
+         reachable from\n\
          cycle: state {evidence `case_outcome` about `doc` earlier, evidence `start` about `b`}: \
          no outcome is legitimate, no action is approval-required, and every step of action \
          `fix` returns this state; path: action `open_review` produces evidence `start` about \
          `b`, then action `fix` revises `doc`, then a child of action `open_review` records \
-         evidence `case_outcome` about `doc` earlier\n\
+         evidence `case_outcome` about `doc` earlier, replacing result `open` expired\n\
          cycle: state {evidence `case_outcome` about `doc` result `accepted` earlier, evidence \
          `start` about `b`}: no outcome is legitimate, no action is approval-required, and every \
          step of action `fix` returns this state; path: action `open_review` produces evidence \
          `start` about `b`, then action `fix` revises `doc`, then a child of action \
-         `open_review` records evidence `case_outcome` about `doc` result `accepted` earlier\n\
-         simulated: protocol `p` revision 1: 11 reachable states, 1 terminable (outcome \
-         `accepted` 1), 2 waiting on supplied evidence, a child outcome or expiry, 3 findings (3 \
+         `open_review` records evidence `case_outcome` about `doc` result `accepted` earlier, \
+         replacing result `open` expired\n\
+         simulated: protocol `p` revision 1: 8 reachable states, 1 terminable (outcome \
+         `accepted` 1), 1 waiting on supplied evidence, a child outcome or expiry, 3 findings (3 \
          stuck or cycle states)\n"
     );
 }
