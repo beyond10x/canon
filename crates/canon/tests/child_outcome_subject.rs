@@ -517,7 +517,8 @@ fn simulate_over_the_fixture_records_each_child_about_its_opening() {
 /// Only `stories.open`, which requires `dispatch`, opens children about `wave`. Unbound, a child
 /// of the free `ideas.open` recorded about `wave` too: 108 states, 15 terminable, among them
 /// `{evidence `case_outcome` about `wave` result `passed`}` with no capability decided, which no
-/// case reaches. Bound, `wave.done` is legitimate only after `dispatch` is granted.
+/// case reaches. Bound, `wave.done` is legitimate only after `dispatch` is granted. The cycle
+/// after the denial names it as blocking `stories.open` (story:refused-approval-is-not-stuck).
 #[test]
 fn simulate_reaches_an_outcome_only_through_a_child_about_its_subject() {
     let text = simulated(&openers(
@@ -533,7 +534,10 @@ fn simulate_reaches_an_outcome_only_through_a_child_about_its_subject() {
         "cycle: state {capability `dispatch` denied, action `ideas.open` opened 2 or more \
          children}: no outcome is legitimate, no action is approval-required, and every step of \
          action `ideas.open` returns this state; path: action `ideas.open` produces nothing, then \
-         action `ideas.open` produces nothing, then capability `dispatch` denied\n\
+         action `ideas.open` produces nothing, then capability `dispatch` denied; capability \
+         `dispatch` denied blocks action `stories.open`, whose precondition is true: to end the \
+         case after the denial, declare an outcome with `requires: {decision: ..., when: ...}` or \
+         an action without capability `dispatch` whose record an outcome reads\n\
          cycle: state {evidence `case_outcome` about `wave` result `open`, evidence `case_outcome` \
          about `wave`, capability `dispatch` granted, action `ideas.open` opened 2 or more \
          children, action `stories.open` opened 2 or more children}: no outcome is legitimate, no \

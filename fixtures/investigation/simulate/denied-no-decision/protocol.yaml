@@ -1,0 +1,42 @@
+format: protocol/1
+
+protocol:
+  id: simulate.denied.no-decision
+  revision: 1
+  description: Approve a post under authority; the one decision counts only once the post is approved, so after a denial no decision ends the case.
+
+artifacts:
+  post:
+    description: The post being approved.
+
+evidence_kinds:
+  approval:
+    description: A person's approval of the post.
+
+claims:
+  post.approved:
+    description: The post has been approved.
+    true_when:
+      evidence:
+        kind: approval
+
+actions:
+  approve:
+    description: Approve the post, under authority.
+    requires:
+      - capability: owner.approve
+    may_produce:
+      - evidence: approval
+
+outcomes:
+  approved:
+    description: The post is approved.
+    requires:
+      claim: post.approved
+
+  retracted:
+    description: An approved post is retracted by an explicit decision.
+    requires:
+      decision: retract
+      when:
+        claim: post.approved
