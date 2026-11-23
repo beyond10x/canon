@@ -138,6 +138,11 @@ fn generate_under_a_umask_that_masks_the_owner_read_bit_writes_as_0_12_0_did() {
         (Some(0), ""),
         "umask 0477, absent --out"
     );
+    for dir in [work.join("absent"), out.clone()] {
+        let mode = std::fs::metadata(&dir).expect("there").permissions().mode() & 0o7777;
+        assert_eq!(mode, 0o300, "{} has mode {mode:o}", dir.display());
+    }
+    make_removable(&work);
     assert_eq!(entries(&out), sorted);
     make_removable(&work);
 }

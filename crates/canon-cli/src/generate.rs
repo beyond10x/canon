@@ -17,7 +17,9 @@ use crate::{REJECTED, read_text, report, unreadable};
 /// `--out` is created with any missing parents when absent, or an existing empty one (or a
 /// symbolic link to one) is written into as it is, keeping its mode, owner and inode. The files
 /// are written into a private directory of the run inside `--out` and moved into place only when
-/// every one is written. On failure, nothing this run created is left, and nothing else is removed:
+/// every one is written; that directory is written through the handle the run opened on it, never
+/// through what another process later puts at its path, and on a filesystem without hard links each
+/// file is written in place instead. On failure, nothing this run created is left, and nothing else is removed:
 /// a file or directory is removed only while it is still the one this run made there.
 /// A protocol path that resolves outside the working directory, a protocol that does not parse, has
 /// imports (naming its first) or does not compile, a refused generation and an output directory
@@ -85,11 +87,13 @@ pub(crate) fn run(path: &Path, out: &Path) -> ExitCode {
     };
 
     let absent = match std::fs::read_dir(out) {
-        Ok(mut entries) => {
-            if entries.next().is_some() {
+        Ok(entries) => {
+            let entries: Vec<_> = entries.collect();
+            if !entries.is_empty() {
                 eprintln!(
-                    "error[out-not-empty]: {}: the output directory is not empty",
-                    model::one_line(&out.display().to_string())
+                    "error[out-not-empty]: {}: the output directory is not empty{}",
+                    model::one_line(&out.display().to_string()),
+                    holds(&entries)
                 );
                 return ExitCode::from(REJECTED);
             }
@@ -118,6 +122,29 @@ pub(crate) fn run(path: &Path, out: &Path) -> ExitCode {
     );
     ExitCode::SUCCESS
 }
+
+/// `: it holds `<name>``: the first entry of a non-empty `--out` by name, said to be the staging
+/// directory of a stopped run when its name is one; empty when no entry's name can be read.
+fn holds(entries: &[std::io::Result<std::fs::DirEntry>]) -> String {
+    let Some(name) = entries
+        .iter()
+        .filter_map(|entry| entry.as_ref().ok())
+        .map(std::fs::DirEntry::file_name)
+        .min()
+    else {
+        return String::new();
+    };
+    let name = name.to_string_lossy();
+    let left = if name.starts_with(STAGING_PREFIX) {
+        ", the staging directory of a `canon generate` run that was stopped"
+    } else {
+        ""
+    };
+    format!(": it holds `{}`{left}", model::one_line(&name))
+}
+
+/// The start of the name of a run's staging directory, `.canon-generate-<pid>-<n>`.
+const STAGING_PREFIX: &str = ".canon-generate-";
 
 /// Writes the scenarios to `out`, creating it with any missing parents when `absent`. Each file is
 /// written first into a private directory of this run inside `out` (so on the same filesystem,
@@ -178,7 +205,8 @@ fn write_out_with(
 
 /// What a file or directory this run made is: compared with what is at its path before removing it.
 /// A directory is the same while its device and inode are; a file, while its device, inode, length
-/// and modification time are.
+/// and modification time are. The owner is kept to tell the run's own staging directory from one
+/// another user put in its place.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Identity {
     directory: bool,
@@ -186,6 +214,8 @@ struct Identity {
     device: u64,
     #[cfg(unix)]
     inode: u64,
+    #[cfg(unix)]
+    owner: u32,
     len: u64,
     modified: Option<std::time::SystemTime>,
 }
@@ -201,6 +231,8 @@ impl Identity {
             device: metadata.dev(),
             #[cfg(unix)]
             inode: metadata.ino(),
+            #[cfg(unix)]
+            owner: metadata.uid(),
             // A directory's length and time change with its entries.
             len: if directory { 0 } else { metadata.len() },
             modified: if directory {
@@ -235,44 +267,97 @@ struct Made {
     /// Each file written into the staging directory. Its name there keeps its inode while the run
     /// lasts.
     staged: Vec<(PathBuf, Identity)>,
-    /// Each file moved into `--out`, with the identity of the staged file it is a link to.
+    /// Each file moved into `--out`, with the identity of the staged file it is a link to, or of
+    /// the file written in place where the filesystem has no hard links.
     placed: Vec<(PathBuf, Identity)>,
     handles: Vec<std::fs::File>,
 }
 
 impl Made {
     /// Records the directory just made at `path`, as the staging directory or as one made for
-    /// `--out`, and opens it. When it cannot be opened, it is still recorded when its identity can
-    /// be read, and the error is returned.
+    /// `--out`, with the identity of what is there right after the `mkdir`, not followed when a
+    /// symbolic link, and opens it without following a symbolic link. Refuses when what is there
+    /// is not a directory or what is opened is not the directory recorded: another process put
+    /// something else at `path`. `made` runs between the two.
     fn directory(
         &mut self,
         path: &Path,
         staging: bool,
         made: &mut dyn FnMut(&Path),
     ) -> std::io::Result<()> {
+        let found = std::fs::symlink_metadata(path)?;
+        if !found.is_dir() {
+            return Err(replaced(path));
+        }
+        let identity = Identity::of(&found);
+        let recorded = (path.to_path_buf(), identity.clone());
+        if staging {
+            self.staging = Some(recorded);
+        } else {
+            self.directories.push(recorded);
+        }
         made(path);
-        let opened = std::fs::File::open(path).and_then(|handle| Ok((handle.metadata()?, handle)));
-        let (identity, failed) = match opened {
-            Ok((metadata, handle)) => {
-                self.handles.push(handle);
-                (Some(Identity::of(&metadata)), None)
-            }
-            Err(error) => (
-                std::fs::symlink_metadata(path)
-                    .ok()
-                    .map(|metadata| Identity::of(&metadata)),
-                Some(error),
-            ),
+        let handle = match open_directory(path, true) {
+            Ok(handle) => handle,
+            Err(_) if !identity.is_at(path) => return Err(replaced(path)),
+            Err(error) => return Err(error),
         };
-        if let Some(identity) = identity {
-            let made = (path.to_path_buf(), identity);
-            if staging {
-                self.staging = Some(made);
-            } else {
-                self.directories.push(made);
+        if Identity::of(&handle.metadata()?) != identity {
+            return Err(replaced(path));
+        }
+        self.handles.push(handle);
+        Ok(())
+    }
+
+    /// Makes the staging directory, opened last, private (mode 0700, which the umask narrowed at
+    /// creation) through its handle, and returns how its entries are reached: through the handle
+    /// where the platform can name a directory by its handle, else by its path, checked before
+    /// each use. Fails unless the user of this run owns the directory.
+    fn private(&mut self) -> std::io::Result<Entries> {
+        let (path, identity) = self
+            .staging
+            .clone()
+            .expect("the staging directory is recorded");
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::fd::AsRawFd as _;
+            use std::os::unix::fs::PermissionsExt as _;
+            let handle = self.handles.last().expect("the staging directory is open");
+            // The directory itself, whatever is at its path now.
+            let held = PathBuf::from(format!("/proc/self/fd/{}", handle.as_raw_fd()));
+            if std::fs::metadata(&held)
+                .is_ok_and(|now| now.is_dir() && Identity::of(&now) == identity)
+            {
+                // A change of mode fails unless this user owns the directory.
+                std::fs::set_permissions(&held, std::fs::Permissions::from_mode(0o700))?;
+                return Ok(Entries::Held(held, identity));
             }
         }
-        failed.map_or(Ok(()), Err)
+        // Elsewhere, and where `/proc` is not mounted: a handle that can change the mode, which
+        // reads the directory, so a umask that masks the owner's read bit fails the run here.
+        let handle = open_directory(&path, false).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::PermissionDenied {
+                std::io::Error::new(
+                    error.kind(),
+                    format!(
+                        "{error}: the staging directory of this run cannot be read, as the \
+                         umask of this process masks the owner's read permission"
+                    ),
+                )
+            } else {
+                error
+            }
+        })?;
+        if Identity::of(&handle.metadata()?) != identity {
+            return Err(replaced(&path));
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            handle.set_permissions(std::fs::Permissions::from_mode(0o700))?;
+        }
+        self.handles.push(handle);
+        Ok(Entries::Checked(path, identity))
     }
 
     /// Removes the staged names, last first, and then the staging directory, each only while it is
@@ -341,44 +426,177 @@ fn write_all(
             }
         }
     }
-    // A failure of the staging directory names `--out`: the staging name is the run's own.
-    let staging = create_staging(out).map_err(|error| (out.to_path_buf(), error))?;
+    // A run that cannot make its staging directory in `--out` could not have written its first file
+    // there either: the failure names that file, as 0.12.0, which wrote into `--out`, named it.
+    let first = scenarios
+        .first()
+        .map_or_else(|| out.to_path_buf(), |scenario| out.join(&scenario.file));
+    let staging = create_staging(out).map_err(|error| (first, error))?;
+    // Any other failure of the staging directory names `--out`: the staging name is the run's own.
+    let at_out = |error: std::io::Error| (out.to_path_buf(), error);
     made.directory(&staging, true, hooks.staging_made)
-        .map_err(|error| (out.to_path_buf(), error))?;
+        .map_err(at_out)?;
+    let entries = made.private().map_err(at_out)?;
     (hooks.staging_open)(&staging);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt as _;
-        // The mode asked for at creation is narrowed by the umask; this is the one asked for.
-        let handle = made.handles.last().expect("the staging directory is open");
-        handle
-            .set_permissions(std::fs::Permissions::from_mode(0o700))
-            .map_err(|error| (out.to_path_buf(), error))?;
-    }
     for scenario in scenarios {
         // A failure names the file as it would be in `--out`.
         let failed = |error: std::io::Error| (out.join(&scenario.file), error);
-        let path = staging.join(&scenario.file);
-        let mut file = std::fs::OpenOptions::new()
+        let path = entries.join(&scenario.file).map_err(at_out)?;
+        let file = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&path)
             .map_err(failed)?;
-        file.write_all(scenario.text.as_bytes()).map_err(failed)?;
-        let identity = file
-            .metadata()
-            .map(|metadata| Identity::of(&metadata))
-            .map_err(failed)?;
-        made.staged.push((path, identity));
+        let created = Identity::of(&file.metadata().map_err(failed)?);
+        made.staged.push((path, created.clone()));
+        entries.owns(&created).map_err(at_out)?;
+        write_recorded(file, &scenario.text, &mut made.staged).map_err(failed)?;
     }
-    for (scenario, (staged, identity)) in scenarios.iter().zip(&made.staged) {
+    let staged = made.staged.clone();
+    for (scenario, (staged, identity)) in scenarios.iter().zip(staged) {
         let path = out.join(&scenario.file);
+        let failed = |error: std::io::Error| (path.clone(), error);
         // A hard link fails when the name is taken: nothing another writer put there is replaced.
-        (hooks.link)(staged, &path).map_err(|error| (path.clone(), error))?;
-        made.placed.push((path, identity.clone()));
+        match (hooks.link)(&staged, &path) {
+            Ok(()) => made.placed.push((path, identity)),
+            // A filesystem without hard links: the file is written in place, as 0.12.0 wrote it,
+            // never over one that is there.
+            Err(error) if links_unsupported(&error) => {
+                let file = std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&path)
+                    .map_err(failed)?;
+                let created = Identity::of(&file.metadata().map_err(failed)?);
+                made.placed.push((path.clone(), created));
+                write_recorded(file, &scenario.text, &mut made.placed).map_err(failed)?;
+            }
+            Err(error) => return Err(failed(error)),
+        }
     }
-    made.remove_staging()
-        .map_err(|error| (out.to_path_buf(), error))
+    made.remove_staging().map_err(at_out)
+}
+
+/// Writes `text` to `file`, just created and recorded last in `recorded`, and records its identity
+/// after the write, also when the write fails, so the rollback still knows the file as the run's.
+fn write_recorded(
+    mut file: std::fs::File,
+    text: &str,
+    recorded: &mut [(PathBuf, Identity)],
+) -> std::io::Result<()> {
+    let wrote = file.write_all(text.as_bytes());
+    let identity = Identity::of(&file.metadata()?);
+    if let Some((_, last)) = recorded.last_mut() {
+        *last = identity;
+    }
+    wrote
+}
+
+/// How the files of the staging directory are reached.
+enum Entries {
+    /// Through the open directory itself (`/proc/self/fd/<fd>`): no lookup of the staging path
+    /// remains, so whatever another process puts at that path, the run writes only in its own
+    /// directory.
+    #[cfg(target_os = "linux")]
+    Held(PathBuf, Identity),
+    /// By the staging path, checked to be still the run's directory before each use.
+    Checked(PathBuf, Identity),
+}
+
+impl Entries {
+    /// The path of `name` in the staging directory.
+    fn join(&self, name: &str) -> std::io::Result<PathBuf> {
+        match self {
+            #[cfg(target_os = "linux")]
+            Entries::Held(dir, _) => Ok(dir.join(name)),
+            Entries::Checked(dir, identity) => {
+                if identity.is_at(dir) {
+                    Ok(dir.join(name))
+                } else {
+                    Err(replaced(dir))
+                }
+            }
+        }
+    }
+
+    /// Refuses when the staging directory is not owned by the user `created`, a file this run just
+    /// created in it, is owned by: a directory of another user put in its place.
+    fn owns(&self, created: &Identity) -> std::io::Result<()> {
+        let (dir, identity) = match self {
+            #[cfg(target_os = "linux")]
+            Entries::Held(dir, identity) => (dir, identity),
+            Entries::Checked(dir, identity) => (dir, identity),
+        };
+        #[cfg(unix)]
+        if identity.owner != created.owner {
+            return Err(std::io::Error::other(format!(
+                "`{}` is not owned by the user that runs canon generate: another process put it \
+                 in place of the staging directory of this run",
+                model::one_line(&name_of(dir))
+            )));
+        }
+        #[cfg(not(unix))]
+        let _ = (dir, identity, created);
+        Ok(())
+    }
+}
+
+/// The error of a directory this run made at `path` that is no longer there: another process put
+/// something else in its place.
+fn replaced(path: &Path) -> std::io::Error {
+    std::io::Error::other(format!(
+        "`{}` is no longer the directory this run made there: another process replaced it",
+        model::one_line(&name_of(path))
+    ))
+}
+
+/// The last component of `path`, or all of it.
+fn name_of(path: &Path) -> String {
+    path.file_name()
+        .unwrap_or(path.as_os_str())
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// Opens the directory at `path`, not following a symbolic link there. `path_only` asks, on Linux,
+/// for a handle that only names the directory (`O_PATH`): it needs no read permission, which a
+/// umask may have taken from the owner of a directory this run made.
+fn open_directory(path: &Path, path_only: bool) -> std::io::Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        #[cfg(target_os = "linux")]
+        let only = if path_only { libc::O_PATH } else { 0 };
+        #[cfg(not(target_os = "linux"))]
+        let only = {
+            let _ = path_only;
+            0
+        };
+        options.custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | only);
+    }
+    #[cfg(not(unix))]
+    let _ = path_only;
+    options.open(path)
+}
+
+/// Whether a link call failed because the filesystem has no hard links: `EPERM` (vfat, exFAT),
+/// `EOPNOTSUPP` or `ENOTSUP`, and `EXDEV` (some FUSE mounts).
+fn links_unsupported(error: &std::io::Error) -> bool {
+    #[cfg(unix)]
+    {
+        error.raw_os_error().is_some_and(|code| {
+            [libc::EPERM, libc::EOPNOTSUPP, libc::ENOTSUP, libc::EXDEV].contains(&code)
+        })
+    }
+    #[cfg(not(unix))]
+    {
+        matches!(
+            error.kind(),
+            std::io::ErrorKind::Unsupported | std::io::ErrorKind::CrossesDevices
+        )
+    }
 }
 
 /// Creates the private staging directory of this run in `out`: `.canon-generate-<pid>-<n>`, with
@@ -393,7 +611,7 @@ fn create_staging(out: &Path) -> std::io::Result<PathBuf> {
     let pid = std::process::id();
     let mut attempt = 0u32;
     loop {
-        let path = out.join(format!(".canon-generate-{pid}-{attempt}"));
+        let path = out.join(format!("{STAGING_PREFIX}{pid}-{attempt}"));
         match builder.create(&path) {
             Ok(()) => return Ok(path),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists && attempt < 1000 => {
