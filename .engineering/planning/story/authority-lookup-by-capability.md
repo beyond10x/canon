@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:authority-lookup-by-capability
 kind: story
-status: active
+status: implemented
 title: authority lookup reads only the grants of the requested capability
 tags:
 - from-finding
@@ -12,10 +12,11 @@ relations:
 scope:
 - confidence: cited
   path: crates/canon/src/eval/authority.rs
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-22T21:20:32Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
 - {from: "proposed", to: "active", at: "2026-11-22T21:20:33Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
+- {from: "active", to: "implemented", at: "2026-11-23T03:03:16Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
 ---
 ## Outcome
 

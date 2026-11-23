@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:approvals-bound-to-evidence-content
 kind: story
-status: active
+status: implemented
 title: a persisted approval stops holding when the evidence behind its ID changed, or the immutability requirement is documented and pinned
 tags:
 - from-finding
@@ -14,10 +14,11 @@ scope:
   path: crates/canon/src/eval/decisions.rs
 - confidence: cited
   path: crates/canon/src/eval/grounds.rs
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-22T21:20:34Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
 - {from: "proposed", to: "active", at: "2026-11-22T21:20:34Z", actor: "human:timo", revision: 5, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
+- {from: "active", to: "implemented", at: "2026-11-23T03:03:17Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
 ---
 ## Outcome
 

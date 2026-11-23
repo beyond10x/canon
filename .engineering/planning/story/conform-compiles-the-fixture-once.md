@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:conform-compiles-the-fixture-once
 kind: story
-status: active
+status: implemented
 title: canon conform compiles a scenario's fixture once, not once per step
 tags:
 - from-finding
@@ -12,10 +12,11 @@ relations:
 scope:
 - confidence: cited
   path: crates/canon/src/conform/mod.rs
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-22T21:20:31Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
 - {from: "proposed", to: "active", at: "2026-11-22T21:20:31Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
+- {from: "active", to: "implemented", at: "2026-11-23T03:03:14Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
 ---
 ## Outcome
 

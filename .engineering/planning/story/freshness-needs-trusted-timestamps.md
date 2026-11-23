@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:freshness-needs-trusted-timestamps
 kind: story
-status: active
+status: implemented
 title: canon evaluate has an opt-in strict freshness mode for undated, future-dated and missing-at evidence
 tags:
 - from-finding
@@ -18,10 +18,11 @@ scope:
   path: crates/canon/src/eval/mod.rs
 - confidence: cited
   path: ess/domains/cli.yaml
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-22T21:20:33Z", actor: "human:timo", revision: 6, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
 - {from: "proposed", to: "active", at: "2026-11-22T21:20:33Z", actor: "human:timo", revision: 7, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
+- {from: "active", to: "implemented", at: "2026-11-23T03:03:16Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
 ---
 ## Outcome
 

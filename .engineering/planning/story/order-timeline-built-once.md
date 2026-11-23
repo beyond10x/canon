@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:order-timeline-built-once
 kind: story
-status: active
+status: implemented
 title: canon evaluate builds the record timeline once per evaluation, not per chronology predicate
 tags:
 - from-finding
@@ -12,10 +12,11 @@ relations:
 scope:
 - confidence: cited
   path: crates/canon/src/eval/order.rs
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-22T21:20:32Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
 - {from: "proposed", to: "active", at: "2026-11-22T21:20:32Z", actor: "human:timo", revision: 4, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
+- {from: "active", to: "implemented", at: "2026-11-23T03:03:15Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
 ---
 ## Outcome
 
