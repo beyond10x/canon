@@ -110,9 +110,9 @@ mod review_outcome_reasons_docs;
 mod review_properties;
 mod review_refusal_naming;
 mod review_w12_approval_docs;
-mod review_w12_strict_order;
 mod source_model;
 mod strict_freshness;
+mod strict_order_forms_read_trusted_records;
 mod unsafe_confined;
 
 /// Helpers shared by the modules above, holding no test of their own.
