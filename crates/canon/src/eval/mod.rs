@@ -591,7 +591,9 @@ fn decide(
         let stage = binding::exclude(ir, case, &applicable)?;
         set_aside(&mut applicable, &mut excluded, stage);
         let stage = freshness::exclude(ir, case, &applicable, at.as_ref())?;
-        freshness::refuse_untrusted(ir, &applicable, at.as_ref(), strict.as_ref())?;
+        // The strict mode reads what the order forms read, every record the evidence check
+        // accepted, not only what revision binding left.
+        freshness::refuse_untrusted(ir, evidence, at.as_ref(), strict.as_ref())?;
         set_aside(&mut applicable, &mut excluded, stage);
         let invalidated = invalidation::exclude(ir, case, &applicable)?;
 

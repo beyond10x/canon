@@ -41,8 +41,9 @@
 //! decisions are given in does not change the result and no principal who decided is dropped
 //! (design § 37).
 //!
-//! A ground evidence id is compared by id, not by the contents of the record given under it:
-//! evidence IDs must be immutable once an approval cites them (`grounds.rs`).
+//! A ground evidence id is checked by id and by the fields that decide whether the record given
+//! under it is applicable, not by the rest of its contents: evidence IDs must be immutable once an
+//! approval cites them (`grounds.rs`).
 
 use std::collections::BTreeSet;
 

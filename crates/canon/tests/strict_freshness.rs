@@ -247,21 +247,42 @@ fn strict_changes_nothing_where_no_kind_has_max_age_or_every_record_is_dated() {
     assert!(decision.contains("\"reason\": \"expired\""), "{decision}");
 }
 
-/// The strict mode reads the records the freshness stage sees: one revision binding already
-/// excluded does not apply, so it is not refused.
+/// The strict mode reads every record the evidence check accepted, what the order forms read
+/// (`strict_order_forms_read_trusted_records.rs`), so a record revision binding excluded is
+/// refused as one that applies is, in a protocol with no order form too; by default it is
+/// excluded as `revision_mismatch`, as before.
 #[test]
-fn strict_does_not_read_a_record_revision_binding_excluded() {
+fn strict_refuses_a_record_revision_binding_excluded() {
     let ir = compiled();
-    let evidence = [
-        record("e1", "fresh", "r0", None),
-        record("e2", "fresh", "r0", Some("2030-01-01T00:00:00Z")),
-    ];
-    let decision = decide(&ir, &evidence, Some(AT), Some("0s")).expect("decides");
-    assert_eq!(decision, decide_by_default(&ir, &evidence, Some(AT)));
-    assert!(
-        decision.contains("\"reason\": \"revision_mismatch\""),
-        "{decision}"
+    let undated = [record("e1", "fresh", "r0", None)];
+    assert_eq!(
+        refused(decide(&ir, &undated, Some(AT), Some("0s"))),
+        (
+            "undated-evidence",
+            "evidence `e1` gives no observed_at, and its kind `fresh` has max_age `1h`: strict \
+             freshness needs the time it was observed"
+                .to_owned(),
+            vec!["e1".to_owned()]
+        )
     );
+    let future = [record("e2", "fresh", "r0", Some("2030-01-01T00:00:00Z"))];
+    assert_eq!(
+        refused(decide(&ir, &future, Some(AT), Some("0s"))),
+        (
+            "future-evidence",
+            "evidence `e2` observed_at `2030-01-01T00:00:00Z` is later than the evaluation \
+             instant `2026-10-04T12:00:00Z` by 102340800 s, more than the allowed clock skew `0s`"
+                .to_owned(),
+            vec!["e2".to_owned()]
+        )
+    );
+    for evidence in [&undated, &future] {
+        let decision = decide_by_default(&ir, evidence, Some(AT));
+        assert!(
+            decision.contains("\"reason\": \"revision_mismatch\""),
+            "{decision}"
+        );
+    }
 }
 
 #[test]

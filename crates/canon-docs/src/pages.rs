@@ -203,14 +203,9 @@ fn cli() -> String {
             .get_arguments()
             .filter(|arg| !matches!(arg.get_id().as_str(), "help" | "version"))
             .map(|arg| {
-                let value = arg
-                    .get_value_names()
-                    .and_then(|names| names.first().map(ToString::to_string))
-                    .unwrap_or_else(|| arg.get_id().as_str().to_uppercase());
-                let written = match arg.get_long() {
-                    Some(long) => format!("--{long} <{value}>"),
-                    None => format!("<{value}>"),
-                };
+                // As the help's option lines write it (clap's rendering, plain): an optional
+                // value is `[<VALUE>]`, a flag has none.
+                let written = arg.to_string();
                 let defaults: Vec<String> = arg
                     .get_default_values()
                     .iter()

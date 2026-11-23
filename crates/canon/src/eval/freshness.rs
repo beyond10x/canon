@@ -32,16 +32,18 @@
 //! - `missing-instant` when no instant is given and the protocol declares a kind with a `max_age`,
 //!   naming the first such kind in identifier order (`` strict freshness needs the evaluation
 //!   instant (`--at`): evidence kind `fresh` has max_age `1h` ``);
-//! - then, for each record this stage sees (what revision binding left) of a kind with a
-//!   `max_age`, in the order given: `undated-evidence` when it gives no `observed_at`, and
+//! - then, for each record the evidence check accepted of a kind with a `max_age`, in the order
+//!   given: `undated-evidence` when it gives no `observed_at`, and
 //!   `future-evidence` when its `observed_at` is later than the instant by more than the skew,
 //!   counted in whole seconds as expiry is (`` evidence `e1` observed_at `2026-10-04T12:00:30Z`
 //!   is later than the evaluation instant `2026-10-04T12:00:00Z` by 30 s, more than the allowed
 //!   clock skew `0s` ``). Each names and cites the record.
 //!
-//! A protocol with no `max_age`, a record of a kind without one and a record revision binding
-//! excluded are not read by the strict mode; where it refuses nothing, the decision is the
-//! default's, byte for byte.
+//! The strict mode reads every accepted record, not only those this stage sees, because the order
+//! forms read every accepted record (`order.rs`): a record revision binding excluded still places
+//! itself in the history by its `observed_at`, so an untrusted one could decide an order form. A
+//! protocol with no `max_age` and a record of a kind without one are not read by the strict mode;
+//! where it refuses nothing, the decision is the default's, byte for byte.
 
 use std::collections::BTreeMap;
 
@@ -162,13 +164,14 @@ pub(super) fn strict<'a>(
     }))
 }
 
-/// The strict mode's refusals over `evidence`, the records this stage saw, once [`exclude`] has
-/// read every `max_age` of `ir`, as the module docs give them: `missing-instant`, then each
-/// record's `undated-evidence` or `future-evidence` in the order given. Without the strict mode it
-/// refuses nothing.
+/// The strict mode's refusals over `evidence`, every record the evidence check accepted (what the
+/// order forms read, the records revision binding excluded included), once [`exclude`] has read
+/// every `max_age` of `ir`, as the module docs give them: `missing-instant`, then each record's
+/// `undated-evidence` or `future-evidence` in the order given. Without the strict mode it refuses
+/// nothing.
 pub(super) fn refuse_untrusted(
     ir: &Ir,
-    evidence: &[&EvidenceRecord],
+    evidence: &[EvidenceRecord],
     at: Option<&Instant>,
     strict: Option<&Strict<'_>>,
 ) -> Result<(), Refusal> {
