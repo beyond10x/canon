@@ -48,6 +48,7 @@ mod conform_requirements;
 mod conform_run;
 mod decision_condition;
 mod decision_outcomes;
+mod documented_guard_limits;
 mod ess_commands_match;
 mod evaluate_help_evidence_ids;
 mod evaluator_skeleton;
