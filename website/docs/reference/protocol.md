@@ -89,6 +89,7 @@ has and what evidence it may produce (design § 10).
 |---|---|---|---|
 | `description` | text | optional | — |
 | `precondition` | [`Predicate`](#predicate) | optional | — |
+| `runs_only_when` | [`Predicate`](#predicate) | optional | An assertion about when the action runs (story:ordering-guards-provable-by-check): it is `admissible` or `approval-required` only in a state where this predicate is `true`. Absent: no assertion. The grammar and reference checks of `precondition`; `all: []`, true in every state, is refused (`vacuous-runs-only-when`). No evaluation reads it: only `canon check` does, proving it in every state (`ordering-guard-failed`), per state and not along an order of actions, so a guard that holds only through the preconditions of earlier actions is proved only when the action's own precondition names it. |
 | `requires` | list of [`CapabilityRequirement`](#capabilityrequirement) | optional | — |
 | `effect` | [identifier](#identifiers) (`EffectClass`) | optional | — |
 | `may_produce` | list of [`EvidenceProduction`](#evidenceproduction) | optional | — |

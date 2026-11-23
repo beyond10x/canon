@@ -133,7 +133,11 @@ pub enum Command {
     /// reaches, actions whose precondition holds in no state, claims, obligations, preconditions and
     /// outcome requirements that read evidence no action produces and no other protocol supplies,
     /// outcomes that rest on evidence an authority-requiring action may produce yet hold without
-    /// any authority decision, and each declared property that fails, with a counterexample. An
+    /// any authority decision, each declared property that fails, with a counterexample, and each
+    /// action that declares `runs_only_when` and is admissible or approval-required in a state
+    /// where that predicate is not true (`ordering-guard-failed`, last), with that state: the
+    /// guard is proved per state, not along an order of actions, and the summary counts the states
+    /// without the guards. An
     /// evidence kind that declares `supplied_by` counts as produced without authority and stays
     /// governed when an action that requires a capability may also produce it, so an outcome a
     /// supplied record alone makes legitimate is reported as a bypass. A state is a set of evidence records,
@@ -164,7 +168,7 @@ pub enum Command {
     /// evidence, authority, decisions and case inputs it reads (its slice), with the findings and
     /// witness states the whole state space gives, and the summary counts the whole state space; a
     /// check in which one slice holds more than 65536 states is refused, naming that outcome,
-    /// action or property and the slice's dimensions, and a whole state space too large to count
+    /// action, property or `runs_only_when` and the slice's dimensions, and a whole state space too large to count
     /// is refused naming the whole state space and its dimensions.
     Check {
         /// The protocol document to check.

@@ -30,12 +30,13 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
 - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
   evidence match without a result has `"result": null`; a claim test without `is` has
   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-  true; absent lists and sections are empty. The eighteen exceptions are an artifact's
+  true; absent lists and sections are empty. The nineteen exceptions are an artifact's
   `revised_by`, an evidence kind's `max_age` and its `supplied_by`, the `when` of an outcome's
   decision requirement, the `subject` of an evidence match, an order form or a
   `children` form, an evidence match's `independent_on`, an obligation's `applicable_when`, an
-  action's `arguments`, an action's `case_open`, an action's `author` and its `revises`, an
-  action's `records_together`, the
+  action's `runs_only_when` (story:ordering-guards-provable-by-check; normalized like every
+  predicate, and read by `canon check` alone), an action's `arguments`, an action's
+  `case_open`, an action's `author` and its `revises`, an action's `records_together`, the
   `decided_by` of an evidence kind an action may produce, the `scope` of a capability
   requirement, the `revision` of a `children` form, the `invalidation` section, the `case`
   section and the `independence_dimensions` section: each written only when it is declared (a

@@ -266,6 +266,55 @@ No check reads them yet; checks that do are planned.
 
 :::
 
+### Ordering guards
+
+`runs_only_when` on an action asserts when it may run: the action is `admissible` or
+`approval-required` only in a state where this predicate is `TRUE`. It is written like a
+precondition, and `canon validate` checks its references the same way, naming it (an undeclared
+claim is `` action `report.open` runs_only_when references claim `x`, which is not declared ``).
+`all: []`, which is true in every state, asserts nothing and is refused as
+`vacuous-runs-only-when`.
+
+```yaml
+actions:
+  report.open:
+    precondition:
+      all:
+        - {claim: store.committed}
+        - {claim: report.opened, is: unknown}
+    runs_only_when: {claim: store.committed}
+```
+
+The field is an assertion, not a condition: `canon evaluate`, `canon simulate` and `canon generate`
+never read it, and give the same output with or without it. `canon check` proves it in every state
+and reports each broken guard, after every other finding, with the state of least weight in which
+the action runs while the guard is not `TRUE`:
+
+```text
+ordering-guard-failed: action `publish_finding` is approval-required in state {evidence `falsification_attempt`}, where its runs_only_when is not true
+```
+
+`UNKNOWN` is not `TRUE`, so an action that can run while the guard is unknown breaks it. An action
+that is `blocked`, by its precondition or by a denied capability, does not run.
+
+The check proves the guard per state, not along an order of actions. Every combination of records
+is a state, whether or not a sequence of actions reaches it, so a guard that holds only because
+the actions that ran earlier never produced some record is reported as broken. Name the guard in
+the action's own precondition, as above, and the check proves it.
+
+`canon compile` writes `"runs_only_when"` only for an action that declares it, so the `canon-ir/1`
+of every protocol without it is unchanged. `canon diff` reports the guard introduced, removed or
+changed as `NO SEMANTIC CHANGE`, naming the action. A Canon release before the field existed
+refuses an IR that holds it.
+
+:::shipped[Ordering guards]
+
+On `main` (story:ordering-guards-provable-by-check), not yet in a release: `runs_only_when` in
+`protocol/1` and `canon-ir/1`, its references checked by `canon validate`, and its proof by
+`canon check` (`ordering-guard-failed`).
+
+:::
+
 ## Outcomes
 
 An outcome is a declared terminal interpretation of a case, such as `supported`, `restored` or

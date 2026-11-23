@@ -21,12 +21,13 @@
 //! - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
 //!   evidence match without a result has `"result": null`; a claim test without `is` has
 //!   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-//!   true; absent lists and sections are empty. The eighteen exceptions are an artifact's
+//!   true; absent lists and sections are empty. The nineteen exceptions are an artifact's
 //!   `revised_by`, an evidence kind's `max_age` and its `supplied_by`, the `when` of an outcome's
 //!   decision requirement, the `subject` of an evidence match, an order form or a
 //!   `children` form, an evidence match's `independent_on`, an obligation's `applicable_when`, an
-//!   action's `arguments`, an action's `case_open`, an action's `author` and its `revises`, an
-//!   action's `records_together`, the
+//!   action's `runs_only_when` (story:ordering-guards-provable-by-check; normalized like every
+//!   predicate, and read by `canon check` alone), an action's `arguments`, an action's
+//!   `case_open`, an action's `author` and its `revises`, an action's `records_together`, the
 //!   `decided_by` of an evidence kind an action may produce, the `scope` of a capability
 //!   requirement, the `revision` of a `children` form, the `invalidation` section, the `case`
 //!   section and the `independence_dimensions` section: each written only when it is declared (a
@@ -237,6 +238,10 @@ pub struct Action {
     pub description: Option<String>,
     /// `{"all": []}`, which is true, when the source declares none.
     pub precondition: Predicate,
+    /// The assertion about when the action runs (story:ordering-guards-provable-by-check),
+    /// normalized like every predicate; `None` when the source declares none, and `canon-ir/1`
+    /// then writes no `runs_only_when` key. No evaluation reads it; `canon check` does.
+    pub runs_only_when: Option<Predicate>,
     /// Every capability a requirement names, sorted by capability, each once.
     pub requires: Vec<CapabilityId>,
     /// The scopes a capability is required at, for each capability some requirement names a scope
@@ -352,6 +357,7 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
                 .precondition
                 .as_ref()
                 .map_or(Predicate::All(Vec::new()), normalize),
+            runs_only_when: action.runs_only_when.as_ref().map(normalize),
             requires: unique(
                 action
                     .requires
@@ -874,6 +880,9 @@ impl Ir {
                             ),
                         ));
                     }
+                    if let Some(guard) = &action.runs_only_when {
+                        fields.push(("runs_only_when", predicate_value(guard)));
+                    }
                     if let Some(arguments) = &action.arguments {
                         fields.push(("arguments", Value::json(arguments)));
                     }
@@ -1389,6 +1398,7 @@ mod tests {
         let action = super::Action {
             description: None,
             precondition: Predicate::All(Vec::new()),
+            runs_only_when: None,
             requires: vec![CapabilityId::new("a"), CapabilityId::new("b")],
             scopes: [
                 (CapabilityId::new("b"), Vec::new()),
