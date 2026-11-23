@@ -308,7 +308,8 @@
 //! A slice of more than [`STATE_BOUND`] states (65 536) refuses the whole check as
 //! `state-space-bound`, before any state is evaluated, and nothing else is reported. The refusal
 //! names the first such subject in finding order (each outcome, then each action, then each
-//! property, each in identifier order), the count of its slice, the bound and each dimension of the
+//! property, then each action's `runs_only_when`, each in identifier order), the count of its
+//! slice, the bound and each dimension of the
 //! slice with its number of values: `` protocol `p` revision 1: action `act` reads 98304 states,
 //! more than the bound of 65536: evidence kind `k` 2048, evidence kind `m` 16, capability `c` 3 ``.
 //! A whole product too large to count is refused as before slices existed, naming it: `` protocol
@@ -360,6 +361,11 @@
 //! - `property-failed`: a property whose subject has two statuses in two states that agree on every
 //!   dimension except the evidence dimensions its `independent_of` claim reads (directly or through
 //!   claims). The counterexample is that pair of states.
+//! - `ordering-guard-failed`: an action that declares `runs_only_when` and is `admissible` or
+//!   `approval-required` in a state where that predicate is not `true` (below, "Ordering
+//!   guards"), in identifier order of the actions. The finding names the action, its status there
+//!   and the witness state: `` ordering-guard-failed: action `a` is approval-required in state
+//!   {evidence `k`}, where its runs_only_when is not true ``.
 //!
 //! A witness state is the one of least weight (present records, decided capabilities and taken
 //! decisions; a record weighs one more for each upstream artifact it was observed before the move
@@ -375,6 +381,30 @@
 //! dimension is written with its subject, in a state and in the bound refusal (`` evidence kind
 //! `k3` about `b` 4 ``); an unbound one without, and stands for records about an artifact no match
 //! of its kind names.
+//!
+//! # Ordering guards
+//!
+//! An action's `runs_only_when` (story:ordering-guards-provable-by-check) asserts that it runs,
+//! `admissible` or `approval-required`, only in a state where that predicate is `true`; `unknown`
+//! is not `true`, and an action `blocked`, by its precondition or by a denial, does not run. No
+//! evaluation reads the key, so the check decides each guard apart from the other subjects, after
+//! them, over the space of the protocol in which each guard is one action more, whose
+//! precondition is the guard and which requires nothing (`guards.rs`): that action is `admissible`
+//! exactly where the guard is `true`, read as a precondition is read. That space has the classes,
+//! upstream artifacts and producer profiles the guards read besides every other predicate's, so a
+//! result only a guard names is a class of its own there. Each guard is decided over its own slice
+//! of it, the action's together with its guard's, guards of one slice sharing its enumeration (and,
+//! enumerating the whole product, over the whole product of that space). A slice above the bound
+//! refuses the check as `state-space-bound`, naming `` action `a` runs_only_when `` as the subject,
+//! after every other subject's slice is within it; the guards are held to the depth bound and to
+//! `ordered-child-outcomes` as the protocol is. The summary counts the states of the protocol's
+//! own space, the one it has without any guard, and a protocol without a guard checks as it did
+//! before the key existed.
+//!
+//! The check proves a guard per state, not along an order of actions: every combination of
+//! records is a state, whether or not some order of admissible actions produces it. A guard that
+//! holds only because the actions that ran before kept a record from existing fails in the state
+//! that holds that record; it is proved only when the action's own precondition names the guard.
 //!
 //! # Refusals
 //!
@@ -395,6 +425,7 @@
 //! state with one dimension alone off its least value that can hold a refused record, capability,
 //! decision or case input value, are evaluated first, in the order of the whole product.
 
+mod guards;
 #[cfg(test)]
 mod peak;
 mod properties;
@@ -529,6 +560,14 @@ pub enum Finding {
         /// The subject's other status in its second state, and that state.
         second: (String, String),
     },
+    OrderingGuardFailed {
+        action: ActionId,
+        /// The action's status in the witness state: `admissible` or `approval-required`.
+        status: String,
+        /// The witness state, as a report writes it: the state of least weight in which the
+        /// action runs while its `runs_only_when` is not true.
+        state: String,
+    },
 }
 
 impl Finding {
@@ -540,6 +579,7 @@ impl Finding {
             Finding::UnproducedEvidence { .. } => "unproduced-evidence",
             Finding::AuthorityBypass { .. } => "authority-bypass",
             Finding::PropertyFailed { .. } => "property-failed",
+            Finding::OrderingGuardFailed { .. } => "ordering-guard-failed",
         }
     }
 }
@@ -581,6 +621,15 @@ impl fmt::Display for Finding {
                 first.1,
                 second.0,
                 second.1
+            ),
+            Finding::OrderingGuardFailed {
+                action,
+                status,
+                state,
+            } => write!(
+                f,
+                "action `{}` is {status} in state {state}, where its runs_only_when is not true",
+                one_line(action.as_str())
             ),
         }
     }
@@ -763,16 +812,17 @@ fn check_enumerating(
         properties::validate(ir, properties)?;
     }
     if let Some(kind) = space::ordered_child_outcomes(ir) {
-        return Err(Refusal::new(
-            "ordered-child-outcomes",
-            format!(
-                "protocol `{}` revision {} reads evidence kind `{}` with a `children` form and with \
-                 an order form, which canon check does not cover together",
-                one_line(ir.protocol.id.as_str()),
-                ir.protocol.revision,
-                one_line(kind.as_str())
-            ),
-        ));
+        return Err(ordered_child_outcomes(ir, kind));
+    }
+    // The guards, each lowered to an action of its own (story:ordering-guards-provable-by-check):
+    // held to the same refusals as the protocol, since they read what its predicates may.
+    let lowered = guards::lower(ir);
+    if let Some(lowered) = &lowered {
+        eval::check_depth(&lowered.ir)
+            .map_err(|refusal| Refusal::new(refusal.code(), refusal.to_string()))?;
+        if let Some(kind) = space::ordered_child_outcomes(&lowered.ir) {
+            return Err(ordered_child_outcomes(&lowered.ir, kind));
+        }
     }
     let whole = Space::new(ir);
     let subjects = subjects(ir, &whole, properties);
@@ -802,6 +852,15 @@ fn check_enumerating(
     let covered = match (strategy, whole.size()) {
         (Strategy::Whole, _) | (_, None) => whole_product(ir, &whole)?,
         (_, Some(size)) => size,
+    };
+    // The guards' space and the spaces they are decided over, refused above the bound before any
+    // state is evaluated, after every other subject.
+    let guarded = lowered
+        .as_ref()
+        .map(|lowered| (lowered, Space::new(&lowered.ir)));
+    let guard_plan = match &guarded {
+        Some((lowered, space)) => guards::plan(lowered, space, strategy)?,
+        None => Vec::new(),
     };
 
     // Each space to enumerate, `None` for the whole product, with the subjects decided over it.
@@ -950,6 +1009,9 @@ fn check_enumerating(
             findings.extend(decided.finding.clone());
         }
     }
+    if let Some((lowered, space)) = &guarded {
+        findings.extend(guards::findings(lowered, space, &guard_plan)?);
+    }
     let report = Report {
         protocol: ir.protocol.id.clone(),
         revision: ir.protocol.revision,
@@ -963,6 +1025,21 @@ fn check_enumerating(
         findings,
     };
     Ok((report, kept))
+}
+
+/// The `ordered-child-outcomes` refusal of `ir`, whose `children` form and an order form both read
+/// `kind`.
+fn ordered_child_outcomes(ir: &Ir, kind: &EvidenceKindId) -> Refusal {
+    Refusal::new(
+        "ordered-child-outcomes",
+        format!(
+            "protocol `{}` revision {} reads evidence kind `{}` with a `children` form and with an \
+             order form, which canon check does not cover together",
+            one_line(ir.protocol.id.as_str()),
+            ir.protocol.revision,
+            one_line(kind.as_str())
+        ),
+    )
 }
 
 /// Every subject in finding order, with its slice: each outcome and each action in identifier

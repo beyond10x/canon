@@ -66,7 +66,11 @@
 //!    `case_outcome` for a `children` form; then its applicability predicate, followed likewise by
 //!    every evidence match, order form and `children` form it holds, `evidence-in-applicability`:
 //!    it tests only claim values and case inputs), then those in actions (each action's
-//!    precondition, then each evidence kind it may produce, then each artifact it `revises`
+//!    precondition, then its `runs_only_when` (story:ordering-guards-provable-by-check), whose
+//!    references are checked as the precondition's are, each problem naming `` action `a`
+//!    runs_only_when ``, followed by `vacuous-runs-only-when` when it is `all: []`, true in every
+//!    state, so it asserts nothing, then each evidence kind it may produce, then each artifact it
+//!    `revises`
 //!    (story:judgement-marking), `undeclared-artifact`, once for every listing, in the order
 //!    listed, then the subject of the case it opens, `undeclared-artifact`, then an opening under
 //!    the protocol's own id, `self-opened-case`, then each group of its `records_together`
@@ -164,6 +168,9 @@ pub enum Referrer {
     Claim(ClaimId),
     Obligation(ObligationId),
     Action(ActionId),
+    /// An action's `runs_only_when` (story:ordering-guards-provable-by-check), as distinct from
+    /// its precondition.
+    ActionGuard(ActionId),
     Outcome(OutcomeId),
     InvalidationRule(InvalidationRuleId),
 }
@@ -174,6 +181,9 @@ impl fmt::Display for Referrer {
             Referrer::Claim(id) => write!(f, "claim `{}`", one_line(id.as_str())),
             Referrer::Obligation(id) => write!(f, "obligation `{}`", one_line(id.as_str())),
             Referrer::Action(id) => write!(f, "action `{}`", one_line(id.as_str())),
+            Referrer::ActionGuard(id) => {
+                write!(f, "action `{}` runs_only_when", one_line(id.as_str()))
+            }
             Referrer::Outcome(id) => write!(f, "outcome `{}`", one_line(id.as_str())),
             Referrer::InvalidationRule(id) => {
                 write!(f, "invalidation rule `{}`", one_line(id.as_str()))
@@ -312,6 +322,9 @@ pub enum Problem {
     /// A `children` form lists `open`, which is a running child case's outcome, never a terminal
     /// one: the form is unknown while a child is open.
     OpenChildOutcome { referrer: Referrer },
+    /// An action's `runs_only_when` (story:ordering-guards-provable-by-check) is `all: []`, which
+    /// is true in every state and so asserts nothing.
+    VacuousGuard { action: ActionId },
     /// An action opens a child case under the protocol's own id: a case could then open cases
     /// under its own protocol without end (D206).
     SelfOpenedCase {
@@ -440,6 +453,7 @@ impl Problem {
             Problem::EmptyChildOutcomes { .. } => "empty-child-outcomes",
             Problem::DuplicateChildOutcome { .. } => "duplicate-child-outcome",
             Problem::OpenChildOutcome { .. } => "open-child-outcome",
+            Problem::VacuousGuard { .. } => "vacuous-runs-only-when",
             Problem::SelfOpenedCase { .. } => "self-opened-case",
             Problem::InvalidRecordGroup { .. } => "invalid-record-group",
             Problem::SelfSuppliedEvidence { .. } => "self-supplied-evidence",
@@ -630,6 +644,12 @@ impl fmt::Display for Problem {
             Problem::OpenChildOutcome { referrer } => write!(
                 f,
                 "{referrer} tests the child cases for outcome `{OPEN_OUTCOME}`, which a running child case has, never a terminal one"
+            ),
+            Problem::VacuousGuard { action } => write!(
+                f,
+                "action `{}` runs_only_when is `all: []`, which is true in every state and asserts \
+                 nothing",
+                one_line(action.as_str())
             ),
             Problem::SelfOpenedCase { action, protocol } => write!(
                 f,
@@ -1076,6 +1096,13 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         let referrer = Referrer::Action(id.clone());
         if let Some(precondition) = &action.precondition {
             references(protocol, &index, &referrer, precondition, &mut problems);
+        }
+        if let Some(guard) = &action.runs_only_when {
+            let guarding = Referrer::ActionGuard(id.clone());
+            references(protocol, &index, &guarding, guard, &mut problems);
+            if matches!(guard, Predicate::All(members) if members.is_empty()) {
+                problems.push(Problem::VacuousGuard { action: id.clone() });
+            }
         }
         for production in &action.may_produce {
             if !index.evidence_kinds.contains(&production.evidence) {

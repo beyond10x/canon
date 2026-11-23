@@ -398,6 +398,8 @@ fn action(entry: &Json) -> Shape<Action> {
     Ok(Action {
         description: optional_text(entry, "description")?,
         precondition: Some(predicate(required(entry, "precondition")?)?),
+        // Written only when declared (story:ordering-guards-provable-by-check).
+        runs_only_when: field(entry, "runs_only_when").map(predicate).transpose()?,
         requires,
         effect: optional_text(entry, "effect")?.map(EffectClass::new),
         may_produce,

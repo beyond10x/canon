@@ -243,6 +243,15 @@ pub struct Action {
     pub description: Option<String>,
     #[serde(default, deserialize_with = "present::optional")]
     pub precondition: Option<Predicate>,
+    /// An assertion about when the action runs (story:ordering-guards-provable-by-check): it is
+    /// `admissible` or `approval-required` only in a state where this predicate is `true`. Absent:
+    /// no assertion. The grammar and reference checks of `precondition`; `all: []`, true in every
+    /// state, is refused (`vacuous-runs-only-when`). No evaluation reads it: only `canon check`
+    /// does, proving it in every state (`ordering-guard-failed`), per state and not along an order
+    /// of actions, so a guard that holds only through the preconditions of earlier actions is
+    /// proved only when the action's own precondition names it.
+    #[serde(default, deserialize_with = "present::optional")]
+    pub runs_only_when: Option<Predicate>,
     #[serde(default, deserialize_with = "present::defaulted")]
     pub requires: Vec<CapabilityRequirement>,
     #[serde(default, deserialize_with = "present::optional")]

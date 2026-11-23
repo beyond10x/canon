@@ -426,6 +426,7 @@ fn action(depth: usize, action: &Action) -> String {
     let Action {
         description,
         precondition,
+        runs_only_when,
         requires,
         effect,
         may_produce,
@@ -445,6 +446,13 @@ fn action(depth: usize, action: &Action) -> String {
         &mut members,
         "precondition",
         precondition.as_ref().map(|when| predicate(depth + 1, when)),
+    );
+    put_some(
+        &mut members,
+        "runs_only_when",
+        runs_only_when
+            .as_ref()
+            .map(|when| predicate(depth + 1, when)),
     );
     put_unless_empty(
         &mut members,

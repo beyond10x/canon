@@ -205,7 +205,7 @@ types:
       # writes `"runs_only_when"` only when declared, normalized like every predicate. canon diff
       # reports it introduced, removed or changed as NO SEMANTIC CHANGE, naming the action.
       # read from: .engineering/planning/story/ordering-guards-provable-by-check.md
-      # read from: crates/canon/src/model/mod.rs:246-257
+      # read from: crates/canon/src/model/mod.rs:246-254
       - name: runs_only_when
         type: Optional<canon.protocol.Predicate>
       # read from: crates/canon/src/model/mod.rs:102

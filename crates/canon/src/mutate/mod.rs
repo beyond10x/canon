@@ -32,7 +32,9 @@
 //! forms; an outcome that requires an explicit decision (`requires: {decision: …}`), its `when`
 //! condition included (story:decision-condition); the report names each such outcome as skipped.
 //! Untouched
-//! altogether: artifacts, evidence kinds (their `max_age` and `supplied_by` included), an action's `effect`, `author`,
+//! altogether: artifacts, evidence kinds (their `max_age` and `supplied_by` included), an action's
+//! `runs_only_when` (an assertion only `canon check` reads, which no scenario can fail;
+//! story:ordering-guards-provable-by-check), `effect`, `author`,
 //! `may_produce` (with `decided_by`), `records_together`, `revises`, `arguments` and `case_open`,
 //! invalidation rules, case inputs, independence dimensions, imports, every description, and the
 //! protocol's id and revision.
