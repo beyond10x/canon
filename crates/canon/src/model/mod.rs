@@ -209,6 +209,17 @@ pub struct EvidenceKind {
     /// nothing does.
     #[serde(default, deserialize_with = "present::optional")]
     pub supplied_by: Option<ProtocolId>,
+    /// Whether the case's opener hands in a current record of this kind when it opens the case
+    /// (story:supplied-evidence-required-at-open): `true`, a runner copies one into the case at
+    /// open, or opens nothing; `false`, the default, written by leaving the key out, asks nothing.
+    /// It needs `supplied_by` on the same kind (`at-open-without-supplier`). Canon opens nothing:
+    /// `b10x_canon::eval::missing_at_open` names the required kinds a case lacks, and `canon
+    /// evaluate` and `canon check` read nothing from it. `canon check-set` reports an action of a
+    /// protocol of the set that opens a case under this one and whose precondition does not imply
+    /// a record of the kind (`unsupplied-at-open`); `canon simulate` starts every walk with one
+    /// record of it.
+    #[serde(default, deserialize_with = "present::defaulted")]
+    pub required_at_open: bool,
 }
 
 /// A proposition whose value is established from evidence by its predicate.

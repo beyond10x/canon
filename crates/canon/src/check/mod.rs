@@ -338,7 +338,9 @@
 //!   when an action that requires a capability may also produce it, so `canon check` reports
 //!   `authority-bypass` on an outcome a supplied record alone makes legitimate.
 //!   Production reads no state, so the slices, their sizes and the states are those of the
-//!   protocol without `supplied_by`; it decides only which states witness a bypass.
+//!   protocol without `supplied_by`; it decides only which states witness a bypass. A kind's
+//!   `required_at_open` (story:supplied-evidence-required-at-open) changes none of this: the
+//!   check covers every combination of records, those without a record of the kind included.
 //! - `authority-bypass`: an outcome that reads governed evidence where its presence helps it hold,
 //!   and that is legitimate without authority because of evidence present. Governed evidence is
 //!   each evidence dimension some action that requires a capability may produce: every dimension

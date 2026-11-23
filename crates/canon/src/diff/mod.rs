@@ -24,6 +24,8 @@
 //! | supplier (`supplied_by`) introduced (a record of the kind may then name upstream artifacts the protocol does not declare) | `EXPANSION` |
 //! | supplier removed (such a record is refused again) | `BREAKING` |
 //! | supplier changed to another protocol (a name the runner acts on and nothing resolves, as a changed `case_open` protocol) | `BREAKING` |
+//! | a record of the kind required at open (`required_at_open`) introduced (the opener must hand one in; story:supplied-evidence-required-at-open) | `TIGHTENING` |
+//! | a record of the kind required at open removed | `RELAXATION` |
 //! | an artifact's `revised_by` introduced, removed or replaced (nothing evaluated reads it; story:artifact-revised-by) | `NO SEMANTIC CHANGE` |
 //! | claim added | `EXPANSION` |
 //! | claim removed | `BREAKING` |
@@ -885,15 +887,32 @@ fn evidence_kind(changes: &mut Changes, id: &str, from: &EvidenceKind, to: &Evid
         description: from_description,
         max_age: from_max_age,
         supplied_by: from_supplier,
+        required_at_open: from_at_open,
     } = from;
     let EvidenceKind {
         description: to_description,
         max_age: to_max_age,
         supplied_by: to_supplier,
+        required_at_open: to_at_open,
     } = to;
     changes.description(SECTION, id, from_description, to_description);
     max_age(changes, id, from_max_age, to_max_age);
     supplier(changes, id, from_supplier, to_supplier);
+    match (from_at_open, to_at_open) {
+        (false, true) => changes.push(
+            Category::Tightening,
+            SECTION,
+            id,
+            "required at open introduced".to_owned(),
+        ),
+        (true, false) => changes.push(
+            Category::Relaxation,
+            SECTION,
+            id,
+            "required at open removed".to_owned(),
+        ),
+        _ => {}
+    }
 }
 
 /// An evidence kind's maximum age, introduced, removed or changed.

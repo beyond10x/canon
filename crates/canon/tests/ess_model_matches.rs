@@ -17,7 +17,7 @@
 //!   `newtype` of `T`, read from the macro body; a struct with named fields is a `struct`; an enum
 //!   of unit variants is an `enum`; an enum of one-payload variants is a `union`. A variant's
 //!   specification name is its Rust name in snake case.
-//! * `String` is `String`; `i64` is `Integer`; `u64` is an `Integer` field whose owner states the
+//! * `String` is `String`; `bool` is `Boolean`; `i64` is `Integer`; `u64` is an `Integer` field whose owner states the
 //!   invariant `<field> >= 0`, or one [`NON_NEGATIVE`] lists; `Option<T>` is `Optional<T>`,
 //!   `Vec<T>` is `List<T>`, `Box<T>` is `T`, `Declarations<K, V>` is `Map<K, V>` and the model's
 //!   `Json` is `Json`. Any other Rust type matches nothing.
@@ -857,6 +857,9 @@ fn rust_ty(text: &str, scope: &Scope) -> Ty {
     }
     if scope.is_prelude(text, "u64") {
         return non_negative_integer();
+    }
+    if scope.is_prelude(text, "bool") {
+        return Ty::Primitive("boolean".to_owned());
     }
     let is_path = text
         .split("::")

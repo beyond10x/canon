@@ -21,8 +21,10 @@
 //! - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
 //!   evidence match without a result has `"result": null`; a claim test without `is` has
 //!   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-//!   true; absent lists and sections are empty. The nineteen exceptions are an artifact's
-//!   `revised_by`, an evidence kind's `max_age` and its `supplied_by`, the `when` of an outcome's
+//!   true; absent lists and sections are empty. The twenty exceptions are an artifact's
+//!   `revised_by`, an evidence kind's `max_age`, its `supplied_by` and its `required_at_open`
+//!   (story:supplied-evidence-required-at-open; written only as `"required_at_open": true`, so
+//!   `false` compiles to no key), the `when` of an outcome's
 //!   decision requirement, the `subject` of an evidence match, an order form or a
 //!   `children` form, an evidence match's `independent_on`, an obligation's `applicable_when`, an
 //!   action's `runs_only_when` (story:ordering-guards-provable-by-check; normalized like every
@@ -215,6 +217,9 @@ pub struct EvidenceKind {
     /// The protocol whose cases produce records of this kind, as declared; `None` when the
     /// protocol names none, and `canon-ir/1` then writes no `supplied_by` key.
     pub supplied_by: Option<ProtocolId>,
+    /// Whether the case's opener hands in a current record of this kind at open
+    /// (story:supplied-evidence-required-at-open); `canon-ir/1` writes the key only when `true`.
+    pub required_at_open: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -341,6 +346,7 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
             description: kind.description.clone(),
             max_age: kind.max_age.clone(),
             supplied_by: kind.supplied_by.clone(),
+            required_at_open: kind.required_at_open,
         }),
         claims: keyed(&protocol.claims, |claim| Claim {
             description: claim.description.clone(),
@@ -752,6 +758,9 @@ impl Ir {
                     }
                     if let Some(supplier) = &kind.supplied_by {
                         fields.push(("supplied_by", Value::string(supplier.as_str())));
+                    }
+                    if kind.required_at_open {
+                        fields.push(("required_at_open", Value::Bool(true)));
                     }
                     Value::object(fields)
                 }),

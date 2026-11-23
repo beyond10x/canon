@@ -480,6 +480,10 @@ pub(crate) struct Space<'a> {
     /// does not read holds the value a witness of the whole product would hold, and the bound
     /// refusal does not name it. Every input of the whole space takes every value it declares.
     fixed: Vec<bool>,
+    /// The evidence kinds that declare `required_at_open: true`, in identifier order
+    /// (story:supplied-evidence-required-at-open): `canon simulate` starts each walk with one
+    /// record of each ([`Space::initial_count`]). `canon check` reads nothing of them.
+    at_open: Vec<&'a EvidenceKindId>,
 }
 
 /// The dimensions of the whole space one subject reads (story:check-subject-slices), each as its
@@ -748,6 +752,12 @@ impl<'a> Space<'a> {
             orders: orders.flatten(),
             rankings: Vec::new(),
             unlisted: unlisted(ir),
+            at_open: ir
+                .evidence_kinds
+                .iter()
+                .filter(|(_, kind)| kind.required_at_open)
+                .map(|(id, _)| id)
+                .collect(),
         };
         if orders.is_some() && space.size().is_some_and(|size| size <= super::STATE_BOUND) {
             space.rankings = rankings(space.placeable());
@@ -967,6 +977,7 @@ impl<'a> Space<'a> {
             after: self.after,
             descended: self.descended,
             fixed,
+            at_open: self.at_open.clone(),
         };
         if orders.is_some() && space.size().is_some_and(|size| size <= super::STATE_BOUND) {
             space.rankings = rankings(space.placeable());
@@ -2724,21 +2735,48 @@ impl<'a> Space<'a> {
             .collect()
     }
 
-    /// How many initial states a walk has: one per assignment of case-input values. `None` when
-    /// it does not fit a `u128`.
+    /// How many initial states a walk has: one per assignment of case-input values and, for each
+    /// kind required at open (story:supplied-evidence-required-at-open), one per record a walk may
+    /// start with of it ([`Space::at_open`]). `None` when it does not fit a `u128`.
     pub(crate) fn initial_count(&self) -> Option<u128> {
+        self.at_open
+            .iter()
+            .try_fold(self.input_count()?, |total, kind| {
+                total.checked_mul(self.at_open_records(kind).max(1))
+            })
+    }
+
+    /// How many assignments of case-input values there are. `None` when it does not fit a `u128`.
+    fn input_count(&self) -> Option<u128> {
         self.inputs.iter().try_fold(1u128, |total, (_, values)| {
             total.checked_mul(u128::try_from(values.len()).ok()?)
         })
     }
 
-    /// The initial states: no record, no authority decision, no decision taken, and one per
-    /// assignment of case-input values, in input order, the last input varying fastest. Called
-    /// only once [`Space::initial_count`] is within the bound.
+    /// The kinds that declare `required_at_open: true`, in identifier order.
+    pub(crate) fn at_open(&self) -> &[&'a EvidenceKindId] {
+        &self.at_open
+    }
+
+    /// How many records a walk may start with of the kind `kind`: one per class and producer
+    /// profile of each of its dimensions, as a supplied step adds them. None when no record can be
+    /// about an artifact, which a protocol that declares none gives.
+    fn at_open_records(&self, kind: &EvidenceKindId) -> u128 {
+        self.kinds
+            .iter()
+            .filter(|dimension| dimension.id == kind && dimension.record.is_some())
+            .map(|dimension| (dimension.classes.len() * dimension.profiles.len()) as u128)
+            .sum()
+    }
+
+    /// The initial states as far as the space holds them: no record, no authority decision, no
+    /// decision taken, and one per assignment of case-input values, in input order, the last
+    /// input varying fastest. A walk adds to each the records of the kinds required at open.
+    /// Called only once [`Space::initial_count`] is within the bound.
     pub(crate) fn initial_states(&self) -> Vec<State> {
         let length = self.radices().len();
         let first_input = self.first_input();
-        let count = self.initial_count().expect("within the bound");
+        let count = self.input_count().expect("within the bound");
         (0..count)
             .map(|mut index| {
                 let mut state: State = vec![0; length];

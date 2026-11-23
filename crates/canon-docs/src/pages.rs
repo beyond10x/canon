@@ -373,6 +373,7 @@ fn render_ty(ty: &Ty, links: &Links) -> String {
     match ty {
         Ty::Text => "text".to_owned(),
         Ty::Count => "integer, 0 or more".to_owned(),
+        Ty::Flag => "`true` or `false`".to_owned(),
         Ty::Any => "any JSON value".to_owned(),
         Ty::Identifier(name) if text_format(name).is_some() => {
             format!("[text](#text-formats) (`{name}`)")
@@ -587,7 +588,7 @@ fn used_identifiers(model: &Model, sections: &[&TypeDef]) -> Result<BTreeSet<Str
                 collect(key, out);
                 collect(value, out);
             }
-            Ty::Text | Ty::Count | Ty::Any | Ty::Named(_) => {}
+            Ty::Text | Ty::Count | Ty::Flag | Ty::Any | Ty::Named(_) => {}
         }
     }
     let mut used = BTreeSet::new();
@@ -929,6 +930,7 @@ fn ty_schema(ty: &Ty, scalars: &BTreeSet<String>) -> Json {
     match ty {
         Ty::Text => obj([("type", json::str("string"))]),
         Ty::Count => obj([("type", json::str("integer")), ("minimum", Json::Int(0))]),
+        Ty::Flag => obj([("type", json::str("boolean"))]),
         Ty::Any => obj([]),
         Ty::Identifier(name) if text_format(name).is_some() => {
             obj([("$ref", json::str(format!("#/$defs/{name}")))])

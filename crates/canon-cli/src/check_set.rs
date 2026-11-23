@@ -3,7 +3,9 @@
 //! (story:check-across-protocol-files): every protocol an action opens a case under and every
 //! supplier is in the set, every child outcome a protocol names is declared by a protocol it opens
 //! about that subject, every supplied kind is one an action of its supplier may produce, the
-//! openings form no cycle, and no two files declare one protocol id.
+//! openings form no cycle, no two files declare one protocol id, and every action that opens a
+//! case under a protocol that requires a kind at open holds a record of it to hand in
+//! (story:supplied-evidence-required-at-open).
 
 use std::collections::BTreeSet;
 use std::fs;

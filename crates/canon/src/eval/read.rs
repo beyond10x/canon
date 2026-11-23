@@ -180,6 +180,16 @@ fn absent_or_text(value: &Json, key: &str) -> Shape<Option<String>> {
     }
 }
 
+/// A flag the IR writes only when it is set, as `true`: absent is `false`, and any value but
+/// `true`, `false` included, is refused.
+fn absent_or_true(value: &Json, key: &str) -> Shape<bool> {
+    match field(value, key) {
+        None => Ok(false),
+        Some(Json::Bool(true)) => Ok(true),
+        Some(_) => Err(format!("`{key}` is not true")),
+    }
+}
+
 fn section<'a>(value: &'a Json, key: &str) -> Shape<&'a Map<String, Json>> {
     required(value, key)?
         .as_object()
@@ -229,6 +239,7 @@ fn protocol(value: &Json) -> Shape<Protocol> {
                 description: optional_text(entry, "description")?,
                 max_age: absent_or_text(entry, "max_age")?.map(Age::new),
                 supplied_by: absent_or_text(entry, "supplied_by")?.map(ProtocolId::new),
+                required_at_open: absent_or_true(entry, "required_at_open")?,
             })
         })?,
         claims: declarations(value, "claims", ClaimId::new, |entry| {
