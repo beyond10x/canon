@@ -42,6 +42,10 @@
 //! record as it opens the child, is held by `simulate_opens_a_child_with_its_open_record` over
 //! `children-open-record` and its one-reader twin.
 //!
+//! A `children` form with `count` (story:children-form-counts-unopened-children) is not true while
+//! a child it counts is unopened, held by `simulate_counts_the_children_not_yet_opened` over
+//! `children-count`.
+//!
 //! A refused approval (story:refused-approval-is-not-stuck) that a decision ends is no finding,
 //! held by `simulate_ends_a_refused_approval_by_a_decision` over `denied-decision`; a printed
 //! finding with a denial names the forms that end the case after it, held by
@@ -68,7 +72,7 @@ enum Expected {
 
 /// Every fixture directory, the exit status and where the expected text goes. A walk that finds
 /// nothing exits 0; findings and a refusal exit 1 (`REJECTED`).
-const CASES: [(&str, i32, Expected); 34] = [
+const CASES: [(&str, i32, Expected); 35] = [
     ("clean", 0, Expected::Report),
     ("mutual", 1, Expected::Report),
     ("denied", 1, Expected::Report),
@@ -103,6 +107,7 @@ const CASES: [(&str, i32, Expected); 34] = [
     ("denied-decision", 0, Expected::Report),
     ("denied-no-decision", 1, Expected::Report),
     ("at-open", 0, Expected::Report),
+    ("children-count", 1, Expected::Report),
 ];
 
 /// The cases of story:child-outcome-recovery, expectations 1 to 4.
@@ -482,6 +487,29 @@ fn simulate_opens_a_child_with_its_open_record() {
         }) {
             failures.push(format!("{case}: outcome `probe` is reached: {report:?}"));
         }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// story:children-form-counts-unopened-children: `children-count` opens five readers about one
+/// subject in any order, each once, and waits for them with one claim, `count: 5`. Its two probes,
+/// `early` (the claim true while a reader is unopened) and `nobody-after-incomplete-read` (gap 8
+/// with five readers), are printed unreached, and nothing else is a finding. Two runs give the
+/// same bytes (`failures`).
+#[test]
+fn simulate_counts_the_children_not_yet_opened() {
+    let mut failures = failures(&["children-count"]);
+    let report = read(&format!("{FIXTURES}/children-count/report.txt"));
+    let findings: Vec<&str> = report
+        .lines()
+        .filter(|line| !line.starts_with("simulated: "))
+        .collect();
+    let wanted = [
+        "unreached-outcome: outcome `early` is legitimate in no reachable state",
+        "unreached-outcome: outcome `nobody-after-incomplete-read` is legitimate in no reachable state",
+    ];
+    if findings != wanted {
+        failures.push(format!("children-count: findings {findings:?}"));
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

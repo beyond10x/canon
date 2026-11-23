@@ -93,6 +93,7 @@ mod argument_validation;
 mod case_composition;
 mod check_independence;
 mod child_outcome_subject;
+mod children_count;
 mod claim_direction;
 mod decision_grounds;
 mod ess_gate;

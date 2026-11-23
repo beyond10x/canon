@@ -1059,6 +1059,30 @@ types:
       # read from: crates/canon/src/model/predicate.rs:295-299
       - name: subject
         type: Optional<canon.protocol.ArtifactId>
+      # How many child cases the form waits for (story:children-form-counts-unopened-children,
+      # decision D10 A): absent, every child that has a record, as above; N, an integer of 1 or
+      # more, N records at least. Over the records the form reads it is false when one names an
+      # outcome neither listed nor `open`, as without the key; otherwise unknown while a child is
+      # `open` or while it reads fewer than N records, and true when it reads N or more, each with
+      # a listed outcome. A child not yet opened has no record, so the form stays unknown, and
+      # never becomes true, until N children were opened and ended. canon validate refuses 0
+      # (zero-child-count), naming the declaration the form is written in, after
+      # open-child-outcome; ess_model_matches.rs reads the field as a u64, so a negative count
+      # does not parse. canon-ir/1 writes `"count": N` only when the form declares it, so the IR
+      # of a protocol without the key is unchanged; two forms that differ only in it are two
+      # members, no count first, then the smaller first. A blocked action's or outcome's reason
+      # and the explanation name the form with `"count"` the same way. The count is of records,
+      # not of opening actions: an opening action whose precondition stays true after it opened a
+      # child may open a second one, whose record counts too, so the author guards each opener
+      # with the record it writes (`{claim: a.opened, is: unknown}`). canon check gives every
+      # case_outcome dimension a counting form reads a dimension of more records, and canon
+      # simulate counts the children each opening step opens; the module docs of check and
+      # simulate say how. What it means is CANON-COMPOSE-004
+      # (conformance/scenarios/children-count.yaml), not this file.
+      # read from: .engineering/planning/story/children-form-counts-unopened-children.md:81-92
+      # read from: crates/canon/src/model/predicate.rs:367-373
+      - name: count
+        type: Optional<Integer>
 
   # Which case_outcome records a `children` form reads (story:child-outcome-revision): `any`, every
   # one the evidence check accepted; `current`, only one whose subject_revision is the case

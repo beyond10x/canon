@@ -1,0 +1,1159 @@
+format: canon-conformance/1
+id: CANON-COMPOSE-004
+covers: [CANON-COMPOSE-004]
+fixture: fixtures/investigation/simulate/children-count/protocol.yaml
+# Five readers a to e, each opened once about `sources` (each opener needs its own `*_opened`
+# record unknown), and a merge about `merged`. Claim readers.complete is
+# `{children: {in: [complete], subject: sources, count: 5}}` and readers.ended the same over
+# `[complete, partial]`; action merge.open writes the first form in its precondition. Over the
+# records a form reads it is FALSE once a record names an outcome neither listed nor `open`;
+# otherwise UNKNOWN while a child is open or while it reads fewer than five records, and TRUE when
+# it reads five or more, each listed. A reader not yet opened has no record, so four readers that
+# ended complete leave both claims UNKNOWN: without `count` they were TRUE there, and outcome
+# `early` was legitimate. The case has `sources` at s1 and `merged` at m1; every record is about
+# the current revision. Expectation 8, a count of 0 refused as zero-child-count, is a protocol
+# canon validate refuses, which no step compiles: crates/canon/tests/children_count.rs states it.
+steps:
+  # Expectation 1. `"count": 5` is written in each form that declares it, before `"in"`, as
+  # canonical JSON orders keys; the IR is otherwise the one the protocol had without the key.
+  - id: compile
+    compile: {}
+    expect:
+      canon-ir: |
+        {
+          "actions": {
+            "a.open": {
+              "case_open": {
+                "protocol": "reader",
+                "subject": "sources"
+              },
+              "description": "Open reader a, once.",
+              "effect": null,
+              "may_produce": [
+                {
+                  "evidence": "a_opened"
+                }
+              ],
+              "precondition": {
+                "claim": {
+                  "id": "a.opened",
+                  "is": "unknown"
+                }
+              },
+              "requires": []
+            },
+            "b.open": {
+              "case_open": {
+                "protocol": "reader",
+                "subject": "sources"
+              },
+              "description": "Open reader b, once.",
+              "effect": null,
+              "may_produce": [
+                {
+                  "evidence": "b_opened"
+                }
+              ],
+              "precondition": {
+                "claim": {
+                  "id": "b.opened",
+                  "is": "unknown"
+                }
+              },
+              "requires": []
+            },
+            "c.open": {
+              "case_open": {
+                "protocol": "reader",
+                "subject": "sources"
+              },
+              "description": "Open reader c, once.",
+              "effect": null,
+              "may_produce": [
+                {
+                  "evidence": "c_opened"
+                }
+              ],
+              "precondition": {
+                "claim": {
+                  "id": "c.opened",
+                  "is": "unknown"
+                }
+              },
+              "requires": []
+            },
+            "d.open": {
+              "case_open": {
+                "protocol": "reader",
+                "subject": "sources"
+              },
+              "description": "Open reader d, once.",
+              "effect": null,
+              "may_produce": [
+                {
+                  "evidence": "d_opened"
+                }
+              ],
+              "precondition": {
+                "claim": {
+                  "id": "d.opened",
+                  "is": "unknown"
+                }
+              },
+              "requires": []
+            },
+            "e.open": {
+              "case_open": {
+                "protocol": "reader",
+                "subject": "sources"
+              },
+              "description": "Open reader e, once.",
+              "effect": null,
+              "may_produce": [
+                {
+                  "evidence": "e_opened"
+                }
+              ],
+              "precondition": {
+                "claim": {
+                  "id": "e.opened",
+                  "is": "unknown"
+                }
+              },
+              "requires": []
+            },
+            "merge.open": {
+              "case_open": {
+                "protocol": "merge",
+                "subject": "merged"
+              },
+              "description": "Open the merge once five readers ended complete.",
+              "effect": null,
+              "may_produce": [
+                {
+                  "evidence": "merge_opened"
+                }
+              ],
+              "precondition": {
+                "all": [
+                  {
+                    "children": {
+                      "count": 5,
+                      "in": [
+                        "complete"
+                      ],
+                      "subject": "sources"
+                    }
+                  },
+                  {
+                    "claim": {
+                      "id": "merge.opened",
+                      "is": "unknown"
+                    }
+                  }
+                ]
+              },
+              "requires": []
+            }
+          },
+          "artifacts": {
+            "merged": {
+              "description": "What the merge writes."
+            },
+            "sources": {
+              "description": "What the five readers read."
+            }
+          },
+          "claims": {
+            "a.opened": {
+              "description": "Reader a was opened.",
+              "true_when": {
+                "evidence": {
+                  "kind": "a_opened",
+                  "result": null
+                }
+              }
+            },
+            "b.opened": {
+              "description": "Reader b was opened.",
+              "true_when": {
+                "evidence": {
+                  "kind": "b_opened",
+                  "result": null
+                }
+              }
+            },
+            "c.opened": {
+              "description": "Reader c was opened.",
+              "true_when": {
+                "evidence": {
+                  "kind": "c_opened",
+                  "result": null
+                }
+              }
+            },
+            "d.opened": {
+              "description": "Reader d was opened.",
+              "true_when": {
+                "evidence": {
+                  "kind": "d_opened",
+                  "result": null
+                }
+              }
+            },
+            "e.opened": {
+              "description": "Reader e was opened.",
+              "true_when": {
+                "evidence": {
+                  "kind": "e_opened",
+                  "result": null
+                }
+              }
+            },
+            "merge.opened": {
+              "description": "The merge was opened.",
+              "true_when": {
+                "evidence": {
+                  "kind": "merge_opened",
+                  "result": null
+                }
+              }
+            },
+            "merged.none": {
+              "description": "The merge found nothing.",
+              "true_when": {
+                "evidence": {
+                  "kind": "case_outcome",
+                  "result": "none",
+                  "subject": "merged"
+                }
+              }
+            },
+            "readers.complete": {
+              "description": "Five readers ended, each complete.",
+              "true_when": {
+                "children": {
+                  "count": 5,
+                  "in": [
+                    "complete"
+                  ],
+                  "subject": "sources"
+                }
+              }
+            },
+            "readers.ended": {
+              "description": "Five readers ended, each complete or partial.",
+              "true_when": {
+                "children": {
+                  "count": 5,
+                  "in": [
+                    "complete",
+                    "partial"
+                  ],
+                  "subject": "sources"
+                }
+              }
+            }
+          },
+          "evidence_kinds": {
+            "a_opened": {
+              "description": "Reader a was opened."
+            },
+            "b_opened": {
+              "description": "Reader b was opened."
+            },
+            "c_opened": {
+              "description": "Reader c was opened."
+            },
+            "case_outcome": {
+              "description": "The outcome of one child case, `open` while it runs."
+            },
+            "d_opened": {
+              "description": "Reader d was opened."
+            },
+            "e_opened": {
+              "description": "Reader e was opened."
+            },
+            "merge_opened": {
+              "description": "The merge was opened."
+            }
+          },
+          "format": "canon-ir/1",
+          "obligations": {},
+          "outcomes": {
+            "early": {
+              "description": "The probe of the count. Five readers ended while one is not yet opened.",
+              "requires": {
+                "all": [
+                  {
+                    "any": [
+                      {
+                        "claim": {
+                          "id": "a.opened",
+                          "is": "unknown"
+                        }
+                      },
+                      {
+                        "claim": {
+                          "id": "b.opened",
+                          "is": "unknown"
+                        }
+                      },
+                      {
+                        "claim": {
+                          "id": "c.opened",
+                          "is": "unknown"
+                        }
+                      },
+                      {
+                        "claim": {
+                          "id": "d.opened",
+                          "is": "unknown"
+                        }
+                      },
+                      {
+                        "claim": {
+                          "id": "e.opened",
+                          "is": "unknown"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "claim": {
+                      "id": "readers.ended",
+                      "is": "true"
+                    }
+                  }
+                ]
+              }
+            },
+            "failed": {
+              "description": "A reader ended with an outcome no reader declares.",
+              "requires": {
+                "claim": {
+                  "id": "readers.ended",
+                  "is": "false"
+                }
+              }
+            },
+            "found": {
+              "description": "Five readers ended complete and the merge found something.",
+              "requires": {
+                "claim": {
+                  "id": "merged.none",
+                  "is": "false"
+                }
+              }
+            },
+            "nobody-after-incomplete-read": {
+              "description": "The probe of gap 8. The merge found nothing while a reader is not complete.",
+              "requires": {
+                "all": [
+                  {
+                    "any": [
+                      {
+                        "claim": {
+                          "id": "readers.complete",
+                          "is": "false"
+                        }
+                      },
+                      {
+                        "claim": {
+                          "id": "readers.complete",
+                          "is": "unknown"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "claim": {
+                      "id": "merged.none",
+                      "is": "true"
+                    }
+                  }
+                ]
+              }
+            },
+            "nothing": {
+              "description": "Five readers ended complete and the merge found nothing.",
+              "requires": {
+                "claim": {
+                  "id": "merged.none",
+                  "is": "true"
+                }
+              }
+            },
+            "partial": {
+              "description": "Five readers ended, one or more partial.",
+              "requires": {
+                "all": [
+                  {
+                    "claim": {
+                      "id": "readers.complete",
+                      "is": "false"
+                    }
+                  },
+                  {
+                    "claim": {
+                      "id": "readers.ended",
+                      "is": "true"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "protocol": {
+            "description": "Five readers opened in any order about one subject, each once, then a merge once all five ended complete. One claim with `count: 5` waits for the five, the ones not yet opened too. The probes are legitimate only where that claim is true while a reader is unopened, or where the merge found nothing while a reader is not complete, which no real case reaches.",
+            "id": "simulate.children-count",
+            "revision": 1
+          }
+        }
+
+  # Expectation 2. Readers a to d ended complete; reader e is not opened and has no record. Both
+  # forms read four records, fewer than five: UNKNOWN, and no outcome over them is legitimate.
+  # merge.open is blocked, its reason naming the form with its count.
+  - id: four-ended-one-unopened
+    evaluate:
+      case: {format: canon-case/1, id: READ-1, protocol: simulate.children-count, artifacts: {merged: {revision: m1}, sources: {revision: s1}}}
+      evidence:
+        - {format: canon-evidence/1, id: oa, kind: a_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: ob, kind: b_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: oc, kind: c_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: od, kind: d_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: r1, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-1}
+        - {format: canon-evidence/1, id: r2, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-2}
+        - {format: canon-evidence/1, id: r3, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-3}
+        - {format: canon-evidence/1, id: r4, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-4}
+    expect:
+      decision: |
+        {
+          "actions": {
+            "a.open": {
+              "reasons": [
+                {
+                  "claim": "a.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "b.open": {
+              "reasons": [
+                {
+                  "claim": "b.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "c.open": {
+              "reasons": [
+                {
+                  "claim": "c.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "d.open": {
+              "reasons": [
+                {
+                  "claim": "d.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "e.open": {
+              "status": "admissible"
+            },
+            "merge.open": {
+              "reasons": [
+                {
+                  "children": [
+                    "complete"
+                  ],
+                  "count": 5,
+                  "subject": "sources",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "a.opened": {
+              "value": "true"
+            },
+            "b.opened": {
+              "value": "true"
+            },
+            "c.opened": {
+              "value": "true"
+            },
+            "d.opened": {
+              "value": "true"
+            },
+            "e.opened": {
+              "value": "unknown"
+            },
+            "merge.opened": {
+              "value": "unknown"
+            },
+            "merged.none": {
+              "value": "unknown"
+            },
+            "readers.complete": {
+              "value": "unknown"
+            },
+            "readers.ended": {
+              "value": "unknown"
+            }
+          },
+          "outcomes": {
+            "early": {
+              "reasons": [
+                {
+                  "claim": "readers.ended",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "failed": {
+              "reasons": [
+                {
+                  "claim": "readers.ended",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "found": {
+              "reasons": [
+                {
+                  "claim": "merged.none",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "nobody-after-incomplete-read": {
+              "reasons": [
+                {
+                  "claim": "merged.none",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "nothing": {
+              "reasons": [
+                {
+                  "claim": "merged.none",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "partial": {
+              "reasons": [
+                {
+                  "claim": "readers.complete",
+                  "value": "unknown"
+                },
+                {
+                  "claim": "readers.ended",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 3. All five ended complete: both forms read five records, each listed, TRUE.
+  # merge.open is admissible; `early` is blocked, every reader being opened.
+  - id: five-ended-complete
+    evaluate:
+      case: {format: canon-case/1, id: READ-1, protocol: simulate.children-count, artifacts: {merged: {revision: m1}, sources: {revision: s1}}}
+      evidence:
+        - {format: canon-evidence/1, id: oa, kind: a_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: ob, kind: b_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: oc, kind: c_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: od, kind: d_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: oe, kind: e_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: r1, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-1}
+        - {format: canon-evidence/1, id: r2, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-2}
+        - {format: canon-evidence/1, id: r3, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-3}
+        - {format: canon-evidence/1, id: r4, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-4}
+        - {format: canon-evidence/1, id: r5, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-5}
+    expect:
+      decision: |
+        {
+          "actions": {
+            "a.open": {
+              "reasons": [
+                {
+                  "claim": "a.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "b.open": {
+              "reasons": [
+                {
+                  "claim": "b.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "c.open": {
+              "reasons": [
+                {
+                  "claim": "c.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "d.open": {
+              "reasons": [
+                {
+                  "claim": "d.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "e.open": {
+              "reasons": [
+                {
+                  "claim": "e.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "merge.open": {
+              "status": "admissible"
+            }
+          },
+          "claims": {
+            "a.opened": {
+              "value": "true"
+            },
+            "b.opened": {
+              "value": "true"
+            },
+            "c.opened": {
+              "value": "true"
+            },
+            "d.opened": {
+              "value": "true"
+            },
+            "e.opened": {
+              "value": "true"
+            },
+            "merge.opened": {
+              "value": "unknown"
+            },
+            "merged.none": {
+              "value": "unknown"
+            },
+            "readers.complete": {
+              "value": "true"
+            },
+            "readers.ended": {
+              "value": "true"
+            }
+          },
+          "outcomes": {
+            "early": {
+              "reasons": [
+                {
+                  "claim": "a.opened",
+                  "value": "true"
+                },
+                {
+                  "claim": "b.opened",
+                  "value": "true"
+                },
+                {
+                  "claim": "c.opened",
+                  "value": "true"
+                },
+                {
+                  "claim": "d.opened",
+                  "value": "true"
+                },
+                {
+                  "claim": "e.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "failed": {
+              "reasons": [
+                {
+                  "claim": "readers.ended",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "found": {
+              "reasons": [
+                {
+                  "claim": "merged.none",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "nobody-after-incomplete-read": {
+              "reasons": [
+                {
+                  "claim": "readers.complete",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "nothing": {
+              "reasons": [
+                {
+                  "claim": "merged.none",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "partial": {
+              "reasons": [
+                {
+                  "claim": "readers.complete",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 4. Four ended complete and the fifth is open: five records, one `open`, UNKNOWN.
+  - id: four-ended-one-open
+    evaluate:
+      case: {format: canon-case/1, id: READ-1, protocol: simulate.children-count, artifacts: {merged: {revision: m1}, sources: {revision: s1}}}
+      evidence:
+        - {format: canon-evidence/1, id: oa, kind: a_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: ob, kind: b_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: oc, kind: c_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: od, kind: d_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: oe, kind: e_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: r1, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-1}
+        - {format: canon-evidence/1, id: r2, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-2}
+        - {format: canon-evidence/1, id: r3, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-3}
+        - {format: canon-evidence/1, id: r4, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-4}
+        - {format: canon-evidence/1, id: r5, kind: case_outcome, result: open, subject: sources, subject_revision: s1, child_case: READER-5}
+    expect:
+      decision: |
+        {
+          "actions": {
+            "a.open": {
+              "reasons": [
+                {
+                  "claim": "a.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "b.open": {
+              "reasons": [
+                {
+                  "claim": "b.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "c.open": {
+              "reasons": [
+                {
+                  "claim": "c.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "d.open": {
+              "reasons": [
+                {
+                  "claim": "d.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "e.open": {
+              "reasons": [
+                {
+                  "claim": "e.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "merge.open": {
+              "reasons": [
+                {
+                  "children": [
+                    "complete"
+                  ],
+                  "count": 5,
+                  "subject": "sources",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "a.opened": {
+              "value": "true"
+            },
+            "b.opened": {
+              "value": "true"
+            },
+            "c.opened": {
+              "value": "true"
+            },
+            "d.opened": {
+              "value": "true"
+            },
+            "e.opened": {
+              "value": "true"
+            },
+            "merge.opened": {
+              "value": "unknown"
+            },
+            "merged.none": {
+              "value": "unknown"
+            },
+            "readers.complete": {
+              "value": "unknown"
+            },
+            "readers.ended": {
+              "value": "unknown"
+            }
+          }
+        }
+
+  # Expectation 5. Two readers ended, b outside the set (`lost`), and three are not opened: FALSE,
+  # with fewer records than the count, as without the key; outcome `failed` is legitimate.
+  - id: one-outside-the-set
+    evaluate:
+      case: {format: canon-case/1, id: READ-1, protocol: simulate.children-count, artifacts: {merged: {revision: m1}, sources: {revision: s1}}}
+      evidence:
+        - {format: canon-evidence/1, id: oa, kind: a_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: ob, kind: b_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: r1, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-1}
+        - {format: canon-evidence/1, id: r2, kind: case_outcome, result: lost, subject: sources, subject_revision: s1, child_case: READER-2}
+    expect:
+      decision: |
+        {
+          "actions": {
+            "a.open": {
+              "reasons": [
+                {
+                  "claim": "a.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "b.open": {
+              "reasons": [
+                {
+                  "claim": "b.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "c.open": {
+              "status": "admissible"
+            },
+            "d.open": {
+              "status": "admissible"
+            },
+            "e.open": {
+              "status": "admissible"
+            },
+            "merge.open": {
+              "reasons": [
+                {
+                  "children": [
+                    "complete"
+                  ],
+                  "count": 5,
+                  "subject": "sources",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          },
+          "claims": {
+            "a.opened": {
+              "value": "true"
+            },
+            "b.opened": {
+              "value": "true"
+            },
+            "c.opened": {
+              "value": "unknown"
+            },
+            "d.opened": {
+              "value": "unknown"
+            },
+            "e.opened": {
+              "value": "unknown"
+            },
+            "merge.opened": {
+              "value": "unknown"
+            },
+            "merged.none": {
+              "value": "unknown"
+            },
+            "readers.complete": {
+              "value": "false"
+            },
+            "readers.ended": {
+              "value": "false"
+            }
+          },
+          "outcomes": {
+            "early": {
+              "reasons": [
+                {
+                  "claim": "readers.ended",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            },
+            "failed": {
+              "status": "legitimate"
+            },
+            "found": {
+              "reasons": [
+                {
+                  "claim": "merged.none",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "nobody-after-incomplete-read": {
+              "reasons": [
+                {
+                  "claim": "merged.none",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "nothing": {
+              "reasons": [
+                {
+                  "claim": "merged.none",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "partial": {
+              "reasons": [
+                {
+                  "claim": "readers.ended",
+                  "value": "false"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # Expectation 6. Five ended, e partial: readers.ended is TRUE, readers.complete FALSE; outcome
+  # `partial` is legitimate.
+  - id: five-ended-one-partial
+    evaluate:
+      case: {format: canon-case/1, id: READ-1, protocol: simulate.children-count, artifacts: {merged: {revision: m1}, sources: {revision: s1}}}
+      evidence:
+        - {format: canon-evidence/1, id: oa, kind: a_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: ob, kind: b_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: oc, kind: c_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: od, kind: d_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: oe, kind: e_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: r1, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-1}
+        - {format: canon-evidence/1, id: r2, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-2}
+        - {format: canon-evidence/1, id: r3, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-3}
+        - {format: canon-evidence/1, id: r4, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-4}
+        - {format: canon-evidence/1, id: r5, kind: case_outcome, result: partial, subject: sources, subject_revision: s1, child_case: READER-5}
+    expect:
+      decision: |
+        {
+          "claims": {
+            "a.opened": {
+              "value": "true"
+            },
+            "b.opened": {
+              "value": "true"
+            },
+            "c.opened": {
+              "value": "true"
+            },
+            "d.opened": {
+              "value": "true"
+            },
+            "e.opened": {
+              "value": "true"
+            },
+            "merge.opened": {
+              "value": "unknown"
+            },
+            "merged.none": {
+              "value": "unknown"
+            },
+            "readers.complete": {
+              "value": "false"
+            },
+            "readers.ended": {
+              "value": "true"
+            }
+          },
+          "outcomes": {
+            "early": {
+              "reasons": [
+                {
+                  "claim": "a.opened",
+                  "value": "true"
+                },
+                {
+                  "claim": "b.opened",
+                  "value": "true"
+                },
+                {
+                  "claim": "c.opened",
+                  "value": "true"
+                },
+                {
+                  "claim": "d.opened",
+                  "value": "true"
+                },
+                {
+                  "claim": "e.opened",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "failed": {
+              "reasons": [
+                {
+                  "claim": "readers.ended",
+                  "value": "true"
+                }
+              ],
+              "status": "blocked"
+            },
+            "found": {
+              "reasons": [
+                {
+                  "claim": "merged.none",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "nobody-after-incomplete-read": {
+              "reasons": [
+                {
+                  "claim": "merged.none",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "nothing": {
+              "reasons": [
+                {
+                  "claim": "merged.none",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            },
+            "partial": {
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # Expectation 7. Six children ended complete, more than the count: the form reads at least five
+  # records, each listed, TRUE.
+  - id: more-than-the-count
+    evaluate:
+      case: {format: canon-case/1, id: READ-1, protocol: simulate.children-count, artifacts: {merged: {revision: m1}, sources: {revision: s1}}}
+      evidence:
+        - {format: canon-evidence/1, id: oa, kind: a_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: ob, kind: b_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: oc, kind: c_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: od, kind: d_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: oe, kind: e_opened, subject: sources, subject_revision: s1}
+        - {format: canon-evidence/1, id: r1, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-1}
+        - {format: canon-evidence/1, id: r2, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-2}
+        - {format: canon-evidence/1, id: r3, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-3}
+        - {format: canon-evidence/1, id: r4, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-4}
+        - {format: canon-evidence/1, id: r5, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-5}
+        - {format: canon-evidence/1, id: r6, kind: case_outcome, result: complete, subject: sources, subject_revision: s1, child_case: READER-6}
+    expect:
+      decision: |
+        {
+          "claims": {
+            "a.opened": {
+              "value": "true"
+            },
+            "b.opened": {
+              "value": "true"
+            },
+            "c.opened": {
+              "value": "true"
+            },
+            "d.opened": {
+              "value": "true"
+            },
+            "e.opened": {
+              "value": "true"
+            },
+            "merge.opened": {
+              "value": "unknown"
+            },
+            "merged.none": {
+              "value": "unknown"
+            },
+            "readers.complete": {
+              "value": "true"
+            },
+            "readers.ended": {
+              "value": "true"
+            }
+          }
+        }
