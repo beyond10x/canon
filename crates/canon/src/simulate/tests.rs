@@ -1203,3 +1203,116 @@ fn every_count_above_none_holds_its_open_record_and_the_reverse() {
         assert!(!without.unpaired.is_empty(), "{case}");
     }
 }
+
+/// The ending clause of story:refused-approval-is-not-stuck, option A.
+const FORMS: &str = "to end the case after the denial, declare an outcome with `requires: \
+    {decision: ..., when: ...}` or an action without capability `sign` whose record an outcome \
+    reads";
+
+/// Option A: one denial that blocks two actions whose preconditions are true names both after
+/// the capability, once, with the two forms that end the case; the finding stays a finding.
+#[test]
+fn a_denial_names_each_action_it_blocks_and_the_forms_that_end_the_case() {
+    let source = format!(
+        "{HEAD}\
+         evidence_kinds: {{post: {{description: A post.}}}}\n\
+         claims:\n\
+         \x20 posted: {{description: Posted., true_when: {{evidence: {{kind: post}}}}}}\n\
+         actions:\n\
+         \x20 publish: {{description: Publish., requires: [{{capability: sign}}], may_produce: \
+         [{{evidence: post}}]}}\n\
+         \x20 send: {{description: Send., requires: [{{capability: sign}}], may_produce: \
+         [{{evidence: post}}]}}\n\
+         outcomes:\n\
+         \x20 posted: {{description: Posted., requires: {{claim: posted}}}}\n"
+    );
+    assert_eq!(
+        report(&source),
+        format!(
+            "stuck-state: state {{capability `sign` denied}}: no outcome is legitimate and no \
+             action is admissible or approval-required; path: capability `sign` denied; \
+             capability `sign` denied blocks action `publish`, action `send`, whose preconditions \
+             are true: {FORMS}\n\
+             simulated: protocol `p` revision 1: 4 reachable states, 1 terminable (outcome \
+             `posted` 1), 1 finding (1 stuck or cycle state)\n"
+        )
+    );
+}
+
+/// Option A's clause over several denials: the actions one set of denied capabilities blocks are
+/// named together, in action order, and the forms name every denied capability.
+#[test]
+fn several_denials_are_named_by_the_actions_they_block() {
+    let dead = Dead {
+        state: "{capability `review` denied, capability `sign` denied}".to_owned(),
+        path: vec![
+            "capability `review` denied".to_owned(),
+            "capability `sign` denied".to_owned(),
+        ],
+        blocks: vec![
+            (
+                ActionId::new("publish"),
+                vec![CapabilityId::new("review"), CapabilityId::new("sign")],
+            ),
+            (ActionId::new("send"), vec![CapabilityId::new("sign")]),
+        ],
+        decisions: Vec::new(),
+        containing: 0,
+    };
+    assert_eq!(
+        Finding::StuckState(dead).to_string(),
+        "stuck-state: state {capability `review` denied, capability `sign` denied}: no outcome is \
+         legitimate and no action is admissible or approval-required; path: capability `review` \
+         denied, then capability `sign` denied; capability `review` and capability `sign` denied \
+         block action `publish`, capability `sign` denied blocks action `send`, whose \
+         preconditions are true: to end the case after the denials, declare an outcome with \
+         `requires: {decision: ..., when: ...}` or an action without capability `review` or \
+         capability `sign` whose record an outcome reads"
+    );
+}
+
+/// Option B: a state that is not open, in which a denial blocks an action and a decision step
+/// leads to a legitimate outcome, is no finding, and the summary counts it; a decision that
+/// counts only after an approval leaves the denial a finding, with option A's clause.
+#[test]
+fn a_decision_after_a_denial_ends_the_case() {
+    let protocol = |requires: &str| {
+        format!(
+            "{HEAD}\
+             evidence_kinds: {{approval: {{description: An approval.}}}}\n\
+             claims:\n\
+             \x20 approved: {{description: Approved., true_when: {{evidence: {{kind: \
+             approval}}}}}}\n\
+             actions:\n\
+             \x20 approve: {{description: Approve., requires: [{{capability: sign}}], \
+             may_produce: [{{evidence: approval}}]}}\n\
+             outcomes:\n\
+             \x20 approved: {{description: Approved., requires: {{claim: approved}}}}\n\
+             \x20 closed: {{description: Closed., requires: {requires}}}\n"
+        )
+    };
+    let walked = simulate(&compiled(&protocol("{decision: close}"))).expect("walked");
+    assert_eq!((walked.ending, walked.dead), (1, 0));
+    assert_eq!(
+        walked.to_string(),
+        "simulated: protocol `p` revision 1: 8 reachable states, 5 terminable (outcome `approved` \
+         2, outcome `closed` 4), 1 ending by a decision after a denial, 0 findings (0 stuck or \
+         cycle states)\n"
+    );
+    let walked = simulate(&compiled(&protocol(
+        "{decision: close, when: {claim: approved}}",
+    )))
+    .expect("walked");
+    assert_eq!((walked.ending, walked.dead), (0, 2));
+    assert_eq!(
+        walked.to_string(),
+        format!(
+            "stuck-state: state {{capability `sign` denied}}: no outcome is legitimate and no \
+             action is admissible or approval-required; path: capability `sign` denied; \
+             capability `sign` denied blocks action `approve`, whose precondition is true: \
+             {FORMS}; 1 other stuck state contains it\n\
+             simulated: protocol `p` revision 1: 8 reachable states, 2 terminable (outcome \
+             `approved` 2, outcome `closed` 1), 1 finding (2 stuck or cycle states)\n"
+        )
+    );
+}

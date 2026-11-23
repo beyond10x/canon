@@ -400,11 +400,12 @@ fn simulate_lets_a_child_outcome_arrive_after_its_opening() {
         }
     }
     // The 15 fixtures of story:canon-simulate with no opening action, the 5 `revise*` fixtures of
-    // story:simulate-revise-step with none, and the 2 `revised-by*` fixtures of
-    // story:artifact-revised-by with none.
-    if unchanged != 22 {
+    // story:simulate-revise-step with none, the 2 `revised-by*` fixtures of
+    // story:artifact-revised-by with none, and the 2 `denied-*decision` fixtures of
+    // story:refused-approval-is-not-stuck with none.
+    if unchanged != 24 {
         failures.push(format!(
-            "{SIMULATE}: expected 22 fixtures with no opening action, found {unchanged}"
+            "{SIMULATE}: expected 24 fixtures with no opening action, found {unchanged}"
         ));
     }
 

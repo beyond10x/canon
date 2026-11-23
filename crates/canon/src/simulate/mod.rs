@@ -206,7 +206,11 @@
 //! some sequence of action (record and revise), supplied, child-outcome, expiry and authority
 //! steps leads from it to a state in which an outcome is legitimate (R3); decision steps are not
 //! part of that sequence (R4), since a protocol with an outcome that requires only a decision can
-//! leave every state by it. In this order:
+//! leave every state by it. A state that is not open, in which a denied capability blocks an
+//! action whose precondition is true and a decision step leads to a state with a legitimate
+//! outcome, ends by that decision (story:refused-approval-is-not-stuck, option B): it is none of
+//! the findings below, and the summary counts it. A refused approval is ended by an explicit
+//! decision, and a protocol that declares one for it needs no workaround action. In this order:
 //!
 //! - `stuck-state`: a state that is not open, in which no action is `admissible` or
 //!   `approval-required`.
@@ -221,6 +225,9 @@
 //! - `dead-action`: an action `admissible` in no reachable state, in identifier order.
 //! - `unreached-outcome`: an outcome legitimate in no reachable state, in identifier order; then
 //!   `no-outcome-reachable`, once, when the protocol declares outcomes and every one is unreached.
+//!
+//! A state that meets the second half of the `stuck-state` or the `cycle` rule and ends by a
+//! decision after a denial is neither.
 //!
 //! A state that meets the second half of the `stuck-state` or the `cycle` rule, in which no
 //! outcome is legitimate, that is open and in which every step of every admissible action, record
@@ -249,12 +256,22 @@
 //! return it and whose capabilities are all decided, since an authority step would change it.
 //! Each state on the way is not open, as no step leads from a state that is not open to one that
 //! is. In m no action is `approval-required`, every capability being decided, so m is a
-//! `stuck-state` when no action is admissible and a `cycle` otherwise, and every state of a kind
-//! contains a printed one. The argument uses no revise, child-outcome or expiry step, the three
+//! `stuck-state` when no action is admissible and a `cycle` otherwise, unless it ends by a
+//! decision after a denial, which the summary counts, and every state of a kind contains a
+//! printed one. The argument uses no revise, child-outcome or expiry step, the three
 //! that remove a record or lower a mark: they are what the old `cycle` rule, which asked every
 //! step of every admissible action to return the state, could not cover, since a state a revise
 //! step leaves never met it. A printed state is not open, so no child outcome that may arrive in
-//! it and no revision opens it. A printed finding names its state and its shortest path, then,
+//! it and no revision opens it. A state that ends by a decision after a denial leaves the kind it
+//! would be of, and a state of the kind that contains it is printed in its place unless it
+//! contains another printed one. A printed finding names its state and its shortest path, then,
+//! when a denied capability blocks an action whose precondition is true in its state (option A),
+//! each such block and the two existing forms that end the case after the denial, `` capability
+//! `c` denied blocks action `a`, whose precondition is true: to end the case after the denial,
+//! declare an outcome with `requires: {decision: ..., when: ...}` or an action without capability
+//! `c` whose record an outcome reads `` (the actions one set of denied capabilities blocks named
+//! together, `` capability `c` and capability `d` denied block … ``, `` whose preconditions are
+//! true `` and `` after the denials `` for more), then,
 //! when a decision step leads from its state to a state with a legitimate outcome, each such
 //! decision in name order and the outcomes it makes legitimate (R4), `` decision `d` taken makes
 //! outcome `o` legitimate ``, then, when other states of its kind contain its state, how many,
@@ -276,7 +293,9 @@
 //! ``, `` evidence `k` expires ``, `` capability `c` denied ``, `` decision `d` taken ``, joined
 //! by `, then `, or `empty`. The findings are followed by the summary: `` simulated: protocol `p`
 //! revision 1: N reachable states, T terminable (outcome `a` x, outcome `b` y), W waiting on
-//! supplied evidence or expiry, F findings (S stuck or cycle states) ``: F counts printed
+//! supplied evidence or expiry, D ending by a decision after a denial, F findings (S stuck or
+//! cycle states) ``: D counts the states that end by a decision after a denial, written only when
+//! it is above 0, F counts printed
 //! findings and S the states the printed stuck states and cycles stand for. A terminable state is
 //! one in which some outcome is legitimate; the walk continues through it.
 //!
@@ -330,8 +349,8 @@ use crate::check::{self, Reader, Space, State, Walked};
 use crate::eval;
 use crate::ir::Ir;
 use crate::model::{
-    ActionId, ArtifactId, CASE_OUTCOME, DecisionName, EvidenceKindId, OPEN_OUTCOME, OutcomeId,
-    Predicate, ProtocolId, one_line,
+    ActionId, ArtifactId, CASE_OUTCOME, CapabilityId, DecisionName, EvidenceKindId, OPEN_OUTCOME,
+    OutcomeId, Predicate, ProtocolId, one_line,
 };
 
 mod recovery;
@@ -365,14 +384,18 @@ impl fmt::Display for Refusal {
 impl std::error::Error for Refusal {}
 
 /// What a printed `stuck-state` or `cycle` names besides its kind: its state, its shortest path,
-/// the decisions that lead from it to a legitimate outcome and how many other states of its kind
-/// contain it.
+/// the denials that block an action whose precondition is true, the decisions that lead from it
+/// to a legitimate outcome and how many other states of its kind contain it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Dead {
     /// The state, as a report writes it.
     pub state: String,
     /// Its shortest path, one step each, as a report writes them.
     pub path: Vec<String>,
+    /// Each action, in identifier order, that a denial blocks in the state while its
+    /// precondition is true, with the denied capabilities in identifier order
+    /// (story:refused-approval-is-not-stuck, option A).
+    pub blocks: Vec<(ActionId, Vec<CapabilityId>)>,
     /// Each decision, in name order, whose step leads from the state to one in which an outcome
     /// is legitimate, with those outcomes in identifier order.
     pub decisions: Vec<(DecisionName, Vec<OutcomeId>)>,
@@ -418,13 +441,77 @@ impl Finding {
     }
 }
 
-/// `; path: …`, then the decisions and the count of containing states, each after `; `.
+/// The clause of option A (story:refused-approval-is-not-stuck): each set of denied capabilities
+/// with the actions it blocks, in order of their first action, and the two existing forms that
+/// end the case after the denial, `` capability `c` denied blocks action `a`, whose precondition
+/// is true: to end the case after the denial, declare an outcome with `requires: {decision: ...,
+/// when: ...}` or an action without capability `c` whose record an outcome reads ``.
+fn blocked(blocks: &[(ActionId, Vec<CapabilityId>)]) -> String {
+    let capability = |id: &CapabilityId| format!("capability `{}`", one_line(id.as_str()));
+    let action = |id: &ActionId| format!("action `{}`", one_line(id.as_str()));
+    let mut groups: Vec<(&[CapabilityId], Vec<&ActionId>)> = Vec::new();
+    for (id, capabilities) in blocks {
+        match groups
+            .iter_mut()
+            .find(|(denied, _)| *denied == capabilities.as_slice())
+        {
+            Some((_, actions)) => actions.push(id),
+            None => groups.push((capabilities, vec![id])),
+        }
+    }
+    let named: Vec<String> = groups
+        .iter()
+        .map(|(denied, actions)| {
+            format!(
+                "{} denied {} {}",
+                denied
+                    .iter()
+                    .map(capability)
+                    .collect::<Vec<_>>()
+                    .join(" and "),
+                if denied.len() == 1 { "blocks" } else { "block" },
+                actions
+                    .iter()
+                    .map(|id| action(id))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })
+        .collect();
+    let denied: BTreeSet<&CapabilityId> = blocks.iter().flat_map(|(_, denied)| denied).collect();
+    format!(
+        "{}, {}: to end the case after the {}, declare an outcome with `requires: {{decision: ..., \
+         when: ...}}` or an action without {} whose record an outcome reads",
+        named.join(", "),
+        if blocks.len() == 1 {
+            "whose precondition is true"
+        } else {
+            "whose preconditions are true"
+        },
+        if denied.len() == 1 {
+            "denial"
+        } else {
+            "denials"
+        },
+        denied
+            .into_iter()
+            .map(capability)
+            .collect::<Vec<_>>()
+            .join(" or ")
+    )
+}
+
+/// `; path: …`, then the denials that block an action, the decisions and the count of containing
+/// states, each after `; `.
 fn tail(dead: &Dead, kind: &str) -> String {
     let mut text = if dead.path.is_empty() {
         "; path: empty".to_owned()
     } else {
         format!("; path: {}", dead.path.join(", then "))
     };
+    if !dead.blocks.is_empty() {
+        text.push_str(&format!("; {}", blocked(&dead.blocks)));
+    }
     if !dead.decisions.is_empty() {
         let decisions: Vec<String> = dead
             .decisions
@@ -534,6 +621,11 @@ pub struct Report {
     /// Whether some artifact declares `revised_by`, so a revision by another protocol may open a
     /// waiting state and the summary names it among what the waiting states wait on.
     pub revisions: bool,
+    /// How many reachable states that are not open end by a decision after a denial: a denial
+    /// blocks an action whose precondition is true there, and a decision step leads to a state
+    /// with a legitimate outcome (story:refused-approval-is-not-stuck, option B). None of them is
+    /// a finding.
+    pub ending: usize,
     /// How many reachable states the printed stuck states and cycles stand for.
     pub dead: usize,
     pub findings: Vec<Finding>,
@@ -554,7 +646,8 @@ fn counted(count: usize, one: &str, many: &str) -> String {
 /// states, 2 terminable (outcome `a` 2), 0 findings (0 stuck or cycle states) ``, with `` , 1
 /// waiting on supplied evidence or expiry `` before the findings when the protocol declares a
 /// supplied or an expiring kind, and `` , 1 waiting on supplied evidence, a child outcome or
-/// expiry `` when it declares an action that opens a child case.
+/// expiry `` when it declares an action that opens a child case; then `` , 1 ending by a decision
+/// after a denial `` when some state ends that way.
 impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for finding in &self.findings {
@@ -579,6 +672,12 @@ impl fmt::Display for Report {
                 }
             };
             terminable.push_str(&format!(", {waiting} waiting on {on}"));
+        }
+        if self.ending > 0 {
+            terminable.push_str(&format!(
+                ", {} ending by a decision after a denial",
+                self.ending
+            ));
         }
         writeln!(
             f,
@@ -1072,6 +1171,9 @@ struct Visited {
     next: Vec<usize>,
     /// The states its decision steps lead to, with each decision's position.
     decided: Vec<(usize, usize)>,
+    /// Each action a denial blocks in it while its precondition is true, by position, with the
+    /// denied capabilities.
+    denied: Vec<(usize, Vec<CapabilityId>)>,
 }
 
 /// Walks every state `ir` reaches from the empty case, as the module docs say. Pure and
@@ -1641,6 +1743,7 @@ fn walk(ir: &Ir, with_record: bool) -> Result<Walk, Refusal> {
             revisers,
             next: followed,
             decided,
+            denied: evaluated.denied,
         });
         next += 1;
     }
@@ -1671,6 +1774,7 @@ fn walk(ir: &Ir, with_record: bool) -> Result<Walk, Refusal> {
     }
 
     let mut waiting = 0;
+    let mut ending = 0;
     let mut stuck: Vec<usize> = Vec::new();
     let mut cycles: Vec<usize> = Vec::new();
     for (at, state) in visited.iter().enumerate() {
@@ -1679,10 +1783,20 @@ fn walk(ir: &Ir, with_record: bool) -> Result<Walk, Refusal> {
         };
         // An open state waits only when every step of every admissible action, record or
         // revise, returns it; one a revise step leads out of is neither waiting nor a finding.
+        // One that is not open, in which a denial blocks an action whose precondition is true
+        // and a decision step leads to a legitimate outcome, ends by that decision
+        // (story:refused-approval-is-not-stuck, option B, which narrows R4).
         if open[at] {
             if state.revisers.is_empty() {
                 waiting += 1;
             }
+        } else if !state.denied.is_empty()
+            && state
+                .decided
+                .iter()
+                .any(|(_, to)| !visited[*to].legitimate.is_empty())
+        {
+            ending += 1;
         } else if admissible.is_empty() {
             stuck.push(at);
         } else {
@@ -1935,6 +2049,20 @@ fn walk(ir: &Ir, with_record: bool) -> Result<Walk, Refusal> {
     let dead = |at: usize, containing: usize| Dead {
         state: rendered(at),
         path: path(at),
+        blocks: visited[at]
+            .denied
+            .iter()
+            .map(|(action, capabilities)| {
+                (
+                    ir.actions
+                        .keys()
+                        .nth(*action)
+                        .expect("a declared action")
+                        .clone(),
+                    capabilities.clone(),
+                )
+            })
+            .collect(),
         decisions: decision_exits(at),
         containing,
     };
@@ -2022,6 +2150,7 @@ fn walk(ir: &Ir, with_record: bool) -> Result<Walk, Refusal> {
         .then_some(waiting),
         child_outcomes,
         revisions: !external.is_empty(),
+        ending,
         dead: stuck.len() + cycles.len(),
         findings,
     };

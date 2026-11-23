@@ -242,8 +242,14 @@ pub enum Command {
     /// of every admissible action returns the same state; when a revise step leads out of a
     /// cycle, it says every record step and ends `every revision by action x leads to a state no
     /// outcome is reachable from`. Each is printed once, at its smallest state, with the shortest
-    /// path that reaches it, each decision that would make an outcome legitimate there, and how
-    /// many other such states contain it; an open state in which no outcome is legitimate, no
+    /// path that reaches it, each denied capability that blocks an action whose precondition is
+    /// true there with the two forms that end the case after the denial (an outcome with
+    /// `requires: {decision: ..., when: ...}`, or an action without the capability whose record
+    /// an outcome reads), each decision that would make an outcome legitimate there, and how
+    /// many other such states contain it. A state that is not open, in which a denial blocks an
+    /// action whose precondition is true and a decision step leads to a legitimate outcome, ends
+    /// by that decision: it is no finding, and the summary counts it (`D ending by a decision
+    /// after a denial`, only when D is above 0). An open state in which no outcome is legitimate, no
     /// action is approval-required, and every step of every admissible action, record or revise,
     /// returns the state is counted as waiting. The summary
     /// counts the reachable states, per outcome those in which it is legitimate, the waiting
