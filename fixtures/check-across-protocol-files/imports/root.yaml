@@ -1,0 +1,15 @@
+format: protocol/1
+
+protocol:
+  id: review
+  revision: 1
+  description: A review that imports another protocol; canon check-set refuses it as a member of the set.
+
+imports:
+  review.base:
+    revision: 1
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+artifacts:
+  work:
+    description: The work under review.
