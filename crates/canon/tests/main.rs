@@ -109,6 +109,8 @@ mod review_depth_beyond_bound;
 mod review_outcome_reasons_docs;
 mod review_properties;
 mod review_refusal_naming;
+mod review_w12_approval_docs;
+mod review_w12_strict_order;
 mod source_model;
 mod strict_freshness;
 mod unsafe_confined;

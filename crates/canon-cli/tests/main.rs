@@ -56,6 +56,7 @@ mod floor;
 mod imports;
 mod invalidation_rules;
 mod review_cli_contract;
+mod review_w12_strict_reference;
 mod revised_by;
 mod scenario_generation;
 mod semantic_diff;
