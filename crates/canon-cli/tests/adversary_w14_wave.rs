@@ -219,7 +219,10 @@ fn generate_gives_the_same_output_with_a_guard_whose_slice_is_above_the_bound() 
     assert!(!without.3.is_empty(), "{without:?}");
     let with = generated(
         "bound-with",
-        &source(&format!("    runs_only_when: {{any: [{}]}}\n", any.join(", "))),
+        &source(&format!(
+            "    runs_only_when: {{any: [{}]}}\n",
+            any.join(", ")
+        )),
     );
     assert_eq!(with, without);
 }
