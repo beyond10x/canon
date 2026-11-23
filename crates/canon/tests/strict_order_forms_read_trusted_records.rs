@@ -83,7 +83,7 @@ fn strict_refuses_a_future_record_every_order_form_reads_though_revision_binding
         ),
         (
             "{after: {first: review, then: {kind: fresh, result: pass}}}",
-            Some(("unknown", "true")),
+            Some(("false", "true")),
         ),
         (
             "{since: {last: review, then: {kind: fresh, result: pass}}}",
