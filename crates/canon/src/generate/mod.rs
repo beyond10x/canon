@@ -83,7 +83,10 @@
 //! - `unrepresentable`: a scenario does not read back as one that passes.
 //! - Every refusal [`crate::check::check`] makes, with its code: a slice above the bound
 //!   (`state-space-bound`), a protocol that reads `case_outcome` with a `children` form and
-//!   an order form (`ordered-child-outcomes`) and an evaluation the evaluator refuses.
+//!   an order form (`ordered-child-outcomes`) and an evaluation the evaluator refuses; but none
+//!   that only an ordering guard gives. Generation reads no `runs_only_when`
+//!   (story:ordering-guards-provable-by-check): only `canon check` decides the guards, so a
+//!   protocol gives the same scenarios, output and refusals with or without one.
 //! - `state-space-bound`: the whole product, which generation is held to, is above the bound though
 //!   every slice `canon check` decides fits. The refusal names the whole product's count, the
 //!   bound and each dimension, as `canon check` did before it decided subjects over slices.

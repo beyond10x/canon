@@ -192,6 +192,10 @@ commands:
       - name: evaluated
         returns: true
 
+  # A children form with `count: N` of 2 or more gives the case_outcome dimension it reads a
+  # dimension of more records, written in a state `... result r 2 more times` and in the bound
+  # refusal `more records of evidence kind case_outcome about b N`
+  # (story:children-form-counts-unopened-children).
   # read from: crates/canon-cli/src/lib.rs:108-143
   # read from: crates/canon-cli/src/check.rs:15-54
   - name: canon.cli.Check
@@ -270,7 +274,10 @@ commands:
       # declares a supplied or an expiring kind and no action that opens a child case, and as
       # waiting on supplied evidence, a child outcome or expiry when an action opens a child case
       # (case_open). A state names each opening action whose children have not all ended: `action
-      # a opened a child` for one, `action a opened 2 or more children` for more. An open state
+      # a opened a child` for one, `action a opened 2 or more children` for more; where a children
+      # form declares `count: N`, it also writes the children counted in each case_outcome
+      # dimension the form reads, `2 children in evidence case_outcome about b`, `N or more
+      # children` at N (story:children-form-counts-unopened-children). An open state
       # waits only when no outcome is legitimate in it, no action is approval-required there, and
       # every step of every admissible action, record or revise, returns it. A revise step is
       # written `action x revises a`, or `action x revises a and produces …` with the record or
@@ -463,6 +470,8 @@ commands:
       - name: compared
         returns: true
 
+  # A floor does not pin a guard: canon diff classifies a removed runs_only_when as NO SEMANTIC
+  # CHANGE, so the floor holds for a protocol that drops a guard the floor declares.
   # read from: crates/canon-cli/src/lib.rs:247-262
   # read from: crates/canon-cli/src/floor.rs:12-51
   - name: canon.cli.Floor
