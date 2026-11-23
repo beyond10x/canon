@@ -199,9 +199,12 @@ pub enum Command {
     /// unless the action declares them a group, and an outcome that needs both is reported as
     /// legitimate in no reachable state. Per action that opens a child case
     /// (`case_open`) the walk counts the children that have not ended: none, one, or two or more.
-    /// A step of the action raises the count, a child's outcome arrives while it is above none,
+    /// A step of the action raises the count and adds the child's `case_outcome` record `open`,
+    /// as a runner writes it when it opens the child, where the protocol reads the result `open`
+    /// of that record; a child's outcome arrives while the count is above none,
     /// and an outcome other than `open` lowers it, or from two or more may also leave it at two
-    /// or more, and replaces an `open` record, since one record is one child. A child of an
+    /// or more, and replaces an `open` record, since one record is one child, but never the last
+    /// one while a child that has not ended is left. A child of an
     /// opening action records `case_outcome` about the artifact the action's `case_open` names
     /// when the protocol reads `case_outcome` about that artifact by name, otherwise without a
     /// subject. A state holding an `open` record, current or held as expired, keeps the count of
