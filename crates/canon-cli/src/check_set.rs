@@ -2,9 +2,11 @@
 //! the set to the library, which checks the documents against each other
 //! (story:check-across-protocol-files): every protocol an action opens a case under and every
 //! supplier is in the set, every child outcome a protocol names is declared by a protocol it opens
-//! about that subject, every supplied kind is one an action of its supplier may produce, and the
-//! openings form no cycle.
+//! about that subject, every supplied kind is one an action of its supplier may produce, the
+//! openings form no cycle, and no two files declare one protocol id.
 
+use std::collections::BTreeSet;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -16,18 +18,25 @@ use crate::{REJECTED, read_text, unreadable};
 /// paths are read in sorted order, so the order of the flags changes nothing; the first file that
 /// cannot be read exits 2, and the first that does not parse, has imports or does not compile
 /// exits 1, naming its path on standard error.
+///
+/// A file is read once wherever its paths resolve to (`fs::canonicalize`): two spellings of it,
+/// or a symbolic link and its target, are one member, named by the first of its paths in sorted
+/// order. A path that does not resolve is a member of its own, and reading it fails, naming it as
+/// it was typed.
 pub(crate) fn run(paths: &[PathBuf]) -> ExitCode {
     let mut sorted: Vec<&PathBuf> = paths.iter().collect();
     sorted.sort();
-    sorted.dedup();
+    let mut resolved: BTreeSet<PathBuf> = BTreeSet::new();
+    sorted
+        .retain(|path| resolved.insert(fs::canonicalize(path).unwrap_or_else(|_| (*path).clone())));
     let mut set = Vec::with_capacity(sorted.len());
     for path in sorted {
         match compiled(path) {
-            Ok(compiled) => set.push(compiled),
+            Ok(compiled) => set.push((path.display().to_string(), compiled)),
             Err(code) => return code,
         }
     }
-    let found = ir::check_set(&set);
+    let found = ir::check_set(set.iter().map(|(source, ir)| (source.as_str(), ir)));
     print!("{found}");
     if found.is_clean() {
         ExitCode::SUCCESS
