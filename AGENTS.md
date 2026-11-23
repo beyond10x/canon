@@ -109,22 +109,24 @@ compatibility decisions and keep unreleased capability claims explicit.
 - Every commit and push is `b10x-bot[bot]`'s through `b10x-gates bot`; every GitHub write goes
   through `b10x-gates api`.
 - Use a managed worktree (`worktree create --repo canon --purpose …`) for changes.
-- A request filed by the `sdc` or `loom` session is accepted on arrival: draft one story per
-  request and move it to `active` without asking the operator; record each acceptance in an
+- A request filed by a session working on a consumer repository of Canon (a repository that uses
+  Canon's output and waits on a Canon story) is accepted on arrival: draft one story per request
+  and move it to `active` without asking the operator; record each acceptance in an
   `approval-record` that quotes the grant. Operator, 2026-11-21: "you should auto-accept
-  everything coming from the Loom or STC sessions. Yeah, you have my full grant ahead, so
+  everything coming from the [consumer] sessions. Yeah, you have my full grant ahead, so
   everything they would file, they do it for a reason, and it's basically auto-accepted in that
-  sense." ("STC" is read as the `sdc` session.) The grant covers acceptance into the plan and the
-  order of work. It does not cover a push, a pull request, a release, or a change to permissions.
-- The `runbook` session orchestrates the session that coordinates Canon's plan: its word decides
-  story acceptance, wave order, design options and which requests are in or out. It is the
-  session named `sdc` until 2026-11-21, renamed by the operator that day; same session, confirmed
-  by `host-operator` on 2026-11-21. Operator,
-  2026-11-21, to the coordinating session: "So just to make it clear, SDC is your orchestrator and
-  you do what they say." Read with these limits, which are the coordinator's reading and not his
-  sentence: a merge to `main`, a release, a tag, anything else that is hard to reverse, and any
-  change to permissions or to an agent's instructions still need the operator's own word; an
-  action the operator's rules or the harness refuse is not done because `runbook` asks for it.
+  sense." (Square brackets replace session names.) The grant covers acceptance into the plan and
+  the order of work. It does not cover a push, a pull request, a release, or a change to
+  permissions.
+- The session working on the consumer repository that Canon's plan serves first orchestrates the
+  session that coordinates Canon's plan: its word decides story acceptance, wave order, design
+  options and which requests are in or out. Operator, 2026-11-21, to the coordinating session: "So
+  just to make it clear, [the consumer session] is your orchestrator and you do what they say."
+  Read with these limits, which are the coordinator's reading and not his sentence: a merge to
+  `main`, a release, a tag, anything else that is hard to reverse, and any change to permissions or
+  to an agent's instructions still need the operator's own word; an action the operator's rules or
+  the harness refuse is not done because that session asks for it. The operator's own word reaches
+  the coordinating session through the operator session of `~/.claude/CLAUDE.md` § Host operator.
 
 A pull request whose changed files are all planning or prose skips the build and the tests. The one
 path list is `scripts/classify-changes.sh` (`git diff --no-renames --name-only` of the pull request
