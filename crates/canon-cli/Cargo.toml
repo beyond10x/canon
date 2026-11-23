@@ -17,5 +17,8 @@ path = "tests/main.rs"
 b10x-canon = { path = "../canon" }
 clap = { version = "4", features = ["derive"] }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 serde_yaml_ng = "0.10"

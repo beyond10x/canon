@@ -53,6 +53,7 @@ mod evidence_freshness;
 mod evidence_revision_binding;
 mod explanation;
 mod floor;
+mod generate_staging;
 mod imports;
 mod invalidation_rules;
 mod review_cli_contract;
