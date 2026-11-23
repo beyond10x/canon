@@ -1,5 +1,59 @@
 # Changelog
 
+## [0.15.0] - 2026-11-24
+
+A minor release: three new optional keys in `protocol/1`, each closing a gap the runbook consumer
+named. Each key is absent from every existing protocol, and when absent nothing is
+written to `canon-ir/1`: `canon validate`, `compile`, `check`, `simulate` and `check-set` give the
+same bytes as 0.14.0 on every existing fixture (852 comparisons; only the wave's new fixtures
+differ), and so does `conform run` on the 30 existing scenarios.
+Install the CLI or depend on the libraries from Git tag `0.15.0`.
+
+What changes, and for whom (read against the diff since 0.14.0):
+
+- Anyone whose action must follow another step. The action key `runs_only_when: <predicate>` names
+  a guard, and `canon check` proves that every state in which the action can run satisfies it; a
+  state that does not is the finding `ordering-guard-failed`. A guard that is the literal `all: []`
+  is refused as `vacuous-runs-only-when`; other always-true guards are not detected. `canon evaluate`,
+  `simulate` and `generate` never read it. `canon floor` does not pin a guard: a refinement that
+  drops one still holds. `check-set` and `unproduced-evidence` do not read guards yet.
+- Anyone who supplies evidence to a child case when it opens. The evidence-kind field
+  `required_at_open: true` (it needs `supplied_by` on the same kind, else `at-open-without-supplier`)
+  states that the child needs a current record of the kind from the moment it opens. `canon
+  check-set` reports `unsupplied-at-open` for an action that opens such a protocol when its
+  precondition does not imply a current record of the kind (an `evidence` match, `all`, `any`, a
+  `claim` that is true by such a match, an order form; `not`, `input` and `children` do not).
+  `canon simulate` starts each case with one current record of every required kind. The library
+  function `eval::missing_at_open` returns the required kinds with no applying record; `canon
+  evaluate` bytes do not change. Adding the field is a tightening in `canon diff`, removing it a
+  relaxation.
+- Anyone whose protocol waits for several children. The key `count: N` on a `children` form (an
+  integer of 1 or more; 0 is refused as `zero-child-count`) waits for N child cases that ended with
+  a listed outcome: the claim stays unknown while fewer than N records are read or a child is
+  open, is false when a child ended outside `in`, and is true at N. It combines with `subject`
+  and `revision`. Five parallel readers are one claim instead of a chain of openers: on a copy of the
+  consumer's `refresh-read`, `canon check` reads 665600 states in 5.4 s (133120 before) and
+  `canon simulate` 2963 states, with 0 findings. `canon check` grows by a factor of N for each counted
+  dimension. `canon simulate` refuses a count above 64 as `child-count-bound`. An opener whose
+  guard stays open can open two children and fake the count: guard each opener with its `*_opened`
+  record.
+
+Other changes:
+
+- `canon simulate` never counts more children than were opened when a revision and an earlier
+  record meet in one step (found by the wave review).
+- The published `protocol-1.schema.json` and the reference give `count` a minimum of 1.
+- `canon check` and `canon simulate` help describe the count dimension and the children count a state
+  prints.
+
+Format note: a 0.14.0 reader refuses a protocol that uses any of the three keys (`unknown field`),
+and refuses a `canon-ir/1` document that holds them (not canonical text). Protocols without the keys
+read the same in both versions.
+
+Not covered: `count` forms with different counts over one dimension in `canon check`; supplied
+`case_outcome` records count once per class in `canon simulate`; with `revision: current`, two
+cases count too low in `canon simulate` (never above the true count).
+
 ## [0.14.0] - 2026-11-23
 
 A minor release: one new command, `canon check-set`, and two changes to what `canon simulate`

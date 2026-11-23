@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ordering-guards-provable-by-check
 kind: story
-status: active
+status: implemented
 title: canon check proves an ordering guard (an action never runs before another)
 relations:
 - decomposes: epic:canon-kernel
@@ -42,10 +42,11 @@ scope:
   path: website/static/schemas/protocol-1.schema.json
 - confidence: inferred
   path: website/status.yaml
-revision: 21
+revision: 22
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T03:55:42Z", actor: "human:timo", revision: 2, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w13"}
 - {from: "proposed", to: "active", at: "2026-11-23T03:55:43Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w13"}
+- {from: "active", to: "implemented", at: "2026-11-23T23:09:05Z", actor: "human:timo", revision: 22, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w14"}
 ---
 ## Outcome
 

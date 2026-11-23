@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:supplied-evidence-required-at-open
 kind: story
-status: active
+status: implemented
 title: A protocol can require that its opener supplies a record when it opens the case
 relations:
 - decomposes: epic:canon-kernel
@@ -54,10 +54,11 @@ scope:
   path: website/docs/reference
 - confidence: inferred
   path: website/static/schemas/protocol-1.schema.json
-revision: 27
+revision: 28
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T03:55:42Z", actor: "human:timo", revision: 2, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w13"}
 - {from: "proposed", to: "active", at: "2026-11-23T03:55:42Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w13"}
+- {from: "active", to: "implemented", at: "2026-11-23T23:09:06Z", actor: "human:timo", revision: 28, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w14"}
 ---
 ## Outcome
 

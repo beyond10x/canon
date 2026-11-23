@@ -287,3 +287,18 @@ items:
     story: story:refused-approval-is-not-stuck
     detail: "A state in which a denied capability blocks an action and a decision step leads to a legitimate outcome is no stuck-state or cycle finding; the summary counts it as ending by a decision after a denial. A finding that holds a denial names the action it blocks and the two forms that end the case, an outcome with requires decision and when, or an action without the capability whose record an outcome reads."
     href: /docs/reference/cli#canon-simulate
+  - label: Ordering guards proven by canon check
+    area: Analysis
+    story: story:ordering-guards-provable-by-check
+    detail: "An action names a guard with runs_only_when; canon check proves that every state in which the action can run satisfies it, and reports ordering-guard-failed where it does not. evaluate, simulate and generate never read it."
+    href: /docs/concepts/protocols
+  - label: Supplied evidence required at case open
+    area: Analysis
+    story: story:supplied-evidence-required-at-open
+    detail: "An evidence kind with required_at_open must be current when a child case opens; canon check-set reports unsupplied-at-open for an opening action whose precondition does not imply it, and canon simulate starts each case with the record."
+    href: /docs/reference/protocol
+  - label: A children form counts its child cases
+    area: Language
+    story: story:children-form-counts-unopened-children
+    detail: "count: N on a children form waits for N child cases ended with a listed outcome: unknown while fewer are read or one is open, false when one ended outside the list. 0 is refused; canon simulate refuses a count above 64."
+    href: /docs/reference/protocol

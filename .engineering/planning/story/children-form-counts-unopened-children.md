@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:children-form-counts-unopened-children
 kind: story
-status: active
+status: implemented
 title: A children form can wait for all children of a set, including those not yet opened
 relations:
 - decomposes: epic:canon-kernel
@@ -50,10 +50,11 @@ scope:
   path: website/static/schemas/protocol-1.schema.json
 - confidence: inferred
   path: website/status.yaml
-revision: 25
+revision: 26
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T03:55:41Z", actor: "human:timo", revision: 2, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w13"}
 - {from: "proposed", to: "active", at: "2026-11-23T03:55:41Z", actor: "human:timo", revision: 3, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w13"}
+- {from: "active", to: "implemented", at: "2026-11-23T23:09:06Z", actor: "human:timo", revision: 26, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-23-w14"}
 ---
 ## Outcome
 
