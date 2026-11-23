@@ -67,7 +67,9 @@ does not depend on the order the sections are written in:
    naming the declaration the test is written in and the input; for a `children` form, first
    an empty `in` list, `empty-child-outcomes`, or an outcome it lists more than once,
    `duplicate-child-outcome`, once for every listing after its first, then `open` listed,
-   `open-child-outcome`, once, then the evidence kind `case_outcome` when it is not declared,
+   `open-child-outcome`, once, then a `count` of 0, `zero-child-count`
+   (story:children-form-counts-unopened-children), then the evidence kind `case_outcome` when
+   it is not declared,
    `undeclared-evidence-kind`, then the artifact it names as its `subject` when that is not
    declared, `undeclared-artifact` (story:child-outcome-subject), every one naming the
    declaration the form is written in): those
@@ -261,6 +263,7 @@ differently in these cases only:
 | `empty-child-outcomes` | A `children` form lists no outcome, so no child case could end with one of them. |
 | `duplicate-child-outcome` | A `children` form lists an outcome more than once. |
 | `open-child-outcome` | A `children` form lists `open`, which is a running child case's outcome, never a terminal one: the form is unknown while a child is open. |
+| `zero-child-count` | A `children` form waits for 0 child cases (`count: 0`), which every case has, so the count would assert nothing. |
 | `vacuous-runs-only-when` | An action's `runs_only_when` (story:ordering-guards-provable-by-check) is `all: []`, which is true in every state and so asserts nothing. |
 | `self-opened-case` | An action opens a child case under the protocol's own id: a case could then open cases under its own protocol without end (D206). |
 | `invalid-record-group` | A group of an action's `records_together` (story:simulate-record-groups) is not one run's records: `group` counts the action's groups from 1, in the order written. |

@@ -453,8 +453,8 @@ the evidence check accepted, as the order forms read the history, or with `revis
 only those about the current revision of their subject, and with `subject` only those about
 that artifact: `unknown` with no record read, `false` when a record's outcome is neither listed
 nor `open` (a child that ended outside the set), otherwise `unknown` when a child is still
-`open` and `true` when every child ended with a listed outcome. It counts only the records it
-is given. Canon does not write them; the runner that opens a child case does, with two duties:
+`open` or, with `count: N`, when it reads fewer than N records, and `true` when every child
+ended with a listed outcome. It counts only the records it is given. Canon does not write them; the runner that opens a child case does, with two duties:
 a record's `subject` is the `case_open` subject of the action that opened the child, and the
 runner writes a record with the outcome `open` when it opens the child.
 
@@ -463,6 +463,7 @@ runner writes a record with the outcome `open` when it opens the child.
 | `in` | list of text | required | The outcomes a child case may have ended with, written `in`: not empty, each once, never `open`. |
 | `revision` | [`ChildRevision`](#childrevision) | optional | Which records the form reads (story:child-outcome-revision): absent or `any`, every `case_outcome` record; `current`, only those whose `subject_revision` is the case snapshot's current revision of their `subject`. |
 | `subject` | [identifier](#identifiers) (`ArtifactId`) | optional | The declared artifact the records are about (story:child-outcome-subject): absent, records about every artifact; named, only the `case_outcome` records whose `subject` it is. A record about another artifact is not read: it neither establishes nor contradicts the form. |
+| `count` | integer, 0 or more | optional | How many child cases the form waits for (story:children-form-counts-unopened-children): absent, every child with a record; N, 1 or more, at least N records, so the form stays `unknown` while fewer are read, and a child not yet opened, which has no record, never lets it become true. `canon validate` refuses 0 (`zero-child-count`). |
 
 ## `Truth`
 

@@ -62,7 +62,10 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   revisions `{"descended": {"first": {"kind": …, "result": …}, "then": {"kind": …, "result": …}}}` (story:revision-ordering). Each adds `"subject": …` when it names one.
   The form over the child cases is `{"children": {"in": [...]}}`, or `{"children": {"in": [...], "revision": "current"}}` when it reads only the records about the current revision of
   their subject (story:child-outcome-revision): `revision: any` reads what no key reads and is
-  written as no key. A form that reads only the records about one artifact adds `"subject": …`, as declared (story:child-outcome-subject). An action's `case_open` is `{"protocol": …, "subject": …}`, as declared (story:case-composition).
+  written as no key. A form that reads only the records about one artifact adds `"subject": …`, as declared (story:child-outcome-subject), and a form that waits for a number of child
+  cases adds `"count": N`, as declared, which sorts before `"in"` like every key
+  (story:children-form-counts-unopened-children); two forms that differ only in it are two
+  members, no count first, then the smaller. An action's `case_open` is `{"protocol": …, "subject": …}`, as declared (story:case-composition).
   An action's `arguments` is its JSON Schema as declared, the same JSON value, its object keys
   sorted like every object's (story:action-arguments).
 - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
