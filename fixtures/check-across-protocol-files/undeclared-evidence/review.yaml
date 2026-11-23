@@ -1,0 +1,33 @@
+format: protocol/1
+
+protocol:
+  id: review
+  revision: 1
+  description: Seeded defect, a review whose evidence match reads the outcome lost of its child about the work, which the protocol change it opens about the work never declares.
+
+artifacts:
+  work:
+    description: The work under review; a child change case is opened about it.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child case, one record per child; open while the child runs.
+
+claims:
+  work.accepted:
+    true_when:
+      evidence: {kind: case_outcome, subject: work, result: accepted}
+  work.lost:
+    true_when:
+      evidence: {kind: case_outcome, subject: work, result: lost}
+
+actions:
+  change.open:
+    description: Open a child change case about the work.
+    case_open: {protocol: change, subject: work}
+
+outcomes:
+  reviewed:
+    requires: {claim: work.accepted}
+  abandoned:
+    requires: {claim: work.lost}

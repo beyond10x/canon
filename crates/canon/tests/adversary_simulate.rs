@@ -263,6 +263,11 @@ fn an_expired_child_outcome_still_counts_for_the_children_form() {
     // children (D1): the stuck state is reached by two children, one accepted and one unlisted,
     // with none left; the cycle holds two or more children not ended, where a step of
     // `open_change` no longer changes the count.
+    // Re-pinned by story:simulate-opens-child-with-its-record, under which a child opens with its
+    // `open` record: the stuck state after `lock` is gone, since `lock` needs every child ended
+    // accepted and no child opens after it, so no real case holds an unlisted outcome there (it
+    // was reached by a child that had not ended and held no record). The cycle left holds the
+    // `open` record of the children not ended beside the unlisted outcome.
     let report = simulate::simulate(&ir).expect("walked");
     let dead: Vec<(&simulate::Dead, bool)> = report
         .findings
@@ -283,16 +288,14 @@ fn an_expired_child_outcome_still_counts_for_the_children_form() {
         .any(|(dead, _)| dead.state == "{evidence `lock`}");
     let only_the_unlisted = matches!(
         dead.as_slice(),
-        [(stuck, false), (cycle, true)] if stuck.state
-            == "{evidence `case_outcome` result `accepted`, evidence `case_outcome`, evidence \
-                `lock`}"
-            && cycle.state
-                == "{evidence `case_outcome`, action `open_change` opened 2 or more children}"
+        [(cycle, true)] if cycle.state
+            == "{evidence `case_outcome` result `open`, evidence `case_outcome`, action \
+                `open_change` opened 2 or more children}"
     );
     assert!(
         !expired_child && !lock_reported && only_the_unlisted,
         "expected no finding whose path has an expiry of `case_outcome`, no finding at \
-         `{{evidence lock}}`, and two findings, both at a state holding an unlisted child \
-         outcome: the stuck state after `lock` and the cycle before it; whole report:\n{report}"
+         `{{evidence lock}}`, and one finding, at a state holding an unlisted child outcome: \
+         the cycle before `lock`; whole report:\n{report}"
     );
 }

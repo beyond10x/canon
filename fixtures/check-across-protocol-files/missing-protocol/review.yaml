@@ -1,0 +1,39 @@
+format: protocol/1
+
+protocol:
+  id: review
+  revision: 1
+  description: Seeded defect, a review that opens a child case under the protocol audit, which is not in the set. The outcome it names about the notes is not a second finding, since the outcomes of audit are not known.
+
+artifacts:
+  work:
+    description: The work under review.
+  notes:
+    description: The review notes, audited in a child case.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child case, one record per child; open while the child runs.
+
+claims:
+  work.accepted:
+    true_when:
+      evidence: {kind: case_outcome, subject: work, result: accepted}
+  notes.cleared:
+    true_when:
+      evidence: {kind: case_outcome, subject: notes, result: cleared}
+
+actions:
+  change.open:
+    description: Open a child change case about the work.
+    case_open: {protocol: change, subject: work}
+  audit.open:
+    description: Open a child audit case about the notes.
+    case_open: {protocol: audit, subject: notes}
+
+outcomes:
+  reviewed:
+    requires:
+      all:
+        - claim: work.accepted
+        - claim: notes.cleared

@@ -1,0 +1,2 @@
+case-open-cycle: protocols open cases under each other in a cycle: audit -> review -> audit
+checked: 2 protocols, 2 openings, 0 supplied kinds, 1 finding

@@ -443,9 +443,9 @@ pub use properties::read_properties;
 use crate::eval::{self, Supplied};
 use crate::ir::Ir;
 use crate::model::{
-    ActionId, CASE_FORMAT, Case, CaseArtifact, CaseId, ClaimId, Declarations, EvidenceKindId,
-    InputId, ObligationId, OutcomeId, Properties, PropertyDependency, PropertyId, PropertySubject,
-    ProtocolId, Revision, one_line,
+    ActionId, CASE_FORMAT, CapabilityId, Case, CaseArtifact, CaseId, ClaimId, Declarations,
+    EvidenceKindId, InputId, ObligationId, OutcomeId, Properties, PropertyDependency, PropertyId,
+    PropertySubject, ProtocolId, Revision, one_line,
 };
 
 pub(crate) use space::{REVISION, Slice, Space, State, Walked};
@@ -651,6 +651,10 @@ fn counted(count: u128, one: &str, many: &str) -> String {
 pub(crate) struct Evaluated {
     pub(crate) actions: Vec<String>,
     pub(crate) outcomes: Vec<String>,
+    /// Each action `blocked` by a denial, which the evaluator gives only while its precondition is
+    /// true, by position in identifier order, with the denied capabilities in requirement order,
+    /// each once: what `canon simulate` names on a finding (story:refused-approval-is-not-stuck).
+    pub(crate) denied: Vec<(usize, Vec<CapabilityId>)>,
 }
 
 /// Checks `ir`, and each of `properties` when given, deciding each subject over its slice, as the
@@ -1113,17 +1117,46 @@ fn evaluate_records_by(
             .unwrap_or_default()
             .to_owned()
     };
+    let actions: Vec<String> = ir
+        .actions
+        .keys()
+        .map(|id| status(&decision.actions, id.as_str()))
+        .collect();
+    // A denial is a reason only of an action whose precondition is true (`eval/actions.rs`).
+    let denied = ir
+        .actions
+        .keys()
+        .enumerate()
+        .filter(|(at, _)| actions[*at] == "blocked")
+        .filter_map(|(at, id)| {
+            let reasons = decision
+                .actions
+                .as_ref()?
+                .get(id.as_str())?
+                .get("reasons")?;
+            let mut capabilities: Vec<CapabilityId> = reasons
+                .as_array()?
+                .iter()
+                .filter(|reason| {
+                    reason
+                        .get("decision")
+                        .and_then(|decision| decision.as_str())
+                        == Some("denied")
+                })
+                .filter_map(|reason| reason.get("capability")?.as_str().map(CapabilityId::new))
+                .collect();
+            capabilities.dedup();
+            (!capabilities.is_empty()).then_some((at, capabilities))
+        })
+        .collect();
     Ok(Evaluated {
-        actions: ir
-            .actions
-            .keys()
-            .map(|id| status(&decision.actions, id.as_str()))
-            .collect(),
+        actions,
         outcomes: ir
             .outcomes
             .keys()
             .map(|id| status(&decision.outcomes, id.as_str()))
             .collect(),
+        denied,
     })
 }
 

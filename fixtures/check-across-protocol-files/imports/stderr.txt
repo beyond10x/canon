@@ -1,0 +1,1 @@
+error[protocol-imports]: fixtures/check-across-protocol-files/imports/root.yaml: the protocol imports `review.base`: canon check-set reads each protocol as written, and a protocol with imports compiles only with the documents it imports

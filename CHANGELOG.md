@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.14.0] - 2026-11-23
+
+A minor release: one new command, `canon check-set`, and two changes to what `canon simulate`
+reports. They close three gaps the runbook consumer (`bf-runbook`) named. There is no change to
+`protocol/1`, `canon-ir/1`, `canon-case/1` or the `canon-decision/1` model. `canon check`,
+`compile`, `generate`, `conform run` and `evaluate` give the same bytes as 0.13.0 on every fixture
+(808 runs). Install the CLI or depend on the libraries from Git tag `0.14.0`.
+
+What changes, and for whom (read against the diff since 0.13.0):
+
+- Anyone who keeps one protocol per file. `canon check-set --path <file>`, repeatable, checks the
+  references between the files that `canon check` reads one at a time. Finding codes:
+  `unknown-opened-protocol`, `undeclared-child-outcome`, `unknown-supplier`,
+  `unproduced-supplied-kind`, `duplicate-protocol-id` and `case-open-cycle`; a file with `imports:`
+  is refused as `error[protocol-imports]`. A supplied kind counts as produced when the supplier has
+  an action whose `may_produce` lists a kind of that id. Exit 0 clean, 1 on a finding, 2 on a file
+  that cannot be read. A file named twice, also as `./a.yaml` or through a symbolic link, is read
+  once. On the consumer's 30 protocol files: `checked: 30 protocols, 32 openings, 1 supplied kind,
+  0 findings`, exit 0.
+- Anyone who runs `canon simulate` on a protocol with children. A child is opened together with its
+  running `case_outcome` record `open`, as the runner writes it. An outcome that requires a `none`
+  record while a `children` claim is not yet true is now reported as reached (`unreached-outcome`
+  no longer fires for it), and the walk is smaller: the consumer's `needs-you` protocol goes
+  from 24410 states (12.9 s) to 1431 (0.5 s), `refresh` from 1607 to 717. 23 fixtures print a
+  different `simulate` report (each `report.txt` is in the commit).
+- Anyone whose protocol refuses an approval by capability. `canon simulate` no longer reports a
+  stuck state for a state in which a denied capability blocks an action and a decision step leads to
+  a legitimate outcome: the summary counts it as `N ending by a decision after a denial`. A finding
+  that holds a denial now names the action it blocks and the two forms that end the case. This
+  reverses part of rule R4 of the wave 9 simulate review (a decision step does not decide whether a
+  state is open) for states with a denial.
+
+Breaking, for the output of `canon simulate` only:
+
+- A protocol whose only findings were such states now exits 0 where 0.13.0 exited 1. Three
+  fixtures lose findings (`decision-grounds` 2 to 1, `pending-decisions` 4 to 2,
+  `check/authority-bypass` 2 to 1); four more gain the denial clause (`capability-scope`,
+  `supplied-evidence/bypass`, `supplied-evidence/bypass-unsupplied`, `record-group-large/chain`).
+- The state counts and the `terminable` counts of protocols with several opening actions change.
+  A script that parses the `simulate` report by line must read the new clause and summary count.
+
 ## [0.13.0] - 2026-11-23
 
 A minor release: one new option, `canon evaluate --strict`, and four commands that do less work for

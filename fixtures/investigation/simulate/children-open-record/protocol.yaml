@@ -1,0 +1,111 @@
+format: protocol/1
+
+protocol:
+  id: simulate.children-open-record
+  revision: 1
+  description: >-
+    Four readers opened one after another about one subject, then a merge once every reader ended
+    complete. The probe is legitimate only where the merge found nothing while a reader is not
+    complete, which no real case reaches: a runner writes each reader's record `open` in the step
+    that opens it.
+
+artifacts:
+  sources:
+    description: What the four readers read.
+  merged:
+    description: What the merge writes.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child case, `open` while it runs.
+  a_opened:
+    description: Reader a was opened.
+  b_opened:
+    description: Reader b was opened.
+  c_opened:
+    description: Reader c was opened.
+  d_opened:
+    description: Reader d was opened.
+  merge_opened:
+    description: The merge was opened.
+
+claims:
+  a.opened:
+    description: Reader a was opened.
+    true_when: {evidence: {kind: a_opened}}
+  b.opened:
+    description: Reader b was opened.
+    true_when: {evidence: {kind: b_opened}}
+  c.opened:
+    description: Reader c was opened.
+    true_when: {evidence: {kind: c_opened}}
+  d.opened:
+    description: Reader d was opened.
+    true_when: {evidence: {kind: d_opened}}
+  merge.opened:
+    description: The merge was opened.
+    true_when: {evidence: {kind: merge_opened}}
+  readers.complete:
+    description: Every reader ended complete.
+    true_when: {children: {in: [complete], subject: sources}}
+  merged.none:
+    description: The merge found nothing.
+    true_when: {evidence: {kind: case_outcome, subject: merged, result: none}}
+
+actions:
+  a.open:
+    description: Open reader a.
+    precondition: {claim: a.opened, is: unknown}
+    case_open: {protocol: reader, subject: sources}
+    may_produce:
+      - evidence: a_opened
+  b.open:
+    description: Open reader b after reader a.
+    precondition:
+      all:
+        - {claim: a.opened}
+        - {claim: b.opened, is: unknown}
+    case_open: {protocol: reader, subject: sources}
+    may_produce:
+      - evidence: b_opened
+  c.open:
+    description: Open reader c after reader b.
+    precondition:
+      all:
+        - {claim: b.opened}
+        - {claim: c.opened, is: unknown}
+    case_open: {protocol: reader, subject: sources}
+    may_produce:
+      - evidence: c_opened
+  d.open:
+    description: Open reader d after reader c.
+    precondition:
+      all:
+        - {claim: c.opened}
+        - {claim: d.opened, is: unknown}
+    case_open: {protocol: reader, subject: sources}
+    may_produce:
+      - evidence: d_opened
+  merge.open:
+    description: Open the merge once every reader was opened and ended complete.
+    precondition:
+      all:
+        - {claim: d.opened}
+        - {claim: readers.complete}
+        - {claim: merge.opened, is: unknown}
+    case_open: {protocol: merge, subject: merged}
+    may_produce:
+      - evidence: merge_opened
+
+outcomes:
+  nothing:
+    description: Every reader ended complete and the merge found nothing.
+    requires: {claim: merged.none}
+  probe:
+    description: The merge found nothing while a reader is not complete.
+    requires:
+      all:
+        - {claim: merged.none}
+        - any:
+            - {claim: readers.complete, is: unknown}
+            - {claim: readers.complete, is: "false"}

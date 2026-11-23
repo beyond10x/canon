@@ -13,8 +13,8 @@
 domain: canon.cli
 
 summary: >-
-  The canon command line: validate, compile, evaluate, check, simulate, generate, diff, floor,
-  mutate and conform run, each reading files named by its flags and printing its result, or
+  The canon command line: validate, compile, evaluate, check, check-set, simulate, generate,
+  diff, floor, mutate and conform run, each reading files named by its flags and printing its result, or
   refusing with exit status 1 when a document is rejected and 2 when an input cannot be read.
 
 naming:
@@ -247,6 +247,7 @@ commands:
   # read from: .engineering/planning/story/canon-simulate.md:125
   # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Outcome", 1 to 5
   # read from: .engineering/planning/story/simulate-revise-step.md, section "Outcome", 1
+  # read from: .engineering/planning/story/simulate-opens-child-with-its-record.md, section "Outcome"
   - name: canon.cli.Simulate
     naming:
       wire: simulate
@@ -290,7 +291,11 @@ commands:
       # revision: current or an evidence match of case_outcome tells an earlier record from a
       # current one. The external revise step is tried after the supplied steps
       # and before the child-outcome and expiry steps, and a state is open when it leads to a
-      # legitimate outcome through it too.
+      # legitimate outcome through it too. A state that is not open, in which a denied capability
+      # blocks an action whose precondition is true and a decision step leads to a legitimate
+      # outcome, ends by that decision: it is no finding, and the summary counts it after the
+      # waiting states, `D ending by a decision after a denial`, only when D is above 0.
+      # read from: .engineering/planning/story/refused-approval-is-not-stuck.md, section "Scope"
       # read from: .engineering/planning/story/child-outcome-recovery.md, section "Outcome", 1
       # read from: .engineering/planning/story/canon-simulate.md:67
       # read from: .engineering/planning/story/artifact-revised-by.md, section "Outcome", 5 and 6
@@ -308,14 +313,26 @@ commands:
       # revise), supplied, child-outcome, expiry and authority steps leads from it to a
       # legitimate outcome. The walk
       # counts, per action that opens a child case, its children that have not ended: none, one,
-      # or two or more. A step of the action raises the count; a child's outcome arrives while the
+      # or two or more. A step of the action raises the count and adds the child's case_outcome
+      # record open where the protocol reads that result and some reader of the record demands no
+      # independence, as a runner writes it when it opens the child
+      # (story:simulate-opens-child-with-its-record); a child's outcome arrives while the
       # count is above none, an outcome other than open lowers it, or from two or more may also
-      # leave it at two or more, and replaces an open record, and a child-outcome step is no
+      # leave it at two or more, and replaces an open record, never the last one while a child
+      # that has not ended is left where the step adds the record, and a child-outcome step is no
       # action step, so it never makes a state a cycle. A state holding an open record, current or
       # held as expired, keeps some count above none, because an open record is a child that has
       # not ended. A stuck state or cycle is printed once per smallest state, with the decisions
       # that would make an outcome legitimate and the number of other such states that contain
-      # it. A case_outcome record that expires stays read by every children form: with no
+      # it. A refused approval (story:refused-approval-is-not-stuck): a state that is not open,
+      # in which a denied capability blocks an action whose precondition is true and a decision
+      # step leads to a state with a legitimate outcome, is no finding; the summary counts it,
+      # `, D ending by a decision after a denial`, only when D is above 0. A printed stuck state
+      # or cycle in which a denied capability blocks an action whose precondition is true names
+      # each such block, `capability c denied blocks action a, whose precondition is true`, and
+      # the two forms that end the case after the denial: an outcome with `requires: {decision:
+      # ..., when: ...}`, or an action without the capability whose record an outcome reads.
+      # A case_outcome record that expires stays read by every children form: with no
       # evidence match reading case_outcome it has no expiry step, otherwise it is held as
       # expired, absent to every evidence match. Limit: a step adds one record, so where an
       # action's guard closes on its first record the walk never holds two records of one taking
@@ -348,6 +365,7 @@ commands:
       # earlier`, or as a current one. A step of the opening action leaves that third value as it
       # is. A parent that revises the artifact a failed child was about, and opens new children,
       # is therefore walked to the outcome the form reads.
+      # read from: .engineering/planning/story/refused-approval-is-not-stuck.md, section "Scope"
       # read from: .engineering/planning/story/child-outcome-recovery.md, section "Outcome", 1 to 3
       # read from: .engineering/planning/story/simulate-revise-step.md, section "Outcome", 1 to 4
       # read from: .engineering/planning/story/simulate-revise-step.md, section "Scope" (one record or one group)
@@ -532,6 +550,64 @@ commands:
         error: canon.cli.Rejected
       # read from: .engineering/planning/story/canon-mutate.md, section "Outcome", "Decided by the rescope"
       - name: no-weak-point
+        returns: true
+
+  # Checks a set of protocol/1 files against each other (story:check-across-protocol-files,
+  # decision D1: a new command, so canon check and canon simulate keep their bytes): each action's
+  # case_open protocol is in the set; each outcome of a child case a protocol names about an
+  # artifact (a children form, an evidence match of case_outcome or an order form) is declared by
+  # a protocol it opens about that artifact, a form without a subject by one of every protocol it
+  # opens, open excepted; each supplied_by protocol is in the set and, decision D2, has an action
+  # whose may_produce lists a kind of the same id; and the openings form no cycle
+  # (case-open-cycle). A member with imports is refused. Two files of the set with one protocol id
+  # are a finding (duplicate-protocol-id), not one protocol: a runner resolves an id to one
+  # protocol and case_open names no revision. A path is one file wherever it resolves to.
+  # read from: .engineering/planning/story/check-across-protocol-files.md, section "Scope"
+  # read from: .engineering/planning/story/check-across-protocol-files.md, section "Acceptance", 1 to 3
+  - name: canon.cli.CheckSet
+    naming:
+      wire: check-set
+      display: Check set
+      summary: >-
+        Check a set of protocol/1 documents against each other: opened protocols and suppliers in
+        the set, named child outcomes declared by the protocols opened about their subject, each
+        supplied kind produced by an action of its supplier, and no cycle of case openings.
+    input:
+      # A protocol/1 document of the set, each given with its own `--path`. A repeatable flag
+      # clap requires, so a List and not Optional. The order changes nothing, and two paths that
+      # resolve to one file (two spellings, a symbolic link) are that file once.
+      # read from: .engineering/planning/story/check-across-protocol-files.md, section "Scope", decision D1
+      - name: path
+        type: List<String>
+    response:
+      # The summary line, which found nothing: the protocols, the openings and the supplied kinds
+      # checked, and 0 findings.
+      # read from: fixtures/check-across-protocol-files/clean/report.txt
+      - name: output
+        type: String
+    outcomes:
+      # read from: .engineering/planning/story/check-across-protocol-files.md, section "Scope", decision D1
+      # Exit 2. The files are read in sorted order of their paths and the first one refused
+      # decides: unreadable when it cannot be read, rejected when it does not parse or compile or
+      # has imports.
+      - name: unreadable
+        external: a file of the set cannot be read, and no file before it in sorted order is refused
+        error: canon.cli.Unreadable
+      # One line per finding, a stable code first (duplicate-protocol-id, case-open-cycle,
+      # unknown-opened-protocol, undeclared-child-outcome, unknown-supplier,
+      # unproduced-supplied-kind), then the summary line.
+      # read from: .engineering/planning/story/check-across-protocol-files.md, section "Acceptance", 1 to 3
+      # read from: fixtures/check-across-protocol-files/imports/stderr.txt
+      # read from: fixtures/check-across-protocol-files/duplicate-id/report.txt
+      - name: rejected
+        external: >-
+          a document does not parse or compile, a member has imports, or the check finds two
+          files with one protocol id, an opened protocol or a supplier outside the set, an
+          undeclared child outcome, a supplied kind its supplier does not produce, or a cycle of
+          case openings
+        error: canon.cli.Rejected
+      # read from: fixtures/check-across-protocol-files/clean/report.txt
+      - name: nothing-found
         returns: true
 
   # The clap path `conform run`.

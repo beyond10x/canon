@@ -45,7 +45,16 @@
 //! holds some mark above none ("Decided in review, D5") on an action whose children record in
 //! that record's dimension (story:child-outcome-subject): an `open` record is a child that has not
 //! ended, and with every such mark at none no child is left to end, so no later outcome could
-//! replace it. A child-outcome successor that would break this is not a successor.
+//! replace it. The reverse holds too (story:simulate-opens-child-with-its-record) in each
+//! dimension the action's children record in that has the class and that some reader reads with
+//! no independence demand: a runner writes a child's `open` record in the step that opens it, and
+//! every producer's record meets that reader, so a mark above none comes with an `open` record
+//! there, until an expiry or a revision removes it from a dimension that holds no expired or
+//! earlier record, as it leaves every evidence match of a real case. In a dimension whose every
+//! reader demands independence a runner's `open` record may meet no demand, which no reader reads
+//! and the state without it stands for, so there a mark above none may come without an `open`
+//! record. A child-outcome successor that would break either is not a successor: a child that
+//! ends replaces its own `open` record, and leaves the one a child that has not ended holds.
 //!
 //! # Steps
 //!
@@ -55,11 +64,17 @@
 //!   its own successor; a producer profile is a free choice of each step, as a runner may use any
 //!   producer. A record already there, or one from a producer independent on more, adds nothing.
 //!   An action that may produce nothing, or nothing a record can be about, has one step, which
-//!   adds nothing. Every step of an action that opens a child case raises its mark, and is a step
-//!   when it only raises the mark; a step that adds nothing and raises no mark (none is raised
-//!   past two or more) returns the same state. `case_outcome` is not among the kinds
-//!   an opening action's step adds (`canon check` still counts it as produced, `check::produces`):
-//!   it arrives by the child-outcome step.
+//!   adds nothing. Every step of an action that opens a child case raises its mark and adds the
+//!   child's `case_outcome` record of the class `open` (story:simulate-opens-child-with-its-record),
+//!   current, from a producer of the empty profile, in each dimension its children record in that
+//!   has the class `open` and that some reader reads with no independence demand (none in a
+//!   dimension without the class, D-b, and none in one whose every reader demands independence,
+//!   where a runner's record may meet no demand); the step keeps its text (D-a). It is a step when it
+//!   only raises the mark or adds that record; a step that adds nothing, raises no mark (none is
+//!   raised past two or more) and finds the `open` record there returns the same state. A child's
+//!   other `case_outcome` records are not among those an opening action's step adds (`canon
+//!   check` still counts the kind as produced, `check::produces`): they arrive by the
+//!   child-outcome step.
 //! - **Group step** (story:simulate-record-groups). An action that declares `records_together`
 //!   records each group's kinds in one run, all of them or none: for each group, one step adds
 //!   one current record of each member kind at once, each member in one dimension of its kind, of
@@ -126,15 +141,23 @@
 //!   records a child's outcome when the child ends, whether the opening action's guard is still
 //!   open or not. Canon runs nothing; the step says that a runner may record it
 //!   between two evaluations. A record of the class `open` keeps the mark: the child has not
-//!   ended. Any other class lowers it, from one to none, and from two or more to one or, since
-//!   more children may remain, to two or more; it is a step when it lowers the mark, even with
-//!   its class already there. A class other than `open`, in a state holding a record of the class
-//!   `open` in that dimension, has more successors that also drop the `open` records: one record
-//!   is one child (`duplicate-child-case` refuses a second record for it), so an open child that
-//!   ends is replaced, not joined. A record of the class `open` held as expired (R2a, below) is
-//!   an open child too, and is replaced the same way: when the state holds `open` both current
-//!   and held as expired, the successors replace the current records, the one held as expired,
-//!   or both, since either child may end first. The step is written `` a child of action `a`
+//!   ended; the opening step added it already where it adds one, so it is a step only where an
+//!   expiry or a revision removed it, where the opening added none, or with another producer
+//!   profile (D-c). Any other class lowers it, from
+//!   one to none, and from two or more to one or, since more children may remain, to two or
+//!   more; it is a step when it lowers the mark, even with its class already there. A class
+//!   other than `open`, in a state holding a record of the class `open` in that dimension, has
+//!   more successors that also drop the `open` records: one record is one child
+//!   (`duplicate-child-case` refuses a second record for it), so an open child that ends is
+//!   replaced, not joined. A record of the class `open` held as expired (R2a, below) is an open
+//!   child too, and is replaced the same way: when the state holds `open` both current and held
+//!   as expired, the successors replace the current records, the one held as expired, or both,
+//!   since either child may end first. A successor that drops the last `open` record of a
+//!   dimension the opening step adds it in while a mark above none on an action whose children
+//!   record in it is left is not one: that child has not ended, and its record stays (two
+//!   children of one action, or of two actions about one subject, share the dimension's `open`
+//!   record); in a dimension whose every reader demands independence the child left may be one
+//!   whose record meets no demand. The step is written `` a child of action `a`
 //!   records evidence `case_outcome` result `r` ``, `a` the action whose mark it lowers or keeps,
 //!   followed by `` , replacing result `open` `` (`` result `open` expired ``, `` result `open`
 //!   and result `open` expired ``) for a replacing successor. It is no action step: it makes no
@@ -190,7 +213,11 @@
 //! some sequence of action (record and revise), supplied, child-outcome, expiry and authority
 //! steps leads from it to a state in which an outcome is legitimate (R3); decision steps are not
 //! part of that sequence (R4), since a protocol with an outcome that requires only a decision can
-//! leave every state by it. In this order:
+//! leave every state by it. A state that is not open, in which a denied capability blocks an
+//! action whose precondition is true and a decision step leads to a state with a legitimate
+//! outcome, ends by that decision (story:refused-approval-is-not-stuck, option B): it is none of
+//! the findings below, and the summary counts it. A refused approval is ended by an explicit
+//! decision, and a protocol that declares one for it needs no workaround action. In this order:
 //!
 //! - `stuck-state`: a state that is not open, in which no action is `admissible` or
 //!   `approval-required`.
@@ -205,6 +232,9 @@
 //! - `dead-action`: an action `admissible` in no reachable state, in identifier order.
 //! - `unreached-outcome`: an outcome legitimate in no reachable state, in identifier order; then
 //!   `no-outcome-reachable`, once, when the protocol declares outcomes and every one is unreached.
+//!
+//! A state that meets the second half of the `stuck-state` or the `cycle` rule and ends by a
+//! decision after a denial is neither.
 //!
 //! A state that meets the second half of the `stuck-state` or the `cycle` rule, in which no
 //! outcome is legitimate, that is open and in which every step of every admissible action, record
@@ -233,12 +263,22 @@
 //! return it and whose capabilities are all decided, since an authority step would change it.
 //! Each state on the way is not open, as no step leads from a state that is not open to one that
 //! is. In m no action is `approval-required`, every capability being decided, so m is a
-//! `stuck-state` when no action is admissible and a `cycle` otherwise, and every state of a kind
-//! contains a printed one. The argument uses no revise, child-outcome or expiry step, the three
+//! `stuck-state` when no action is admissible and a `cycle` otherwise, unless it ends by a
+//! decision after a denial, which the summary counts, and every state of a kind contains a
+//! printed one. The argument uses no revise, child-outcome or expiry step, the three
 //! that remove a record or lower a mark: they are what the old `cycle` rule, which asked every
 //! step of every admissible action to return the state, could not cover, since a state a revise
 //! step leaves never met it. A printed state is not open, so no child outcome that may arrive in
-//! it and no revision opens it. A printed finding names its state and its shortest path, then,
+//! it and no revision opens it. A state that ends by a decision after a denial leaves the kind it
+//! would be of, and a state of the kind that contains it is printed in its place unless it
+//! contains another printed one. A printed finding names its state and its shortest path, then,
+//! when a denied capability blocks an action whose precondition is true in its state (option A),
+//! each such block and the two existing forms that end the case after the denial, `` capability
+//! `c` denied blocks action `a`, whose precondition is true: to end the case after the denial,
+//! declare an outcome with `requires: {decision: ..., when: ...}` or an action without capability
+//! `c` whose record an outcome reads `` (the actions one set of denied capabilities blocks named
+//! together, `` capability `c` and capability `d` denied block … ``, `` whose preconditions are
+//! true `` and `` after the denials `` for more), then,
 //! when a decision step leads from its state to a state with a legitimate outcome, each such
 //! decision in name order and the outcomes it makes legitimate (R4), `` decision `d` taken makes
 //! outcome `o` legitimate ``, then, when other states of its kind contain its state, how many,
@@ -260,7 +300,9 @@
 //! ``, `` evidence `k` expires ``, `` capability `c` denied ``, `` decision `d` taken ``, joined
 //! by `, then `, or `empty`. The findings are followed by the summary: `` simulated: protocol `p`
 //! revision 1: N reachable states, T terminable (outcome `a` x, outcome `b` y), W waiting on
-//! supplied evidence or expiry, F findings (S stuck or cycle states) ``: F counts printed
+//! supplied evidence or expiry, D ending by a decision after a denial, F findings (S stuck or
+//! cycle states) ``: D counts the states that end by a decision after a denial, written only when
+//! it is above 0, F counts printed
 //! findings and S the states the printed stuck states and cycles stand for. A terminable state is
 //! one in which some outcome is legitimate; the walk continues through it.
 //!
@@ -314,8 +356,8 @@ use crate::check::{self, Reader, Space, State, Walked};
 use crate::eval;
 use crate::ir::Ir;
 use crate::model::{
-    ActionId, ArtifactId, CASE_OUTCOME, DecisionName, EvidenceKindId, OPEN_OUTCOME, OutcomeId,
-    Predicate, ProtocolId, one_line,
+    ActionId, ArtifactId, CASE_OUTCOME, CapabilityId, DecisionName, EvidenceKindId, OPEN_OUTCOME,
+    OutcomeId, Predicate, ProtocolId, one_line,
 };
 
 mod recovery;
@@ -349,14 +391,18 @@ impl fmt::Display for Refusal {
 impl std::error::Error for Refusal {}
 
 /// What a printed `stuck-state` or `cycle` names besides its kind: its state, its shortest path,
-/// the decisions that lead from it to a legitimate outcome and how many other states of its kind
-/// contain it.
+/// the denials that block an action whose precondition is true, the decisions that lead from it
+/// to a legitimate outcome and how many other states of its kind contain it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Dead {
     /// The state, as a report writes it.
     pub state: String,
     /// Its shortest path, one step each, as a report writes them.
     pub path: Vec<String>,
+    /// Each action, in identifier order, that a denial blocks in the state while its
+    /// precondition is true, with the denied capabilities in identifier order
+    /// (story:refused-approval-is-not-stuck, option A).
+    pub blocks: Vec<(ActionId, Vec<CapabilityId>)>,
     /// Each decision, in name order, whose step leads from the state to one in which an outcome
     /// is legitimate, with those outcomes in identifier order.
     pub decisions: Vec<(DecisionName, Vec<OutcomeId>)>,
@@ -402,13 +448,77 @@ impl Finding {
     }
 }
 
-/// `; path: …`, then the decisions and the count of containing states, each after `; `.
+/// The clause of option A (story:refused-approval-is-not-stuck): each set of denied capabilities
+/// with the actions it blocks, in order of their first action, and the two existing forms that
+/// end the case after the denial, `` capability `c` denied blocks action `a`, whose precondition
+/// is true: to end the case after the denial, declare an outcome with `requires: {decision: ...,
+/// when: ...}` or an action without capability `c` whose record an outcome reads ``.
+fn blocked(blocks: &[(ActionId, Vec<CapabilityId>)]) -> String {
+    let capability = |id: &CapabilityId| format!("capability `{}`", one_line(id.as_str()));
+    let action = |id: &ActionId| format!("action `{}`", one_line(id.as_str()));
+    let mut groups: Vec<(&[CapabilityId], Vec<&ActionId>)> = Vec::new();
+    for (id, capabilities) in blocks {
+        match groups
+            .iter_mut()
+            .find(|(denied, _)| *denied == capabilities.as_slice())
+        {
+            Some((_, actions)) => actions.push(id),
+            None => groups.push((capabilities, vec![id])),
+        }
+    }
+    let named: Vec<String> = groups
+        .iter()
+        .map(|(denied, actions)| {
+            format!(
+                "{} denied {} {}",
+                denied
+                    .iter()
+                    .map(capability)
+                    .collect::<Vec<_>>()
+                    .join(" and "),
+                if denied.len() == 1 { "blocks" } else { "block" },
+                actions
+                    .iter()
+                    .map(|id| action(id))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })
+        .collect();
+    let denied: BTreeSet<&CapabilityId> = blocks.iter().flat_map(|(_, denied)| denied).collect();
+    format!(
+        "{}, {}: to end the case after the {}, declare an outcome with `requires: {{decision: ..., \
+         when: ...}}` or an action without {} whose record an outcome reads",
+        named.join(", "),
+        if blocks.len() == 1 {
+            "whose precondition is true"
+        } else {
+            "whose preconditions are true"
+        },
+        if denied.len() == 1 {
+            "denial"
+        } else {
+            "denials"
+        },
+        denied
+            .into_iter()
+            .map(capability)
+            .collect::<Vec<_>>()
+            .join(" or ")
+    )
+}
+
+/// `; path: …`, then the denials that block an action, the decisions and the count of containing
+/// states, each after `; `.
 fn tail(dead: &Dead, kind: &str) -> String {
     let mut text = if dead.path.is_empty() {
         "; path: empty".to_owned()
     } else {
         format!("; path: {}", dead.path.join(", then "))
     };
+    if !dead.blocks.is_empty() {
+        text.push_str(&format!("; {}", blocked(&dead.blocks)));
+    }
     if !dead.decisions.is_empty() {
         let decisions: Vec<String> = dead
             .decisions
@@ -518,6 +628,11 @@ pub struct Report {
     /// Whether some artifact declares `revised_by`, so a revision by another protocol may open a
     /// waiting state and the summary names it among what the waiting states wait on.
     pub revisions: bool,
+    /// How many reachable states that are not open end by a decision after a denial: a denial
+    /// blocks an action whose precondition is true there, and a decision step leads to a state
+    /// with a legitimate outcome (story:refused-approval-is-not-stuck, option B). None of them is
+    /// a finding.
+    pub ending: usize,
     /// How many reachable states the printed stuck states and cycles stand for.
     pub dead: usize,
     pub findings: Vec<Finding>,
@@ -538,7 +653,8 @@ fn counted(count: usize, one: &str, many: &str) -> String {
 /// states, 2 terminable (outcome `a` 2), 0 findings (0 stuck or cycle states) ``, with `` , 1
 /// waiting on supplied evidence or expiry `` before the findings when the protocol declares a
 /// supplied or an expiring kind, and `` , 1 waiting on supplied evidence, a child outcome or
-/// expiry `` when it declares an action that opens a child case.
+/// expiry `` when it declares an action that opens a child case; then `` , 1 ending by a decision
+/// after a denial `` when some state ends that way.
 impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for finding in &self.findings {
@@ -563,6 +679,12 @@ impl fmt::Display for Report {
                 }
             };
             terminable.push_str(&format!(", {waiting} waiting on {on}"));
+        }
+        if self.ending > 0 {
+            terminable.push_str(&format!(
+                ", {} ending by a decision after a denial",
+                self.ending
+            ));
         }
         writeln!(
             f,
@@ -686,6 +808,9 @@ struct Layout<'d, 'a> {
     /// For each opener, the `case_open` subject when its mark has a third value
     /// (story:child-outcome-recovery), otherwise `None`; empty before [`Layout::flagging`].
     flagged: Vec<Option<ArtifactId>>,
+    /// For each opener, the `open` records a step of it adds with its child
+    /// (story:simulate-opens-child-with-its-record); empty before [`Layout::opening`].
+    opening: Vec<Vec<Added>>,
 }
 
 impl<'d, 'a> Layout<'d, 'a> {
@@ -745,7 +870,15 @@ impl<'d, 'a> Layout<'d, 'a> {
             marks: at,
             openers: Vec::new(),
             flagged: Vec::new(),
+            opening: Vec::new(),
         }
+    }
+
+    /// The layout in which a step of opener `i` adds the records `opening[i]` as it raises its
+    /// mark: the child's `open` record, as a runner writes it in the step that opens the child.
+    fn opening(mut self, opening: Vec<Vec<Added>>) -> Self {
+        self.opening = opening;
+        self
     }
 
     /// The upstream vector of position `vector` of `dimension`, as [`Space::walk_evidence`] reads
@@ -840,10 +973,18 @@ impl<'d, 'a> Layout<'d, 'a> {
     }
 
     /// `state` after a step of the action at `action`: when it opens a child case, its mark is
-    /// raised by one child, up to two or more.
+    /// raised by one child, up to two or more, and the child's `open` record is added
+    /// ([`Layout::opening`]).
     fn raise(&self, state: &State, action: usize) -> State {
         match self.openers.iter().position(|opener| *opener == action) {
-            Some(at) => self.marked(state, at, (self.mark(state, at) + 1).min(2)),
+            Some(at) => {
+                let raised = self.marked(state, at, (self.mark(state, at) + 1).min(2));
+                self.opening.get(at).map_or(raised.clone(), |records| {
+                    records.iter().fold(raised, |added, record| {
+                        self.add(&added, record.dimension, record.class, record.profile)
+                    })
+                })
+            }
             None => state.clone(),
         }
     }
@@ -1037,11 +1178,36 @@ struct Visited {
     next: Vec<usize>,
     /// The states its decision steps lead to, with each decision's position.
     decided: Vec<(usize, usize)>,
+    /// Each action a denial blocks in it while its precondition is true, by position, with the
+    /// denied capabilities.
+    denied: Vec<(usize, Vec<CapabilityId>)>,
 }
 
 /// Walks every state `ir` reaches from the empty case, as the module docs say. Pure and
 /// deterministic.
 pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
+    walk(ir, true).map(|walked| walked.report)
+}
+
+/// What [`walk`] gives: the report, and for the tests every state it reached.
+struct Walk {
+    report: Report,
+    /// Every reachable state, in the order the walk first reached it.
+    #[cfg(test)]
+    states: Vec<State>,
+    /// The positions of the reachable states in which an `open` record and the marks of the
+    /// actions that produce its dimension do not pair: an `open` record of the dimension, current
+    /// or held as earlier, with every such mark at none, or, in a dimension the opening step adds
+    /// the record in, some such mark above none with no `open` record.
+    #[cfg(test)]
+    unpaired: Vec<usize>,
+}
+
+/// [`simulate`]. With `with_record` false it is the walk before
+/// story:simulate-opens-child-with-its-record, in which the step of an opening action adds no
+/// `open` record and a child that ends may drop the `open` record a child that has not ended
+/// still holds; the tests hold the walk's states within that walk's.
+fn walk(ir: &Ir, with_record: bool) -> Result<Walk, Refusal> {
     eval::check_depth(ir).map_err(|refusal| Refusal::new(refusal.code(), refusal.to_string()))?;
     let protocol = format!(
         "protocol `{}` revision {}",
@@ -1137,9 +1303,71 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         .map(|(at, _)| at)
         .collect();
     let child_outcomes = !openers.is_empty();
+    // A child of an opening action records only in the `case_outcome` dimension its action
+    // produces (`Space::produced_by`, story:child-outcome-subject D1): the one about its
+    // `case_open` subject, or the one without a subject. Opener `i` is `openers[i]`.
+    let produced: Vec<Vec<usize>> = openers
+        .iter()
+        .map(|action| {
+            let action = ir
+                .actions
+                .values()
+                .nth(*action)
+                .expect("an opener is an action");
+            space
+                .produced_by(ir, action)
+                .into_iter()
+                .filter(|at| is_case_outcome(&dimensions[*at]))
+                .collect()
+        })
+        .collect();
+    let produced = split.redirect(&openers, produced);
+    // For each dimension, the position of its class `open`, which a child that ends replaces.
+    let open_class: Vec<Option<usize>> = dimensions
+        .iter()
+        .map(|walked| {
+            walked
+                .classes
+                .iter()
+                .position(|class| *class == Some(OPEN_OUTCOME))
+        })
+        .collect();
+    // For each dimension, whether the step that opens a child adds its `open` record there: it has
+    // the class `open` and some reader demands no independence, so the empty profile is its first
+    // one and every producer's record meets that reader. When every reader demands independence a
+    // runner's `open` record may meet no demand, which no reader reads and the state without it
+    // stands for, so the opening adds none and a child-outcome step adds one that meets a demand.
+    let paired: Vec<bool> = dimensions
+        .iter()
+        .zip(&open_class)
+        .map(|(walked, open)| {
+            open.is_some() && walked.profiles.first().is_some_and(String::is_empty)
+        })
+        .collect();
+    // story:simulate-opens-child-with-its-record: the step that opens a child adds its `open`
+    // record, from a producer of the empty profile, in each dimension its children record in that
+    // is `paired` (D-b: a dimension without the class gets no record, and neither does one whose
+    // every reader demands independence).
+    let opening: Vec<Vec<Added>> = produced
+        .iter()
+        .map(|at| {
+            at.iter()
+                .filter(|_| with_record)
+                .filter(|dimension| paired[**dimension])
+                .filter_map(|dimension| {
+                    open_class[*dimension].map(|class| Added {
+                        dimension: *dimension,
+                        class,
+                        profile: 0,
+                    })
+                })
+                .collect()
+        })
+        .collect();
     let layout = Layout::revising(&dimensions, base, &holds, moving)
         .marking(openers)
-        .flagging(ir, &split);
+        .flagging(ir, &split)
+        .opening(opening);
     // Each action's revise subsets: the non-empty subsets of its `revises`, in order of their
     // sorted ids; none for an action that declares no `revises`.
     let action_subsets: Vec<Vec<Vec<&ArtifactId>>> = ir
@@ -1227,50 +1455,38 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         .collect();
     let supplied_kinds: BTreeSet<&EvidenceKindId> = check::supplied(ir).collect();
     let supplied_records = records(&of_kinds(&supplied_kinds));
-    // A child of an opening action records only in the `case_outcome` dimension its action
-    // produces (`Space::produced_by`, story:child-outcome-subject D1): the one about its
-    // `case_open` subject, or the one without a subject. Opener `i` is `layout.openers[i]`.
-    let produced: Vec<Vec<usize>> = layout
-        .openers
-        .iter()
-        .map(|action| {
-            let action = ir
-                .actions
-                .values()
-                .nth(*action)
-                .expect("an opener is an action");
-            space
-                .produced_by(ir, action)
-                .into_iter()
-                .filter(|at| is_case_outcome(&dimensions[*at]))
-                .collect()
-        })
-        .collect();
-    let produced = split.redirect(&layout.openers, produced);
     let child_records: Vec<Vec<Added>> = produced.iter().map(|at| records(at)).collect();
-    // For each dimension, the position of its class `open`, which a child that ends replaces.
-    let open_class: Vec<Option<usize>> = dimensions
-        .iter()
-        .map(|walked| {
-            walked
-                .classes
-                .iter()
-                .position(|class| *class == Some(OPEN_OUTCOME))
+    // Whether `state` holds a record of the class `open` in `dimension`, current or held as
+    // expired or earlier.
+    let holds_open = |state: &State, dimension: usize| {
+        open_class[dimension].is_some_and(|open| {
+            layout.present(state, dimension, open) || layout.held_expired(state, dimension, open)
         })
-        .collect();
-    // Whether every `case_outcome` record of the class `open` in `state`, current or held as
-    // expired, has a child that has not ended (D5): a mark above none on an action that produces
-    // the record's dimension.
-    let open_held = |state: &State| {
+    };
+    // Whether `state` holds a mark above none on an action whose children record in `dimension`.
+    let marked_on = |state: &State, dimension: usize| {
+        produced
+            .iter()
+            .enumerate()
+            .any(|(opener, at)| at.contains(&dimension) && layout.mark(state, opener) > 0)
+    };
+    // Whether `walked`, a child-outcome successor of `state`, pairs its `open` records with the
+    // marks. Every `case_outcome` record of the class `open`, current or held as expired, has a
+    // child that has not ended (D5): a mark above none on an action that produces the record's
+    // dimension. And the reverse (story:simulate-opens-child-with-its-record), in a `paired`
+    // dimension: a child that ends replaces its own `open` record, so `walked` drops no `open`
+    // record of a dimension `state` held while a mark above none on an action that produces the
+    // dimension is left. In a dimension whose every reader demands independence the child left
+    // may be one whose `open` record meets no demand.
+    let open_held = |state: &State, walked: &State| {
         (0..dimensions.len()).all(|dimension| {
             !is_case_outcome(&dimensions[dimension])
-                || open_class[dimension].is_none_or(|open| {
-                    !(layout.present(state, dimension, open)
-                        || layout.held_expired(state, dimension, open))
-                        || produced.iter().enumerate().any(|(opener, at)| {
-                            at.contains(&dimension) && layout.mark(state, opener) > 0
-                        })
-                })
+                || ((!holds_open(walked, dimension) || marked_on(walked, dimension))
+                    && (!with_record
+                        || !paired[dimension]
+                        || holds_open(walked, dimension)
+                        || !holds_open(state, dimension)
+                        || !marked_on(walked, dimension)))
         })
     };
     let expiring_kinds: BTreeSet<&EvidenceKindId> = ir
@@ -1465,8 +1681,9 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
                     for lowered in lowered {
                         let walked = layout.marked(&added, at, *lowered);
                         // D5: a state that holds an `open` record holds a child that has not
-                        // ended, so it keeps a mark above none on an action that produces it.
-                        if walked == state || !open_held(&walked) {
+                        // ended, so it keeps a mark above none on an action that produces it;
+                        // and a child that ends leaves the `open` record of one not ended.
+                        if walked == state || !open_held(&state, &walked) {
                             continue;
                         }
                         successors.push((
@@ -1550,6 +1767,7 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
             revisers,
             next: followed,
             decided,
+            denied: evaluated.denied,
         });
         next += 1;
     }
@@ -1580,6 +1798,7 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
     }
 
     let mut waiting = 0;
+    let mut ending = 0;
     let mut stuck: Vec<usize> = Vec::new();
     let mut cycles: Vec<usize> = Vec::new();
     for (at, state) in visited.iter().enumerate() {
@@ -1588,10 +1807,20 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         };
         // An open state waits only when every step of every admissible action, record or
         // revise, returns it; one a revise step leads out of is neither waiting nor a finding.
+        // One that is not open, in which a denial blocks an action whose precondition is true
+        // and a decision step leads to a legitimate outcome, ends by that decision
+        // (story:refused-approval-is-not-stuck, option B, which narrows R4).
         if open[at] {
             if state.revisers.is_empty() {
                 waiting += 1;
             }
+        } else if !state.denied.is_empty()
+            && state
+                .decided
+                .iter()
+                .any(|(_, to)| !visited[*to].legitimate.is_empty())
+        {
+            ending += 1;
         } else if admissible.is_empty() {
             stuck.push(at);
         } else {
@@ -1844,6 +2073,20 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
     let dead = |at: usize, containing: usize| Dead {
         state: rendered(at),
         path: path(at),
+        blocks: visited[at]
+            .denied
+            .iter()
+            .map(|(action, capabilities)| {
+                (
+                    ir.actions
+                        .keys()
+                        .nth(*action)
+                        .expect("a declared action")
+                        .clone(),
+                    capabilities.clone(),
+                )
+            })
+            .collect(),
         decisions: decision_exits(at),
         containing,
     };
@@ -1900,7 +2143,21 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
             revision: ir.protocol.revision,
         });
     }
-    Ok(Report {
+    #[cfg(test)]
+    let unpaired: Vec<usize> = (0..states.len())
+        .filter(|at| {
+            (0..dimensions.len()).any(|dimension| {
+                let (open, marked) = (
+                    holds_open(&states[*at], dimension),
+                    marked_on(&states[*at], dimension),
+                );
+                is_case_outcome(&dimensions[dimension])
+                    && open_class[dimension].is_some()
+                    && ((open && !marked) || (marked && !open && paired[dimension]))
+            })
+        })
+        .collect();
+    let report = Report {
         protocol: ir.protocol.id.clone(),
         revision: ir.protocol.revision,
         states: states.len(),
@@ -1921,8 +2178,16 @@ pub fn simulate(ir: &Ir) -> Result<Report, Refusal> {
         .then_some(waiting),
         child_outcomes,
         revisions: !external.is_empty(),
+        ending,
         dead: stuck.len() + cycles.len(),
         findings,
+    };
+    Ok(Walk {
+        report,
+        #[cfg(test)]
+        states,
+        #[cfg(test)]
+        unpaired,
     })
 }
 

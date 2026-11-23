@@ -199,9 +199,14 @@ pub enum Command {
     /// unless the action declares them a group, and an outcome that needs both is reported as
     /// legitimate in no reachable state. Per action that opens a child case
     /// (`case_open`) the walk counts the children that have not ended: none, one, or two or more.
-    /// A step of the action raises the count, a child's outcome arrives while it is above none,
+    /// A step of the action raises the count and adds the child's `case_outcome` record `open`,
+    /// as a runner writes it when it opens the child, where the protocol reads the result `open`
+    /// of that record and some reader of the record demands no independence; where every reader
+    /// demands independence (`independent_on`), the runner's record may meet no demand and the
+    /// step adds none. A child's outcome arrives while the count is above none,
     /// and an outcome other than `open` lowers it, or from two or more may also leave it at two
-    /// or more, and replaces an `open` record, since one record is one child. A child of an
+    /// or more, and replaces an `open` record, since one record is one child, but, where the step
+    /// adds the record, never the last one while a child that has not ended is left. A child of an
     /// opening action records `case_outcome` about the artifact the action's `case_open` names
     /// when the protocol reads `case_outcome` about that artifact by name, otherwise without a
     /// subject. A state holding an `open` record, current or held as expired, keeps the count of
@@ -239,8 +244,14 @@ pub enum Command {
     /// of every admissible action returns the same state; when a revise step leads out of a
     /// cycle, it says every record step and ends `every revision by action x leads to a state no
     /// outcome is reachable from`. Each is printed once, at its smallest state, with the shortest
-    /// path that reaches it, each decision that would make an outcome legitimate there, and how
-    /// many other such states contain it; an open state in which no outcome is legitimate, no
+    /// path that reaches it, each denied capability that blocks an action whose precondition is
+    /// true there with the two forms that end the case after the denial (an outcome with
+    /// `requires: {decision: ..., when: ...}`, or an action without the capability whose record
+    /// an outcome reads), each decision that would make an outcome legitimate there, and how
+    /// many other such states contain it. A state that is not open, in which a denial blocks an
+    /// action whose precondition is true and a decision step leads to a legitimate outcome, ends
+    /// by that decision: it is no finding, and the summary counts it (`D ending by a decision
+    /// after a denial`, only when D is above 0). An open state in which no outcome is legitimate, no
     /// action is approval-required, and every step of every admissible action, record or revise,
     /// returns the state is counted as waiting. The summary
     /// counts the reachable states, per outcome those in which it is legitimate, the waiting
@@ -320,7 +331,8 @@ pub enum Command {
     /// mutant with its categories, then a summary line. Exits 1 when at least one weak point is
     /// reported, and 0 otherwise. Refused, exit 1, running nothing: no scenario names the protocol
     /// file as its fixture, a scenario file does not parse, the protocol does not compile, or a
-    /// scenario whose fixture it is does not pass on the protocol itself.
+    /// scenario whose fixture it is does not pass on the protocol itself. A protocol, scenario
+    /// directory or scenario file that cannot be read exits 2.
     Mutate {
         /// The protocol document to mutate, the fixture of the scenarios that test it.
         #[arg(long)]
@@ -329,6 +341,34 @@ pub enum Command {
         /// scenario.
         #[arg(long)]
         scenarios: PathBuf,
+    },
+    /// Check a set of `protocol/1` documents against each other, the names one gives another that
+    /// `canon check` of one document never resolves. Prints one line per finding, its stable code
+    /// first, then a summary line counting the protocols, the openings and the supplied kinds
+    /// checked: `case-open-cycle`, the set's case openings form a cycle; `unknown-opened-protocol`,
+    /// an action's `case_open` names a protocol not in the set; `undeclared-child-outcome`, a
+    /// protocol names an outcome of a child case about an artifact (an outcome a `children` form
+    /// lists, or the result an evidence match or an order form reads of `case_outcome`, about the
+    /// form's `subject`) that no protocol it opens about that artifact declares, a form without a
+    /// subject checked against every protocol it opens, `open` never one, and a name about an
+    /// artifact one of whose opened protocols is not in the set not checked; `unknown-supplier`, an
+    /// evidence kind's `supplied_by` names a protocol not in the set; `unproduced-supplied-kind`,
+    /// no action of that supplier lists a kind of the same id in `may_produce`;
+    /// `duplicate-protocol-id`, two or more files of the set declare one protocol id, naming the id
+    /// and each file's path: a runner resolves an id to one protocol and `case_open` names no
+    /// revision, so the files are not pooled and nothing is resolved against that id. Each finding
+    /// names the protocol, the action, declaration or kind, and the missing id. Exits 0 when the
+    /// check found nothing, 1 when it found something. Each document is compiled on its own: one
+    /// that does not parse or compile, or that has imports, is refused, exit 1, and a file that
+    /// cannot be read exits 2, each naming its path; the files are read in sorted order of their
+    /// paths, and when more than one is refused, the first of them in sorted order of the paths
+    /// decides the exit status.
+    CheckSet {
+        /// A protocol document of the set. Repeat it once per document, in any order: the order
+        /// changes no byte of the report, and a path given twice, under two spellings or through
+        /// a symbolic link, is read once.
+        #[arg(long, required = true)]
+        path: Vec<PathBuf>,
     },
     /// Conformance scenarios.
     Conform {

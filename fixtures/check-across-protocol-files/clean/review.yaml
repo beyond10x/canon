@@ -1,0 +1,57 @@
+format: protocol/1
+
+protocol:
+  id: review
+  revision: 1
+  description: Review a piece of work through a child change case about the work and a child check case about the notes, and read a note a case under another protocol supplies.
+
+artifacts:
+  work:
+    description: The work under review; a child change case is opened about it.
+  notes:
+    description: The review notes; a child check case is opened about them.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child case, one record per child; open while the child runs.
+  peer_note:
+    description: A note a case under notes.write wrote, copied unchanged from that case.
+    supplied_by: notes.write
+
+claims:
+  work.ended:
+    description: Every child case about the work ended accepted or declined.
+    true_when:
+      children: {in: [accepted, declined], subject: work}
+  work.accepted:
+    description: The child case about the work ended accepted.
+    true_when:
+      evidence: {kind: case_outcome, subject: work, result: accepted}
+  work.running:
+    description: The child case about the work still runs; naming open is never a finding.
+    true_when:
+      evidence: {kind: case_outcome, subject: work, result: open}
+  every.ended:
+    description: Every child case, about any artifact, ended accepted or passed; a form without a subject is checked against every protocol the review opens.
+    true_when:
+      children: {in: [accepted, passed]}
+  notes.read:
+    description: A peer note was supplied about the notes.
+    true_when:
+      evidence: {kind: peer_note, subject: notes}
+
+actions:
+  change.open:
+    description: Open a child change case about the work.
+    case_open: {protocol: change, subject: work}
+  check.open:
+    description: Open a child check case about the notes.
+    case_open: {protocol: check, subject: notes}
+
+outcomes:
+  reviewed:
+    description: The work was accepted and a peer note was read.
+    requires:
+      all:
+        - claim: work.accepted
+        - claim: notes.read

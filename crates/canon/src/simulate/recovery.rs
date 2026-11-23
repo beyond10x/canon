@@ -388,7 +388,7 @@ pub(super) fn late(
     state: &State,
     child_records: &[Vec<Added>],
     open_class: &[Option<usize>],
-    open_held: &dyn Fn(&State) -> bool,
+    open_held: &dyn Fn(&State, &State) -> bool,
 ) -> Vec<(State, Step)> {
     let mut steps = Vec::new();
     for (at, action, mark) in layout.raised(state) {
@@ -429,7 +429,7 @@ pub(super) fn late(
                 let added = layout.add_earlier(&replaced, dimension, class);
                 for lowered in lowered {
                     let walked = layout.marked(&added, at, *lowered);
-                    if walked == *state || !open_held(&walked) {
+                    if walked == *state || !open_held(state, &walked) {
                         continue;
                     }
                     steps.push((

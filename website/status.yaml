@@ -272,3 +272,18 @@ items:
     story: story:artifact-revised-by
     detail: "An artifact of protocol/1 can name the protocol whose cases revise it with revised_by, one protocol id; canon validate refuses the protocol's own id as self-revised-artifact and any other id is valid and resolved by nothing. canon-ir/1 writes revised_by after the artifact's description only when it is set, so the IR and digest of every protocol without it stay as they were, and the IR read-back refuses a non-string and the own id. canon evaluate, canon check and canon generate give the same bytes with or without it, and canon diff reports adding, removing or replacing it as NO SEMANTIC CHANGE. canon simulate offers a revise step for the artifact in every state, printed as protocol q revises a, after the supplied steps and before the expiry steps; a state only that step can open counts as waiting and is no finding, and the summary of a protocol with such an artifact says waiting on supplied evidence, expiry or a revision by another protocol. Canon revises nothing and nothing checks that the named protocol revises the artifact."
     href: /docs/reference/cli#canon-simulate
+  - label: canon check-set
+    area: Analysis
+    story: story:check-across-protocol-files
+    detail: "canon check-set --path <file>, repeatable, checks the references between protocol files: an opened protocol that is no file of the set, a child outcome a protocol names about a subject that no protocol it opens on that subject declares, a supplier that is no protocol of the set or has no action whose may_produce lists the supplied kind, two files with one protocol id and a cycle of openings. Exit 0 clean, 1 on a finding, 2 on a file that cannot be read. canon check and canon simulate read one file and are unchanged."
+    href: /docs/reference/cli#canon-check-set
+  - label: canon simulate opens a child with its record
+    area: Analysis
+    story: story:simulate-opens-child-with-its-record
+    detail: "canon simulate opens a child together with its running case_outcome record open, as the runner writes it, so an outcome that waits for a child to end is reached only through the states the runner reaches. The walk of a protocol with several opening actions is smaller (one consumer protocol 24410 states to 1431) and an outcome that required an open child record is no longer reported unreached."
+    href: /docs/reference/cli#canon-simulate
+  - label: canon simulate ends a refused approval by a decision
+    area: Analysis
+    story: story:refused-approval-is-not-stuck
+    detail: "A state in which a denied capability blocks an action and a decision step leads to a legitimate outcome is no stuck-state or cycle finding; the summary counts it as ending by a decision after a denial. A finding that holds a denial names the action it blocks and the two forms that end the case, an outcome with requires decision and when, or an action without the capability whose record an outcome reads."
+    href: /docs/reference/cli#canon-simulate

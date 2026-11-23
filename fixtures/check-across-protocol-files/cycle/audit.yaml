@@ -1,0 +1,28 @@
+format: protocol/1
+
+protocol:
+  id: audit
+  revision: 1
+  description: Seeded defect, an audit that opens a child review case, whose protocol opens a child audit case in turn.
+
+artifacts:
+  findings:
+    description: The audit's findings, reviewed in a child case.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child case, one record per child; open while the child runs.
+
+claims:
+  findings.reviewed:
+    true_when:
+      children: {in: [reviewed], subject: findings}
+
+actions:
+  review.open:
+    description: Open a child review case about the findings.
+    case_open: {protocol: review, subject: findings}
+
+outcomes:
+  audited:
+    requires: {claim: findings.reviewed}

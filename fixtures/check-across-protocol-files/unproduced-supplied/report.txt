@@ -1,0 +1,2 @@
+unproduced-supplied-kind: protocol `review` evidence kind `peer_note` is supplied by protocol `notes.write`, no action of which may produce `peer_note`
+checked: 2 protocols, 0 openings, 1 supplied kind, 1 finding

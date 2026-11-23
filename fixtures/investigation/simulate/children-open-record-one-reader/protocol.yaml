@@ -1,0 +1,69 @@
+format: protocol/1
+
+protocol:
+  id: simulate.children-open-record-one-reader
+  revision: 1
+  description: >-
+    The twin of `children-open-record` with one reader: the merge opens once the reader ended
+    complete, and the probe is legitimate only where the merge found nothing while the reader is
+    not complete, which the walk never reaches with or without the reader's record `open` at its
+    opening.
+
+artifacts:
+  sources:
+    description: What the reader reads.
+  merged:
+    description: What the merge writes.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child case, `open` while it runs.
+  a_opened:
+    description: Reader a was opened.
+  merge_opened:
+    description: The merge was opened.
+
+claims:
+  a.opened:
+    description: Reader a was opened.
+    true_when: {evidence: {kind: a_opened}}
+  merge.opened:
+    description: The merge was opened.
+    true_when: {evidence: {kind: merge_opened}}
+  readers.complete:
+    description: Every reader ended complete.
+    true_when: {children: {in: [complete], subject: sources}}
+  merged.none:
+    description: The merge found nothing.
+    true_when: {evidence: {kind: case_outcome, subject: merged, result: none}}
+
+actions:
+  a.open:
+    description: Open reader a.
+    precondition: {claim: a.opened, is: unknown}
+    case_open: {protocol: reader, subject: sources}
+    may_produce:
+      - evidence: a_opened
+  merge.open:
+    description: Open the merge once the reader was opened and ended complete.
+    precondition:
+      all:
+        - {claim: a.opened}
+        - {claim: readers.complete}
+        - {claim: merge.opened, is: unknown}
+    case_open: {protocol: merge, subject: merged}
+    may_produce:
+      - evidence: merge_opened
+
+outcomes:
+  nothing:
+    description: The reader ended complete and the merge found nothing.
+    requires: {claim: merged.none}
+  probe:
+    description: The merge found nothing while the reader is not complete.
+    requires:
+      all:
+        - {claim: merged.none}
+        - any:
+            - {claim: readers.complete, is: unknown}
+            - {claim: readers.complete, is: "false"}

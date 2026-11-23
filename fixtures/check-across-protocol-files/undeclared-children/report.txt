@@ -1,0 +1,2 @@
+undeclared-child-outcome: protocol `review` claim `work.ended` names outcome `lost` of a child case about `work`, which no protocol it opens about `work` declares (it opens `change`)
+checked: 2 protocols, 1 opening, 0 supplied kinds, 1 finding

@@ -1,0 +1,2 @@
+duplicate-protocol-id: protocol `change` is declared by more than one file of the set: `fixtures/check-across-protocol-files/duplicate-id/change-other.yaml` and `fixtures/check-across-protocol-files/duplicate-id/change.yaml`
+checked: 3 protocols, 1 opening, 0 supplied kinds, 1 finding
