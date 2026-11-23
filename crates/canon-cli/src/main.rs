@@ -6,6 +6,7 @@
 //! other subcommand is in its own file.
 
 mod check;
+mod check_set;
 mod conform;
 mod diff;
 mod evaluate;
@@ -73,6 +74,7 @@ fn main() -> ExitCode {
         Command::Simulate { path } => simulate::run(&path),
         Command::Generate { path, out } => generate::run(&path, &out),
         Command::Mutate { path, scenarios } => mutate::run(&path, &scenarios),
+        Command::CheckSet { path } => check_set::run(&path),
     }
 }
 

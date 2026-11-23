@@ -330,6 +330,27 @@ pub enum Command {
         #[arg(long)]
         scenarios: PathBuf,
     },
+    /// Check a set of `protocol/1` documents against each other, the names one gives another that
+    /// `canon check` of one document never resolves. Prints one line per finding, its stable code
+    /// first, then a summary line counting the protocols, the openings and the supplied kinds
+    /// checked: `case-open-cycle`, the set's case openings form a cycle; `unknown-opened-protocol`,
+    /// an action's `case_open` names a protocol not in the set; `undeclared-child-outcome`, a
+    /// protocol names an outcome of a child case about an artifact (an outcome a `children` form
+    /// lists, or the result an evidence match or an order form reads of `case_outcome`, about the
+    /// form's `subject`) that no protocol it opens about that artifact declares, a form without a
+    /// subject checked against every protocol it opens, `open` never one, and a name about an
+    /// artifact one of whose opened protocols is not in the set not checked; `unknown-supplier`, an
+    /// evidence kind's `supplied_by` names a protocol not in the set; `unproduced-supplied-kind`,
+    /// no action of that supplier lists a kind of the same id in `may_produce`. Each finding names
+    /// the protocol, the action, declaration or kind, and the missing id. Exits 0 when the check
+    /// found nothing and 1 when it found something. Each document is compiled on its own: one that
+    /// does not parse or compile, or that has imports, is refused, naming its path.
+    CheckSet {
+        /// A protocol document of the set. Repeat it once per document, in any order: the order
+        /// changes no byte of the report, and a path given twice is read once.
+        #[arg(long, required = true)]
+        path: Vec<PathBuf>,
+    },
     /// Conformance scenarios.
     Conform {
         #[command(subcommand)]

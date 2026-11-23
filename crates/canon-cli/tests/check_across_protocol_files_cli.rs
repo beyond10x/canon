@@ -60,7 +60,13 @@ fn members(root: &Path, set: &str) -> Vec<String> {
     let dir = root.join(FIXTURES).join(set);
     let mut found: Vec<String> = std::fs::read_dir(&dir)
         .expect("the set directory is read")
-        .map(|entry| entry.expect("an entry").file_name().into_string().expect("utf-8"))
+        .map(|entry| {
+            entry
+                .expect("an entry")
+                .file_name()
+                .into_string()
+                .expect("utf-8")
+        })
         .filter(|name| name.ends_with(".yaml"))
         .map(|name| format!("{FIXTURES}/{set}/{name}"))
         .collect();

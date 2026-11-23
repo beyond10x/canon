@@ -38,7 +38,8 @@
 //!   them is the IR it was before they existed. A production's `decided_by` is resolved: the
 //!   action's `author` when the production declares none (story:judgement-marking), so
 //!   `author: program` and a `decided_by` equal to the action's `author` compile to no key. An evidence kind's `supplied_by` is the protocol id as
-//!   declared, a name nothing resolves (story:supplied-evidence). An artifact's `revised_by` is
+//!   declared, a name no single protocol resolves (story:supplied-evidence); [`check_set`]
+//!   resolves it over a set of protocols. An artifact's `revised_by` is
 //!   one more such key: written after its `description` only when the protocol declares it
 //!   (story:artifact-revised-by). A capability requirement is `{"capability": …}`, or `{"capability": …, "scope":
 //!   {<key>: <value>, …}}` with a scope (story:capability-scope). The `independence_dimensions`
@@ -85,6 +86,16 @@
 //! protocol id on any cycle finds, in the order its openings go, back to that id
 //! (`protocols open cases under each other in a cycle: audit -> review -> audit`). An opening
 //! under a protocol outside the set closes no cycle; a chain of openings is accepted.
+//!
+//! [`check_set`] (story:check-across-protocol-files, `canon check-set`) checks a set of compiled
+//! protocols against each other and reports, each with a stable code: the cycle
+//! [`check_openings`] names (`case-open-cycle`); an action whose `case_open` names a protocol
+//! outside the set (`unknown-opened-protocol`); an outcome of a child case a protocol names about
+//! an artifact, in a `children` form, an evidence match of `case_outcome` or an order form, that
+//! no protocol it opens about that artifact declares, a form without a subject checked against
+//! every protocol it opens and `open` never one (`undeclared-child-outcome`); an evidence kind
+//! whose `supplied_by` names a protocol outside the set (`unknown-supplier`), or one no action of
+//! which may produce a kind of the same id (`unproduced-supplied-kind`).
 //!
 //! A protocol that imports others (`imports:`, story:protocol-imports) compiles only composed with
 //! the documents it imports, directly or through another import: [`compose`] turns the root and
@@ -133,7 +144,7 @@ use crate::model::{
 };
 use crate::validate::{self, Problem};
 
-pub use composition::{OpeningCycle, check_openings};
+pub use composition::{NamedIn, OpeningCycle, SetFinding, SetReport, check_openings, check_set};
 pub use imports::{DIGEST_PREFIX, compose, digest};
 use json::Value;
 

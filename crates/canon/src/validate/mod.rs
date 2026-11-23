@@ -28,8 +28,8 @@
 //!    or `d`, or that are but are too long to count in seconds (each with its own message), and
 //!    evidence kinds whose `supplied_by` names the protocol's own id (`self-supplied-evidence`,
 //!    naming the kind; story:supplied-evidence), each kind's in that order, in the order the
-//!    evidence kinds are written. Any other protocol may supply a kind, and nothing resolves the
-//!    name; then artifacts whose `revised_by` names the protocol's own id
+//!    evidence kinds are written. Any other protocol may supply a kind, and validation does not
+//!    resolve the name (`canon check-set` does, over a set of protocols); then artifacts whose `revised_by` names the protocol's own id
 //!    (`self-revised-artifact`, naming the artifact; story:artifact-revised-by), in the order the
 //!    artifacts are written, and any other protocol may revise an artifact;
 //! 7. case inputs that declare no value (`empty-input-values`, naming the input) or list a value
