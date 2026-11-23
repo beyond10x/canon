@@ -1,0 +1,2 @@
+unknown-opened-protocol: protocol `review` action `audit.open` opens a case under protocol `audit`, which is not in the set
+checked: 2 protocols, 2 openings, 0 supplied kinds, 1 finding

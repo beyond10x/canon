@@ -198,7 +198,10 @@ pub struct EvidenceKind {
     #[serde(default, deserialize_with = "present::optional")]
     pub max_age: Option<Age>,
     /// The protocol whose cases produce records of this kind (story:supplied-evidence): any
-    /// protocol but this one, named and never resolved. A runner copies such a record unchanged
+    /// protocol but this one. No check of one protocol resolves it; `canon check-set`
+    /// (`b10x_canon::ir::check_set`) reports, over a set of protocols, a supplier outside the set
+    /// (`unknown-supplier`) and one no action of which may produce a kind of this id
+    /// (`unproduced-supplied-kind`). A runner copies such a record unchanged
     /// from a case under that protocol; `canon check` counts the kind as produced. It counts as
     /// produced without authority and stays governed when an action that requires a capability
     /// may also produce it, so `canon check` reports `authority-bypass` on an outcome a supplied
@@ -305,7 +308,11 @@ impl Author {
 /// artifact it is about, never an existing case. No run-time check keeps a case from opening one
 /// under its own protocol (D206): `canon validate` refuses an opening under the protocol's own id,
 /// and the library function `b10x_canon::ir::check_openings` refuses a set of protocols whose
-/// openings form a cycle, naming it in the order its openings go, from its least protocol id.
+/// openings form a cycle, naming it in the order its openings go, from its least protocol id. No
+/// check of one protocol resolves `protocol`; `canon check-set` (`b10x_canon::ir::check_set`)
+/// reports, over a set of protocols, an opening under a protocol outside the set
+/// (`unknown-opened-protocol`), an outcome of a child case named about `subject` that no protocol
+/// opened about it declares (`undeclared-child-outcome`), and the cycle (`case-open-cycle`).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CaseOpening {

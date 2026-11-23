@@ -1,0 +1,29 @@
+format: protocol/1
+
+protocol:
+  id: notes.write
+  revision: 1
+  description: Write a peer note, which a review reads as supplied evidence.
+
+artifacts:
+  notes:
+    description: The notes written.
+
+evidence_kinds:
+  peer_note:
+    description: The note written.
+
+claims:
+  note.written:
+    true_when:
+      evidence: {kind: peer_note, subject: notes}
+
+actions:
+  write:
+    description: Write the note.
+    may_produce:
+      - evidence: peer_note
+
+outcomes:
+  written:
+    requires: {claim: note.written}

@@ -1,0 +1,24 @@
+format: protocol/1
+
+protocol:
+  id: review
+  revision: 1
+  description: Seeded defect, a review that reads a note supplied by the protocol notes.write, which is not in the set.
+
+artifacts:
+  notes:
+    description: The review notes.
+
+evidence_kinds:
+  peer_note:
+    description: A note a case under notes.write wrote, copied unchanged from that case.
+    supplied_by: notes.write
+
+claims:
+  notes.read:
+    true_when:
+      evidence: {kind: peer_note, subject: notes}
+
+outcomes:
+  reviewed:
+    requires: {claim: notes.read}

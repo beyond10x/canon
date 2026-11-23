@@ -13,8 +13,8 @@
 domain: canon.cli
 
 summary: >-
-  The canon command line: validate, compile, evaluate, check, simulate, generate, diff, floor,
-  mutate and conform run, each reading files named by its flags and printing its result, or
+  The canon command line: validate, compile, evaluate, check, check-set, simulate, generate,
+  diff, floor, mutate and conform run, each reading files named by its flags and printing its result, or
   refusing with exit status 1 when a document is rejected and 2 when an input cannot be read.
 
 naming:
@@ -532,6 +532,56 @@ commands:
         error: canon.cli.Rejected
       # read from: .engineering/planning/story/canon-mutate.md, section "Outcome", "Decided by the rescope"
       - name: no-weak-point
+        returns: true
+
+  # Checks a set of protocol/1 files against each other (story:check-across-protocol-files,
+  # decision D1: a new command, so canon check and canon simulate keep their bytes): each action's
+  # case_open protocol is in the set; each outcome of a child case a protocol names about an
+  # artifact (a children form, an evidence match of case_outcome or an order form) is declared by
+  # a protocol it opens about that artifact, a form without a subject by one of every protocol it
+  # opens, open excepted; each supplied_by protocol is in the set and, decision D2, has an action
+  # whose may_produce lists a kind of the same id; and the openings form no cycle
+  # (case-open-cycle). A member with imports is refused.
+  # read from: .engineering/planning/story/check-across-protocol-files.md, section "Scope"
+  # read from: .engineering/planning/story/check-across-protocol-files.md, section "Acceptance", 1 to 3
+  - name: canon.cli.CheckSet
+    naming:
+      wire: check-set
+      display: Check set
+      summary: >-
+        Check a set of protocol/1 documents against each other: opened protocols and suppliers in
+        the set, named child outcomes declared by the protocols opened about their subject, each
+        supplied kind produced by an action of its supplier, and no cycle of case openings.
+    input:
+      # A protocol/1 document of the set, each given with its own `--path`. A repeatable flag
+      # clap requires, so a List and not Optional. The order changes nothing.
+      # read from: .engineering/planning/story/check-across-protocol-files.md, section "Scope", decision D1
+      - name: path
+        type: List<String>
+    response:
+      # The summary line, which found nothing: the protocols, the openings and the supplied kinds
+      # checked, and 0 findings.
+      # read from: fixtures/check-across-protocol-files/clean/report.txt
+      - name: output
+        type: String
+    outcomes:
+      # read from: .engineering/planning/story/check-across-protocol-files.md, section "Scope", decision D1
+      - name: unreadable
+        external: a file of the set cannot be read
+        error: canon.cli.Unreadable
+      # One line per finding, a stable code first (unknown-opened-protocol,
+      # undeclared-child-outcome, unknown-supplier, unproduced-supplied-kind, case-open-cycle),
+      # then the summary line.
+      # read from: .engineering/planning/story/check-across-protocol-files.md, section "Acceptance", 1 to 3
+      # read from: fixtures/check-across-protocol-files/imports/stderr.txt
+      - name: rejected
+        external: >-
+          a document does not parse or compile, a member has imports, or the check finds an
+          opened protocol or a supplier outside the set, an undeclared child outcome, a supplied
+          kind its supplier does not produce, or a cycle of case openings
+        error: canon.cli.Rejected
+      # read from: fixtures/check-across-protocol-files/clean/report.txt
+      - name: nothing-found
         returns: true
 
   # The clap path `conform run`.
