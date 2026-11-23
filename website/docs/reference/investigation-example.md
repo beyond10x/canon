@@ -296,6 +296,7 @@ The repository keeps broken copies of this protocol in [`fixtures/investigation/
 
 | Variant | Code | Problem |
 |---|---|---|
+| [`at-open-without-supplier.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/at-open-without-supplier.yaml) | `at-open-without-supplier` | evidence kind `peer_review` is required at open and names no protocol that supplies it (`supplied_by`) |
 | [`case-open-self.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/case-open-self.yaml) | `self-opened-case` | action `reaudit` opens a case under protocol `audit`, the protocol's own id |
 | [`duplicate-identifier.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/duplicate-identifier.yaml) | `duplicate-identifier` | action `inspect` is declared more than once |
 | [`input-duplicate-value.yaml`](https://github.com/beyond10x/canon/blob/main/fixtures/investigation/invalid/input-duplicate-value.yaml) | `duplicate-input-value` | input `severity` lists value `low` more than once |

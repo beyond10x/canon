@@ -27,7 +27,9 @@
 //! 6. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
 //!    or `d`, or that are but are too long to count in seconds (each with its own message), and
 //!    evidence kinds whose `supplied_by` names the protocol's own id (`self-supplied-evidence`,
-//!    naming the kind; story:supplied-evidence), each kind's in that order, in the order the
+//!    naming the kind; story:supplied-evidence), and evidence kinds that declare
+//!    `required_at_open: true` without `supplied_by` (`at-open-without-supplier`, naming the kind;
+//!    story:supplied-evidence-required-at-open), each kind's in that order, in the order the
 //!    evidence kinds are written. Any other protocol may supply a kind, and validation does not
 //!    resolve the name (`canon check-set` does, over a set of protocols); then artifacts whose `revised_by` names the protocol's own id
 //!    (`self-revised-artifact`, naming the artifact; story:artifact-revised-by), in the order the
@@ -345,6 +347,10 @@ pub enum Problem {
         kind: EvidenceKindId,
         protocol: ProtocolId,
     },
+    /// An evidence kind is required at open (story:supplied-evidence-required-at-open) but names
+    /// no protocol that supplies it: the opener hands in a record another protocol's case
+    /// produced, so the kind needs `supplied_by`.
+    AtOpenWithoutSupplier { kind: EvidenceKindId },
     /// An artifact names the protocol's own id as the protocol whose cases revise it
     /// (story:artifact-revised-by): the protocol's own actions revise through `revises`, and a
     /// self-name would hide the dead end a revising action that no state admits leaves.
@@ -457,6 +463,7 @@ impl Problem {
             Problem::SelfOpenedCase { .. } => "self-opened-case",
             Problem::InvalidRecordGroup { .. } => "invalid-record-group",
             Problem::SelfSuppliedEvidence { .. } => "self-supplied-evidence",
+            Problem::AtOpenWithoutSupplier { .. } => "at-open-without-supplier",
             Problem::SelfRevisedArtifact { .. } => "self-revised-artifact",
             Problem::ClaimCycle { .. } => "claim-cycle",
             Problem::ActionArguments { .. } => "action-arguments",
@@ -692,6 +699,12 @@ impl fmt::Display for Problem {
                 "evidence kind `{}` is supplied by protocol `{}`, the protocol's own id",
                 one_line(kind.as_str()),
                 one_line(protocol.as_str())
+            ),
+            Problem::AtOpenWithoutSupplier { kind } => write!(
+                f,
+                "evidence kind `{}` is required at open and names no protocol that supplies it \
+                 (`supplied_by`)",
+                one_line(kind.as_str())
             ),
             Problem::SelfRevisedArtifact { artifact, protocol } => write!(
                 f,
@@ -1013,6 +1026,9 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
                 kind: id.clone(),
                 protocol: protocol.protocol.id.clone(),
             });
+        }
+        if kind.required_at_open && kind.supplied_by.is_none() {
+            problems.push(Problem::AtOpenWithoutSupplier { kind: id.clone() });
         }
     }
     for (id, artifact) in protocol.artifacts.iter() {
@@ -1914,6 +1930,26 @@ mod tests {
                  side: {supplied_by: p.sibling}, nowhere: {supplied_by: never.declared}}\n"
             ),
             Vec::<String>::new()
+        );
+    }
+
+    /// story:supplied-evidence-required-at-open: a kind required at open needs a supplier on the
+    /// same kind, else `at-open-without-supplier`, naming the kind, after the kind's maximum age and
+    /// its own supplier check, each kind's in the order written; `false` asks nothing.
+    #[test]
+    fn a_kind_required_at_open_needs_a_supplier() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            evidence_kinds: {z: {required_at_open: true, max_age: 5x}, \
+            a: {supplied_by: p, required_at_open: true}, k: {required_at_open: true}, \
+            off: {required_at_open: false}, ok: {supplied_by: q, required_at_open: true}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "invalid-max-age: evidence kind `z` has max_age `5x`, which is not a whole number without leading zeros, followed by s, m, h or d",
+                "at-open-without-supplier: evidence kind `z` is required at open and names no protocol that supplies it (`supplied_by`)",
+                "self-supplied-evidence: evidence kind `a` is supplied by protocol `p`, the protocol's own id",
+                "at-open-without-supplier: evidence kind `k` is required at open and names no protocol that supplies it (`supplied_by`)",
+            ]
         );
     }
 

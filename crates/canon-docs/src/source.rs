@@ -26,6 +26,8 @@ pub enum Ty {
     Text,
     /// `u64`.
     Count,
+    /// `bool`.
+    Flag,
     /// `Json`: any JSON value, a slot whose shape a later story settles.
     Any,
     /// One of the identifier newtypes in `ids.rs`.
@@ -164,7 +166,7 @@ pub fn named(ty: &Ty, out: &mut Vec<String>) {
             named(key, out);
             named(value, out);
         }
-        Ty::Text | Ty::Count | Ty::Any | Ty::Identifier(_) => {}
+        Ty::Text | Ty::Count | Ty::Flag | Ty::Any | Ty::Identifier(_) => {}
     }
 }
 
@@ -329,6 +331,7 @@ fn ty(ty: &Type, identifiers: &BTreeSet<String>, owner: &str) -> Result<Ty, Stri
     match name.as_str() {
         "String" => Ok(Ty::Text),
         "u64" => Ok(Ty::Count),
+        "bool" => Ok(Ty::Flag),
         "Json" => Ok(Ty::Any),
         "Option" => one(Ty::Option),
         "Vec" => one(Ty::List),

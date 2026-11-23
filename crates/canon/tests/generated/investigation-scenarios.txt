@@ -1,4 +1,4 @@
-digest: 8236454217d8779c6327babb7dfe73be48cac329c7130a18c60435961debcfe2
+digest: f1f204d5dd06a242ba001c94413c2d67da4c47a794582124fee76163c7590f69
 regenerate: task regenerate-scenarios
 === fixture fixtures/investigation/action-admissibility.yaml
 === scenario action.publish_finding.blocked.yaml
@@ -7014,6 +7014,70 @@ steps:
         {
           "outcomes": {
             "supported": {
+              "status": "legitimate"
+            }
+          }
+        }
+=== fixture fixtures/investigation/simulate/at-open/protocol.yaml
+=== scenario action.publish.blocked.yaml
+format: "canon-conformance/1"
+id: "simulate.at-open.action.publish.blocked"
+covers: []
+fixture: "fixtures/investigation/simulate/at-open/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.at-open"
+        revision: "r"
+        artifacts:
+          "report":
+            revision: "r"
+      evidence: []
+    expect:
+      decision: |
+        {
+          "actions": {
+            "publish": {
+              "reasons": [
+                {
+                  "claim": "peer.reviewed",
+                  "value": "unknown"
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+=== scenario outcome.published.legitimate.yaml
+format: "canon-conformance/1"
+id: "simulate.at-open.outcome.published.legitimate"
+covers: []
+fixture: "fixtures/investigation/simulate/at-open/protocol.yaml"
+steps:
+  - id: "witness"
+    evaluate:
+      case:
+        format: "canon-case/1"
+        id: "witness"
+        protocol: "simulate.at-open"
+        revision: "r"
+        artifacts:
+          "report":
+            revision: "r"
+      evidence:
+        - format: "canon-evidence/1"
+          id: "e0"
+          kind: "publication"
+          subject: "report"
+          subject_revision: "r"
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "published": {
               "status": "legitimate"
             }
           }

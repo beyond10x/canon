@@ -1,0 +1,46 @@
+format: protocol/1
+
+protocol:
+  id: gate.drift
+  revision: 1
+  description: A gate that compares the stated ticket statuses with this round's ticket read, which its opener hands in when it opens the case.
+
+artifacts:
+  tickets:
+    description: The ticket snapshot of this round.
+
+evidence_kinds:
+  tickets_read:
+    description: The ticket read of read.tickets, copied unchanged into this case when it opens.
+    supplied_by: read.tickets
+    max_age: 12h
+    required_at_open: true
+  drift:
+    description: Every stated status against the snapshot; none or found.
+
+claims:
+  tickets.read:
+    true_when:
+      evidence: {kind: tickets_read, subject: tickets}
+  drift.recorded:
+    true_when:
+      evidence: {kind: drift, subject: tickets}
+  drift.none:
+    true_when:
+      evidence: {kind: drift, subject: tickets, result: none}
+
+actions:
+  check:
+    description: Compare every stated status with the snapshot, once.
+    precondition:
+      all:
+        - {claim: tickets.read}
+        - {claim: drift.recorded, is: unknown}
+    may_produce:
+      - evidence: drift
+
+outcomes:
+  passed:
+    requires: {claim: drift.none}
+  failed:
+    requires: {claim: drift.none, is: "false"}

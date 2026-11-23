@@ -184,7 +184,9 @@ pub enum Command {
         import: Vec<PathBuf>,
     },
     /// Walk every state a case of a `protocol/1` document can reach from the empty case, one step
-    /// at a time, and report the states no sequence of steps gets out of, each action admissible
+    /// at a time (or, when evidence kinds declare `required_at_open: true`, from each case that
+    /// holds one record of every such kind, of any class, which the opener hands in, its path
+    /// `empty`), and report the states no sequence of steps gets out of, each action admissible
     /// in no reachable state, and each outcome legitimate in no reachable state. A step adds one
     /// current record an admissible action may produce (`may_produce`), or one of each kind of a
     /// group the action records together (`records_together`), never one of those kinds alone,
@@ -360,7 +362,14 @@ pub enum Command {
     /// no action of that supplier lists a kind of the same id in `may_produce`;
     /// `duplicate-protocol-id`, two or more files of the set declare one protocol id, naming the id
     /// and each file's path: a runner resolves an id to one protocol and `case_open` names no
-    /// revision, so the files are not pooled and nothing is resolved against that id. Each finding
+    /// revision, so the files are not pooled and nothing is resolved against that id;
+    /// `unsupplied-at-open`, last, an action opens a case under a protocol of the set that declares
+    /// an evidence kind with `required_at_open: true`, and the action's protocol declares no kind
+    /// of that id, or the action's precondition, when true, does not imply a record of it (an
+    /// evidence match of the kind does, at either value; `all` when one member does, `any` when
+    /// every member does; a claim test `is: true` or `is: false` through the claim's `true_when`;
+    /// an order form naming the kind, when true; never `not`, `is: unknown`, an input test, a
+    /// `children` form or the action's `runs_only_when`), named per protocol, action and kind. Each finding
     /// names the protocol, the action, declaration or kind, and the missing id. Exits 0 when the
     /// check found nothing, 1 when it found something. Each document is compiled on its own: one
     /// that does not parse or compile, or that has imports, is refused, exit 1, and a file that

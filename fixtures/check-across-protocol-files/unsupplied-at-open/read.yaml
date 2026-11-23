@@ -1,0 +1,35 @@
+format: protocol/1
+
+protocol:
+  id: read.tickets
+  revision: 1
+  description: A reader that reads the tickets once and records the read.
+
+artifacts:
+  tickets:
+    description: The ticket snapshot this read writes.
+
+evidence_kinds:
+  tickets_read:
+    description: One read of the tickets; complete or partial.
+
+claims:
+  read.recorded:
+    true_when:
+      evidence: {kind: tickets_read, subject: tickets}
+  read.complete:
+    true_when:
+      evidence: {kind: tickets_read, subject: tickets, result: complete}
+
+actions:
+  read:
+    description: Read the tickets, once.
+    precondition: {claim: read.recorded, is: unknown}
+    may_produce:
+      - evidence: tickets_read
+
+outcomes:
+  complete:
+    requires: {claim: read.complete}
+  partial:
+    requires: {claim: read.complete, is: "false"}

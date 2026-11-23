@@ -595,16 +595,22 @@ commands:
         error: canon.cli.Unreadable
       # One line per finding, a stable code first (duplicate-protocol-id, case-open-cycle,
       # unknown-opened-protocol, undeclared-child-outcome, unknown-supplier,
-      # unproduced-supplied-kind), then the summary line.
+      # unproduced-supplied-kind, and last unsupplied-at-open of
+      # story:supplied-evidence-required-at-open: an opening action whose protocol declares no
+      # kind its opened protocol requires at open, or whose precondition does not imply a record
+      # of it), then the summary line.
       # read from: .engineering/planning/story/check-across-protocol-files.md, section "Acceptance", 1 to 3
+      # read from: .engineering/planning/story/supplied-evidence-required-at-open.md, section "Scope", "Proposal"
       # read from: fixtures/check-across-protocol-files/imports/stderr.txt
       # read from: fixtures/check-across-protocol-files/duplicate-id/report.txt
+      # read from: fixtures/check-across-protocol-files/unsupplied-at-open/report.txt
       - name: rejected
         external: >-
           a document does not parse or compile, a member has imports, or the check finds two
           files with one protocol id, an opened protocol or a supplier outside the set, an
-          undeclared child outcome, a supplied kind its supplier does not produce, or a cycle of
-          case openings
+          undeclared child outcome, a supplied kind its supplier does not produce, a cycle of
+          case openings, or an opening action that holds no record of a kind its opened protocol
+          requires at open
         error: canon.cli.Rejected
       # read from: fixtures/check-across-protocol-files/clean/report.txt
       - name: nothing-found

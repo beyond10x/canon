@@ -408,6 +408,23 @@
 //! `undeclared-artifact`; then, in the `outcomes` section and at any case revision, a decision for
 //! an outcome the protocol does not declare as `undeclared-outcome`, and one for an outcome that
 //! does not require a decision of its name as `undeclared-decision`.
+//!
+//! # Records required at open
+//!
+//! An evidence kind that declares `required_at_open: true` (story:supplied-evidence-required-at-open)
+//! is one the case's opener hands in when it opens the case: the runner copies a current record of
+//! it into the case, or opens nothing. Canon opens nothing, and [`evaluate`] reads nothing from the
+//! declaration. [`missing_at_open`] is what a runner asks before it opens a case: the required
+//! kinds, in kind-identifier order, of which no record applies, read as an evaluation reads them.
+//! The case snapshot and the records are checked as [`evaluate`] checks them, with the same
+//! refusals in the same order (a record about an artifact the protocol does not declare is
+//! `undeclared-artifact`), then the evaluation instant as `--at` gives it; a record applies when
+//! the revision-binding and freshness stages leave it: about its subject's current revision in the
+//! case snapshot, and not past its kind's `max_age` at the instant (none expires without one). So
+//! the record a runner copies from the opener's case is about an artifact the opened protocol
+//! declares, at the child case's revision of it; Canon maps no artifact of one protocol to one of
+//! another. The invalidation stage takes no part: a record kept from a claim by an invalidation
+//! rule is still handed in.
 
 mod actions;
 mod authority;
@@ -548,6 +565,35 @@ pub fn evaluate_with_freshness(
     strict_freshness: Option<&str>,
 ) -> Result<Decision, Refusal> {
     decide(ir, case, evidence, supplied, strict_freshness, true)
+}
+
+/// The evidence kinds of `ir` that declare `required_at_open: true` and of which no record of
+/// `evidence` applies to `case` at the instant `at` (`--at`'s text; without it nothing expires),
+/// in kind-identifier order, as the module docs ("Records required at open") say. Empty when the
+/// case holds a record of every such kind. Refused as [`evaluate`] refuses the case snapshot, the
+/// records and the instant. Pure and deterministic.
+pub fn missing_at_open(
+    ir: &Ir,
+    case: &Case,
+    evidence: &[EvidenceRecord],
+    at: Option<&str>,
+) -> Result<Vec<EvidenceKindId>, Refusal> {
+    case::check(ir, case)?;
+    let distinct = evidence::check(ir, evidence)?;
+    let at = freshness::instant(at)?;
+    let mut applicable: Vec<&EvidenceRecord> = distinct.iter().collect();
+    let mut excluded: Vec<EvidenceExclusion> = Vec::new();
+    let stage = binding::exclude(ir, case, &applicable)?;
+    set_aside(&mut applicable, &mut excluded, stage);
+    let stage = freshness::exclude(ir, case, &applicable, at.as_ref())?;
+    set_aside(&mut applicable, &mut excluded, stage);
+    Ok(ir
+        .evidence_kinds
+        .iter()
+        .filter(|(_, kind)| kind.required_at_open)
+        .filter(|(id, _)| !applicable.iter().any(|record| record.kind == **id))
+        .map(|(id, _)| id.clone())
+        .collect())
 }
 
 /// [`evaluate_with`] without the explanation (`explanation` is `None`): every other section, and
@@ -1680,5 +1726,56 @@ mod tests {
             );
             assert_eq!(refusal.evidence(), [EvidenceId::new("e1")]);
         }
+    }
+
+    /// story:supplied-evidence-required-at-open: [`missing_at_open`] names each kind required at
+    /// open of which no record is about its subject's current revision and within its `max_age` at
+    /// the instant, in kind-identifier order; a kind not required is never named; a record about
+    /// an artifact the protocol does not declare is refused as an evaluation refuses it.
+    #[test]
+    fn missing_at_open_names_each_required_kind_without_a_current_record() {
+        let ir = crate::ir::compile(
+            &crate::model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 artifacts: {a: {}, b: {}}\n\
+                 evidence_kinds:\n\
+                 \x20\x20z: {supplied_by: q, required_at_open: true, max_age: 1h}\n\
+                 \x20\x20y: {supplied_by: q, required_at_open: true}\n\
+                 \x20\x20x: {supplied_by: q}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let case = read_case(CASE).expect("case");
+        let at = |id: &str, kind: &str, subject: &str, revision: &str| {
+            read_evidence(&format!(
+                "format: canon-evidence/1\nid: {id}\nkind: {kind}\nsubject: {subject}\n\
+                 subject_revision: {revision}\nobserved_at: 2026-11-23T10:00:00Z\n"
+            ))
+            .expect("a record")
+        };
+        let missing = |evidence: &[EvidenceRecord], at: Option<&str>| -> Vec<String> {
+            missing_at_open(&ir, &case, evidence, at)
+                .expect("read")
+                .iter()
+                .map(|kind| kind.as_str().to_owned())
+                .collect()
+        };
+        assert_eq!(missing(&[], None), ["y", "z"]);
+        let current = [at("e1", "z", "a", "r1"), at("e2", "y", "b", "r1")];
+        assert_eq!(missing(&current, None), Vec::<String>::new());
+        assert_eq!(
+            missing(&current, Some("2026-11-23T10:30:00Z")),
+            Vec::<String>::new()
+        );
+        assert_eq!(missing(&current, Some("2026-11-23T11:00:01Z")), ["z"]);
+        let superseded = [at("e1", "z", "a", "r0"), at("e2", "y", "b", "r1")];
+        assert_eq!(missing(&superseded, None), ["z"]);
+        assert_eq!(missing(&[at("e3", "x", "a", "r1")], None), ["y", "z"]);
+        let refusal = missing_at_open(&ir, &case, &[at("e4", "y", "elsewhere", "r1")], None)
+            .expect_err("an undeclared subject");
+        assert_eq!(refusal.code(), "undeclared-artifact");
+        let refusal = missing_at_open(&ir, &case, &[], Some("noon")).expect_err("an instant");
+        assert_eq!(refusal.code(), "invalid-instant");
     }
 }

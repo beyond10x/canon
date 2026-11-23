@@ -41,6 +41,30 @@
 //!   no revision, so the files are not pooled: no child outcome and no supplied kind is resolved
 //!   against that id, as for a protocol outside the set. One file given twice under one name is
 //!   that file once, not a duplicate. The cycle check reads the openings of every file of the id.
+//! - `unsupplied-at-open` (story:supplied-evidence-required-at-open), after every other finding,
+//!   by protocol, action and kind: an action whose `case_open` names a protocol `c` of the set
+//!   (one file of that id) that declares an evidence kind `k` with `required_at_open: true`, where
+//!   the action's protocol declares no kind `k`, or the action's `precondition`, when true, does
+//!   not imply that the case holds a record of `k`, which the runner then has none of to hand
+//!   in. The precondition is what decides that the action is admissible, so the action's
+//!   `runs_only_when` takes no part. The walk, for a predicate with the value true or false:
+//!   - an evidence match of `k` implies it at either value, since a match is `unknown` over no
+//!     record of its kind; a match of another kind does not;
+//!   - `all` true implies it when one member true does, `all` false when every member false does;
+//!     `any` true when every member true does, `any` false when one member false does;
+//!   - a claim test `is: true` follows the claim's `true_when` at the value the test has, and
+//!     `is: false` at the other value; `is: unknown` does not imply it;
+//!   - an order form (`first`, `before`, `after`, `since`, `descended`) naming `k` implies it when
+//!     true, since each is true only over a record of every kind it names; when false it does
+//!     not;
+//!   - `not`, an input test and a `children` form do not.
+//!
+//!   The walk asks for a record of `k`, not one about a given artifact: the runner copies a
+//!   record the child declares the subject of, at the child's current revision of it, or the
+//!   record does not apply there (`eval::missing_at_open` reads that), and an order form reads
+//!   every record the evidence check accepted, an expired one too. A protocol nothing in the set
+//!   opens is held to nothing, and a child outside the set or of an id more than one file
+//!   declares requires nothing known.
 //!
 //! A protocol's own openings decide which protocols it opens. Pure: the report is a function of
 //! the set, whatever its order.
@@ -51,7 +75,7 @@ use std::fmt;
 use super::Ir;
 use crate::model::{
     ActionId, ArtifactId, CASE_OUTCOME, ClaimId, EvidenceKindId, OPEN_OUTCOME, OutcomeId,
-    OutcomeRequirement, Predicate, ProtocolId, one_line,
+    OutcomeRequirement, Predicate, ProtocolId, Truth, one_line,
 };
 
 /// A cycle of case openings among a set of protocols: [`check_openings`] refuses the set.
@@ -161,7 +185,8 @@ pub struct SetReport {
     pub supplied: usize,
     /// Every finding, sorted and each once: each protocol id of more than one file first, then a
     /// cycle, then each opening under a protocol outside the set, each undeclared child outcome, each supplier outside the set and each
-    /// supplied kind its supplier does not produce, each by protocol id.
+    /// supplied kind its supplier does not produce, each by protocol id, and last each kind an
+    /// opening action does not hand in at open, by protocol id, action and kind.
     pub findings: Vec<SetFinding>,
 }
 
@@ -234,6 +259,17 @@ pub enum SetFinding {
         kind: EvidenceKindId,
         supplier: ProtocolId,
     },
+    /// An action opens a case under `opened`, which requires the kind `kind` at open, and the
+    /// action does not hold a record of it to hand in (`unsupplied-at-open`): `protocol` declares
+    /// no kind of that id (`declared` false), or the action's precondition, when true, does not
+    /// imply a record of it (story:supplied-evidence-required-at-open).
+    UnsuppliedAtOpen {
+        protocol: ProtocolId,
+        action: ActionId,
+        kind: EvidenceKindId,
+        opened: ProtocolId,
+        declared: bool,
+    },
 }
 
 impl SetFinding {
@@ -246,6 +282,7 @@ impl SetFinding {
             SetFinding::UndeclaredChildOutcome { .. } => "undeclared-child-outcome",
             SetFinding::UnknownSupplier { .. } => "unknown-supplier",
             SetFinding::UnproducedSuppliedKind { .. } => "unproduced-supplied-kind",
+            SetFinding::UnsuppliedAtOpen { .. } => "unsupplied-at-open",
         }
     }
 }
@@ -338,6 +375,31 @@ impl fmt::Display for SetFinding {
                 quoted(supplier.as_str()),
                 quoted(kind.as_str())
             ),
+            SetFinding::UnsuppliedAtOpen {
+                protocol,
+                action,
+                kind,
+                opened,
+                declared,
+            } => {
+                let why = if *declared {
+                    "the action's precondition does not imply a record of it".to_owned()
+                } else {
+                    format!(
+                        "protocol {} declares no evidence kind {}",
+                        quoted(protocol.as_str()),
+                        quoted(kind.as_str())
+                    )
+                };
+                write!(
+                    f,
+                    "protocol {} action {} opens a case under protocol {}, which requires evidence kind {} at open, and {why}",
+                    quoted(protocol.as_str()),
+                    quoted(action.as_str()),
+                    quoted(opened.as_str()),
+                    quoted(kind.as_str())
+                )
+            }
         }
     }
 }
@@ -437,6 +499,64 @@ fn predicates(ir: &Ir) -> Vec<(NamedIn, &Predicate)> {
     found
 }
 
+/// Whether `predicate`, when it has the value `value` (`true` or `false`), implies that the case
+/// holds a record of `kind`, by the walk the module docs give (`unsupplied-at-open`). `path` holds
+/// the claim tests followed on the way down, so a claim reached again on its own path, a cycle the
+/// validator refuses, implies nothing.
+fn implies_record<'a>(
+    ir: &'a Ir,
+    predicate: &'a Predicate,
+    value: bool,
+    kind: &EvidenceKindId,
+    path: &mut Vec<(&'a ClaimId, bool)>,
+) -> bool {
+    let members =
+        |members: &'a [Predicate], at: bool, every: bool, path: &mut Vec<(&'a ClaimId, bool)>| {
+            let mut implied = members
+                .iter()
+                .map(|member| implies_record(ir, member, at, kind, path));
+            if every {
+                implied.all(|implied| implied)
+            } else {
+                implied.any(|implied| implied)
+            }
+        };
+    match predicate {
+        // An evidence match is unknown over no record of its kind: true or false, it read one.
+        Predicate::Evidence(matching) => matching.kind == *kind,
+        // `all` is true when every member is, false when some member is.
+        Predicate::All(of) => members(of, value, !value, path),
+        // `any` is true when some member is, false when every member is.
+        Predicate::Any(of) => members(of, value, value, path),
+        Predicate::Claim(test) => {
+            let claim_value = match test.is {
+                Truth::True => value,
+                Truth::False => !value,
+                Truth::Unknown => return false,
+            };
+            let Some(claim) = ir.claims.get(&test.claim) else {
+                return false;
+            };
+            if path.contains(&(&test.claim, claim_value)) {
+                return false;
+            }
+            path.push((&test.claim, claim_value));
+            let implied = implies_record(ir, &claim.true_when, claim_value, kind, path);
+            path.pop();
+            implied
+        }
+        // Each order form is true only over a record of every kind it names.
+        Predicate::First(order) => value && order.kind == *kind,
+        Predicate::Before(order) => value && (order.first == *kind || order.then == *kind),
+        Predicate::After(order) => value && (order.first == *kind || order.then.kind == *kind),
+        Predicate::Since(order) => value && (order.last == *kind || order.then.kind == *kind),
+        Predicate::Descended(order) => {
+            value && (order.first.kind == *kind || order.then.kind == *kind)
+        }
+        Predicate::Not(_) | Predicate::Input(_) | Predicate::Children(_) => false,
+    }
+}
+
 /// Checks a set of compiled protocols against each other, as the module docs say, and reports
 /// every finding with what it checked. Each member is `(source, protocol)`, `source` the name of
 /// the file it was read from as a finding writes it; a source given twice is one member, the
@@ -458,6 +578,8 @@ pub fn check_set<'a>(members: impl IntoIterator<Item = (&'a str, &'a Ir)>) -> Se
     // An id of more than one file is a finding and resolves nothing.
     let mut outcomes: BTreeMap<&ProtocolId, BTreeSet<&str>> = BTreeMap::new();
     let mut produces: BTreeMap<&ProtocolId, BTreeSet<&str>> = BTreeMap::new();
+    // And the kinds it requires at open, in kind-id order.
+    let mut at_open: BTreeMap<&ProtocolId, Vec<&EvidenceKindId>> = BTreeMap::new();
     for ir in &protocols {
         let id = &ir.protocol.id;
         if let Some(files) = sources.get(id).filter(|files| files.len() > 1) {
@@ -473,6 +595,14 @@ pub fn check_set<'a>(members: impl IntoIterator<Item = (&'a str, &'a Ir)>) -> Se
             ir.actions
                 .values()
                 .flat_map(|action| action.may_produce.iter().map(EvidenceKindId::as_str))
+                .collect(),
+        );
+        at_open.insert(
+            id,
+            ir.evidence_kinds
+                .iter()
+                .filter(|(_, kind)| kind.required_at_open)
+                .map(|(kind, _)| kind)
                 .collect(),
         );
     }
@@ -499,6 +629,22 @@ pub fn check_set<'a>(members: impl IntoIterator<Item = (&'a str, &'a Ir)>) -> Se
                     protocol: id.clone(),
                     action: action_id.clone(),
                     opened: opening.protocol.clone(),
+                });
+            }
+            // story:supplied-evidence-required-at-open. A child outside the set, or of an id more
+            // than one file declares, is already a finding, and requires nothing known.
+            for kind in at_open.get(&opening.protocol).into_iter().flatten() {
+                let declared = ir.evidence_kinds.contains_key(*kind);
+                if declared && implies_record(ir, &action.precondition, true, kind, &mut Vec::new())
+                {
+                    continue;
+                }
+                findings.insert(SetFinding::UnsuppliedAtOpen {
+                    protocol: id.clone(),
+                    action: action_id.clone(),
+                    kind: (*kind).clone(),
+                    opened: opening.protocol.clone(),
+                    declared,
                 });
             }
         }
@@ -977,5 +1123,244 @@ mod tests {
              checked: 4 protocols, 1 opening, 1 supplied kind, 1 finding\n"
         );
         assert_eq!(three.findings[0].code(), "duplicate-protocol-id");
+    }
+
+    /// The supplier `s` of the kinds `k` and `l`, and a child `c` about `thing` that requires `k`
+    /// at open and only reads `l`, with the outcome `done`.
+    fn at_open_family() -> [Ir; 2] {
+        [
+            written(
+                "s",
+                "artifacts: {thing: {}}\nevidence_kinds: {k: {}, l: {}}\n\
+                 actions: {make: {may_produce: [{evidence: k}, {evidence: l}]}}\n",
+            ),
+            written(
+                "c",
+                "artifacts: {thing: {}}\n\
+                 evidence_kinds: {k: {supplied_by: s, required_at_open: true}, l: {supplied_by: s}}\n\
+                 claims: {c.k: {true_when: {evidence: {kind: k}}}}\n\
+                 outcomes: {done: {requires: {claim: c.k}}}\n",
+            ),
+        ]
+    }
+
+    /// The `unsupplied-at-open` lines of a set of `p`, written from `sections`, with the
+    /// [`at_open_family`].
+    fn unsupplied(sections: &str) -> Vec<String> {
+        let [supplier, child] = at_open_family();
+        let parent = written("p", sections);
+        checked([&parent, &supplier, &child])
+            .findings
+            .iter()
+            .filter(|finding| finding.code() == "unsupplied-at-open")
+            .map(ToString::to_string)
+            .collect()
+    }
+
+    /// A parent `p` that declares `k`, `other` and `case_outcome`, the input `mode`, the claims
+    /// written and one action per `(id, precondition)` of `actions`, each opening `c` about
+    /// `thing`.
+    fn opener(claims: &str, actions: &[(&str, &str)]) -> String {
+        let actions: String = actions
+            .iter()
+            .map(|(id, precondition)| {
+                format!(
+                    "  {id}: {{precondition: {precondition}, case_open: {{protocol: c, subject: thing}}}}\n"
+                )
+            })
+            .collect();
+        format!(
+            "case: {{inputs: {{mode: {{values: [fast, slow]}}}}}}\n\
+             artifacts: {{thing: {{}}}}\n\
+             evidence_kinds: {{k: {{supplied_by: s}}, other: {{}}, case_outcome: {{}}}}\n\
+             claims:\n{claims}actions:\n{actions}"
+        )
+    }
+
+    /// The actions of `p` that [`unsupplied`] names, in finding order.
+    fn unproved(claims: &str, actions: &[(&str, &str)]) -> Vec<String> {
+        unsupplied(&opener(claims, actions))
+            .iter()
+            .map(|line| {
+                line.strip_prefix("protocol `p` action `")
+                    .and_then(|rest| rest.split('`').next())
+                    .unwrap_or(line)
+                    .to_owned()
+            })
+            .collect()
+    }
+
+    const CLAIMS: &str = "  has.k: {true_when: {evidence: {kind: k}}}\n  \
+         k.approved: {true_when: {evidence: {kind: k, result: approved}}}\n  \
+         has.other: {true_when: {evidence: {kind: other}}}\n  \
+         both: {true_when: {all: [{evidence: {kind: k}}, {evidence: {kind: other}}]}}\n  \
+         either: {true_when: {any: [{evidence: {kind: k, result: approved}}, {evidence: {kind: other}}]}}\n  \
+         chained: {true_when: {claim: has.k}}\n";
+
+    /// story:supplied-evidence-required-at-open: an evidence match of the kind implies a record of
+    /// it at either value, so a claim test `is: true` or `is: false` implies one through the
+    /// claim's `true_when`; `all` implies it when one member does, `any` when every member does;
+    /// an order form naming the kind implies it. `not`, `is: unknown`, an input test, a `children`
+    /// form, a match of another kind and the always-true precondition do not, and neither does an
+    /// action's `runs_only_when`, which no evaluation reads.
+    #[test]
+    fn the_precondition_of_an_opening_action_implies_a_record_of_the_kind() {
+        let found = unproved(
+            CLAIMS,
+            &[
+                ("match", "{evidence: {kind: k}}"),
+                ("match.result", "{evidence: {kind: k, result: approved}}"),
+                ("claim.true", "{claim: has.k}"),
+                ("claim.false", "{claim: k.approved, is: \"false\"}"),
+                ("claim.chained", "{claim: chained}"),
+                ("claim.unknown", "{claim: has.k, is: unknown}"),
+                ("all.one", "{all: [{claim: has.other}, {claim: has.k}]}"),
+                ("any.one", "{any: [{claim: has.other}, {claim: has.k}]}"),
+                (
+                    "any.every",
+                    "{any: [{claim: has.k}, {evidence: {kind: k, result: approved}}]}",
+                ),
+                ("false.all", "{claim: both, is: \"false\"}"),
+                ("false.any", "{claim: either, is: \"false\"}"),
+                ("not", "{not: {claim: has.k, is: unknown}}"),
+                (
+                    "not.match",
+                    "{not: {evidence: {kind: k, result: approved}}}",
+                ),
+                ("children", "{children: {in: [done], subject: thing}}"),
+                ("input", "{input: mode, in: [fast]}"),
+                ("order", "{first: {kind: k, result: approved}}"),
+                ("order.before", "{before: {first: other, then: k}}"),
+                ("order.other", "{first: {kind: other, result: x}}"),
+                ("order.not", "{not: {first: {kind: k, result: approved}}}"),
+                ("other", "{evidence: {kind: other}}"),
+                ("always", "{all: []}"),
+            ],
+        );
+        assert_eq!(
+            found,
+            [
+                "always",
+                "any.one",
+                "children",
+                "claim.unknown",
+                "false.all",
+                "input",
+                "not",
+                "not.match",
+                "order.not",
+                "order.other",
+                "other",
+            ]
+        );
+    }
+
+    /// A guard of story:ordering-guards-provable-by-check is no part of the proof: the precondition
+    /// is what decides whether the action is admissible.
+    #[test]
+    fn a_runs_only_when_guard_proves_nothing() {
+        let sections = opener(CLAIMS, &[]).replace(
+            "actions:\n",
+            "actions:\n  guarded: {precondition: {claim: has.other}, runs_only_when: {claim: has.k}, \
+             case_open: {protocol: c, subject: thing}}\n",
+        );
+        assert_eq!(
+            unsupplied(&sections),
+            [
+                "protocol `p` action `guarded` opens a case under protocol `c`, which requires evidence kind `k` at open, and the action's precondition does not imply a record of it"
+            ]
+        );
+    }
+
+    /// An opener that does not declare the kind cannot hold a record of it: the finding says so.
+    /// One finding per action and kind, a kind the child only reads (`l`) asks nothing.
+    #[test]
+    fn an_opener_that_declares_no_such_kind_is_a_finding() {
+        assert_eq!(
+            unsupplied(
+                "artifacts: {thing: {}}\nevidence_kinds: {l: {}}\n\
+                 claims: {has.l: {true_when: {evidence: {kind: l}}}}\n\
+                 actions:\n  \
+                 b: {precondition: {claim: has.l}, case_open: {protocol: c, subject: thing}}\n  \
+                 a: {case_open: {protocol: c, subject: thing}}\n"
+            ),
+            [
+                "protocol `p` action `a` opens a case under protocol `c`, which requires evidence kind `k` at open, and protocol `p` declares no evidence kind `k`",
+                "protocol `p` action `b` opens a case under protocol `c`, which requires evidence kind `k` at open, and protocol `p` declares no evidence kind `k`",
+            ]
+        );
+    }
+
+    /// The finding comes after every other finding, by protocol, action and kind. A child outside
+    /// the set, or of an id two files declare, requires nothing known, and a protocol nothing in
+    /// the set opens is held to nothing.
+    #[test]
+    fn findings_come_last_and_only_a_known_child_requires_anything() {
+        let [supplier, child] = at_open_family();
+        let two = written(
+            "c2",
+            "artifacts: {thing: {}}\n\
+             evidence_kinds: {k2: {supplied_by: s, required_at_open: true}, k1: {supplied_by: s, required_at_open: true}}\n",
+        );
+        let parent = written(
+            "p",
+            "artifacts: {thing: {}}\nevidence_kinds: {k: {supplied_by: ghost}}\n\
+             actions:\n  \
+             open.c: {case_open: {protocol: c, subject: thing}}\n  \
+             open.c2: {case_open: {protocol: c2, subject: thing}}\n  \
+             open.absent: {case_open: {protocol: absent, subject: thing}}\n",
+        );
+        let report = checked([&parent, &supplier, &child, &two]);
+        let codes: Vec<&str> = report.findings.iter().map(SetFinding::code).collect();
+        assert_eq!(
+            codes,
+            [
+                "unknown-opened-protocol",
+                "unknown-supplier",
+                "unproduced-supplied-kind",
+                "unproduced-supplied-kind",
+                "unsupplied-at-open",
+                "unsupplied-at-open",
+                "unsupplied-at-open",
+            ]
+        );
+        let at_open: Vec<String> = report.findings[4..]
+            .iter()
+            .map(|finding| {
+                let line = finding.to_string();
+                let (action, rest) = line
+                    .strip_prefix("protocol `p` action `")
+                    .and_then(|rest| rest.split_once('`'))
+                    .expect("a finding of p");
+                let kind = rest
+                    .split("evidence kind `")
+                    .nth(1)
+                    .and_then(|rest| rest.split('`').next())
+                    .expect("a kind");
+                format!("{action} {kind}")
+            })
+            .collect();
+        assert_eq!(at_open, ["open.c k", "open.c2 k1", "open.c2 k2"]);
+
+        let duplicate = written("c", "artifacts: {thing: {}}\n");
+        let pooled = check_set([
+            ("p.yaml", &parent),
+            ("s.yaml", &supplier),
+            ("c.yaml", &child),
+            ("c-other.yaml", &duplicate),
+        ]);
+        assert!(
+            pooled
+                .findings
+                .iter()
+                .all(|finding| finding.code() != "unsupplied-at-open"),
+            "{pooled}"
+        );
+        let alone = checked([&supplier, &child]);
+        assert!(alone.is_clean(), "{alone}");
+        assert_eq!(
+            alone.to_string(),
+            "checked: 2 protocols, 0 openings, 2 supplied kinds, 0 findings\n"
+        );
     }
 }

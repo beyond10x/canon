@@ -68,7 +68,7 @@ enum Expected {
 
 /// Every fixture directory, the exit status and where the expected text goes. A walk that finds
 /// nothing exits 0; findings and a refusal exit 1 (`REJECTED`).
-const CASES: [(&str, i32, Expected); 33] = [
+const CASES: [(&str, i32, Expected); 34] = [
     ("clean", 0, Expected::Report),
     ("mutual", 1, Expected::Report),
     ("denied", 1, Expected::Report),
@@ -102,6 +102,7 @@ const CASES: [(&str, i32, Expected); 33] = [
     ("children-open-record-one-reader", 1, Expected::Report),
     ("denied-decision", 0, Expected::Report),
     ("denied-no-decision", 1, Expected::Report),
+    ("at-open", 0, Expected::Report),
 ];
 
 /// The cases of story:child-outcome-recovery, expectations 1 to 4.
@@ -275,6 +276,30 @@ fn simulate_reports_reachability_findings() {
 fn simulate_lets_a_supplied_record_arrive_at_any_step() {
     let failures = failures(&["supplied", "unsupplied"]);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// story:supplied-evidence-required-at-open: `at-open` is `supplied` with the review required at
+/// open. Its walk starts with the review's record, so `{}` is not reachable and no state waits:
+/// the summary counts 0 waiting states where `supplied` counts 1, and one reachable state fewer.
+#[test]
+fn simulate_starts_with_a_record_required_at_open() {
+    let failures = failures(&["at-open"]);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    let summary = |case: &str| {
+        let report = read(&format!("{FIXTURES}/{case}/report.txt"));
+        report
+            .split(", ")
+            .find(|part| part.ends_with("waiting on supplied evidence or expiry"))
+            .map(str::to_owned)
+    };
+    assert_eq!(
+        summary("supplied").as_deref(),
+        Some("1 waiting on supplied evidence or expiry")
+    );
+    assert_eq!(
+        summary("at-open").as_deref(),
+        Some("0 waiting on supplied evidence or expiry")
+    );
 }
 
 /// The rules refined after adversary pass 1:

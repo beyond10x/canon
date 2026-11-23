@@ -139,6 +139,31 @@ types:
       # read from: crates/canon/src/model/mod.rs:189-197
       - name: supplied_by
         type: Optional<canon.protocol.ProtocolId>
+      # Whether the case's opener must hand in a current record of this kind when it opens the
+      # case (story:supplied-evidence-required-at-open, decision D9 A): `true`, the runner copies
+      # one into the case at open, or opens nothing; `false`, the default, written by leaving the
+      # key out, asks nothing. It needs supplied_by on the same kind, else canon validate refuses
+      # it (at-open-without-supplier, naming the kind). Canon opens nothing: a runner reads which
+      # required kinds a case lacks with eval::missing_at_open (no record left by revision
+      # binding and freshness), and canon evaluate reads nothing from it. canon check-set
+      # (unsupplied-at-open, after every other finding) holds every action of a protocol of the set
+      # whose case_open names this protocol to it: the opener declares the kind, and its
+      # precondition, when true, implies a record of it: an evidence match of the kind, at either
+      # value; all when one member does, any when every member does; a claim test is: true or
+      # is: false through the claim's true_when, which an evidence match then decides at that value
+      # (a match is false only over a record of its kind); an order form naming the kind, when
+      # true; never not, is: unknown, an input test or a children form, nor the action's
+      # runs_only_when. Subjects are not matched: the copied record is about an artifact the opened
+      # protocol declares, at the case's revision of it, or it does not apply there. canon simulate
+      # starts every walk with one current record of each such kind, one initial state per record
+      # the supplied step could add; the supplied step stays, since a record can expire and arrive
+      # again. canon check reads nothing from it. canon diff reports it introduced as TIGHTENING,
+      # removed as RELAXATION. Written into canon-ir/1 as `"required_at_open": true` only when
+      # true, so the canon-ir/1 of a protocol without it is unchanged.
+      # read from: .engineering/planning/story/supplied-evidence-required-at-open.md, section "Scope", "Proposal"
+      # read from: crates/canon/src/model/mod.rs:212-222
+      - name: required_at_open
+        type: Boolean
 
   # read from: crates/canon/src/model/mod.rs:76-82
   - name: canon.protocol.Claim

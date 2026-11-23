@@ -2,7 +2,8 @@
 //! case (story:canon-simulate, with the rules refined after adversary pass 1, R1 to R6,
 //! story:simulate-child-outcome-step, which lets a child case's outcome arrive after its opening,
 //! and story:simulate-revise-step, which lets an admissible action move the artifacts it declares
-//! in `revises` to a new revision).
+//! in `revises` to a new revision), or, for a protocol with kinds required at open
+//! (story:supplied-evidence-required-at-open), from a case that holds one record of each.
 //!
 //! [`simulate`] walks every reachable state, one step at a time, evaluates each with Canon's own
 //! evaluator and reports what no single evaluation and no static check shows: states no sequence
@@ -122,7 +123,10 @@
 //!   revise step, and a protocol in which no action declares one walks as before.
 //! - **Supplied step.** A kind that declares `supplied_by` is produced by another protocol's
 //!   cases (story:supplied-evidence), and no action step produces it: a record of it may arrive at
-//!   any step, from any state, by the combinations an action step takes.
+//!   any step, from any state, by the combinations an action step takes. A kind that also declares
+//!   `required_at_open: true` (story:supplied-evidence-required-at-open) is in every initial state
+//!   already (see Order); its supplied step stays, since a record of it can expire, or be set
+//!   aside by a revision, and arrive again, and a record of another class can arrive beside it.
 //! - **External revise step** (story:artifact-revised-by). An artifact that declares `revised_by`
 //!   is revised by the cases of another protocol, and a case of it may move the artifact to a new
 //!   revision between two evaluations: the step is offered in every state, one per such artifact
@@ -191,7 +195,13 @@
 //! # Order
 //!
 //! There is one initial state per assignment of case-input values, in input order, the last input
-//! varying fastest, with every mark at none. Breadth-first search reaches each state first along
+//! varying fastest, with every mark at none. When kinds declare `required_at_open: true`, each
+//! assignment has one initial state per combination of one record of each such kind, in kind-id
+//! order, the last varying fastest, each kind's records in the order its supplied steps add them
+//! (dimension, class, producer profile): the opener hands one in when it opens the case, of any
+//! class. Their path is `empty`, so a record of a class that leads nowhere is a stuck state the
+//! walk starts in, and `{}` is reached only when a record can leave (an expiry or a revision).
+//! Without such a kind the initial states are as before. Breadth-first search reaches each state first along
 //! a shortest path, a group step counting as one step. From a state, steps are tried in this
 //! order: actions in identifier order, then their kinds in no group, dimensions, classes and
 //! profiles in the space's own orders, then their groups in order of each group's least kind id,
@@ -1502,13 +1512,32 @@ fn walk(ir: &Ir, with_record: bool) -> Result<Walk, Refusal> {
     let capabilities = space.walked_capabilities().len();
     let decisions = space.walked_decisions().len();
 
-    let mut states: Vec<State> = initial
-        .into_iter()
-        .map(|mut state| {
-            state.resize(layout.length(), 0);
-            state
-        })
+    // story:supplied-evidence-required-at-open: each kind required at open, in identifier order,
+    // with the records a walk may start with of it, those its supplied step adds; a kind no record
+    // can be about adds none. Each assignment of case inputs starts with one record of each such
+    // kind, the last kind varying fastest.
+    let at_open: Vec<Vec<Added>> = space
+        .at_open()
+        .iter()
+        .map(|kind| records(&of_kinds(&BTreeSet::from([*kind]))))
+        .filter(|records| !records.is_empty())
         .collect();
+    let mut states: Vec<State> = Vec::new();
+    for mut state in initial {
+        state.resize(layout.length(), 0);
+        let mut starts = vec![state];
+        for records in &at_open {
+            starts = starts
+                .iter()
+                .flat_map(|start| {
+                    records.iter().map(|record| {
+                        layout.add(start, record.dimension, record.class, record.profile)
+                    })
+                })
+                .collect();
+        }
+        states.extend(starts);
+    }
     let mut index: HashMap<State, usize> = states
         .iter()
         .enumerate()

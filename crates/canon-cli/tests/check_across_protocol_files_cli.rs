@@ -17,6 +17,10 @@
 //!    `change` and prints `duplicate-protocol-id`, naming both paths, instead of pooling them.
 //! 4. A member with `imports:` is refused, naming it (`protocol-imports`), and an unreadable file
 //!    exits 2; the order of the `--path` flags changes no byte.
+//! 5. story:supplied-evidence-required-at-open: the gate `gate.drift` requires the kind
+//!    `tickets_read` at open (`required_at_open: true`). In `supplied-at-open` its opener's
+//!    precondition reads the record, so the set is clean; in `unsupplied-at-open` the opener waits
+//!    only for the read to end, and the set is the finding `unsupplied-at-open`, exit 1.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -26,8 +30,10 @@ const FIXTURES: &str = "fixtures/check-across-protocol-files";
 
 /// Every set with a `report.txt`, the exit status `canon check-set` gives it and the code of its
 /// one finding, `None` for a clean set.
-const SETS: [(&str, i32, Option<&str>); 9] = [
+const SETS: [(&str, i32, Option<&str>); 11] = [
     ("clean", 0, None),
+    ("supplied-at-open", 0, None),
+    ("unsupplied-at-open", 1, Some("unsupplied-at-open")),
     ("missing-protocol", 1, Some("unknown-opened-protocol")),
     ("undeclared-children", 1, Some("undeclared-child-outcome")),
     ("undeclared-evidence", 1, Some("undeclared-child-outcome")),

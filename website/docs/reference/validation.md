@@ -36,7 +36,9 @@ does not depend on the order the sections are written in:
 6. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
    or `d`, or that are but are too long to count in seconds (each with its own message), and
    evidence kinds whose `supplied_by` names the protocol's own id (`self-supplied-evidence`,
-   naming the kind; story:supplied-evidence), each kind's in that order, in the order the
+   naming the kind; story:supplied-evidence), and evidence kinds that declare
+   `required_at_open: true` without `supplied_by` (`at-open-without-supplier`, naming the kind;
+   story:supplied-evidence-required-at-open), each kind's in that order, in the order the
    evidence kinds are written. Any other protocol may supply a kind, and validation does not
    resolve the name (`canon check-set` does, over a set of protocols); then artifacts whose `revised_by` names the protocol's own id
    (`self-revised-artifact`, naming the artifact; story:artifact-revised-by), in the order the
@@ -263,6 +265,7 @@ differently in these cases only:
 | `self-opened-case` | An action opens a child case under the protocol's own id: a case could then open cases under its own protocol without end (D206). |
 | `invalid-record-group` | A group of an action's `records_together` (story:simulate-record-groups) is not one run's records: `group` counts the action's groups from 1, in the order written. |
 | `self-supplied-evidence` | An evidence kind names the protocol's own id as the protocol that supplies its records (story:supplied-evidence): records of it come from outside the protocol, or from its own actions, never from a case of the same protocol through `supplied_by`. |
+| `at-open-without-supplier` | An evidence kind is required at open (story:supplied-evidence-required-at-open) but names no protocol that supplies it: the opener hands in a record another protocol's case produced, so the kind needs `supplied_by`. |
 | `self-revised-artifact` | An artifact names the protocol's own id as the protocol whose cases revise it (story:artifact-revised-by): the protocol's own actions revise through `revises`, and a self-name would hide the dead end a revising action that no state admits leaves. |
 | `claim-cycle` | Claims whose predicates test each other in a cycle; the first claim is repeated at the end. |
 | `action-arguments` | An action's argument schema is outside the argument-schema dialect: `pointer` is the JSON Pointer of the offending keyword inside the schema (`""` for the schema itself) and `reason` why it is refused. |
