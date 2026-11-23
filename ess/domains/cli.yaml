@@ -558,7 +558,9 @@ commands:
   # a protocol it opens about that artifact, a form without a subject by one of every protocol it
   # opens, open excepted; each supplied_by protocol is in the set and, decision D2, has an action
   # whose may_produce lists a kind of the same id; and the openings form no cycle
-  # (case-open-cycle). A member with imports is refused.
+  # (case-open-cycle). A member with imports is refused. Two files of the set with one protocol id
+  # are a finding (duplicate-protocol-id), not one protocol: a runner resolves an id to one
+  # protocol and case_open names no revision. A path is one file wherever it resolves to.
   # read from: .engineering/planning/story/check-across-protocol-files.md, section "Scope"
   # read from: .engineering/planning/story/check-across-protocol-files.md, section "Acceptance", 1 to 3
   - name: canon.cli.CheckSet
@@ -571,7 +573,8 @@ commands:
         supplied kind produced by an action of its supplier, and no cycle of case openings.
     input:
       # A protocol/1 document of the set, each given with its own `--path`. A repeatable flag
-      # clap requires, so a List and not Optional. The order changes nothing.
+      # clap requires, so a List and not Optional. The order changes nothing, and two paths that
+      # resolve to one file (two spellings, a symbolic link) are that file once.
       # read from: .engineering/planning/story/check-across-protocol-files.md, section "Scope", decision D1
       - name: path
         type: List<String>
@@ -583,19 +586,24 @@ commands:
         type: String
     outcomes:
       # read from: .engineering/planning/story/check-across-protocol-files.md, section "Scope", decision D1
+      # Exit 2. The files are read in sorted order of their paths and the first one refused
+      # decides: unreadable when it cannot be read, rejected when it does not parse or compile or
+      # has imports.
       - name: unreadable
-        external: a file of the set cannot be read
+        external: a file of the set cannot be read, and no file before it in sorted order is refused
         error: canon.cli.Unreadable
-      # One line per finding, a stable code first (unknown-opened-protocol,
-      # undeclared-child-outcome, unknown-supplier, unproduced-supplied-kind, case-open-cycle),
-      # then the summary line.
+      # One line per finding, a stable code first (duplicate-protocol-id, case-open-cycle,
+      # unknown-opened-protocol, undeclared-child-outcome, unknown-supplier,
+      # unproduced-supplied-kind), then the summary line.
       # read from: .engineering/planning/story/check-across-protocol-files.md, section "Acceptance", 1 to 3
       # read from: fixtures/check-across-protocol-files/imports/stderr.txt
+      # read from: fixtures/check-across-protocol-files/duplicate-id/report.txt
       - name: rejected
         external: >-
-          a document does not parse or compile, a member has imports, or the check finds an
-          opened protocol or a supplier outside the set, an undeclared child outcome, a supplied
-          kind its supplier does not produce, or a cycle of case openings
+          a document does not parse or compile, a member has imports, or the check finds two
+          files with one protocol id, an opened protocol or a supplier outside the set, an
+          undeclared child outcome, a supplied kind its supplier does not produce, or a cycle of
+          case openings
         error: canon.cli.Rejected
       # read from: fixtures/check-across-protocol-files/clean/report.txt
       - name: nothing-found

@@ -1,0 +1,29 @@
+format: protocol/1
+
+protocol:
+  id: change
+  revision: 2
+  description: Seeded defect, a second protocol with the id change, which ends only declined. A runner resolves the id change to one protocol, so the set is ambiguous; before, the two were pooled and the outcome accepted the review names was found in change.yaml.
+
+artifacts:
+  work:
+    description: The work changed.
+
+evidence_kinds:
+  verdict:
+    description: The verdict on the change; its result is declined.
+
+claims:
+  change.declined:
+    true_when:
+      evidence: {kind: verdict, subject: work, result: declined}
+
+actions:
+  decide:
+    description: Decide the change.
+    may_produce:
+      - evidence: verdict
+
+outcomes:
+  declined:
+    requires: {claim: change.declined}
