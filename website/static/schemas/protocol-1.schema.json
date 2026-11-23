@@ -243,7 +243,7 @@
           "$ref": "#/$defs/Predicate"
         },
         "runs_only_when": {
-          "description": "An assertion about when the action runs (story:ordering-guards-provable-by-check): it is `admissible` or `approval-required` only in a state where this predicate is `true`. Absent: no assertion. The grammar and reference checks of `precondition`; `all: []`, true in every state, is refused (`vacuous-runs-only-when`). No evaluation reads it: only `canon check` does, proving it in every state (`ordering-guard-failed`), per state and not along an order of actions, so a guard that holds only through the preconditions of earlier actions is proved only when the action's own precondition names it.",
+          "description": "An assertion about when the action runs (story:ordering-guards-provable-by-check): it is `admissible` or `approval-required` only in a state where this predicate is `true`. Absent: no assertion. The grammar and reference checks of `precondition`; the literal `all: []`, true in every state, is refused (`vacuous-runs-only-when`), and only that literal: another guard true in every state (`{any: [{all: []}]}`, `{not: {any: []}}`) is not detected. No evaluation reads it: only `canon check` does, proving it in every state (`ordering-guard-failed`), per state and not along an order of actions, so a guard that holds only through the preconditions of earlier actions is proved only when the action's own precondition names it. A floor does not pin it: `canon floor` holds for a protocol that drops a guard its floor declares.",
           "$ref": "#/$defs/Predicate"
         },
         "requires": {
@@ -850,7 +850,7 @@
         "count": {
           "description": "How many child cases the form waits for (story:children-form-counts-unopened-children): absent, every child with a record; N, 1 or more, at least N records, so the form stays `unknown` while fewer are read, and a child not yet opened, which has no record, never lets it become true. `canon validate` refuses 0 (`zero-child-count`).",
           "type": "integer",
-          "minimum": 0
+          "minimum": 1
         }
       },
       "required": [
