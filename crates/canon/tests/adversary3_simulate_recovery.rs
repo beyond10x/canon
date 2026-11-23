@@ -29,6 +29,9 @@ fn report(source: &str) -> String {
 /// canon 0.10.0 gives the bytes below (68 states, 1 finding). With four such subjects 0.10.0
 /// walks 644 states and that head refused `reachable-state-bound`; the fixtures `festival` and
 /// `event` of `fixtures/child-outcome-large/` (no `revises`) changed the same way.
+/// Re-pinned by story:simulate-opens-child-with-its-record, whose opening step adds the
+/// child's `open` record: 36 states, the same one finding, and still one dimension without a
+/// subject.
 #[test]
 fn a_protocol_that_revises_nothing_walks_child_outcomes_as_before() {
     let source = "format: protocol/1\n\
@@ -45,10 +48,11 @@ fn a_protocol_that_revises_nothing_walks_child_outcomes_as_before() {
         outcomes: {built: {description: Built., requires: {claim: done.current}}}\n";
     let expected = "stuck-state: state {evidence `case_outcome`}: no outcome is legitimate and no \
         action is admissible or approval-required; path: action `open1` produces nothing, then a \
-        child of action `open1` records evidence `case_outcome`; 33 other stuck states contain it\n\
-        simulated: protocol `probe.subjects.2` revision 1: 68 reachable states, 9 terminable \
-        (outcome `built` 9), 3 waiting on supplied evidence, a child outcome or expiry, 1 finding \
-        (34 stuck or cycle states)";
+        child of action `open1` records evidence `case_outcome`, replacing result `open`; 17 other \
+        stuck states contain it\n\
+        simulated: protocol `probe.subjects.2` revision 1: 36 reachable states, 1 terminable \
+        (outcome `built` 1), 2 waiting on supplied evidence, a child outcome or expiry, 1 finding \
+        (18 stuck or cycle states)";
     assert_eq!(report(source).trim_end(), expected);
 }
 
@@ -97,16 +101,33 @@ const CHILD: &str =
 /// differently from a current one. `revise-child` reads its children with a form without
 /// `revision: current`, which counts both alike, so the walk of the fixture keeps its 9 states;
 /// with `revision: current` added the child's late outcome is walked as well.
+///
+/// Re-pinned by story:simulate-opens-child-with-its-record. The opening step adds the child's
+/// `open` record, which the revision holds as earlier, so the two states of an opened child with
+/// no record after the revision are gone and both walks reach 8 states: the count no longer tells
+/// them apart. The step does: with `revision: current` a printed path holds the late step, a
+/// child that records its outcome `… earlier`; the fixture as it is prints only its summary.
 #[test]
 fn a_child_about_the_spaces_own_subject_is_walked_late_only_where_a_claim_tells_the_difference() {
+    let any = report(CHILD);
     let summary = |text: &str| text.lines().last().expect("a summary").to_owned();
-    let any = summary(&report(CHILD));
-    assert!(any.contains(": 9 reachable states"), "{any}");
+    assert!(summary(&any).contains(": 8 reachable states"), "{any}");
+    assert_eq!(any.lines().count(), 1, "{any}");
     let current = CHILD.replace(
         "        subject: doc\n",
         "        subject: doc\n        revision: current\n",
     );
     assert_ne!(current, CHILD, "the key was added");
-    let current = summary(&report(&current));
-    assert!(current.contains(": 11 reachable states"), "{current}");
+    let current = report(&current);
+    assert!(
+        summary(&current).contains(": 8 reachable states"),
+        "{current}"
+    );
+    assert!(
+        current.lines().any(|line| line.contains(
+            "then a child of action `open_review` records evidence `case_outcome` about `doc` \
+             result `accepted` earlier"
+        )),
+        "{current}"
+    );
 }

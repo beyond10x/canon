@@ -673,7 +673,9 @@ fn a_second_child_ends_after_the_first_one_ended() {
 /// none, since an `open` record is a child that has not ended. In `HELD` a second child may
 /// record `open`, the record expire, and that child end accepted: the successor that keeps the
 /// expired `open` record beside the new outcome with every mark at none would stand for a third
-/// child, and is not one. No printed state holds `open` without a mark.
+/// child, and is not one. No printed state holds `open` without a mark, and, since the opening
+/// step adds the child's `open` record (story:simulate-opens-child-with-its-record), none holds a
+/// mark without `open`: 114 states, against 252 when the record arrived by a later step.
 #[test]
 fn an_open_record_keeps_a_mark_above_none() {
     let text = report(HELD);
@@ -682,17 +684,18 @@ fn an_open_record_keeps_a_mark_above_none() {
         .filter(|line| line.starts_with("stuck-state: ") || line.starts_with("cycle: "))
     {
         let state = line.split("}: ").next().expect("a state");
-        assert!(
-            !state.contains("result `open`") || state.contains(" opened "),
+        assert_eq!(
+            state.contains("result `open`"),
+            state.contains(" opened "),
             "{line}"
         );
     }
     assert_eq!(
         text.lines().last(),
         Some(
-            "simulated: protocol `p` revision 1: 252 reachable states, 9 terminable (outcome \
-             `done` 9), 41 waiting on supplied evidence, a child outcome or expiry, 5 findings \
-             (183 stuck or cycle states)"
+            "simulated: protocol `p` revision 1: 114 reachable states, 3 terminable (outcome \
+             `done` 3), 19 waiting on supplied evidence, a child outcome or expiry, 3 findings \
+             (78 stuck or cycle states)"
         ),
         "{text}"
     );
@@ -768,6 +771,9 @@ fn a_revision_of_an_upstream_artifact_keeps_the_record_from_its_claim() {
 /// the earlier one (story:simulate-child-about-own-artifact): the two earlier states are first
 /// reached that way, and the walk holds two states more, the open child after the revision, than
 /// when only a child that ended before it counted (9 before, 11 after; the same three findings).
+/// The opening step adds the child's `open` record (story:simulate-opens-child-with-its-record),
+/// so each child's end replaces it, current or earlier, and the states of an opened child with no
+/// record are gone: 8 states, one waiting, the same three findings.
 #[test]
 fn a_record_a_children_form_reads_becomes_earlier() {
     let source = "format: protocol/1\n\
@@ -791,20 +797,22 @@ fn a_record_a_children_form_reads_becomes_earlier() {
         "cycle: state {evidence `case_outcome` about `doc`, evidence `start` about `b`}: no \
          outcome is legitimate, no action is approval-required, and every record step of action \
          `fix` returns this state; path: action `open_review` produces evidence `start` about \
-         `b`, then a child of action `open_review` records evidence `case_outcome` about `doc`; \
-         every revision by action `fix` leads to a state no outcome is reachable from\n\
+         `b`, then a child of action `open_review` records evidence `case_outcome` about `doc`, \
+         replacing result `open`; every revision by action `fix` leads to a state no outcome is \
+         reachable from\n\
          cycle: state {evidence `case_outcome` about `doc` earlier, evidence `start` about `b`}: \
          no outcome is legitimate, no action is approval-required, and every step of action \
          `fix` returns this state; path: action `open_review` produces evidence `start` about \
          `b`, then action `fix` revises `doc`, then a child of action `open_review` records \
-         evidence `case_outcome` about `doc` earlier\n\
+         evidence `case_outcome` about `doc` earlier, replacing result `open` expired\n\
          cycle: state {evidence `case_outcome` about `doc` result `accepted` earlier, evidence \
          `start` about `b`}: no outcome is legitimate, no action is approval-required, and every \
          step of action `fix` returns this state; path: action `open_review` produces evidence \
          `start` about `b`, then action `fix` revises `doc`, then a child of action \
-         `open_review` records evidence `case_outcome` about `doc` result `accepted` earlier\n\
-         simulated: protocol `p` revision 1: 11 reachable states, 1 terminable (outcome \
-         `accepted` 1), 2 waiting on supplied evidence, a child outcome or expiry, 3 findings (3 \
+         `open_review` records evidence `case_outcome` about `doc` result `accepted` earlier, \
+         replacing result `open` expired\n\
+         simulated: protocol `p` revision 1: 8 reachable states, 1 terminable (outcome \
+         `accepted` 1), 1 waiting on supplied evidence, a child outcome or expiry, 3 findings (3 \
          stuck or cycle states)\n"
     );
 }
@@ -1024,4 +1032,174 @@ fn a_descended_form_is_refused_as_ordered_evidence() {
     let refusal = simulate(&compiled(&source)).expect_err("refused");
     assert_eq!(refusal.code(), "ordered-evidence");
     assert!(refusal.to_string().contains("outcome `done`"), "{refusal}");
+}
+
+/// Every fixture protocol that declares `case_open` and validates, by path: the 15 fixtures
+/// story:simulate-opens-child-with-its-record names, the six others that open a child case, and
+/// its two own.
+const OPENING: [(&str, &str); 23] = [
+    (
+        "child-outcome/closed",
+        include_str!("../../../../fixtures/investigation/child-outcome/closed/protocol.yaml"),
+    ),
+    (
+        "child-outcome/denied",
+        include_str!("../../../../fixtures/investigation/child-outcome/denied/protocol.yaml"),
+    ),
+    (
+        "child-outcome/ends-open",
+        include_str!("../../../../fixtures/investigation/child-outcome/ends-open/protocol.yaml"),
+    ),
+    (
+        "child-outcome/repeat",
+        include_str!("../../../../fixtures/investigation/child-outcome/repeat/protocol.yaml"),
+    ),
+    (
+        "child-outcome/twice",
+        include_str!("../../../../fixtures/investigation/child-outcome/twice/protocol.yaml"),
+    ),
+    (
+        "child-outcome/two-records",
+        include_str!("../../../../fixtures/investigation/child-outcome/two-records/protocol.yaml"),
+    ),
+    (
+        "child-outcome-large/event",
+        include_str!("../../../../fixtures/child-outcome-large/event/protocol.yaml"),
+    ),
+    (
+        "child-outcome-large/festival",
+        include_str!("../../../../fixtures/child-outcome-large/festival/protocol.yaml"),
+    ),
+    (
+        "simulate/child-expiry",
+        include_str!("../../../../fixtures/investigation/simulate/child-expiry/protocol.yaml"),
+    ),
+    (
+        "simulate/child-expiry-held",
+        include_str!("../../../../fixtures/investigation/simulate/child-expiry-held/protocol.yaml"),
+    ),
+    (
+        "simulate/revise-child",
+        include_str!("../../../../fixtures/investigation/simulate/revise-child/protocol.yaml"),
+    ),
+    (
+        "simulate/revise-child-current",
+        include_str!(
+            "../../../../fixtures/investigation/simulate/revise-child-current/protocol.yaml"
+        ),
+    ),
+    (
+        "simulate/revise-child-late",
+        include_str!("../../../../fixtures/investigation/simulate/revise-child-late/protocol.yaml"),
+    ),
+    (
+        "simulate/revise-child-other-subject",
+        include_str!(
+            "../../../../fixtures/investigation/simulate/revise-child-other-subject/protocol.yaml"
+        ),
+    ),
+    (
+        "simulate/revise-child-two-subjects",
+        include_str!(
+            "../../../../fixtures/investigation/simulate/revise-child-two-subjects/protocol.yaml"
+        ),
+    ),
+    (
+        "child-outcome-adversary/either-once",
+        include_str!("../../../../fixtures/child-outcome-adversary/either-once/protocol.yaml"),
+    ),
+    (
+        "child-outcome-adversary/ended-once",
+        include_str!("../../../../fixtures/child-outcome-adversary/ended-once/protocol.yaml"),
+    ),
+    (
+        "case-composition",
+        include_str!("../../../../fixtures/investigation/case-composition.yaml"),
+    ),
+    (
+        "child-outcome-revision",
+        include_str!("../../../../fixtures/investigation/child-outcome-revision.yaml"),
+    ),
+    (
+        "child-outcome-subject",
+        include_str!("../../../../fixtures/investigation/child-outcome-subject.yaml"),
+    ),
+    (
+        "evidence-redelivery",
+        include_str!("../../../../fixtures/investigation/evidence-redelivery.yaml"),
+    ),
+    (
+        "simulate/children-open-record",
+        include_str!(
+            "../../../../fixtures/investigation/simulate/children-open-record/protocol.yaml"
+        ),
+    ),
+    (
+        "simulate/children-open-record-one-reader",
+        include_str!(
+            "../../../../fixtures/investigation/simulate/children-open-record-one-reader/protocol.yaml"
+        ),
+    ),
+];
+
+/// story:simulate-opens-child-with-its-record, acceptance 1: a runner writes a child's `open`
+/// record in the step that opens it, so with four readers on one subject no state holds "three
+/// ended complete, the fourth opened with no record", and the probe that needs the merge's `none`
+/// while the readers are not all complete is legitimate in no reachable state. With one reader it
+/// was unreached before and is after.
+#[test]
+fn a_child_opens_with_its_open_record() {
+    let unreached = "unreached-outcome: outcome `probe` is legitimate in no reachable state";
+    for (case, source) in &OPENING[21..] {
+        let text = report(source);
+        assert!(text.lines().any(|line| line == unreached), "{case}: {text}");
+    }
+    let ir = compiled(OPENING[21].1);
+    let before = walk(&ir, false).expect("walked").report;
+    assert!(
+        !before.to_string().lines().any(|line| line == unreached),
+        "the walk without the open record reaches the probe: {before}"
+    );
+}
+
+/// Acceptance 2: every state the walk reaches is one the walk without the `open` record at the
+/// opening reached, on every fixture that opens a child case: the opening step's successor is
+/// that walk's opening step followed by the child's `open` record, and the only successor left
+/// out is a child's end that drops the `open` record of a child that has not ended. Each of the
+/// fixtures that read the class `open` reaches fewer.
+#[test]
+fn the_walk_reaches_only_states_the_walk_without_the_open_record_reached() {
+    for (case, source) in OPENING {
+        let ir = compiled(source);
+        let with = walk(&ir, true).expect("walked");
+        let without = walk(&ir, false).expect("walked");
+        let old: std::collections::HashSet<&State> = without.states.iter().collect();
+        let new = with
+            .states
+            .iter()
+            .filter(|state| !old.contains(state))
+            .count();
+        assert_eq!(new, 0, "{case}: {new} states the old walk never reached");
+        assert!(
+            with.states.len() < without.states.len(),
+            "{case}: {} states, {} without the open record",
+            with.states.len(),
+            without.states.len()
+        );
+    }
+}
+
+/// Acceptance 3: in no reachable state, printed or not, is an action's count of children above
+/// none without an `open` record in the dimension its children record in, or an `open` record
+/// held with every such count at none; the walk without the `open` record at the opening has
+/// such states in each of these fixtures.
+#[test]
+fn every_count_above_none_holds_its_open_record_and_the_reverse() {
+    for (case, source) in OPENING {
+        let ir = compiled(source);
+        let with = walk(&ir, true).expect("walked");
+        assert_eq!(with.unpaired, Vec::<usize>::new(), "{case}");
+        let without = walk(&ir, false).expect("walked");
+        assert!(!without.unpaired.is_empty(), "{case}");
+    }
 }

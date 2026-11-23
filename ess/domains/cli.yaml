@@ -247,6 +247,7 @@ commands:
   # read from: .engineering/planning/story/canon-simulate.md:125
   # read from: .engineering/planning/story/simulate-child-outcome-step.md, section "Outcome", 1 to 5
   # read from: .engineering/planning/story/simulate-revise-step.md, section "Outcome", 1
+  # read from: .engineering/planning/story/simulate-opens-child-with-its-record.md, section "Outcome"
   - name: canon.cli.Simulate
     naming:
       wire: simulate
@@ -308,9 +309,12 @@ commands:
       # revise), supplied, child-outcome, expiry and authority steps leads from it to a
       # legitimate outcome. The walk
       # counts, per action that opens a child case, its children that have not ended: none, one,
-      # or two or more. A step of the action raises the count; a child's outcome arrives while the
+      # or two or more. A step of the action raises the count and adds the child's case_outcome
+      # record open where the protocol reads that result, as a runner writes it when it opens the
+      # child (story:simulate-opens-child-with-its-record); a child's outcome arrives while the
       # count is above none, an outcome other than open lowers it, or from two or more may also
-      # leave it at two or more, and replaces an open record, and a child-outcome step is no
+      # leave it at two or more, and replaces an open record, never the last one while a child
+      # that has not ended is left, and a child-outcome step is no
       # action step, so it never makes a state a cycle. A state holding an open record, current or
       # held as expired, keeps some count above none, because an open record is a child that has
       # not ended. A stuck state or cycle is printed once per smallest state, with the decisions

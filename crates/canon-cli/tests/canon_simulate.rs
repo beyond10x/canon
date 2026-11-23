@@ -38,6 +38,10 @@
 //! declares in `revises` to a new revision, is held by `simulate_revises_declared_artifacts` over
 //! the six `revise*` fixtures.
 //!
+//! The opening step of story:simulate-opens-child-with-its-record, which adds a child's `open`
+//! record as it opens the child, is held by `simulate_opens_a_child_with_its_open_record` over
+//! `children-open-record` and its one-reader twin.
+//!
 //! Each fixture directory carries `protocol.yaml` and the exact output: `report.txt` on standard
 //! output with nothing on standard error, or `refusal.txt` on standard error with nothing on
 //! standard output. Both were written by hand from the story before `canon simulate` existed.
@@ -59,7 +63,7 @@ enum Expected {
 
 /// Every fixture directory, the exit status and where the expected text goes. A walk that finds
 /// nothing exits 0; findings and a refusal exit 1 (`REJECTED`).
-const CASES: [(&str, i32, Expected); 29] = [
+const CASES: [(&str, i32, Expected); 31] = [
     ("clean", 0, Expected::Report),
     ("mutual", 1, Expected::Report),
     ("denied", 1, Expected::Report),
@@ -89,6 +93,8 @@ const CASES: [(&str, i32, Expected); 29] = [
     ("revise-child-other-subject", 1, Expected::Report),
     ("revise-child-two-subjects", 1, Expected::Report),
     ("revise-child-late", 1, Expected::Report),
+    ("children-open-record", 1, Expected::Report),
+    ("children-open-record-one-reader", 1, Expected::Report),
 ];
 
 /// The cases of story:child-outcome-recovery, expectations 1 to 4.
@@ -168,7 +174,8 @@ fn simulate(case: &str) -> Output {
     canon(&["simulate", "--path", &protocol(case)])
 }
 
-/// The largest fixture (3160 states, about 4 s in a debug build): `failures` walks it once, and
+/// The largest fixture (1308 states, 3160 before story:simulate-opens-child-with-its-record, about
+/// 4 s in a debug build then): `failures` walks it once, and
 /// `simulate_walks_the_largest_recovery_fixture_the_same_twice` holds its second run to the first.
 const WALKED_ONCE: [&str; 1] = ["revise-child-two-subjects"];
 
@@ -423,6 +430,28 @@ fn simulate_walks_the_largest_recovery_fixture_the_same_twice() {
         );
         assert_eq!(text(&output.stderr), "", "{case}");
     }
+}
+
+/// story:simulate-opens-child-with-its-record, acceptance 1: a runner writes a child's `open`
+/// record in the step that opens it. `children-open-record` opens four readers about `sources`,
+/// one after another, and a merge once `{children: {in: [complete], subject: sources}}` is true;
+/// outcome `probe` needs the merge's `none` while that claim is not true. A walk that opened a
+/// reader without its record reached "three ended complete, the fourth opened with no record",
+/// read the claim as true and made `probe` legitimate; the walk prints it as unreached. Its
+/// one-reader twin prints it unreached before and after. Two runs give the same bytes.
+#[test]
+fn simulate_opens_a_child_with_its_open_record() {
+    let cases = ["children-open-record", "children-open-record-one-reader"];
+    let mut failures = failures(&cases);
+    for case in cases {
+        let report = read(&format!("{FIXTURES}/{case}/report.txt"));
+        if !report.lines().any(|line| {
+            line == "unreached-outcome: outcome `probe` is legitimate in no reachable state"
+        }) {
+            failures.push(format!("{case}: outcome `probe` is reached: {report:?}"));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
 /// The red run must not come from a fixture typo: every fixture protocol is one `canon validate`
