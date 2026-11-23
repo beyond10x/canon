@@ -1190,9 +1190,9 @@ fn the_walk_reaches_only_states_the_walk_without_the_open_record_reached() {
 }
 
 /// Acceptance 3: in no reachable state, printed or not, is an action's count of children above
-/// none without an `open` record in the dimension its children record in, or an `open` record
-/// held with every such count at none; the walk without the `open` record at the opening has
-/// such states in each of these fixtures.
+/// none without an `open` record in the dimension its children record in, where some reader of
+/// it demands no independence, or an `open` record held with every such count at none; the walk
+/// without the `open` record at the opening has such states in each of these fixtures.
 #[test]
 fn every_count_above_none_holds_its_open_record_and_the_reverse() {
     for (case, source) in OPENING {
@@ -1202,6 +1202,69 @@ fn every_count_above_none_holds_its_open_record_and_the_reverse() {
         let without = walk(&ir, false).expect("walked");
         assert!(!without.unpaired.is_empty(), "{case}");
     }
+}
+
+/// A child read only through `independent_on: [other_team]`: no reader demands nothing, so a
+/// runner's `open` record may meet no demand, which the state without it stands for.
+const DEMANDING_READERS: &str = "format: protocol/1\n\
+    protocol: {id: p, revision: 1, description: A child read only through an independence demand.}\n\
+    artifacts: {doc: {description: The document.}}\n\
+    independence_dimensions:\n\
+    \x20 other_team: {description: A producer of another team.}\n\
+    evidence_kinds:\n\
+    \x20 case_outcome: {description: The outcome of one child case.}\n\
+    \x20 opened: {description: The child was opened.}\n\
+    claims:\n\
+    \x20 opened: {description: Opened., true_when: {evidence: {kind: opened}}}\n\
+    \x20 running:\n\
+    \x20   description: The child runs, as a producer of another team recorded.\n\
+    \x20   true_when: {evidence: {kind: case_outcome, subject: doc, result: open, independent_on: [other_team]}}\n\
+    \x20 recorded:\n\
+    \x20   description: Some record of the child, from a producer of another team, is there.\n\
+    \x20   true_when: {evidence: {kind: case_outcome, subject: doc, independent_on: [other_team]}}\n\
+    actions:\n\
+    \x20 open:\n\
+    \x20   description: Open the child once.\n\
+    \x20   precondition: {claim: opened, is: unknown}\n\
+    \x20   case_open: {protocol: child, subject: doc}\n\
+    \x20   may_produce: [{evidence: opened}]\n\
+    outcomes:\n\
+    \x20 unseen:\n\
+    \x20   description: The child was opened and no record of it from a producer of another team is there.\n\
+    \x20   requires:\n\
+    \x20     all:\n\
+    \x20       - {claim: opened}\n\
+    \x20       - {claim: recorded, is: unknown}\n\
+    \x20 ran:\n\
+    \x20   description: The child was seen running.\n\
+    \x20   requires: {claim: running}\n";
+
+/// The review of wave 2026-11-23-w13, F1: where every reader of the dimension demands
+/// independence, the opening step adds no `open` record and a child that ends may drop the last
+/// one while a child is left, so the walk is the walk without the `open` record at the opening,
+/// state for state; it reaches the running child whose record meets no demand (outcome `unseen`
+/// legitimate), and a count above none without an `open` record is no unpaired state there.
+#[test]
+fn a_dimension_read_only_with_a_demand_walks_as_without_the_open_record() {
+    let ir = compiled(DEMANDING_READERS);
+    let with = walk(&ir, true).expect("walked");
+    let without = walk(&ir, false).expect("walked");
+    assert_eq!(with.states, without.states);
+    assert_eq!(with.unpaired, Vec::<usize>::new());
+    assert_eq!(
+        with.report.to_string(),
+        without.report.to_string(),
+        "{}",
+        with.report
+    );
+    assert!(
+        with.report
+            .outcomes
+            .iter()
+            .any(|(outcome, count)| outcome.as_str() == "unseen" && *count > 0),
+        "{}",
+        with.report
+    );
 }
 
 /// The ending clause of story:refused-approval-is-not-stuck, option A.

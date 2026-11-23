@@ -110,6 +110,8 @@ mod review_depth_beyond_bound;
 mod review_outcome_reasons_docs;
 mod review_properties;
 mod review_refusal_naming;
+mod simulate_fixture_reports;
+mod simulate_open_record_without_demand;
 mod source_model;
 mod strict_freshness;
 mod strict_order_forms_read_trusted_records;
