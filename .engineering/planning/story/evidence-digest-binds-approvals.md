@@ -34,7 +34,7 @@ revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-22T22:17:48Z", actor: "human:timo", revision: 12, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
 - {from: "proposed", to: "active", at: "2026-11-22T22:17:48Z", actor: "human:timo", revision: 13, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
-- {from: "active", to: "implemented", at: "2026-11-24T07:04:30Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-24-w15"}
+- {from: "active", to: "implemented", at: "2026-11-24T08:42:53Z", actor: "human:owner", revision: 14, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-24-w15"}
 ---
 ## Outcome
 

@@ -11,8 +11,8 @@ relations:
 - serves: vision:governed-autonomy
 revision: 3
 transitions:
-- {from: "draft", to: "proposed", at: "2026-11-24T00:44:55Z", actor: "human:timo", revision: 2}
-- {from: "proposed", to: "active", at: "2026-11-24T00:44:56Z", actor: "human:timo", revision: 3}
+- {from: "draft", to: "proposed", at: "2026-11-24T08:42:53Z", actor: "human:owner", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-24T08:42:53Z", actor: "human:owner", revision: 3}
 ---
 ## Outcome
 

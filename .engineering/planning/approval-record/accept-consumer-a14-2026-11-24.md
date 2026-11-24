@@ -10,7 +10,7 @@ relations:
 - decides: story:consumer-state-bound-cases
 revision: 2
 transitions:
-- {from: "draft", to: "approved", at: "2026-11-24T00:44:55Z", actor: "human:timo", revision: 2}
+- {from: "draft", to: "approved", at: "2026-11-24T08:42:53Z", actor: "human:owner", revision: 2}
 ---
 ## Decision
 
