@@ -195,9 +195,11 @@ commands:
   # How a producer computes the digest an evidence ground may give
   # (story:evidence-digest-binds-approvals): the EvidenceDigest of one canon-evidence/1 record, the
   # SHA-256 of its canonical form (canon.protocol.EvidenceDigest), so the file's key order and
-  # whitespace change nothing. Refused: a file that is not a canon-evidence/1 document
+  # whitespace change nothing. Refused: a file that does not read as a canon-evidence/1 record
   # (malformed-input) and one whose format is another (unsupported-format), as canon evaluate
-  # refuses them. Nothing else is checked: canon evaluate checks the record against the protocol.
+  # refuses them. Nothing else is checked: the identifier and instant checks of canon evaluate are
+  # not run, so a record with an id `e 1` or an observed_at `yesterday` prints a digest, and canon
+  # evaluate checks the record against the protocol.
   # read from: crates/canon-cli/src/lib.rs
   # read from: crates/canon-cli/src/digest.rs
   - name: canon.cli.Digest
@@ -222,7 +224,7 @@ commands:
         error: canon.cli.Unreadable
       # read from: crates/canon-cli/src/digest.rs
       - name: rejected
-        external: the file is not a canon-evidence/1 record
+        external: the file does not read as a canon-evidence/1 record
         error: canon.cli.Rejected
       # read from: crates/canon-cli/src/digest.rs
       - name: digested

@@ -407,8 +407,9 @@ pub enum Command {
     /// Canonicalization Scheme (RFC 8785) of its fields as Canon reads them, so the key order and
     /// whitespace of the file change nothing. A `ground_evidence` entry of `--authority` or
     /// `--decisions` written `{id: <id>, digest: <digest>}` gives it, and holds only while the
-    /// record under the id has it. A file that is not a `canon-evidence/1` record is refused; the
-    /// record is not checked against a protocol.
+    /// record under the id has it. A file that does not read as a `canon-evidence/1` record is
+    /// refused; the identifier and instant checks of `canon evaluate` are not run, and the record
+    /// is not checked against a protocol.
     Digest {
         /// The `canon-evidence/1` record, one file.
         #[arg(long)]
