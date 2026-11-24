@@ -52,6 +52,7 @@ mod documented_guard_limits;
 mod ess_commands_match;
 mod evaluate_help_evidence_ids;
 mod evaluator_skeleton;
+mod evidence_digest_cli;
 mod evidence_file_named;
 mod evidence_freshness;
 mod evidence_revision_binding;

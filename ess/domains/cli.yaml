@@ -13,8 +13,8 @@
 domain: canon.cli
 
 summary: >-
-  The canon command line: validate, compile, evaluate, check, check-set, simulate, generate,
-  diff, floor, mutate and conform run, each reading files named by its flags and printing its result, or
+  The canon command line: validate, compile, evaluate, digest, check, check-set, simulate,
+  generate, diff, floor, mutate and conform run, each reading files named by its flags and printing its result, or
   refusing with exit status 1 when a document is rejected and 2 when an input cannot be read.
 
 naming:
@@ -190,6 +190,42 @@ commands:
         error: canon.cli.Rejected
       # read from: crates/canon-cli/src/evaluate.rs:102-106
       - name: evaluated
+        returns: true
+
+  # How a producer computes the digest an evidence ground may give
+  # (story:evidence-digest-binds-approvals): the EvidenceDigest of one canon-evidence/1 record, the
+  # SHA-256 of its canonical form (canon.protocol.EvidenceDigest), so the file's key order and
+  # whitespace change nothing. Refused: a file that is not a canon-evidence/1 document
+  # (malformed-input) and one whose format is another (unsupported-format), as canon evaluate
+  # refuses them. Nothing else is checked: canon evaluate checks the record against the protocol.
+  # read from: crates/canon-cli/src/lib.rs
+  # read from: crates/canon-cli/src/digest.rs
+  - name: canon.cli.Digest
+    naming:
+      wire: digest
+      display: Digest
+      summary: Print the digest of one canon-evidence/1 record, as an evidence ground gives it.
+    input:
+      # The canon-evidence/1 record, one file.
+      # read from: crates/canon-cli/src/lib.rs
+      - name: evidence
+        type: String
+    response:
+      # `sha256:` followed by 64 lowercase hexadecimal digits, and a newline.
+      # read from: crates/canon-cli/src/digest.rs
+      - name: output
+        type: String
+    outcomes:
+      # read from: crates/canon-cli/src/digest.rs
+      - name: unreadable
+        external: the record cannot be read
+        error: canon.cli.Unreadable
+      # read from: crates/canon-cli/src/digest.rs
+      - name: rejected
+        external: the file is not a canon-evidence/1 record
+        error: canon.cli.Rejected
+      # read from: crates/canon-cli/src/digest.rs
+      - name: digested
         returns: true
 
   # A children form with `count: N` of 2 or more gives the case_outcome dimension it reads a

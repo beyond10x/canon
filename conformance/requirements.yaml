@@ -255,6 +255,20 @@ requirements:
       an identifier as invalid-identifier. Two entries that differ only in their grounds MUST be
       refused as duplicate-identifier.
     source: story:decision-grounds
+  CANON-GROUND-002:
+    status: implemented
+    statement: >-
+      A ground_evidence entry of canon-authority/1 or canon-decisions/1 MAY be written as a map
+      with the evidence id and an optional digest, sha256: followed by 64 lowercase hexadecimal
+      digits of the SHA-256 of the record's canonical form (RFC 8785 of its fields as read). A map
+      without a digest MUST hold exactly as the bare id does. A ground with a digest MUST fail as
+      content_changed when the record given under its id has another digest, whether or not that
+      record is applicable, and the entry MUST then not apply; it MUST hold as a bare id does when
+      the digest is the record's. The key order and whitespace of the record MUST NOT change its
+      digest. With no record under the id it MUST fail with present false. A digest of another form,
+      and a map with another key or without an id, MUST be refused as malformed-input. Inputs without
+      the map form MUST give the decision they gave before it existed.
+    source: story:evidence-digest-binds-approvals
   CANON-COMPOSE-003:
     status: implemented
     statement: >-
