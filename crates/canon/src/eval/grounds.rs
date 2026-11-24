@@ -66,6 +66,7 @@
 //! `undeclared-artifact` ([`declared`]). A malformed digest, and a map with another key or without
 //! `id`, are refused before, as `malformed-input`, when the entry is read.
 
+use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value};
@@ -215,13 +216,22 @@ pub(super) fn stale_grounds(failed: &BTreeSet<Failed>) -> Option<Value> {
 
 /// Which grounds hold in one evaluation: the case snapshot's current revisions, the records that
 /// are applicable, the reason each other given record was excluded with, and every record given,
-/// for the grounds that give a digest.
+/// by id, for the grounds that give a digest. A given record's digest is computed the first time a
+/// ground with a digest cites it, and kept, so a record is hashed at most once however many
+/// grounds cite it, and finding a ground's record reads one record, not every record given.
 #[derive(Debug, Default)]
 pub(crate) struct Standing<'a> {
     current: BTreeMap<&'a ArtifactId, &'a Revision>,
     applicable: BTreeSet<&'a EvidenceId>,
     excluded: BTreeMap<&'a EvidenceId, ExclusionReason>,
-    given: &'a [EvidenceRecord],
+    given: BTreeMap<&'a EvidenceId, GivenRecord<'a>>,
+}
+
+/// A given record and, once a ground with a digest has cited it, its digest.
+#[derive(Debug)]
+struct GivenRecord<'a> {
+    record: &'a EvidenceRecord,
+    digest: OnceCell<EvidenceDigest>,
 }
 
 impl<'a> Standing<'a> {
@@ -250,6 +260,14 @@ impl<'a> Standing<'a> {
                 .entry(&exclusion.evidence)
                 .or_insert(exclusion.reason);
         }
+        // The first record given under an id, as a scan of `given` in order would find it.
+        let mut by_id: BTreeMap<&EvidenceId, GivenRecord> = BTreeMap::new();
+        for record in given {
+            by_id.entry(&record.id).or_insert(GivenRecord {
+                record,
+                digest: OnceCell::new(),
+            });
+        }
         Standing {
             current: case
                 .artifacts
@@ -258,7 +276,7 @@ impl<'a> Standing<'a> {
                 .collect(),
             applicable,
             excluded: reasons,
-            given,
+            given: by_id,
         }
     }
 
@@ -278,16 +296,14 @@ impl<'a> Standing<'a> {
 
     /// Why the evidence ground `id`, with `digest` when it gives one, does not hold; `None` when it
     /// holds. The digest is computed only for a ground that gives one, so an evaluation without
-    /// digests computes none.
+    /// digests computes none, and once for each record however many grounds cite it.
     fn lapse(&self, id: &EvidenceId, digest: Option<&EvidenceDigest>) -> Option<Lapse> {
         if let Some(digest) = digest {
-            match self.given.iter().find(|record| {
-                #[cfg(test)]
-                counted(&READ);
-                record.id == *id
-            }) {
+            #[cfg(test)]
+            counted(&READ);
+            match self.given.get(id) {
                 None => return Some(Lapse::Absent),
-                Some(record) if hashed(record) != *digest => {
+                Some(given) if given.digest.get_or_init(|| hashed(given.record)) != digest => {
                     return Some(Lapse::ContentChanged);
                 }
                 Some(_) => {}
@@ -313,7 +329,7 @@ fn hashed(record: &EvidenceRecord) -> EvidenceDigest {
 #[cfg(test)]
 thread_local! {
     /// The given records [`Standing::lapse`] read to find the record under a ground's id on this
-    /// thread, for the operation-count test.
+    /// thread, for the operation-count test: one per lookup of the id in the index, found or not.
     static READ: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// The record digests [`Standing::lapse`] computed on this thread.
     static HASHED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
