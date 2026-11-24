@@ -104,6 +104,9 @@ compatibility decisions and keep unreleased capability claims explicit.
 
 - Planned in the AEP store under `.engineering/`, written only through `aep plan artifact`. Body
   drafts go in `.engineering/drafts/` (ignored).
+- Every write to the store runs under `AEP_ACTOR=human:owner`: a person's name does not go into
+  this public repository, in a record's actor id neither. Records on `main` before 2026-11-24
+  keep the actor they were written with.
 - Build into the tree's own `target/`; never set `CARGO_TARGET_DIR`. End every tree with
   `worktree finish --discard-cache --archive <tree>`, and never delete a `target/` by hand.
 - Every commit and push is `b10x-bot[bot]`'s through `b10x-gates bot`; every GitHub write goes

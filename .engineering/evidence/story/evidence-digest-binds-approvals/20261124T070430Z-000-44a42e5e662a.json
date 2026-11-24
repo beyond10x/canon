@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-24T07:04:30Z",
+  "actor": "human:owner",
+  "artifact": "story:evidence-digest-binds-approvals",
+  "kind": "story",
+  "revision": 13,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "full gate on wave/2026-11-24-w15 5c7b90d18 on build node build-1d: build, ess-gate (91), fmt, clippy, conform (32 passed, 33 of 33 covered), docs-check exit 0; test step 1460 tests, 1459 passed (simulate_lets_a_child_outcome_arrive_after_its_opening runs git ls-files; the node copy has no .git), 6.5 s of 120 s; test-slow 66 of 66",
+    "reference": "docs/plan/wave-2026-11-24-w15.md#delivered-state-kept-current-by-stage-2"
+  }
+}

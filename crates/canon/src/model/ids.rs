@@ -195,6 +195,19 @@ identifier!(
     Age
 );
 identifier!(
+    /// The digest of a `canon-evidence/1` record's contents
+    /// (story:evidence-digest-binds-approvals): `sha256:` followed by the 64 lowercase hexadecimal
+    /// digits of the SHA-256 of the record's canonical form, the JSON Canonicalization Scheme
+    /// (RFC 8785) of one object holding each field of the record as Canon reads it under its own
+    /// key: `format`, `id`, `kind`, `subject` and `subject_revision` always, `result`,
+    /// `observed_at`, `producer`, `child_case` and `item` when given, and `upstream_revisions`,
+    /// an object of artifact to revision, when not empty; every value a string, as written. So
+    /// neither the key order nor the whitespace of the file changes it, and two records have one
+    /// digest exactly when a repeated delivery of a record counts once. `canon digest --evidence
+    /// <file>` prints it.
+    EvidenceDigest
+);
+identifier!(
     /// Names an explicit decision an outcome may require (`explicitly_inconclusive`).
     DecisionName
 );

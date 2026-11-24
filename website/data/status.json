@@ -426,6 +426,13 @@
       "detail": "count: N on a children form waits for N child cases ended with a listed outcome: unknown while fewer are read or one is open, false when one ended outside the list. 0 is refused; canon simulate refuses a count above 64.",
       "href": "/docs/reference/protocol",
       "area": "Language"
+    },
+    {
+      "label": "Approvals bound to evidence content",
+      "status": "shipped",
+      "detail": "A ground_evidence entry of canon-authority/1 or canon-decisions/1 may carry digest: sha256:<hex>; when the record under that ID has other contents the ground fails as content_changed. canon digest --evidence <file> prints the digest. Requirement CANON-GROUND-002.",
+      "href": "/docs/reference/evaluation",
+      "area": "Evaluation"
     }
   ]
 }

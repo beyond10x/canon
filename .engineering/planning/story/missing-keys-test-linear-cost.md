@@ -6,11 +6,11 @@ status: draft
 title: The missing-keys test reads each fixture once and costs linear time
 relations:
 - decomposes: epic:canon-kernel
-revision: 1
+revision: 2
 ---
 ## Problem
 
-`crates/canon/tests/missing_keys.rs` `every_left_out_key_of_a_protocol_or_a_scenario_is_named` removes each key of every `protocol/1` fixture in turn and serializes and parses the whole document again for each key, so its cost grows with the square of each fixture's size. On 2026-11-23 it took 8.5 s on an idle build node and was killed at 60 s twice on the shared host at load 90 to 107, also when run alone (wave 14 slow lane, gate at `352569c62`). 211 protocol fixtures, 185 distinct texts, 11391 lines; sum of squared line counts 804681, of which wave 14's new fixtures add 41693.
+`crates/canon/tests/missing_keys.rs` `every_left_out_key_of_a_protocol_or_a_scenario_is_named` removes each key of every `protocol/1` fixture in turn and serializes and parses the whole document again for each key, so its cost grows with the square of each fixture's size. It was killed at 60 s twice on the shared host at load 90 to 107, also when run alone (wave 14 slow lane, gate at `352569c62`); alone without the kill it took 37.05 s locally on 2026-11-24 at host load 87 to 67 (`cargo test`). A figure of 8.5 s from the shared build node is withdrawn: its file sync could compile stale copies that night. 211 protocol fixtures, 185 distinct texts, 11391 lines; sum of squared line counts 804681, of which wave 14's new fixtures add 41693.
 
 ## Acceptance
 

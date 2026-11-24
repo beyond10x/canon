@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:evidence-digest-binds-approvals
 kind: story
-status: active
+status: implemented
 title: an approval's evidence ground can carry a sha256 digest and lapses as content_changed when the content differs
 tags:
 - from-finding
@@ -30,10 +30,11 @@ scope:
   path: ess/domains/protocol.yaml
 - confidence: cited
   path: website/static/schemas
-revision: 13
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-22T22:17:48Z", actor: "human:timo", revision: 12, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
 - {from: "proposed", to: "active", at: "2026-11-22T22:17:48Z", actor: "human:timo", revision: 13, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-22-w12"}
+- {from: "active", to: "implemented", at: "2026-11-24T08:42:53Z", actor: "human:owner", revision: 14, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}, executor: "agent:claude-140bdba0", correlation: "wave/2026-11-24-w15"}
 ---
 ## Outcome
 

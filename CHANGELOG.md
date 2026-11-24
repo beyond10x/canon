@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.16.0] - 2026-11-24
+
+A minor release: an approval or grant that cites evidence can bind to that evidence's content.
+Inputs that do not use the new form give the same bytes as 0.15.0 on every existing fixture and
+scenario. Install the CLI or depend on the libraries from Git tag `0.16.0`.
+
+What changes, and for whom (read against the diff since 0.15.0):
+
+- Anyone who writes `canon-authority/1` or `canon-decisions/1` documents. A `ground_evidence` entry
+  is a bare evidence ID, as before, or an object `{id: <evidence id>, digest: "sha256:<64 lowercase
+  hex>"}` with `digest` optional. When the record Canon reads under that ID has other contents than
+  the ones hashed, the ground fails: `canon evaluate` lists it in `stale_grounds` with the new reason
+  `content_changed`, beside the existing `present: false`. An object without a digest behaves as
+  the bare ID. A bare ID still relies on evidence IDs that are never reused for other contents.
+- Anyone who produces evidence. `canon digest --evidence <file>` prints the digest of a
+  `canon-evidence/1` record: SHA-256 over the RFC 8785 canonical JSON of the record's fields as
+  Canon reads them (always `format`, `id`, `kind`, `subject`, `subject_revision`; `result`,
+  `observed_at`, `producer`, `child_case`, `item` when given; `upstream_revisions` when not empty).
+  Key order, whitespace and YAML or JSON do not change it. It checks the file reads as a record; it
+  does not run the identifier and instant checks of `canon evaluate`.
+- The authority and decisions JSON Schemas gain `EvidenceGround`, `CitedEvidence` and
+  `EvidenceDigest`. New conformance requirement `CANON-GROUND-002`.
+
+Breaking, for documents that use the new form only:
+
+- Canon 0.15.0 and older refuse a `ground_evidence` object: `error[malformed-input]: --authority is
+  not a canon-authority/1 document: entry 1: invalid type: map, expected a string`.
+- The refusal of an empty object `[{}]` now reads "missing field `id`".
+
 ## [0.15.0] - 2026-11-24
 
 A minor release: three new optional keys in `protocol/1`, each closing a gap the runbook consumer

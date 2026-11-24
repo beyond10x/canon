@@ -20,8 +20,9 @@
 //!   decisions (`decisions`, `{"case_revision", "decision", "outcome", "principal"}` entries) and
 //!   the evaluation instant (`at`). An entry of either list that names grounds
 //!   (story:decision-grounds) adds them as given: `"ground_revisions": {<artifact>: <revision>,
-//!   ...}` and `"ground_evidence": [<id>, ...]`, in id order, each id once, each only when not
-//!   empty.
+//!   ...}` and `"ground_evidence": [<ground>, ...]`, each ground its evidence id or, when it gives a
+//!   digest (story:evidence-digest-binds-approvals), `{"digest": <digest>, "id": <id>}`, in id
+//!   order, the id alone first, each once, each only when not empty.
 //! - `outcomes`: each blocked outcome, `{"because": [...], "status": "blocked"}`.
 //! - `actions`: each action that is not admissible, `{"because": [...], "status": <status>}`.
 //! - `obligations`: each open obligation, `{"because": [...], "status": "open"}`. Its reasons are

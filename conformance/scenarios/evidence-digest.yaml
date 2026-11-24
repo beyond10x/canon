@@ -1,0 +1,508 @@
+format: canon-conformance/1
+id: CANON-GROUND-002
+covers: [CANON-GROUND-002]
+fixture: fixtures/investigation/decision-grounds.yaml
+# Evidence grounds bound to a digest (story:evidence-digest-binds-approvals). A `ground_evidence`
+# entry may be a map, `{id: <evidence id>, digest: sha256:<64 lowercase hex>}`, the digest optional.
+# The digest is the SHA-256 of the record's canonical form: the JSON Canonicalization Scheme
+# (RFC 8785) of one object holding every field of the record as Canon reads it, an absent optional
+# field and an empty `upstream_revisions` left out, every value a string. `canon digest --evidence
+# <file>` prints it.
+#
+# - A map without a digest holds as the bare id does.
+# - A ground with a digest holds while the record under the id is applicable and has that digest; with
+#   other contents under the id it fails as `{"evidence", "reason": "content_changed"}`, whether or
+#   not the record is applicable, and the entry no longer applies. No record under the id: present
+#   false.
+# - Refused as malformed-input: a digest of another form, a map with another key or without an id.
+#
+# The fixture is CANON-GROUND-001's. Record e1 as the decisions were taken (digest computed
+# outside Canon, with sha256sum over the canonical text):
+#   {"format":"canon-evidence/1","id":"e1","kind":"k","observed_at":"2026-11-21T10:00:00Z","subject":"spec","subject_revision":"r2","upstream_revisions":{"up":"u2"}}
+#   sha256:b5971ff0209e762046a75b9465832b0b24892d22b49fbb2cb05684472c4d6dea
+# Other contents stored under e1 later, still applicable (another result and a producer):
+#   {"format":"canon-evidence/1","id":"e1","kind":"k","observed_at":"2026-11-21T10:00:00Z","producer":"mallory","result":"fail","subject":"spec","subject_revision":"r2","upstream_revisions":{"up":"u2"}}
+#   sha256:e9e9c3de2d505aad08f158a0c2e59bd95a05e85c77eeaecac9db0ba3101d4672
+steps:
+  # The record has the digest the grant gives, its keys written in another order than the
+  # canonical one: the ground holds and `act` is admissible.
+  - id: digest-of-the-record-holds
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence:
+        - upstream_revisions: {up: u2}
+          subject_revision: r2
+          subject: spec
+          observed_at: 2026-11-21T10:00:00Z
+          kind: k
+          id: e1
+          format: canon-evidence/1
+      at: 2026-11-21T10:30:00Z
+      authority:
+        - capability: x
+          decision: granted
+          ground_evidence:
+            - {id: e1, digest: 'sha256:b5971ff0209e762046a75b9465832b0b24892d22b49fbb2cb05684472c4d6dea'}
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "status": "admissible"
+            }
+          }
+        }
+
+  # Other contents under e1: the grant resting on the digest lapses as content_changed, and the
+  # requirement is not decided.
+  - id: other-contents-lapse-the-grant
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: k
+          result: fail
+          subject: spec
+          subject_revision: r2
+          observed_at: 2026-11-21T10:00:00Z
+          upstream_revisions: {up: u2}
+          producer: mallory
+      at: 2026-11-21T10:30:00Z
+      authority:
+        - capability: x
+          decision: granted
+          ground_evidence:
+            - {id: e1, digest: 'sha256:b5971ff0209e762046a75b9465832b0b24892d22b49fbb2cb05684472c4d6dea'}
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "reasons": [
+                {
+                  "capability": "x",
+                  "decision": "none",
+                  "stale_grounds": [
+                    {
+                      "evidence": "e1",
+                      "reason": "content_changed"
+                    }
+                  ]
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }
+
+  # The same other contents: a grant citing e1 by its bare id, or as a map without a digest, still
+  # holds (CANON-GROUND-001), so only the digest binds the contents.
+  - id: without-a-digest-other-contents-hold
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: k
+          result: fail
+          subject: spec
+          subject_revision: r2
+          observed_at: 2026-11-21T10:00:00Z
+          upstream_revisions: {up: u2}
+          producer: mallory
+      at: 2026-11-21T10:30:00Z
+      authority:
+        - capability: x
+          decision: granted
+          ground_evidence: [e1]
+        - capability: x
+          decision: granted
+          principal: q
+          ground_evidence: [{id: e1}]
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "status": "admissible"
+            }
+          }
+        }
+
+  # An explicit decision resting on the digest: with the record it hashed it applies, and `o` is
+  # legitimate.
+  - id: explicit-decision-digest-holds
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: k
+          subject: spec
+          subject_revision: r2
+          observed_at: 2026-11-21T10:00:00Z
+          upstream_revisions: {up: u2}
+      at: 2026-11-21T10:30:00Z
+      decisions:
+        - decision: d
+          outcome: o
+          principal: p
+          case_revision: c2
+          ground_evidence:
+            - {id: e1, digest: 'sha256:b5971ff0209e762046a75b9465832b0b24892d22b49fbb2cb05684472c4d6dea'}
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "o": {
+              "decided_by": {
+                "decision": "d",
+                "principals": [
+                  "p"
+                ]
+              },
+              "status": "legitimate"
+            }
+          }
+        }
+
+  # With other contents under e1 the decision lapses as content_changed, and `o` is blocked.
+  - id: explicit-decision-other-contents-lapse
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: k
+          result: fail
+          subject: spec
+          subject_revision: r2
+          observed_at: 2026-11-21T10:00:00Z
+          upstream_revisions: {up: u2}
+          producer: mallory
+      at: 2026-11-21T10:30:00Z
+      decisions:
+        - decision: d
+          outcome: o
+          principal: p
+          case_revision: c2
+          ground_evidence:
+            - {id: e1, digest: 'sha256:b5971ff0209e762046a75b9465832b0b24892d22b49fbb2cb05684472c4d6dea'}
+    expect:
+      decision: |
+        {
+          "outcomes": {
+            "o": {
+              "reasons": [
+                {
+                  "decision": "d",
+                  "present": false,
+                  "stale_grounds": [
+                    {
+                      "evidence": "e1",
+                      "reason": "content_changed"
+                    }
+                  ]
+                }
+              ],
+              "status": "blocked"
+            }
+          }
+        }
+
+  # No record under e1: the ground fails with present false, as a bare id's does.
+  - id: digest-without-a-record
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      authority:
+        - capability: x
+          decision: granted
+          ground_evidence:
+            - {id: e1, digest: 'sha256:b5971ff0209e762046a75b9465832b0b24892d22b49fbb2cb05684472c4d6dea'}
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "reasons": [
+                {
+                  "capability": "x",
+                  "decision": "none",
+                  "stale_grounds": [
+                    {
+                      "evidence": "e1",
+                      "present": false
+                    }
+                  ]
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }
+
+  # The record it hashed, past the kind's max_age: the digest matches, and the ground fails with
+  # the reason the record was excluded with.
+  - id: digest-matches-and-the-record-expired
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: k
+          subject: spec
+          subject_revision: r2
+          observed_at: 2026-11-21T10:00:00Z
+          upstream_revisions: {up: u2}
+      at: 2026-11-21T12:00:00Z
+      authority:
+        - capability: x
+          decision: granted
+          ground_evidence:
+            - {id: e1, digest: 'sha256:b5971ff0209e762046a75b9465832b0b24892d22b49fbb2cb05684472c4d6dea'}
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "reasons": [
+                {
+                  "capability": "x",
+                  "decision": "none",
+                  "stale_grounds": [
+                    {
+                      "evidence": "e1",
+                      "reason": "expired"
+                    }
+                  ]
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }
+
+  # Other contents, past the kind's max_age as well: the ground fails as content_changed, since the
+  # record under the id is not the one the grant rested on.
+  - id: other-contents-and-expired-is-content-changed
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence:
+        - format: canon-evidence/1
+          id: e1
+          kind: k
+          result: fail
+          subject: spec
+          subject_revision: r2
+          observed_at: 2026-11-21T10:00:00Z
+          upstream_revisions: {up: u2}
+          producer: mallory
+      at: 2026-11-21T12:00:00Z
+      authority:
+        - capability: x
+          decision: granted
+          ground_evidence:
+            - {id: e1, digest: 'sha256:b5971ff0209e762046a75b9465832b0b24892d22b49fbb2cb05684472c4d6dea'}
+    expect:
+      decision: |
+        {
+          "actions": {
+            "act": {
+              "reasons": [
+                {
+                  "capability": "x",
+                  "decision": "none",
+                  "stale_grounds": [
+                    {
+                      "evidence": "e1",
+                      "reason": "content_changed"
+                    }
+                  ]
+                }
+              ],
+              "status": "approval-required"
+            }
+          }
+        }
+
+  # A digest in upper case is not the written form.
+  - id: digest-in-upper-case-is-refused
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      authority:
+        - capability: x
+          decision: granted
+          ground_evidence:
+            - {id: e1, digest: 'sha256:B5971FF0209E762046A75B9465832B0B24892D22B49FBB2CB05684472C4D6DEA'}
+    expect:
+      refusal: malformed-input
+
+  # Another algorithm's prefix is refused.
+  - id: digest-of-another-algorithm-is-refused
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      decisions:
+        - decision: d
+          outcome: o
+          principal: p
+          case_revision: c2
+          ground_evidence:
+            - {id: e1, digest: 'sha512:b5971ff0209e762046a75b9465832b0b24892d22b49fbb2cb05684472c4d6dea'}
+    expect:
+      refusal: malformed-input
+
+  # Too few digits.
+  - id: short-digest-is-refused
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      authority:
+        - capability: x
+          decision: granted
+          ground_evidence:
+            - {id: e1, digest: 'sha256:b5971ff0'}
+    expect:
+      refusal: malformed-input
+
+  # A map with another key.
+  - id: map-with-another-key-is-refused
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      authority:
+        - capability: x
+          decision: granted
+          ground_evidence:
+            - {id: e1, sha256: b5971ff0209e762046a75b9465832b0b24892d22b49fbb2cb05684472c4d6dea}
+    expect:
+      refusal: malformed-input
+
+  # A map without an id.
+  - id: map-without-an-id-is-refused
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      decisions:
+        - decision: d
+          outcome: o
+          principal: p
+          case_revision: c2
+          ground_evidence:
+            - {digest: 'sha256:b5971ff0209e762046a75b9465832b0b24892d22b49fbb2cb05684472c4d6dea'}
+    expect:
+      refusal: malformed-input
+
+  # The id inside a map is an identifier, as a bare one is.
+  - id: map-id-not-an-identifier-is-refused
+    evaluate:
+      case:
+        format: canon-case/1
+        id: G-1
+        protocol: grounds
+        revision: c2
+        artifacts:
+          spec: {revision: r2}
+          up: {revision: u2}
+      evidence: []
+      authority:
+        - capability: x
+          decision: granted
+          ground_evidence:
+            - {id: 'e 1', digest: 'sha256:b5971ff0209e762046a75b9465832b0b24892d22b49fbb2cb05684472c4d6dea'}
+    expect:
+      refusal: invalid-identifier
