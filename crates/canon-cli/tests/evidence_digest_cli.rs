@@ -76,8 +76,8 @@ fn digest_prints_the_digest_of_the_record() {
     }
 }
 
-/// A file that is not a `canon-evidence/1` record exits 1 naming the code; a file that cannot be
-/// read exits 2.
+/// A file that does not read as a `canon-evidence/1` record exits 1 naming the code; a file that
+/// cannot be read exits 2.
 #[test]
 fn digest_refuses_what_is_not_a_record() {
     let dir = scratch("refuses");

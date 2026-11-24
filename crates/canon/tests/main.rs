@@ -87,6 +87,7 @@ mod adversary_subject_probes;
 mod adversary_subject_reasons;
 mod adversary_supplied_evidence;
 mod adversary_tvc_eval;
+mod adversary_w15_evidence_digest;
 mod approvals_cite_evidence_by_id;
 mod approvals_cite_evidence_replaced_contents;
 mod argument_validation;
