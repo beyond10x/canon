@@ -39,7 +39,9 @@ use serde::Deserialize;
 use serde::de::{MapAccess, Visitor};
 use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 
-pub use authority::{AUTHORITY_FORMAT, AuthorityDecision, Grant, ScopeKey, ScopeValue};
+pub use authority::{
+    AUTHORITY_FORMAT, AuthorityDecision, CitedEvidence, EvidenceGround, Grant, ScopeKey, ScopeValue,
+};
 pub use case::{CASE_FORMAT, Case, CaseArtifact};
 pub use catalogue::{
     NormativeRequirement, REQUIREMENTS_FORMAT, RequirementCatalogue, RequirementId,
@@ -53,8 +55,8 @@ pub use evidence::{EVIDENCE_FORMAT, EvidenceRecord};
 pub use explicit::{DECISIONS_FORMAT, ExplicitDecision};
 pub use ids::{
     ActionId, Age, ArtifactId, CapabilityId, CaseId, ClaimId, DecisionName, EffectClass,
-    EvidenceId, EvidenceKindId, IndependenceDimensionId, InputId, InputValue, Instant,
-    InvalidationRuleId, ItemId, ObligationId, OutcomeId, Principal, ProtocolId, Revision,
+    EvidenceDigest, EvidenceId, EvidenceKindId, IndependenceDimensionId, InputId, InputValue,
+    Instant, InvalidationRuleId, ItemId, ObligationId, OutcomeId, Principal, ProtocolId, Revision,
 };
 pub use parse::{FORMAT, ParseError, parse};
 pub use predicate::{

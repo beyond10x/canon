@@ -26,10 +26,16 @@ const SITE: &str = "https://beyond10x.github.io/canon";
 
 /// Types whose `Deserialize` is written by hand, and how a document writes them. Nothing else
 /// about the model is written here; a hand-written `Deserialize` without an entry stops generation.
-const CUSTOM: [(&str, &str); 1] = [(
-    "Truth",
-    "Written `true`, `false` or `unknown`. A YAML boolean `true` or `false` is read as the same value.",
-)];
+const CUSTOM: [(&str, &str); 2] = [
+    (
+        "Truth",
+        "Written `true`, `false` or `unknown`. A YAML boolean `true` or `false` is read as the same value.",
+    ),
+    (
+        "EvidenceGround",
+        "Written as one of the forms below, with no key of its own: the evidence id alone, or a map.",
+    ),
+];
 
 /// Every generated file, keyed by its path relative to the repository root.
 pub fn all(root: &Path) -> Result<BTreeMap<String, String>, String> {
@@ -615,6 +621,14 @@ fn used_identifiers(model: &Model, sections: &[&TypeDef]) -> Result<BTreeSet<Str
                     collect(&field.ty, &mut used);
                 }
             }
+            (Reading::Custom, Shape::Enum(variants)) => {
+                for payload in variants
+                    .iter()
+                    .filter_map(|variant| variant.payload.as_ref())
+                {
+                    collect(payload, &mut used);
+                }
+            }
             (_, Shape::Enum(_)) => {}
         }
     }
@@ -732,6 +746,21 @@ fn type_sections(
                     .collect();
                 out.push_str(&table(&["Key", "Value", "Meaning"], &rows));
             }
+            // A hand-written reader of one-payload variants: each variant is written as its
+            // payload, with no key of its own (an evidence ground: an id, or a map).
+            (Reading::Custom, Shape::Enum(variants))
+                if variants.iter().all(|variant| variant.payload.is_some()) =>
+            {
+                out.push_str(&format!("{}\n\n", custom(&def.name)?));
+                let rows: Vec<Vec<String>> = variants
+                    .iter()
+                    .filter_map(|variant| {
+                        let payload = variant.payload.as_ref()?;
+                        Some(vec![render_ty(payload, links), meaning(&variant.doc)])
+                    })
+                    .collect();
+                out.push_str(&table(&["Written as", "Meaning"], &rows));
+            }
             (Reading::Custom, Shape::Enum(variants)) => {
                 out.push_str(&format!("{}\n\n", custom(&def.name)?));
                 let rows: Vec<Vec<String>> = variants
@@ -818,6 +847,11 @@ const TEXT_FORMATS: &[(&str, &str, &str)] = &[
         "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$",
         "Calendar validity is checked by Canon, not by the pattern: the date must exist (leap \
          years included) and the time be at most 23:59:59.",
+    ),
+    (
+        "EvidenceDigest",
+        "^sha256:[0-9a-f]{64}$",
+        "Canon refuses any other form, naming the entry.",
     ),
 ];
 
@@ -1132,6 +1166,26 @@ fn schema(model: &Model, document: &Document) -> Result<Json, String> {
                         variants
                             .iter()
                             .map(|variant| json::str(variant.written.clone()))
+                            .collect(),
+                    ),
+                )])
+            }
+            (Reading::Custom, Shape::Enum(variants))
+                if variants.iter().all(|variant| variant.payload.is_some()) =>
+            {
+                custom(&def.name)?;
+                obj([(
+                    "oneOf",
+                    Json::Arr(
+                        variants
+                            .iter()
+                            .filter_map(|variant| {
+                                let payload = variant.payload.as_ref()?;
+                                Some(with_description(
+                                    ty_schema(payload, scalars),
+                                    &resolve(&variant.doc, model),
+                                ))
+                            })
                             .collect(),
                     ),
                 )])

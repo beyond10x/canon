@@ -9,6 +9,7 @@ mod check;
 mod check_set;
 mod conform;
 mod diff;
+mod digest;
 mod evaluate;
 mod floor;
 mod generate;
@@ -64,6 +65,7 @@ fn main() -> ExitCode {
             at.as_deref(),
             strict.as_deref(),
         ),
+        Command::Digest { evidence } => digest::run(&evidence),
         Command::Diff { from, to } => diff::run(&from, &to),
         Command::Floor { floor, ir } => floor::run(&floor, &ir),
         Command::Check {

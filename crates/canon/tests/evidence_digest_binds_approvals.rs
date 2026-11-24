@@ -81,8 +81,12 @@ fn decide(evidence: &[EvidenceRecord], authority: &str, decisions: &str) -> mode
 /// The authority and decisions documents citing `e1` with `digest`.
 fn approvals(digest: &str) -> (String, String) {
     (
-        format!("- {{capability: x, decision: granted, principal: p, ground_evidence: [{{id: e1, digest: '{digest}'}}]}}\n"),
-        format!("- {{decision: d, outcome: o, principal: q, case_revision: c2, ground_evidence: [{{id: e1, digest: '{digest}'}}]}}\n"),
+        format!(
+            "- {{capability: x, decision: granted, principal: p, ground_evidence: [{{id: e1, digest: '{digest}'}}]}}\n"
+        ),
+        format!(
+            "- {{decision: d, outcome: o, principal: q, case_revision: c2, ground_evidence: [{{id: e1, digest: '{digest}'}}]}}\n"
+        ),
     )
 }
 

@@ -129,7 +129,7 @@ rested on.
 | `principal` | [identifier](#identifiers) (`Principal`) | optional | Who took it, an identifier, recorded as given: Canon resolves no identity, so it is matched against nothing and does not change admissibility. |
 | `case_revision` | [identifier](#identifiers) (`Revision`) | optional | The case revision it was taken at, an identifier: the decision applies only while the case snapshot's `revision` equals it, and to nothing when the snapshot has none. Absent, it applies at every case revision. |
 | `ground_revisions` | map from [identifier](#identifiers) (`ArtifactId`) to [identifier](#identifiers) (`Revision`) | optional | The artifact revisions the decision rested on, keyed by artifact, each key once (story:decision-grounds): a ground holds while its revision is the case snapshot's current revision of the artifact, compared for equality. The decision applies only while every ground holds, whatever it decided. Absent or empty, it rests on no artifact. |
-| `ground_evidence` | list of [identifier](#identifiers) (`EvidenceId`) | optional | The evidence records the decision rested on, by id: a ground holds while a record with that id is applicable, the rule of `missing_evidence` (given, left by the revision-binding and freshness stages, and listed in no claim's `excluded_evidence`), so expiry and invalidation reach the decision through it. An id no record has does not hold and is not refused. Absent or empty, it rests on no record. |
+| `ground_evidence` | list of [`EvidenceGround`](#evidenceground) | optional | The evidence records the decision rested on, each by id or by id and digest (`EvidenceGround`): a ground holds while a record with that id is applicable, the rule of `missing_evidence` (given, left by the revision-binding and freshness stages, and listed in no claim's `excluded_evidence`), so expiry and invalidation reach the decision through it, and, when it gives a digest, while that record has the digest. An id no record has does not hold and is not refused. Absent or empty, it rests on no record. |
 
 ### `Grant`
 
@@ -144,6 +144,35 @@ requires approval or is not decided.
 | `granted` | The capability is granted. |
 | `require_approval` | The capability is granted only with approval: asking for approval could grant it. |
 | `denied` | The capability is denied; asking again would not change it. |
+
+### `EvidenceGround`
+
+One evidence record a decision rested on, an entry of `ground_evidence`
+(story:evidence-digest-binds-approvals). Written as the record's id alone (`e1`), or as a map
+with the id and, optionally, the digest of the record's contents when the decision was taken
+(`{id: e1, digest: 'sha256:…'}`, the digest `canon digest --evidence <file>` prints). A map
+without a digest is the id alone. With a digest, the ground holds only while the record given
+under the id has that digest; with other contents under the id it fails as `content_changed`,
+whether or not the record is applicable. Refused as `malformed-input`, naming the entry: a map
+with another key or without `id`, and a digest not written `sha256:` followed by 64 lowercase
+hexadecimal digits.
+
+Written as one of the forms below, with no key of its own: the evidence id alone, or a map.
+
+| Written as | Meaning |
+|---|---|
+| [identifier](#identifiers) (`EvidenceId`) | The record's id alone: the ground holds while a record with the id is applicable, whatever the rest of its contents. |
+| [`CitedEvidence`](#citedevidence) | The record's id with, optionally, the digest of its contents. |
+
+### `CitedEvidence`
+
+An evidence ground written as a map: the record's id and, optionally, the digest of its
+contents.
+
+| Key | Value | Required | Meaning |
+|---|---|---|---|
+| `id` | [identifier](#identifiers) (`EvidenceId`) | required | The record's id, an identifier. |
+| `digest` | [text](#text-formats) (`EvidenceDigest`) | optional | The digest of the record's contents when the decision was taken. Absent, the ground holds as the id alone does. |
 
 ## `canon-decisions/1`
 
@@ -162,7 +191,7 @@ holds.
 | `principal` | [identifier](#identifiers) (`Principal`) | required | Who took it. |
 | `case_revision` | [identifier](#identifiers) (`Revision`) | required | The case revision it was taken at. |
 | `ground_revisions` | map from [identifier](#identifiers) (`ArtifactId`) to [identifier](#identifiers) (`Revision`) | optional | The artifact revisions the decision rested on, keyed by artifact, each key once (story:decision-grounds): a ground holds while its revision is the case snapshot's current revision of the artifact, compared for equality. Absent or empty, it rests on no artifact. |
-| `ground_evidence` | list of [identifier](#identifiers) (`EvidenceId`) | optional | The evidence records the decision rested on, by id: a ground holds while a record with that id is applicable, the rule of `missing_evidence` (given, left by the revision-binding and freshness stages, and listed in no claim's `excluded_evidence`), so expiry and invalidation reach the decision through it. An id no record has does not hold and is not refused. Absent or empty, it rests on no record. |
+| `ground_evidence` | list of [`EvidenceGround`](#evidenceground) | optional | The evidence records the decision rested on, each by id or by id and digest (`EvidenceGround`): a ground holds while a record with that id is applicable, the rule of `missing_evidence` (given, left by the revision-binding and freshness stages, and listed in no claim's `excluded_evidence`), so expiry and invalidation reach the decision through it, and, when it gives a digest, while that record has the digest. An id no record has does not hold and is not refused. Absent or empty, it rests on no record. |
 
 ## `canon-properties/1`
 
@@ -239,3 +268,4 @@ These values are text in a fixed form, not identifiers. Canon refuses text that 
 | Type | Written as | Pattern |
 |---|---|---|
 | `Instant` | An instant written `YYYY-MM-DDTHH:MM:SSZ` in UTC, or with a fraction of one to nine digits after the seconds, `YYYY-MM-DDTHH:MM:SS.fffZ`; uppercase `T` and `Z`, no leap second (`2026-10-04T12:00:00Z`, `2026-10-04T12:00:00.400Z`): when evidence was observed, and the evaluation instant. Order forms compare every instant of one evaluation at one resolution, the coarsest precision written among its records, dropping finer digits (`12:00:00.4Z` beside `12:00:00Z` reads as `12:00:00Z`); expiry reads the whole seconds and ignores the fraction. Calendar validity is checked by Canon, not by the pattern: the date must exist (leap years included) and the time be at most 23:59:59. | `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$` |
+| `EvidenceDigest` | The digest of a `canon-evidence/1` record's contents (story:evidence-digest-binds-approvals): `sha256:` followed by the 64 lowercase hexadecimal digits of the SHA-256 of the record's canonical form, the JSON Canonicalization Scheme (RFC 8785) of one object holding each field of the record as Canon reads it under its own key: `format`, `id`, `kind`, `subject` and `subject_revision` always, `result`, `observed_at`, `producer`, `child_case` and `item` when given, and `upstream_revisions`, an object of artifact to revision, when not empty; every value a string, as written. So neither the key order nor the whitespace of the file changes it, and two records have one digest exactly when a repeated delivery of a record counts once. `canon digest --evidence <file>` prints it. Canon refuses any other form, naming the entry. | `^sha256:[0-9a-f]{64}$` |

@@ -82,8 +82,11 @@ fn digest_prints_the_digest_of_the_record() {
 fn digest_refuses_what_is_not_a_record() {
     let dir = scratch("refuses");
     let not_a_record = dir.join("case.yaml");
-    std::fs::write(&not_a_record, "format: canon-case/1\nid: C-1\nprotocol: p\n")
-        .expect("written");
+    std::fs::write(
+        &not_a_record,
+        "format: canon-case/1\nid: C-1\nprotocol: p\n",
+    )
+    .expect("written");
     let out = canon(&["digest", "--evidence", &path(&not_a_record)]);
     assert_eq!(out.status.code(), Some(1), "{}", text(&out.stderr));
     assert!(
@@ -94,8 +97,11 @@ fn digest_refuses_what_is_not_a_record() {
     assert_eq!(text(&out.stdout), "");
 
     let other_format = dir.join("other.yaml");
-    std::fs::write(&other_format, E1.replace("canon-evidence/1", "canon-evidence/2"))
-        .expect("written");
+    std::fs::write(
+        &other_format,
+        E1.replace("canon-evidence/1", "canon-evidence/2"),
+    )
+    .expect("written");
     let out = canon(&["digest", "--evidence", &path(&other_format)]);
     assert_eq!(out.status.code(), Some(1), "{}", text(&out.stderr));
     assert!(
@@ -125,7 +131,12 @@ fn evaluate_lapses_a_grant_when_the_record_file_is_rewritten() {
         "--path",
         "fixtures/investigation/decision-grounds.yaml",
     ]);
-    assert_eq!(compiled.status.code(), Some(0), "{}", text(&compiled.stderr));
+    assert_eq!(
+        compiled.status.code(),
+        Some(0),
+        "{}",
+        text(&compiled.stderr)
+    );
     let ir = dir.join("grounds.ir.json");
     std::fs::write(&ir, &compiled.stdout).expect("IR written");
     let case = dir.join("case.yaml");
@@ -173,11 +184,7 @@ fn evaluate_lapses_a_grant_when_the_record_file_is_rewritten() {
         decision["actions"]["act"].clone()
     };
     let holds = evaluate();
-    assert_eq!(
-        holds["status"].as_str(),
-        Some("admissible"),
-        "{holds:?}"
-    );
+    assert_eq!(holds["status"].as_str(), Some("admissible"), "{holds:?}");
 
     std::fs::write(&record, E1_REPLACED).expect("record rewritten");
     let lapsed = evaluate();
@@ -215,8 +222,15 @@ fn evaluate_help_names_the_digest_and_how_to_compute_it() {
             .unwrap_or_default()
             .to_lowercase();
         let help = help.split_whitespace().collect::<Vec<_>>().join(" ");
-        for words in ["`{id: <id>, digest: <digest>}`", "`canon digest`", "`content_changed`"] {
-            assert!(help.contains(words), "--{flag} help does not say {words}: {help}");
+        for words in [
+            "`{id: <id>, digest: <digest>}`",
+            "`canon digest`",
+            "`content_changed`",
+        ] {
+            assert!(
+                help.contains(words),
+                "--{flag} help does not say {words}: {help}"
+            );
         }
     }
 }

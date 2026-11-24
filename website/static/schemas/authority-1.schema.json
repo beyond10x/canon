@@ -16,6 +16,11 @@
       "minLength": 1,
       "pattern": "^\\S+$"
     },
+    "EvidenceDigest": {
+      "description": "The digest of a `canon-evidence/1` record's contents (story:evidence-digest-binds-approvals): `sha256:` followed by the 64 lowercase hexadecimal digits of the SHA-256 of the record's canonical form, the JSON Canonicalization Scheme (RFC 8785) of one object holding each field of the record as Canon reads it under its own key: `format`, `id`, `kind`, `subject` and `subject_revision` always, `result`, `observed_at`, `producer`, `child_case` and `item` when given, and `upstream_revisions`, an object of artifact to revision, when not empty; every value a string, as written. So neither the key order nor the whitespace of the file changes it, and two records have one digest exactly when a repeated delivery of a record counts once. `canon digest --evidence <file>` prints it. Canon refuses any other form, naming the entry.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
     "AuthorityDecision": {
       "description": "One entry of a `canon-authority/1` document: a capability, the scope the decision covers, the decision and, optionally, who took it, the case revision it was taken at and the grounds it rested on.",
       "type": "object",
@@ -58,10 +63,10 @@
           }
         },
         "ground_evidence": {
-          "description": "The evidence records the decision rested on, by id: a ground holds while a record with that id is applicable, the rule of `missing_evidence` (given, left by the revision-binding and freshness stages, and listed in no claim's `excluded_evidence`), so expiry and invalidation reach the decision through it. An id no record has does not hold and is not refused. Absent or empty, it rests on no record.",
+          "description": "The evidence records the decision rested on, each by id or by id and digest (`EvidenceGround`): a ground holds while a record with that id is applicable, the rule of `missing_evidence` (given, left by the revision-binding and freshness stages, and listed in no claim's `excluded_evidence`), so expiry and invalidation reach the decision through it, and, when it gives a digest, while that record has the digest. An id no record has does not hold and is not refused. Absent or empty, it rests on no record.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/Identifier"
+            "$ref": "#/$defs/EvidenceGround"
           }
         }
       },
@@ -76,6 +81,37 @@
         "granted",
         "require_approval",
         "denied"
+      ]
+    },
+    "EvidenceGround": {
+      "description": "One evidence record a decision rested on, an entry of `ground_evidence` (story:evidence-digest-binds-approvals). Written as the record's id alone (`e1`), or as a map with the id and, optionally, the digest of the record's contents when the decision was taken (`{id: e1, digest: 'sha256:…'}`, the digest `canon digest --evidence <file>` prints). A map without a digest is the id alone. With a digest, the ground holds only while the record given under the id has that digest; with other contents under the id it fails as `content_changed`, whether or not the record is applicable. Refused as `malformed-input`, naming the entry: a map with another key or without `id`, and a digest not written `sha256:` followed by 64 lowercase hexadecimal digits.",
+      "oneOf": [
+        {
+          "description": "The record's id alone: the ground holds while a record with the id is applicable, whatever the rest of its contents.",
+          "$ref": "#/$defs/Identifier"
+        },
+        {
+          "description": "The record's id with, optionally, the digest of its contents.",
+          "$ref": "#/$defs/CitedEvidence"
+        }
+      ]
+    },
+    "CitedEvidence": {
+      "description": "An evidence ground written as a map: the record's id and, optionally, the digest of its contents.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "The record's id, an identifier.",
+          "$ref": "#/$defs/Identifier"
+        },
+        "digest": {
+          "description": "The digest of the record's contents when the decision was taken. Absent, the ground holds as the id alone does.",
+          "$ref": "#/$defs/EvidenceDigest"
+        }
+      },
+      "required": [
+        "id"
       ]
     }
   }

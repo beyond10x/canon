@@ -153,6 +153,7 @@ use crate::model::{
 use crate::validate::{self, Problem};
 
 pub use composition::{NamedIn, OpeningCycle, SetFinding, SetReport, check_openings, check_set};
+pub(crate) use imports::digest_of;
 pub use imports::{DIGEST_PREFIX, compose, digest};
 use json::Value;
 

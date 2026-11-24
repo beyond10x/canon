@@ -54,7 +54,7 @@ pub fn digest(ir: &Ir) -> String {
 }
 
 /// [`DIGEST_PREFIX`] followed by the SHA-256 of `canonical_json` in lowercase hexadecimal.
-fn digest_of(canonical_json: &str) -> String {
+pub(crate) fn digest_of(canonical_json: &str) -> String {
     let mut text = String::from(DIGEST_PREFIX);
     for byte in sha256(canonical_json.as_bytes()) {
         text.push_str(&format!("{byte:02x}"));

@@ -14,7 +14,8 @@
 //!   principal: ops-lead        # optional: who took it, recorded as given
 //!   case_revision: c2          # optional: absent, the decision applies at every case revision
 //!   ground_revisions: {spec: r2}  # optional: the artifact revisions it rested on
-//!   ground_evidence: [e1]         # optional: the evidence records it rested on
+//!   ground_evidence: [e1]         # optional: the evidence records it rested on, each an id
+//!                                 # or {id: e1, digest: sha256:<hex>}
 //! ```
 //!
 //! The entry type is [`crate::model::AuthorityDecision`]. An empty list (`[]`) decides nothing; an
@@ -23,10 +24,11 @@
 //! entries equal in capability, scope (the same keys with the same values, in any order), case
 //! revision and principal are a duplicate, whatever their decisions and grounds. Refused, in this
 //! order: text that is not such a list (a scope or `ground_revisions` that names a key twice
-//! included), or an entry with another key, another decision or a missing key, as
-//! `malformed-input` (`` `--authority` is not a canon-authority/1 document: entry <n>: <why> ``,
-//! counting entries from 1, where a missing key is named: `` missing field `capability` ``); then,
-//! entry by entry in the order given, a capability that is not an identifier as
+//! included), or an entry with another key, another decision or a missing key, or with a
+//! `ground_evidence` map that has another key, no `id` or a digest not written `sha256:` and 64
+//! lowercase hexadecimal digits (`grounds.rs`), as `malformed-input` (`` `--authority` is not a
+//! canon-authority/1 document: entry <n>: <why> ``, counting entries from 1, where a missing key
+//! is named: `` missing field `capability` ``); then, entry by entry in the order given, a capability that is not an identifier as
 //! `invalid-identifier`, then a scope key or value that is not one, in the order written, then a
 //! principal, then a case revision, then a ground artifact or its revision, in the order written,
 //! then a ground evidence id, each as `invalid-identifier`, then an entry equal to an earlier one
@@ -299,6 +301,7 @@ pub(super) fn read(text: Option<&str>) -> Result<Option<Authority>, Refusal> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::eval::grounds::Lapse;
     use crate::model::{ScopeKey, ScopeValue};
 
     fn refusal(text: &str) -> Refusal {
@@ -774,8 +777,10 @@ mod tests {
                 .collect::<Vec<_>>()
         });
         for (i, failed) in stale.iter().enumerate() {
-            let expected =
-                BTreeSet::from([Failed::Evidence(format!("e{i}").as_str().into(), None)]);
+            let expected = BTreeSet::from([Failed::Evidence(
+                format!("e{i}").as_str().into(),
+                Lapse::Absent,
+            )]);
             assert_eq!(failed, &expected, "cap{i:04}");
         }
         assert!(

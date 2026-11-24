@@ -366,17 +366,20 @@
 //! revision of the artifact, compared for equality; an evidence ground while a record with its id
 //! is applicable, as `missing_evidence` defines it (given, left by the revision-binding and
 //! freshness stages, listed in no claim's `excluded_evidence`); an id no record has does not hold
-//! and is not refused. An entry applies only while every ground holds, whatever it decides, so a
-//! denial whose ground moved lapses too. A requirement covered only by entries that do not apply is
+//! and is not refused. An evidence ground may be written `{id: <evidence id>, digest:
+//! sha256:<hex>}` (story:evidence-digest-binds-approvals, CANON-GROUND-002): it holds only while,
+//! besides, the record under the id has that digest ([`evidence_digest`]), and otherwise fails as
+//! `{"evidence": <id>, "reason": "content_changed"}`. An entry applies only while every ground
+//! holds, whatever it decides, so a denial whose ground moved lapses too. A requirement covered only by entries that do not apply is
 //! not decided, and its reason `{"capability": <id>, "decision": "none"}` adds `"stale_grounds"`:
 //! every failed ground of the entries on its capability that cover it and are set aside by their
 //! grounds alone, each once, artifact grounds first by artifact and then revision, `{"artifact":
 //! <id>, "reason": "revision_mismatch", "revision": <the ground's revision>}`, then evidence grounds
 //! by id, `{"evidence": <id>, "reason": <reason>}` with the reason the record was excluded with
 //! (the revision-binding or freshness stage's, else that of the first claim listing it in claim-id
-//! order), or `{"evidence": <id>, "present": false}` when no record has the id. An entry set aside
-//! by its case revision adds none of its grounds: it would not apply whatever its grounds do, so
-//! naming them would ask for a ground to hold again that restores nothing. So the order of the
+//! order), or `{"evidence": <id>, "present": false}` when no record has the id, or the
+//! `content_changed` reason above. An entry set aside by its case revision adds none of its
+//! grounds: it would not apply whatever its grounds do, so naming them would ask for a ground to hold again that restores nothing. So the order of the
 //! entries does not change the result (`grounds.rs`). `pending_decisions` lists such a requirement as it lists any other that
 //! is not decided, without the grounds.
 //!
@@ -469,7 +472,7 @@ use crate::model::{
 
 pub use case::{case_from_value, read_case};
 pub use decision::{render, render_sections};
-pub use evidence::{evidence_from_value, read_evidence};
+pub use evidence::{digest_evidence, evidence_digest, evidence_from_value, read_evidence};
 pub use read::{MAX_IR_DEPTH, read_ir};
 
 pub(crate) use authority::Authority;
@@ -688,6 +691,7 @@ fn decide(
         // entry as given.
         let standing = grounds::Standing::new(
             case,
+            evidence,
             &applicable,
             &excluded,
             claims.iter().map(|(_, entry)| entry),

@@ -24,8 +24,8 @@ use super::read::{malformed, yaml};
 use super::{Refusal, identifier, unsupported_format};
 use crate::ir::Ir;
 use crate::model::{
-    ArtifactId, Declarations, EVIDENCE_FORMAT, EvidenceId, EvidenceRecord, Instant, Revision,
-    one_line,
+    ArtifactId, Declarations, EVIDENCE_FORMAT, EvidenceDigest, EvidenceId, EvidenceRecord, Instant,
+    Revision, one_line,
 };
 
 /// Reads one `canon-evidence/1` document: parsed as YAML, then read as [`evidence_from_value`]
@@ -48,6 +48,96 @@ pub fn evidence_from_value(value: &Value) -> Result<EvidenceRecord, Refusal> {
         };
         malformed(&what, error)
     })
+}
+
+/// The digest of a record's contents (story:evidence-digest-binds-approvals), the one an evidence
+/// ground written `{id, digest}` gives: `sha256:` followed by the SHA-256 of [`canonical_form`] in
+/// lowercase hexadecimal ([`EvidenceDigest`] says what it covers).
+pub fn evidence_digest(record: &EvidenceRecord) -> EvidenceDigest {
+    EvidenceDigest::new(crate::ir::digest_of(&canonical_form(record)))
+}
+
+/// Reads one `canon-evidence/1` document as [`read_evidence`] does and gives its
+/// [`evidence_digest`]; a document of another format is refused as `unsupported-format`, as
+/// `canon evaluate` refuses it. Nothing else is checked: whether the record fits a protocol is
+/// the evaluation's to decide.
+pub fn digest_evidence(text: &str) -> Result<EvidenceDigest, Refusal> {
+    let record = read_evidence(text)?;
+    if record.format != EVIDENCE_FORMAT {
+        let refusal = unsupported_format(&record.format, EVIDENCE_FORMAT);
+        return Err(Refusal::new(
+            refusal.code(),
+            format!("evidence `{}` {refusal}", one_line(record.id.as_str())),
+        ));
+    }
+    Ok(evidence_digest(&record))
+}
+
+/// The canonical form of a record, the bytes its digest is taken of: the JSON Canonicalization
+/// Scheme (RFC 8785) of one object holding every field of the record under its own key, an absent
+/// optional field and an empty `upstream_revisions` left out, `upstream_revisions` an object of
+/// artifact to revision, every value a string as read (`observed_at` as its text). The keys are
+/// sorted by their UTF-16 code units and every string is written as RFC 8785 writes it, which is
+/// how `serde_json` writes a string. The record is destructured without `..`, so a field added to
+/// it does not compile until this reads it.
+fn canonical_form(record: &EvidenceRecord) -> String {
+    let EvidenceRecord {
+        format,
+        id,
+        kind,
+        result,
+        subject,
+        subject_revision,
+        observed_at,
+        upstream_revisions,
+        producer,
+        child_case,
+        item,
+    } = record;
+    fn string(text: &str) -> String {
+        serde_json::to_string(text).expect("a string is written as JSON")
+    }
+    fn object(mut members: Vec<(&str, String)>) -> String {
+        members.sort_by(|(left, _), (right, _)| left.encode_utf16().cmp(right.encode_utf16()));
+        let members: Vec<String> = members
+            .into_iter()
+            .map(|(key, value)| format!("{}:{value}", string(key)))
+            .collect();
+        format!("{{{}}}", members.join(","))
+    }
+    let mut members = vec![
+        ("format", string(format)),
+        ("id", string(id.as_str())),
+        ("kind", string(kind.as_str())),
+        ("subject", string(subject.as_str())),
+        ("subject_revision", string(subject_revision.as_str())),
+    ];
+    let optional = [
+        ("result", result.as_deref()),
+        ("observed_at", observed_at.as_ref().map(Instant::as_str)),
+        (
+            "producer",
+            producer.as_ref().map(|producer| producer.as_str()),
+        ),
+        (
+            "child_case",
+            child_case.as_ref().map(|child| child.as_str()),
+        ),
+        ("item", item.as_ref().map(|item| item.as_str())),
+    ];
+    members.extend(
+        optional
+            .into_iter()
+            .filter_map(|(key, value)| value.map(|value| (key, string(value)))),
+    );
+    if !upstream_revisions.is_empty() {
+        let pairs = upstream_revisions
+            .iter()
+            .map(|(artifact, revision)| (artifact.as_str(), string(revision.as_str())))
+            .collect();
+        members.push(("upstream_revisions", object(pairs)));
+    }
+    object(members)
 }
 
 /// Checks each record in the order given, as the module docs of [`super`] describe, and returns the

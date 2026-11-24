@@ -13,14 +13,16 @@
 //!   principal: lead-investigator
 //!   case_revision: c2
 //!   ground_revisions: {spec: r2}  # optional: the artifact revisions it rested on
-//!   ground_evidence: [e1]         # optional: the evidence records it rested on
+//!   ground_evidence: [e1]         # optional: the evidence records it rested on, each an id
+//!                                 # or {id: e1, digest: sha256:<hex>}
 //! ```
 //!
 //! An empty list (`[]`) decides nothing; an empty document is not a list. Refused, in this order:
-//! text that is not such a list, or an entry with another key or a missing one, as
-//! `malformed-input` (`` `--decisions` is not a canon-decisions/1 document: entry <n>: <why> ``,
-//! counting entries from 1, where a missing key is named: `` missing field `case_revision` ``); then,
-//! entry by entry in the order given, a decision, outcome, principal or case revision that is not an
+//! text that is not such a list, or an entry with another key or a missing one, or with a
+//! `ground_evidence` map that has another key, no `id` or a digest not written `sha256:` and 64
+//! lowercase hexadecimal digits (`grounds.rs`), as `malformed-input` (`` `--decisions` is not a
+//! canon-decisions/1 document: entry <n>: <why> ``, counting entries from 1, where a missing key is
+//! named: `` missing field `case_revision` ``); then, entry by entry in the order given, a decision, outcome, principal or case revision that is not an
 //! identifier, in that order, then a ground artifact or its revision, in the order written, then a
 //! ground evidence id, each as `invalid-identifier`, and an entry that repeats an earlier one in
 //! its four keys (decision, outcome, principal and case revision, whatever its grounds) as
@@ -43,7 +45,9 @@
 //!
 //! A ground evidence id is checked by id and by the fields that decide whether the record given
 //! under it is applicable, not by the rest of its contents: evidence IDs must be immutable once an
-//! approval cites them (`grounds.rs`).
+//! approval cites them by id alone (`grounds.rs`). A ground written `{id, digest}`
+//! (story:evidence-digest-binds-approvals) is checked by the digest of the record's contents too,
+//! and fails as `content_changed` when the record under the id has other contents.
 
 use std::collections::BTreeSet;
 
