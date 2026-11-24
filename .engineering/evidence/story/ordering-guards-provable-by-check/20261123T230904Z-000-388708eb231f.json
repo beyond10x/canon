@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-23T23:09:04Z",
+  "actor": "human:timo",
+  "artifact": "story:ordering-guards-provable-by-check",
+  "kind": "story",
+  "revision": 21,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "full gate on wave/2026-11-23-w14 352569c62: build, ess-gate, fmt, clippy, test (1447 tests, 29.4 s test time, bound 120 s), conform (31 passed, 32 of 32 covered), docs-check exit 0; test-slow 65 of 66 (missing_keys killed at 60 s at host load 90-107, 8.5 s on an idle node; story:missing-keys-test-linear-cost)",
+    "reference": "docs/plan/wave-2026-11-23-w14.md#delivered-state-kept-current-by-stage-2"
+  }
+}

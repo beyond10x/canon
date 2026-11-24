@@ -27,7 +27,9 @@
 //! 6. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
 //!    or `d`, or that are but are too long to count in seconds (each with its own message), and
 //!    evidence kinds whose `supplied_by` names the protocol's own id (`self-supplied-evidence`,
-//!    naming the kind; story:supplied-evidence), each kind's in that order, in the order the
+//!    naming the kind; story:supplied-evidence), and evidence kinds that declare
+//!    `required_at_open: true` without `supplied_by` (`at-open-without-supplier`, naming the kind;
+//!    story:supplied-evidence-required-at-open), each kind's in that order, in the order the
 //!    evidence kinds are written. Any other protocol may supply a kind, and validation does not
 //!    resolve the name (`canon check-set` does, over a set of protocols); then artifacts whose `revised_by` names the protocol's own id
 //!    (`self-revised-artifact`, naming the artifact; story:artifact-revised-by), in the order the
@@ -56,7 +58,9 @@
 //!    naming the declaration the test is written in and the input; for a `children` form, first
 //!    an empty `in` list, `empty-child-outcomes`, or an outcome it lists more than once,
 //!    `duplicate-child-outcome`, once for every listing after its first, then `open` listed,
-//!    `open-child-outcome`, once, then the evidence kind `case_outcome` when it is not declared,
+//!    `open-child-outcome`, once, then a `count` of 0, `zero-child-count`
+//!    (story:children-form-counts-unopened-children), then the evidence kind `case_outcome` when
+//!    it is not declared,
 //!    `undeclared-evidence-kind`, then the artifact it names as its `subject` when that is not
 //!    declared, `undeclared-artifact` (story:child-outcome-subject), every one naming the
 //!    declaration the form is written in): those
@@ -66,7 +70,13 @@
 //!    `case_outcome` for a `children` form; then its applicability predicate, followed likewise by
 //!    every evidence match, order form and `children` form it holds, `evidence-in-applicability`:
 //!    it tests only claim values and case inputs), then those in actions (each action's
-//!    precondition, then each evidence kind it may produce, then each artifact it `revises`
+//!    precondition, then its `runs_only_when` (story:ordering-guards-provable-by-check), whose
+//!    references are checked as the precondition's are, each problem naming `` action `a`
+//!    runs_only_when ``, followed by `vacuous-runs-only-when` when it is the literal `all: []`,
+//!    true in every state, so it asserts nothing (only that literal: another guard true in every
+//!    state, such as `{any: [{all: []}]}` or `{not: {any: []}}`, is not detected and validates),
+//!    then each evidence kind it may produce, then each artifact it
+//!    `revises`
 //!    (story:judgement-marking), `undeclared-artifact`, once for every listing, in the order
 //!    listed, then the subject of the case it opens, `undeclared-artifact`, then an opening under
 //!    the protocol's own id, `self-opened-case`, then each group of its `records_together`
@@ -164,6 +174,9 @@ pub enum Referrer {
     Claim(ClaimId),
     Obligation(ObligationId),
     Action(ActionId),
+    /// An action's `runs_only_when` (story:ordering-guards-provable-by-check), as distinct from
+    /// its precondition.
+    ActionGuard(ActionId),
     Outcome(OutcomeId),
     InvalidationRule(InvalidationRuleId),
 }
@@ -174,6 +187,9 @@ impl fmt::Display for Referrer {
             Referrer::Claim(id) => write!(f, "claim `{}`", one_line(id.as_str())),
             Referrer::Obligation(id) => write!(f, "obligation `{}`", one_line(id.as_str())),
             Referrer::Action(id) => write!(f, "action `{}`", one_line(id.as_str())),
+            Referrer::ActionGuard(id) => {
+                write!(f, "action `{}` runs_only_when", one_line(id.as_str()))
+            }
             Referrer::Outcome(id) => write!(f, "outcome `{}`", one_line(id.as_str())),
             Referrer::InvalidationRule(id) => {
                 write!(f, "invalidation rule `{}`", one_line(id.as_str()))
@@ -312,6 +328,13 @@ pub enum Problem {
     /// A `children` form lists `open`, which is a running child case's outcome, never a terminal
     /// one: the form is unknown while a child is open.
     OpenChildOutcome { referrer: Referrer },
+    /// A `children` form waits for 0 child cases (`count: 0`), which every case has, so the count
+    /// would assert nothing.
+    ZeroChildCount { referrer: Referrer },
+    /// An action's `runs_only_when` (story:ordering-guards-provable-by-check) is the literal
+    /// `all: []`, which is true in every state and so asserts nothing. Only that literal: another
+    /// guard true in every state, such as `{any: [{all: []}]}`, is not detected.
+    VacuousGuard { action: ActionId },
     /// An action opens a child case under the protocol's own id: a case could then open cases
     /// under its own protocol without end (D206).
     SelfOpenedCase {
@@ -332,6 +355,10 @@ pub enum Problem {
         kind: EvidenceKindId,
         protocol: ProtocolId,
     },
+    /// An evidence kind is required at open (story:supplied-evidence-required-at-open) but names
+    /// no protocol that supplies it: the opener hands in a record another protocol's case
+    /// produced, so the kind needs `supplied_by`.
+    AtOpenWithoutSupplier { kind: EvidenceKindId },
     /// An artifact names the protocol's own id as the protocol whose cases revise it
     /// (story:artifact-revised-by): the protocol's own actions revise through `revises`, and a
     /// self-name would hide the dead end a revising action that no state admits leaves.
@@ -440,9 +467,12 @@ impl Problem {
             Problem::EmptyChildOutcomes { .. } => "empty-child-outcomes",
             Problem::DuplicateChildOutcome { .. } => "duplicate-child-outcome",
             Problem::OpenChildOutcome { .. } => "open-child-outcome",
+            Problem::ZeroChildCount { .. } => "zero-child-count",
+            Problem::VacuousGuard { .. } => "vacuous-runs-only-when",
             Problem::SelfOpenedCase { .. } => "self-opened-case",
             Problem::InvalidRecordGroup { .. } => "invalid-record-group",
             Problem::SelfSuppliedEvidence { .. } => "self-supplied-evidence",
+            Problem::AtOpenWithoutSupplier { .. } => "at-open-without-supplier",
             Problem::SelfRevisedArtifact { .. } => "self-revised-artifact",
             Problem::ClaimCycle { .. } => "claim-cycle",
             Problem::ActionArguments { .. } => "action-arguments",
@@ -631,6 +661,16 @@ impl fmt::Display for Problem {
                 f,
                 "{referrer} tests the child cases for outcome `{OPEN_OUTCOME}`, which a running child case has, never a terminal one"
             ),
+            Problem::ZeroChildCount { referrer } => write!(
+                f,
+                "{referrer} waits for 0 child cases; a count is 1 or more"
+            ),
+            Problem::VacuousGuard { action } => write!(
+                f,
+                "action `{}` runs_only_when is `all: []`, which is true in every state and asserts \
+                 nothing",
+                one_line(action.as_str())
+            ),
             Problem::SelfOpenedCase { action, protocol } => write!(
                 f,
                 "action `{}` opens a case under protocol `{}`, the protocol's own id",
@@ -672,6 +712,12 @@ impl fmt::Display for Problem {
                 "evidence kind `{}` is supplied by protocol `{}`, the protocol's own id",
                 one_line(kind.as_str()),
                 one_line(protocol.as_str())
+            ),
+            Problem::AtOpenWithoutSupplier { kind } => write!(
+                f,
+                "evidence kind `{}` is required at open and names no protocol that supplies it \
+                 (`supplied_by`)",
+                one_line(kind.as_str())
             ),
             Problem::SelfRevisedArtifact { artifact, protocol } => write!(
                 f,
@@ -994,6 +1040,9 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
                 protocol: protocol.protocol.id.clone(),
             });
         }
+        if kind.required_at_open && kind.supplied_by.is_none() {
+            problems.push(Problem::AtOpenWithoutSupplier { kind: id.clone() });
+        }
     }
     for (id, artifact) in protocol.artifacts.iter() {
         if artifact.revised_by.as_ref() == Some(&protocol.protocol.id) {
@@ -1076,6 +1125,13 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
         let referrer = Referrer::Action(id.clone());
         if let Some(precondition) = &action.precondition {
             references(protocol, &index, &referrer, precondition, &mut problems);
+        }
+        if let Some(guard) = &action.runs_only_when {
+            let guarding = Referrer::ActionGuard(id.clone());
+            references(protocol, &index, &guarding, guard, &mut problems);
+            if matches!(guard, Predicate::All(members) if members.is_empty()) {
+                problems.push(Problem::VacuousGuard { action: id.clone() });
+            }
         }
         for production in &action.may_produce {
             if !index.evidence_kinds.contains(&production.evidence) {
@@ -1496,6 +1552,11 @@ fn references(
                     referrer: referrer.clone(),
                 });
             }
+            if form.count == Some(0) {
+                unresolved.push(Problem::ZeroChildCount {
+                    referrer: referrer.clone(),
+                });
+            }
             let kind = EvidenceKindId::new(CASE_OUTCOME);
             if !index.evidence_kinds.contains(&kind) {
                 unresolved.push(Problem::UndeclaredEvidenceKind {
@@ -1887,6 +1948,26 @@ mod tests {
                  side: {supplied_by: p.sibling}, nowhere: {supplied_by: never.declared}}\n"
             ),
             Vec::<String>::new()
+        );
+    }
+
+    /// story:supplied-evidence-required-at-open: a kind required at open needs a supplier on the
+    /// same kind, else `at-open-without-supplier`, naming the kind, after the kind's maximum age and
+    /// its own supplier check, each kind's in the order written; `false` asks nothing.
+    #[test]
+    fn a_kind_required_at_open_needs_a_supplier() {
+        let source = "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+            evidence_kinds: {z: {required_at_open: true, max_age: 5x}, \
+            a: {supplied_by: p, required_at_open: true}, k: {required_at_open: true}, \
+            off: {required_at_open: false}, ok: {supplied_by: q, required_at_open: true}}\n";
+        assert_eq!(
+            problems(source),
+            [
+                "invalid-max-age: evidence kind `z` has max_age `5x`, which is not a whole number without leading zeros, followed by s, m, h or d",
+                "at-open-without-supplier: evidence kind `z` is required at open and names no protocol that supplies it (`supplied_by`)",
+                "self-supplied-evidence: evidence kind `a` is supplied by protocol `p`, the protocol's own id",
+                "at-open-without-supplier: evidence kind `k` is required at open and names no protocol that supplies it (`supplied_by`)",
+            ]
         );
     }
 

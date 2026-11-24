@@ -85,6 +85,47 @@ fn a_supplied_record_is_a_step_naming_its_supplier() {
     );
 }
 
+/// story:supplied-evidence-required-at-open: a kind required at open starts the walk with one of
+/// its records, one initial state per record the supplied step could add, so `{}` is not reached
+/// and does not wait. A review handed in with another result than the one the action reads is a
+/// stuck state with an empty path; the supplied step still adds the other class beside it.
+#[test]
+fn a_kind_required_at_open_starts_the_walk_with_each_of_its_records() {
+    let source = format!(
+        "{HEAD}\
+         evidence_kinds:\n\
+         \x20 review: {{description: A review., supplied_by: q, required_at_open: true}}\n\
+         \x20 publication: {{description: A publication.}}\n\
+         claims:\n\
+         \x20 approved: {{description: Approved., true_when: {{evidence: {{kind: review, result: \
+         approved}}}}}}\n\
+         \x20 published: {{description: Published., true_when: {{evidence: {{kind: \
+         publication}}}}}}\n\
+         actions:\n\
+         \x20 publish: {{description: Publish., precondition: {{claim: approved}}, may_produce: \
+         [{{evidence: publication}}]}}\n\
+         outcomes:\n\
+         \x20 published: {{description: Published., requires: {{claim: published}}}}\n"
+    );
+    assert_eq!(
+        report(&source),
+        "stuck-state: state {evidence `review`}: no outcome is legitimate and no action is \
+         admissible or approval-required; path: empty; 1 other stuck state contains it\n\
+         simulated: protocol `p` revision 1: 5 reachable states, 2 terminable (outcome \
+         `published` 2), 0 waiting on supplied evidence or expiry, 1 finding (2 stuck or cycle \
+         states)\n"
+    );
+    let without = report(&source.replace(", required_at_open: true", ""));
+    assert!(
+        without.ends_with(
+            "simulated: protocol `p` revision 1: 6 reachable states, 2 terminable (outcome \
+             `published` 2), 1 waiting on supplied evidence or expiry, 1 finding (2 stuck or \
+             cycle states)\n"
+        ),
+        "{without}"
+    );
+}
+
 /// A decision is a step but no way out: a state from which only a decision leads to a
 /// legitimate outcome is stuck, and its finding names the decision and the outcome.
 #[test]

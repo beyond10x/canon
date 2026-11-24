@@ -268,3 +268,15 @@ requirements:
       predicate in its reasons with its subject, and two predicates that differ only in their
       subject MUST be two reasons, the one without a subject first.
     source: story:child-outcome-subject
+  CANON-COMPOSE-004:
+    status: implemented
+    statement: >-
+      A predicate over the outcomes of the child cases MAY name a count, an integer of 1 or more.
+      With a count, over the records it reads, it MUST be FALSE once a record names an outcome it
+      does not list and that is not open, otherwise MUST be UNKNOWN while a child case is open or
+      while it reads fewer records than the count, and MUST be TRUE only when it reads at least
+      that many records, each with an outcome it lists; a child case with no record MUST NOT make
+      it TRUE. A count of 0 MUST be refused. Without a count it MUST follow CANON-COMPOSE-001, and
+      its compiled form MUST be the form it had before the count existed. A blocked action MUST
+      name the predicate in its reasons with its count.
+    source: story:children-form-counts-unopened-children

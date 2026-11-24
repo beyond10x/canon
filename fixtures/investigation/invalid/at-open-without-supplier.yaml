@@ -1,0 +1,29 @@
+format: protocol/1
+
+protocol:
+  id: investigation.publication
+  revision: 1
+  description: Publish a finding a peer approved; the review is required at open, but no protocol is named that supplies it.
+
+artifacts:
+  explanation:
+    description: The explanation under investigation.
+
+evidence_kinds:
+  peer_review:
+    description: A peer's review of the finding, required when the case opens, with no supplier named.
+    required_at_open: true
+
+claims:
+  peer.approved:
+    description: A peer approved the finding.
+    true_when:
+      evidence:
+        kind: peer_review
+        result: approved
+
+outcomes:
+  published:
+    description: The finding is published once a peer approved it.
+    requires:
+      claim: peer.approved

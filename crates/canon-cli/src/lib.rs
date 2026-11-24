@@ -133,7 +133,11 @@ pub enum Command {
     /// reaches, actions whose precondition holds in no state, claims, obligations, preconditions and
     /// outcome requirements that read evidence no action produces and no other protocol supplies,
     /// outcomes that rest on evidence an authority-requiring action may produce yet hold without
-    /// any authority decision, and each declared property that fails, with a counterexample. An
+    /// any authority decision, each declared property that fails, with a counterexample, and each
+    /// action that declares `runs_only_when` and is admissible or approval-required in a state
+    /// where that predicate is not true (`ordering-guard-failed`, last), with that state: the
+    /// guard is proved per state, not along an order of actions, and the summary counts the states
+    /// without the guards. An
     /// evidence kind that declares `supplied_by` counts as produced without authority and stays
     /// governed when an action that requires a capability may also produce it, so an outcome a
     /// supplied record alone makes legitimate is reported as a bypass. A state is a set of evidence records,
@@ -159,12 +163,16 @@ pub enum Command {
     /// `case_open` subject when the protocol reads `case_outcome` about that artifact by name, in
     /// a `children` form or an evidence match, otherwise without a subject, and a `children` form
     /// naming a `subject` reads only records about it; and a protocol that reads `case_outcome`
-    /// with both a `children` form and an order form is refused (`ordered-child-outcomes`). Each
+    /// with both a `children` form and an order form is refused (`ordered-child-outcomes`). Where
+    /// a `children` form declares `count: N` of 2 or more, its `case_outcome` evidence is also
+    /// there with up to N more records, each a child case of its own, written in a state as
+    /// `` evidence `case_outcome` about `b` result `r` 2 more times `` and in the bound refusal
+    /// as `` more records of evidence kind `case_outcome` about `b` N ``. Each
     /// outcome, action and property is decided over the
     /// evidence, authority, decisions and case inputs it reads (its slice), with the findings and
     /// witness states the whole state space gives, and the summary counts the whole state space; a
     /// check in which one slice holds more than 65536 states is refused, naming that outcome,
-    /// action or property and the slice's dimensions, and a whole state space too large to count
+    /// action, property or `runs_only_when` and the slice's dimensions, and a whole state space too large to count
     /// is refused naming the whole state space and its dimensions.
     Check {
         /// The protocol document to check.
@@ -180,7 +188,9 @@ pub enum Command {
         import: Vec<PathBuf>,
     },
     /// Walk every state a case of a `protocol/1` document can reach from the empty case, one step
-    /// at a time, and report the states no sequence of steps gets out of, each action admissible
+    /// at a time (or, when evidence kinds declare `required_at_open: true`, from each case that
+    /// holds one record of every such kind, of any class, which the opener hands in, its path
+    /// `empty`), and report the states no sequence of steps gets out of, each action admissible
     /// in no reachable state, and each outcome legitimate in no reachable state. A step adds one
     /// current record an admissible action may produce (`may_produce`), or one of each kind of a
     /// group the action records together (`records_together`), never one of those kinds alone,
@@ -212,7 +222,12 @@ pub enum Command {
     /// subject. A state holding an `open` record, current or held as expired, keeps the count of
     /// some action that produces that record above none, because an `open` record is a child that
     /// has not ended. A state names each action with a count above none
-    /// (`action a opened a child`, `action a opened 2 or more children`). An expired
+    /// (`action a opened a child`, `action a opened 2 or more children`). Where a `children` form
+    /// declares `count: N`, the walk also counts the children it opened per `case_outcome`
+    /// dimension the form reads, up to N, and a state writes the count
+    /// (`` 2 children in evidence `case_outcome` about `b` ``, `1 child`, `3 or more children` at
+    /// N of 3, with `(1 at the current revision)` when a form says `revision: current`). An
+    /// expired
     /// `case_outcome` record still counts for a `children` form: with no evidence match reading
     /// `case_outcome` it does not expire, and otherwise it is held as expired, absent to every
     /// evidence match. A revision of an artifact removes the current records about it, except
@@ -257,7 +272,8 @@ pub enum Command {
     /// counts the reachable states, per outcome those in which it is legitimate, the waiting
     /// states, the findings and the stuck and cycle states they stand for. A protocol with an
     /// order form (`first`, `before`, `after`, `since`, `descended`) is refused (`ordered-evidence`),
-    /// and so is
+    /// and so is a protocol whose `children` form counts more than 64 children
+    /// (`child-count-bound`), naming the first declaration that holds one, and
     /// a walk that would visit more than 65536 states (`reachable-state-bound`), which reports
     /// nothing of what it saw.
     Simulate {
@@ -274,8 +290,9 @@ pub enum Command {
     /// a character a file name cannot hold (`/ \ : * ? " < > |` or a control character), two
     /// scenario file names equal up to letter case or Unicode normalisation, a protocol with
     /// imports (a scenario names one fixture), a non-empty `--out`, and a whole state space of
-    /// more than 65536 states, which `canon check` may still decide slice by slice. On failure,
-    /// nothing this run created is left.
+    /// more than 65536 states, which `canon check` may still decide slice by slice. It reads no
+    /// `runs_only_when`: the scenarios, the output and the exit status are the same with or
+    /// without it. On failure, nothing this run created is left.
     Generate {
         /// The protocol document, as a relative path without `..` components.
         #[arg(long)]
@@ -308,7 +325,9 @@ pub enum Command {
     /// with a capability and lacks that capability: its precondition is implied by the floor
     /// action's (the same, the always-true one, or some of its conjuncts) and it produces and
     /// revises at least what that action does (an action that does neither is repeated only by
-    /// one that does neither).
+    /// one that does neither). A floor does not pin a guard: `canon diff` classifies a removed
+    /// `runs_only_when` as `NO SEMANTIC CHANGE`, so the floor holds for a protocol that drops a
+    /// guard the floor declares.
     Floor {
         /// The organization's floor, a `protocol/1` document compiled as `canon compile` prints it.
         #[arg(long)]
@@ -356,7 +375,14 @@ pub enum Command {
     /// no action of that supplier lists a kind of the same id in `may_produce`;
     /// `duplicate-protocol-id`, two or more files of the set declare one protocol id, naming the id
     /// and each file's path: a runner resolves an id to one protocol and `case_open` names no
-    /// revision, so the files are not pooled and nothing is resolved against that id. Each finding
+    /// revision, so the files are not pooled and nothing is resolved against that id;
+    /// `unsupplied-at-open`, last, an action opens a case under a protocol of the set that declares
+    /// an evidence kind with `required_at_open: true`, and the action's protocol declares no kind
+    /// of that id, or the action's precondition, when true, does not imply a record of it (an
+    /// evidence match of the kind does, at either value; `all` when one member does, `any` when
+    /// every member does; a claim test `is: true` or `is: false` through the claim's `true_when`;
+    /// an order form naming the kind, when true; never `not`, `is: unknown`, an input test, a
+    /// `children` form or the action's `runs_only_when`), named per protocol, action and kind. Each finding
     /// names the protocol, the action, declaration or kind, and the missing id. Exits 0 when the
     /// check found nothing, 1 when it found something. Each document is compiled on its own: one
     /// that does not parse or compile, or that has imports, is refused, exit 1, and a file that

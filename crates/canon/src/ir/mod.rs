@@ -21,12 +21,15 @@
 //! - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
 //!   evidence match without a result has `"result": null`; a claim test without `is` has
 //!   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-//!   true; absent lists and sections are empty. The eighteen exceptions are an artifact's
-//!   `revised_by`, an evidence kind's `max_age` and its `supplied_by`, the `when` of an outcome's
+//!   true; absent lists and sections are empty. The twenty exceptions are an artifact's
+//!   `revised_by`, an evidence kind's `max_age`, its `supplied_by` and its `required_at_open`
+//!   (story:supplied-evidence-required-at-open; written only as `"required_at_open": true`, so
+//!   `false` compiles to no key), the `when` of an outcome's
 //!   decision requirement, the `subject` of an evidence match, an order form or a
 //!   `children` form, an evidence match's `independent_on`, an obligation's `applicable_when`, an
-//!   action's `arguments`, an action's `case_open`, an action's `author` and its `revises`, an
-//!   action's `records_together`, the
+//!   action's `runs_only_when` (story:ordering-guards-provable-by-check; normalized like every
+//!   predicate, and read by `canon check` alone), an action's `arguments`, an action's
+//!   `case_open`, an action's `author` and its `revises`, an action's `records_together`, the
 //!   `decided_by` of an evidence kind an action may produce, the `scope` of a capability
 //!   requirement, the `revision` of a `children` form, the `invalidation` section, the `case`
 //!   section and the `independence_dimensions` section: each written only when it is declared (a
@@ -54,7 +57,10 @@
 //!   [...], "revision": "current"}}` when it reads only the records about the current revision of
 //!   their subject (story:child-outcome-revision): `revision: any` reads what no key reads and is
 //!   written as no key. A form that reads only the records about one artifact adds `"subject":
-//!   …`, as declared (story:child-outcome-subject). An action's `case_open` is `{"protocol": …,
+//!   …`, as declared (story:child-outcome-subject), and a form that waits for a number of child
+//!   cases adds `"count": N`, as declared, which sorts before `"in"` like every key
+//!   (story:children-form-counts-unopened-children); two forms that differ only in it are two
+//!   members, no count first, then the smaller. An action's `case_open` is `{"protocol": …,
 //!   "subject": …}`, as declared (story:case-composition).
 //!   An action's `arguments` is its JSON Schema as declared, the same JSON value, its object keys
 //!   sorted like every object's (story:action-arguments).
@@ -214,6 +220,9 @@ pub struct EvidenceKind {
     /// The protocol whose cases produce records of this kind, as declared; `None` when the
     /// protocol names none, and `canon-ir/1` then writes no `supplied_by` key.
     pub supplied_by: Option<ProtocolId>,
+    /// Whether the case's opener hands in a current record of this kind at open
+    /// (story:supplied-evidence-required-at-open); `canon-ir/1` writes the key only when `true`.
+    pub required_at_open: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -237,6 +246,10 @@ pub struct Action {
     pub description: Option<String>,
     /// `{"all": []}`, which is true, when the source declares none.
     pub precondition: Predicate,
+    /// The assertion about when the action runs (story:ordering-guards-provable-by-check),
+    /// normalized like every predicate; `None` when the source declares none, and `canon-ir/1`
+    /// then writes no `runs_only_when` key. No evaluation reads it; `canon check` does.
+    pub runs_only_when: Option<Predicate>,
     /// Every capability a requirement names, sorted by capability, each once.
     pub requires: Vec<CapabilityId>,
     /// The scopes a capability is required at, for each capability some requirement names a scope
@@ -336,6 +349,7 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
             description: kind.description.clone(),
             max_age: kind.max_age.clone(),
             supplied_by: kind.supplied_by.clone(),
+            required_at_open: kind.required_at_open,
         }),
         claims: keyed(&protocol.claims, |claim| Claim {
             description: claim.description.clone(),
@@ -352,6 +366,7 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
                 .precondition
                 .as_ref()
                 .map_or(Predicate::All(Vec::new()), normalize),
+            runs_only_when: action.runs_only_when.as_ref().map(normalize),
             requires: unique(
                 action
                     .requires
@@ -455,6 +470,7 @@ pub(crate) fn normalize(predicate: &Predicate) -> Predicate {
             r#in: unique(form.r#in.clone()),
             revision: form.revision.filter(|_| form.current_only()),
             subject: form.subject.clone(),
+            count: form.count,
         }),
         Predicate::Claim(_)
         | Predicate::First(_)
@@ -695,6 +711,8 @@ fn canonical_order(left: &Predicate, right: &Predicate) -> Ordering {
                         right.subject.as_ref().map(|subject| subject.as_str()),
                     )
                 })
+                // No count first, then the smaller (story:children-form-counts-unopened-children).
+                .then_with(|| left.count.cmp(&right.count))
         }
         _ => form(left).cmp(&form(right)),
     }
@@ -746,6 +764,9 @@ impl Ir {
                     }
                     if let Some(supplier) = &kind.supplied_by {
                         fields.push(("supplied_by", Value::string(supplier.as_str())));
+                    }
+                    if kind.required_at_open {
+                        fields.push(("required_at_open", Value::Bool(true)));
                     }
                     Value::object(fields)
                 }),
@@ -873,6 +894,9 @@ impl Ir {
                                     .collect(),
                             ),
                         ));
+                    }
+                    if let Some(guard) = &action.runs_only_when {
+                        fields.push(("runs_only_when", predicate_value(guard)));
                     }
                     if let Some(arguments) = &action.arguments {
                         fields.push(("arguments", Value::json(arguments)));
@@ -1114,12 +1138,14 @@ fn predicate_value(predicate: &Predicate) -> Value {
         )]),
         // `"revision"` only when the form reads the current revision alone, so a form without the
         // key, or with `any`, is written as it was before the key existed; `"subject"` only when
-        // the form names one.
+        // the form names one; `"count"` only when the form declares one, so a protocol without
+        // the key is written as before it existed.
         Predicate::Children(
             form @ ChildOutcomes {
                 r#in,
                 revision: _,
                 subject,
+                count,
             },
         ) => {
             let mut written = vec![("in", Value::Array(r#in.iter().map(Value::string).collect()))];
@@ -1128,6 +1154,9 @@ fn predicate_value(predicate: &Predicate) -> Value {
             }
             if let Some(subject) = subject {
                 written.push(("subject", Value::string(subject.as_str())));
+            }
+            if let Some(count) = count {
+                written.push(("count", Value::Integer(*count)));
             }
             Value::object([("children", Value::object(written))])
         }
@@ -1389,6 +1418,7 @@ mod tests {
         let action = super::Action {
             description: None,
             precondition: Predicate::All(Vec::new()),
+            runs_only_when: None,
             requires: vec![CapabilityId::new("a"), CapabilityId::new("b")],
             scopes: [
                 (CapabilityId::new("b"), Vec::new()),

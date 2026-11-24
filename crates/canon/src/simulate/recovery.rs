@@ -107,6 +107,8 @@ pub(super) fn split<'a>(
                 subject: Some(subject.clone()),
                 upstreams: own.upstreams.clone(),
                 history: own.history,
+                count: own.count,
+                current_count: own.current_count,
             };
             for (position, opening) in &openers {
                 if *opening == subject {
@@ -156,7 +158,7 @@ fn sees_earlier_records(ir: &Ir) -> bool {
     seen
 }
 
-type Held = (usize, usize, u32, Vec<usize>);
+pub(super) type Held = (usize, usize, u32, Vec<usize>);
 
 impl Split {
     /// Each opener's dimensions that its children record in, the split ones in place of the
@@ -426,7 +428,12 @@ pub(super) fn late(
                     }
                     _ => state.clone(),
                 };
-                let added = layout.add_earlier(&replaced, dimension, class);
+                let added = layout.ended(
+                    layout.add_earlier(&replaced, dimension, class),
+                    dimension,
+                    replacing,
+                    true,
+                );
                 for lowered in lowered {
                     let walked = layout.marked(&added, at, *lowered);
                     if walked == *state || !open_held(state, &walked) {

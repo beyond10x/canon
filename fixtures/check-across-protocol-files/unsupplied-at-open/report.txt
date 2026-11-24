@@ -1,0 +1,2 @@
+unsupplied-at-open: protocol `round` action `drift.open` opens a case under protocol `gate.drift`, which requires evidence kind `tickets_read` at open, and the action's precondition does not imply a record of it
+checked: 3 protocols, 2 openings, 2 supplied kinds, 1 finding

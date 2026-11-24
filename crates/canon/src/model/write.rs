@@ -25,7 +25,7 @@
 //!   `evidence_kinds`, `claims`, `obligations`, `actions`, `outcomes`, `invalidation`, `case`,
 //!   `independence_dimensions`, `imports`. A predicate is an object of its form's key, then `is`
 //!   beside `claim` and `in` beside `input`; inside an order form, `kind`, `result`, `first`,
-//!   `then`, `last`, `in`, `revision` and `subject` follow the struct.
+//!   `then`, `last`, `in`, `revision`, `subject` and `count` follow the struct.
 //! - Keys inside `arguments` follow the iteration order of `serde_json::Map` (sorted by key,
 //!   unless the build keeps insertion order).
 //!
@@ -34,7 +34,9 @@
 //! An absent `Option` and an empty defaulted section (`requires`, `may_produce`,
 //! `records_together`, `revises`, `scope`, `refines`, `inputs` and each top-level declaration
 //! section) are left out, because
-//! `parse` reads a left-out key as the default and refuses an explicit `null`. `Some` of an empty
+//! `parse` reads a left-out key as the default and refuses an explicit `null`; so is an evidence
+//! kind's `required_at_open` when it is `false`, its default, and when it is `true` it is written
+//! as the unquoted `true` YAML reads as a boolean. `Some` of an empty
 //! value is written (`case: {}`, `independent_on: []`), because the model tells it apart from
 //! `None`. A required key is always written, empty or not (`values: []`, `invalidates: []`).
 //!
@@ -358,6 +360,7 @@ fn evidence_kind(depth: usize, kind: &EvidenceKind) -> String {
         description,
         max_age,
         supplied_by,
+        required_at_open,
     } = kind;
     let mut members = Members::new();
     put_some(
@@ -376,6 +379,11 @@ fn evidence_kind(depth: usize, kind: &EvidenceKind) -> String {
         supplied_by
             .as_ref()
             .map(|protocol| quote(protocol.as_str())),
+    );
+    put_some(
+        &mut members,
+        "required_at_open",
+        required_at_open.then(|| "true".to_owned()),
     );
     object(depth, members)
 }
@@ -426,6 +434,7 @@ fn action(depth: usize, action: &Action) -> String {
     let Action {
         description,
         precondition,
+        runs_only_when,
         requires,
         effect,
         may_produce,
@@ -445,6 +454,13 @@ fn action(depth: usize, action: &Action) -> String {
         &mut members,
         "precondition",
         precondition.as_ref().map(|when| predicate(depth + 1, when)),
+    );
+    put_some(
+        &mut members,
+        "runs_only_when",
+        runs_only_when
+            .as_ref()
+            .map(|when| predicate(depth + 1, when)),
     );
     put_unless_empty(
         &mut members,
@@ -764,6 +780,7 @@ fn predicate(depth: usize, predicate: &Predicate) -> String {
                 r#in,
                 revision,
                 subject,
+                count,
             } = form;
             let mut body = Members::new();
             put(&mut body, "in", names(depth + 2, r#in));
@@ -777,6 +794,7 @@ fn predicate(depth: usize, predicate: &Predicate) -> String {
                 "subject",
                 subject.as_ref().map(|id| quote(id.as_str())),
             );
+            put_some(&mut body, "count", count.map(|count| count.to_string()));
             put(&mut members, "children", object(depth + 1, body));
         }
         Predicate::Claim(test) => {

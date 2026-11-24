@@ -1,0 +1,1 @@
+checked: 3 protocols, 2 openings, 2 supplied kinds, 0 findings

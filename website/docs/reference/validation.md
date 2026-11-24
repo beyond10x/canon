@@ -36,7 +36,9 @@ does not depend on the order the sections are written in:
 6. maximum ages that are not a whole number without leading zeros, followed by `s`, `m`, `h`
    or `d`, or that are but are too long to count in seconds (each with its own message), and
    evidence kinds whose `supplied_by` names the protocol's own id (`self-supplied-evidence`,
-   naming the kind; story:supplied-evidence), each kind's in that order, in the order the
+   naming the kind; story:supplied-evidence), and evidence kinds that declare
+   `required_at_open: true` without `supplied_by` (`at-open-without-supplier`, naming the kind;
+   story:supplied-evidence-required-at-open), each kind's in that order, in the order the
    evidence kinds are written. Any other protocol may supply a kind, and validation does not
    resolve the name (`canon check-set` does, over a set of protocols); then artifacts whose `revised_by` names the protocol's own id
    (`self-revised-artifact`, naming the artifact; story:artifact-revised-by), in the order the
@@ -65,7 +67,9 @@ does not depend on the order the sections are written in:
    naming the declaration the test is written in and the input; for a `children` form, first
    an empty `in` list, `empty-child-outcomes`, or an outcome it lists more than once,
    `duplicate-child-outcome`, once for every listing after its first, then `open` listed,
-   `open-child-outcome`, once, then the evidence kind `case_outcome` when it is not declared,
+   `open-child-outcome`, once, then a `count` of 0, `zero-child-count`
+   (story:children-form-counts-unopened-children), then the evidence kind `case_outcome` when
+   it is not declared,
    `undeclared-evidence-kind`, then the artifact it names as its `subject` when that is not
    declared, `undeclared-artifact` (story:child-outcome-subject), every one naming the
    declaration the form is written in): those
@@ -75,7 +79,12 @@ does not depend on the order the sections are written in:
    `case_outcome` for a `children` form; then its applicability predicate, followed likewise by
    every evidence match, order form and `children` form it holds, `evidence-in-applicability`:
    it tests only claim values and case inputs), then those in actions (each action's
-   precondition, then each evidence kind it may produce, then each artifact it `revises`
+   precondition, then its `runs_only_when` (story:ordering-guards-provable-by-check), whose
+   references are checked as the precondition's are, each problem naming `` action `a` runs_only_when ``, followed by `vacuous-runs-only-when` when it is the literal `all: []`,
+   true in every state, so it asserts nothing (only that literal: another guard true in every
+   state, such as `{any: [{all: []}]}` or `{not: {any: []}}`, is not detected and validates),
+   then each evidence kind it may produce, then each artifact it
+   `revises`
    (story:judgement-marking), `undeclared-artifact`, once for every listing, in the order
    listed, then the subject of the case it opens, `undeclared-artifact`, then an opening under
    the protocol's own id, `self-opened-case`, then each group of its `records_together`
@@ -256,9 +265,12 @@ differently in these cases only:
 | `empty-child-outcomes` | A `children` form lists no outcome, so no child case could end with one of them. |
 | `duplicate-child-outcome` | A `children` form lists an outcome more than once. |
 | `open-child-outcome` | A `children` form lists `open`, which is a running child case's outcome, never a terminal one: the form is unknown while a child is open. |
+| `zero-child-count` | A `children` form waits for 0 child cases (`count: 0`), which every case has, so the count would assert nothing. |
+| `vacuous-runs-only-when` | An action's `runs_only_when` (story:ordering-guards-provable-by-check) is the literal `all: []`, which is true in every state and so asserts nothing. Only that literal: another guard true in every state, such as `{any: [{all: []}]}`, is not detected. |
 | `self-opened-case` | An action opens a child case under the protocol's own id: a case could then open cases under its own protocol without end (D206). |
 | `invalid-record-group` | A group of an action's `records_together` (story:simulate-record-groups) is not one run's records: `group` counts the action's groups from 1, in the order written. |
 | `self-supplied-evidence` | An evidence kind names the protocol's own id as the protocol that supplies its records (story:supplied-evidence): records of it come from outside the protocol, or from its own actions, never from a case of the same protocol through `supplied_by`. |
+| `at-open-without-supplier` | An evidence kind is required at open (story:supplied-evidence-required-at-open) but names no protocol that supplies it: the opener hands in a record another protocol's case produced, so the kind needs `supplied_by`. |
 | `self-revised-artifact` | An artifact names the protocol's own id as the protocol whose cases revise it (story:artifact-revised-by): the protocol's own actions revise through `revises`, and a self-name would hide the dead end a revising action that no state admits leaves. |
 | `claim-cycle` | Claims whose predicates test each other in a cycle; the first claim is repeated at the end. |
 | `action-arguments` | An action's argument schema is outside the argument-schema dialect: `pointer` is the JSON Pointer of the offending keyword inside the schema (`""` for the schema itself) and `reason` why it is refused. |

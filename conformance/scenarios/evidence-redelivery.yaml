@@ -152,7 +152,7 @@ steps:
               "protocol": "redelivery",
               "protocol_revision": 1,
               "semantics": {
-                "canon": "0.14.0",
+                "canon": "0.15.0",
                 "format": "canon-decision/1"
               }
             },
@@ -343,7 +343,7 @@ steps:
               "protocol": "redelivery",
               "protocol_revision": 1,
               "semantics": {
-                "canon": "0.14.0",
+                "canon": "0.15.0",
                 "format": "canon-decision/1"
               }
             },
@@ -534,7 +534,7 @@ steps:
               "protocol": "redelivery",
               "protocol_revision": 1,
               "semantics": {
-                "canon": "0.14.0",
+                "canon": "0.15.0",
                 "format": "canon-decision/1"
               }
             },
@@ -726,7 +726,7 @@ steps:
               "protocol": "redelivery",
               "protocol_revision": 1,
               "semantics": {
-                "canon": "0.14.0",
+                "canon": "0.15.0",
                 "format": "canon-decision/1"
               }
             },
@@ -917,7 +917,7 @@ steps:
               "protocol": "redelivery",
               "protocol_revision": 1,
               "semantics": {
-                "canon": "0.14.0",
+                "canon": "0.15.0",
                 "format": "canon-decision/1"
               }
             },
@@ -1063,7 +1063,7 @@ steps:
               "protocol": "redelivery",
               "protocol_revision": 1,
               "semantics": {
-                "canon": "0.14.0",
+                "canon": "0.15.0",
                 "format": "canon-decision/1"
               }
             },
@@ -1219,7 +1219,7 @@ steps:
               "protocol": "redelivery",
               "protocol_revision": 1,
               "semantics": {
-                "canon": "0.14.0",
+                "canon": "0.15.0",
                 "format": "canon-decision/1"
               }
             },

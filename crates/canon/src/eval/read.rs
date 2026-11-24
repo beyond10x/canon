@@ -180,6 +180,28 @@ fn absent_or_text(value: &Json, key: &str) -> Shape<Option<String>> {
     }
 }
 
+/// A flag the IR writes only when it is set, as `true`: absent is `false`, and any value but
+/// `true`, `false` included, is refused.
+fn absent_or_true(value: &Json, key: &str) -> Shape<bool> {
+    match field(value, key) {
+        None => Ok(false),
+        Some(Json::Bool(true)) => Ok(true),
+        Some(_) => Err(format!("`{key}` is not true")),
+    }
+}
+
+/// A number the IR writes only when it has one, as a non-negative integer: absent is `None`, and
+/// any other value, `null`, a string or a fraction included, is refused.
+fn absent_or_count(value: &Json, key: &str) -> Shape<Option<u64>> {
+    match field(value, key) {
+        None => Ok(None),
+        Some(number) => number
+            .as_u64()
+            .map(Some)
+            .ok_or_else(|| format!("`{key}` is not a non-negative integer")),
+    }
+}
+
 fn section<'a>(value: &'a Json, key: &str) -> Shape<&'a Map<String, Json>> {
     required(value, key)?
         .as_object()
@@ -229,6 +251,7 @@ fn protocol(value: &Json) -> Shape<Protocol> {
                 description: optional_text(entry, "description")?,
                 max_age: absent_or_text(entry, "max_age")?.map(Age::new),
                 supplied_by: absent_or_text(entry, "supplied_by")?.map(ProtocolId::new),
+                required_at_open: absent_or_true(entry, "required_at_open")?,
             })
         })?,
         claims: declarations(value, "claims", ClaimId::new, |entry| {
@@ -398,6 +421,8 @@ fn action(entry: &Json) -> Shape<Action> {
     Ok(Action {
         description: optional_text(entry, "description")?,
         precondition: Some(predicate(required(entry, "precondition")?)?),
+        // Written only when declared (story:ordering-guards-provable-by-check).
+        runs_only_when: field(entry, "runs_only_when").map(predicate).transpose()?,
         requires,
         effect: optional_text(entry, "effect")?.map(EffectClass::new),
         may_produce,
@@ -547,7 +572,8 @@ fn predicate(value: &Json) -> Shape<Predicate> {
         }
         // `"revision"` is written only as `current`; an `any` read here compiles to no key, so
         // the bytes differ and the text is refused. `"subject"` is written only when the form
-        // names one, as a string, as an evidence match's is.
+        // names one, as a string, as an evidence match's is. `"count"` is written only when the
+        // form declares one; a 0 read here is refused when the rebuilt model compiles.
         "children" => Ok(Predicate::Children(ChildOutcomes {
             r#in: values(inner, "in")?
                 .into_iter()
@@ -557,6 +583,7 @@ fn predicate(value: &Json) -> Shape<Predicate> {
                 .map(|revision| revision.parse())
                 .transpose()?,
             subject: absent_or_text(inner, "subject")?.map(ArtifactId::new),
+            count: absent_or_count(inner, "count")?,
         })),
         _ => Err(
             "a predicate is not one of all, any, not, evidence, claim, input, first, before, after, since, descended or children"
@@ -691,6 +718,43 @@ mod tests {
         let refusal = read_ir(&text.replace("\"q\"", "\"p\"")).expect_err("self-supplied");
         assert!(
             refusal.to_string().contains("self-supplied-evidence"),
+            "{refusal}"
+        );
+    }
+
+    /// story:supplied-evidence-required-at-open: a kind required at open reads back as written;
+    /// the compiler writes the key only as `true`, so `false`, `null` and any other value are
+    /// refused, and so is the key on a kind without a supplier, as the validator refuses it.
+    #[test]
+    fn a_kind_required_at_open_reads_back_and_any_other_value_is_refused() {
+        let ir = ir::compile(
+            &model::parse(
+                "format: protocol/1\nprotocol: {id: p, revision: 1}\n\
+                 evidence_kinds: {k: {supplied_by: q, required_at_open: true}, l: {}}\n",
+            )
+            .expect("parses"),
+        )
+        .expect("compiles");
+        let text = ir.canonical_json();
+        let key = "\"required_at_open\": true,\n      \"supplied_by\": \"q\"\n";
+        assert!(text.contains(key), "{text}");
+        assert_eq!(read_ir(&text), Ok(ir));
+        for replacement in ["false", "null", "\"true\"", "1"] {
+            let refusal = read_ir(&text.replace(
+                "\"required_at_open\": true",
+                &format!("\"required_at_open\": {replacement}"),
+            ))
+            .expect_err(replacement);
+            assert_eq!(refusal.code(), "malformed-input", "{refusal}");
+            assert_eq!(
+                refusal.to_string(),
+                "not canon-ir/1: `required_at_open` is not true"
+            );
+        }
+        let refusal = read_ir(&text.replace(",\n      \"supplied_by\": \"q\"", ""))
+            .expect_err("without a supplier");
+        assert!(
+            refusal.to_string().contains("at-open-without-supplier"),
             "{refusal}"
         );
     }

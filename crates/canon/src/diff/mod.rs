@@ -24,6 +24,8 @@
 //! | supplier (`supplied_by`) introduced (a record of the kind may then name upstream artifacts the protocol does not declare) | `EXPANSION` |
 //! | supplier removed (such a record is refused again) | `BREAKING` |
 //! | supplier changed to another protocol (a name the runner acts on and nothing resolves, as a changed `case_open` protocol) | `BREAKING` |
+//! | a record of the kind required at open (`required_at_open`) introduced (the opener must hand one in; story:supplied-evidence-required-at-open) | `TIGHTENING` |
+//! | a record of the kind required at open removed | `RELAXATION` |
 //! | an artifact's `revised_by` introduced, removed or replaced (nothing evaluated reads it; story:artifact-revised-by) | `NO SEMANTIC CHANGE` |
 //! | claim added | `EXPANSION` |
 //! | claim removed | `BREAKING` |
@@ -35,6 +37,7 @@
 //! | applicability predicate changed | `BREAKING` |
 //! | action added | `EXPANSION` |
 //! | action removed | `BREAKING` |
+//! | assertion about when an action runs (`runs_only_when`) introduced, removed or changed (only `canon check` reads it; story:ordering-guards-provable-by-check) | `NO SEMANTIC CHANGE` |
 //! | capability requirement added to an action (a requirement is a capability and its scope, so a changed scope is one removed and one added) | `TIGHTENING` |
 //! | capability requirement removed from an action | `RELAXATION` |
 //! | action effect changed | `BREAKING` |
@@ -110,7 +113,8 @@
 //! since a claim strengthened is true in fewer cases, which tightens a place that needs it true
 //! and relaxes one that needs it false. Every place a predicate is written reads the claims it
 //! tests: another claim's `true_when`, an obligation's `discharged_when` and `applicable_when`, an
-//! action's precondition and an outcome's requirement. A claim test `{claim: c}` reads `c`
+//! action's precondition and an outcome's requirement; an action's `runs_only_when` is an
+//! assertion and reads no claim here. A claim test `{claim: c}` reads `c`
 //! positively, `{claim: c, is: false}` in reverse and `{claim: c, is: unknown}` in both
 //! directions; a `not` reverses what it holds; an `applicable_when` reverses the whole predicate,
 //! since an obligation that applies in fewer cases requires less; and a claim read by another
@@ -130,7 +134,8 @@
 //! rules, case inputs and independence dimensions; within a section, by identifier; within a declaration, its description,
 //! then its fields in the order the IR declares them (an evidence kind's maximum age and
 //! supplier; an obligation's discharge predicate and
-//! applicability predicate; an action's precondition, capability requirements, effect, author,
+//! applicability predicate; an action's precondition, `runs_only_when`, capability requirements,
+//! effect, author,
 //! evidence it may produce, who decides each kind it may produce in both revisions, the artifacts
 //! it revises, argument schema and the case it opens; a case input's values), each list in
 //! identifier order, removals before additions. The IR holds a production's resolved
@@ -882,15 +887,32 @@ fn evidence_kind(changes: &mut Changes, id: &str, from: &EvidenceKind, to: &Evid
         description: from_description,
         max_age: from_max_age,
         supplied_by: from_supplier,
+        required_at_open: from_at_open,
     } = from;
     let EvidenceKind {
         description: to_description,
         max_age: to_max_age,
         supplied_by: to_supplier,
+        required_at_open: to_at_open,
     } = to;
     changes.description(SECTION, id, from_description, to_description);
     max_age(changes, id, from_max_age, to_max_age);
     supplier(changes, id, from_supplier, to_supplier);
+    match (from_at_open, to_at_open) {
+        (false, true) => changes.push(
+            Category::Tightening,
+            SECTION,
+            id,
+            "required at open introduced".to_owned(),
+        ),
+        (true, false) => changes.push(
+            Category::Relaxation,
+            SECTION,
+            id,
+            "required at open removed".to_owned(),
+        ),
+        _ => {}
+    }
 }
 
 /// An evidence kind's maximum age, introduced, removed or changed.
@@ -1043,6 +1065,7 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
     let Action {
         description: from_description,
         precondition: from_precondition,
+        runs_only_when: from_guard,
         requires: _,
         scopes: _,
         effect: from_effect,
@@ -1057,6 +1080,7 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
     let Action {
         description: to_description,
         precondition: to_precondition,
+        runs_only_when: to_guard,
         requires: _,
         scopes: _,
         effect: to_effect,
@@ -1076,6 +1100,22 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         from_precondition,
         to_precondition,
     );
+    // Only `canon check` reads `runs_only_when` (story:ordering-guards-provable-by-check, D8b): it
+    // asserts, and changes no evaluation.
+    let guard = match (from_guard, to_guard) {
+        (None, Some(_)) => Some("introduced"),
+        (Some(_), None) => Some("removed"),
+        (Some(from), Some(to)) if from != to => Some("changed"),
+        _ => None,
+    };
+    if let Some(how) = guard {
+        changes.push(
+            Category::NoSemanticChange,
+            SECTION,
+            id,
+            format!("runs_only_when {how}"),
+        );
+    }
     // `requires` and `scopes` are compared together, as the requirements they make up.
     changes.members(
         SECTION,

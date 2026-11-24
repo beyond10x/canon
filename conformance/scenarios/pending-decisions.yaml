@@ -2211,7 +2211,7 @@ steps:
               "protocol": "operations",
               "protocol_revision": 1,
               "semantics": {
-                "canon": "0.14.0",
+                "canon": "0.15.0",
                 "format": "canon-decision/1"
               }
             }

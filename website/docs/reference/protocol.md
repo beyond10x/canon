@@ -58,6 +58,7 @@ A kind of evidence the protocol admits.
 | `description` | text | optional | — |
 | `max_age` | [text](#text-formats) (`Age`) | optional | How old a record of this kind may be and still apply: at an evaluation instant later than its `observed_at` by more than this, it is excluded as expired (design § 8). |
 | `supplied_by` | [identifier](#identifiers) (`ProtocolId`) | optional | The protocol whose cases produce records of this kind (story:supplied-evidence): any protocol but this one. No check of one protocol resolves it; `canon check-set` (`b10x_canon::ir::check_set`) reports, over a set of protocols, a supplier outside the set (`unknown-supplier`) and one no action of which may produce a kind of this id (`unproduced-supplied-kind`). A runner copies such a record unchanged from a case under that protocol; `canon check` counts the kind as produced. It counts as produced without authority and stays governed when an action that requires a capability may also produce it, so `canon check` reports `authority-bypass` on an outcome a supplied record alone makes legitimate. Absent: the protocol's own actions produce the kind, or nothing does. |
+| `required_at_open` | `true` or `false` | optional | Whether the case's opener hands in a current record of this kind when it opens the case (story:supplied-evidence-required-at-open): `true`, a runner copies one into the case at open, or opens nothing; `false`, the default, written by leaving the key out, asks nothing. It needs `supplied_by` on the same kind (`at-open-without-supplier`). Canon opens nothing: `b10x_canon::eval::missing_at_open` names the required kinds a case lacks, and `canon evaluate` and `canon check` read nothing from it. `canon check-set` reports an action of a protocol of the set that opens a case under this one and whose precondition does not imply a record of the kind (`unsupplied-at-open`); `canon simulate` starts every walk with one record of it. |
 
 ## `Claim`
 
@@ -89,6 +90,7 @@ has and what evidence it may produce (design § 10).
 |---|---|---|---|
 | `description` | text | optional | — |
 | `precondition` | [`Predicate`](#predicate) | optional | — |
+| `runs_only_when` | [`Predicate`](#predicate) | optional | An assertion about when the action runs (story:ordering-guards-provable-by-check): it is `admissible` or `approval-required` only in a state where this predicate is `true`. Absent: no assertion. The grammar and reference checks of `precondition`; the literal `all: []`, true in every state, is refused (`vacuous-runs-only-when`), and only that literal: another guard true in every state (`{any: [{all: []}]}`, `{not: {any: []}}`) is not detected. No evaluation reads it: only `canon check` does, proving it in every state (`ordering-guard-failed`), per state and not along an order of actions, so a guard that holds only through the preconditions of earlier actions is proved only when the action's own precondition names it. A floor does not pin it: `canon floor` holds for a protocol that drops a guard its floor declares. |
 | `requires` | list of [`CapabilityRequirement`](#capabilityrequirement) | optional | — |
 | `effect` | [identifier](#identifiers) (`EffectClass`) | optional | — |
 | `may_produce` | list of [`EvidenceProduction`](#evidenceproduction) | optional | — |
@@ -451,8 +453,8 @@ the evidence check accepted, as the order forms read the history, or with `revis
 only those about the current revision of their subject, and with `subject` only those about
 that artifact: `unknown` with no record read, `false` when a record's outcome is neither listed
 nor `open` (a child that ended outside the set), otherwise `unknown` when a child is still
-`open` and `true` when every child ended with a listed outcome. It counts only the records it
-is given. Canon does not write them; the runner that opens a child case does, with two duties:
+`open` or, with `count: N`, when it reads fewer than N records, and `true` when every child
+ended with a listed outcome. It counts only the records it is given. Canon does not write them; the runner that opens a child case does, with two duties:
 a record's `subject` is the `case_open` subject of the action that opened the child, and the
 runner writes a record with the outcome `open` when it opens the child.
 
@@ -461,6 +463,7 @@ runner writes a record with the outcome `open` when it opens the child.
 | `in` | list of text | required | The outcomes a child case may have ended with, written `in`: not empty, each once, never `open`. |
 | `revision` | [`ChildRevision`](#childrevision) | optional | Which records the form reads (story:child-outcome-revision): absent or `any`, every `case_outcome` record; `current`, only those whose `subject_revision` is the case snapshot's current revision of their `subject`. |
 | `subject` | [identifier](#identifiers) (`ArtifactId`) | optional | The declared artifact the records are about (story:child-outcome-subject): absent, records about every artifact; named, only the `case_outcome` records whose `subject` it is. A record about another artifact is not read: it neither establishes nor contradicts the form. |
+| `count` | integer, 1 or more | optional | How many child cases the form waits for (story:children-form-counts-unopened-children): absent, every child with a record; N, 1 or more, at least N records, so the form stays `unknown` while fewer are read, and a child not yet opened, which has no record, never lets it become true. `canon validate` refuses 0 (`zero-child-count`). |
 
 ## `Truth`
 

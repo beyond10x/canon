@@ -192,6 +192,10 @@ commands:
       - name: evaluated
         returns: true
 
+  # A children form with `count: N` of 2 or more gives the case_outcome dimension it reads a
+  # dimension of more records, written in a state `... result r 2 more times` and in the bound
+  # refusal `more records of evidence kind case_outcome about b N`
+  # (story:children-form-counts-unopened-children).
   # read from: crates/canon-cli/src/lib.rs:108-143
   # read from: crates/canon-cli/src/check.rs:15-54
   - name: canon.cli.Check
@@ -270,7 +274,10 @@ commands:
       # declares a supplied or an expiring kind and no action that opens a child case, and as
       # waiting on supplied evidence, a child outcome or expiry when an action opens a child case
       # (case_open). A state names each opening action whose children have not all ended: `action
-      # a opened a child` for one, `action a opened 2 or more children` for more. An open state
+      # a opened a child` for one, `action a opened 2 or more children` for more; where a children
+      # form declares `count: N`, it also writes the children counted in each case_outcome
+      # dimension the form reads, `2 children in evidence case_outcome about b`, `N or more
+      # children` at N (story:children-form-counts-unopened-children). An open state
       # waits only when no outcome is legitimate in it, no action is approval-required there, and
       # every step of every admissible action, record or revise, returns it. A revise step is
       # written `action x revises a`, or `action x revises a and produces …` with the record or
@@ -463,6 +470,8 @@ commands:
       - name: compared
         returns: true
 
+  # A floor does not pin a guard: canon diff classifies a removed runs_only_when as NO SEMANTIC
+  # CHANGE, so the floor holds for a protocol that drops a guard the floor declares.
   # read from: crates/canon-cli/src/lib.rs:247-262
   # read from: crates/canon-cli/src/floor.rs:12-51
   - name: canon.cli.Floor
@@ -595,16 +604,22 @@ commands:
         error: canon.cli.Unreadable
       # One line per finding, a stable code first (duplicate-protocol-id, case-open-cycle,
       # unknown-opened-protocol, undeclared-child-outcome, unknown-supplier,
-      # unproduced-supplied-kind), then the summary line.
+      # unproduced-supplied-kind, and last unsupplied-at-open of
+      # story:supplied-evidence-required-at-open: an opening action whose protocol declares no
+      # kind its opened protocol requires at open, or whose precondition does not imply a record
+      # of it), then the summary line.
       # read from: .engineering/planning/story/check-across-protocol-files.md, section "Acceptance", 1 to 3
+      # read from: .engineering/planning/story/supplied-evidence-required-at-open.md, section "Scope", "Proposal"
       # read from: fixtures/check-across-protocol-files/imports/stderr.txt
       # read from: fixtures/check-across-protocol-files/duplicate-id/report.txt
+      # read from: fixtures/check-across-protocol-files/unsupplied-at-open/report.txt
       - name: rejected
         external: >-
           a document does not parse or compile, a member has imports, or the check finds two
           files with one protocol id, an opened protocol or a supplier outside the set, an
-          undeclared child outcome, a supplied kind its supplier does not produce, or a cycle of
-          case openings
+          undeclared child outcome, a supplied kind its supplier does not produce, a cycle of
+          case openings, or an opening action that holds no record of a kind its opened protocol
+          requires at open
         error: canon.cli.Rejected
       # read from: fixtures/check-across-protocol-files/clean/report.txt
       - name: nothing-found

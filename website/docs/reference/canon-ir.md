@@ -30,12 +30,15 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
 - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
   evidence match without a result has `"result": null`; a claim test without `is` has
   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-  true; absent lists and sections are empty. The eighteen exceptions are an artifact's
-  `revised_by`, an evidence kind's `max_age` and its `supplied_by`, the `when` of an outcome's
+  true; absent lists and sections are empty. The twenty exceptions are an artifact's
+  `revised_by`, an evidence kind's `max_age`, its `supplied_by` and its `required_at_open`
+  (story:supplied-evidence-required-at-open; written only as `"required_at_open": true`, so
+  `false` compiles to no key), the `when` of an outcome's
   decision requirement, the `subject` of an evidence match, an order form or a
   `children` form, an evidence match's `independent_on`, an obligation's `applicable_when`, an
-  action's `arguments`, an action's `case_open`, an action's `author` and its `revises`, an
-  action's `records_together`, the
+  action's `runs_only_when` (story:ordering-guards-provable-by-check; normalized like every
+  predicate, and read by `canon check` alone), an action's `arguments`, an action's
+  `case_open`, an action's `author` and its `revises`, an action's `records_together`, the
   `decided_by` of an evidence kind an action may produce, the `scope` of a capability
   requirement, the `revision` of a `children` form, the `invalidation` section, the `case`
   section and the `independence_dimensions` section: each written only when it is declared (a
@@ -59,7 +62,10 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   revisions `{"descended": {"first": {"kind": …, "result": …}, "then": {"kind": …, "result": …}}}` (story:revision-ordering). Each adds `"subject": …` when it names one.
   The form over the child cases is `{"children": {"in": [...]}}`, or `{"children": {"in": [...], "revision": "current"}}` when it reads only the records about the current revision of
   their subject (story:child-outcome-revision): `revision: any` reads what no key reads and is
-  written as no key. A form that reads only the records about one artifact adds `"subject": …`, as declared (story:child-outcome-subject). An action's `case_open` is `{"protocol": …, "subject": …}`, as declared (story:case-composition).
+  written as no key. A form that reads only the records about one artifact adds `"subject": …`, as declared (story:child-outcome-subject), and a form that waits for a number of child
+  cases adds `"count": N`, as declared, which sorts before `"in"` like every key
+  (story:children-form-counts-unopened-children); two forms that differ only in it are two
+  members, no count first, then the smaller. An action's `case_open` is `{"protocol": …, "subject": …}`, as declared (story:case-composition).
   An action's `arguments` is its JSON Schema as declared, the same JSON value, its object keys
   sorted like every object's (story:action-arguments).
 - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way

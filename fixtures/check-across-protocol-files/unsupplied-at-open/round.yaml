@@ -1,0 +1,55 @@
+format: protocol/1
+
+protocol:
+  id: round
+  revision: 1
+  description: Seeded defect, a round that opens the drift gate once the ticket read ended, without waiting for the read's record that the gate requires at open.
+
+artifacts:
+  sources:
+    description: The snapshots of this round, the subject of read.tickets.
+  drift:
+    description: The store and this round's ticket read, the subject of gate.drift.
+
+evidence_kinds:
+  case_outcome:
+    description: The outcome of one child case, open while it runs.
+  tickets_read:
+    description: The ticket read of the read.tickets case, copied unchanged into this case.
+    supplied_by: read.tickets
+  drift_opened:
+    description: The record that gate.drift was opened.
+
+claims:
+  read.ended:
+    true_when:
+      children: {in: [complete, partial], subject: sources}
+  tickets.read:
+    true_when:
+      evidence: {kind: tickets_read, subject: sources}
+  drift.opened:
+    true_when:
+      evidence: {kind: drift_opened, subject: drift}
+  drift.passed:
+    true_when:
+      evidence: {kind: case_outcome, subject: drift, result: passed}
+
+actions:
+  read.open:
+    description: Open the ticket read.
+    effect: write
+    case_open: {protocol: read.tickets, subject: sources}
+  drift.open:
+    description: Open the drift gate after the read ended; its record may not be here yet.
+    effect: write
+    precondition:
+      all:
+        - {claim: read.ended}
+        - {claim: drift.opened, is: unknown}
+    case_open: {protocol: gate.drift, subject: drift}
+    may_produce:
+      - evidence: drift_opened
+
+outcomes:
+  done:
+    requires: {claim: drift.passed}
