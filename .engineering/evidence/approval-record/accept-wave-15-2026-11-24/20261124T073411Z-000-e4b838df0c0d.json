@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-24T07:34:11Z",
+  "actor": "human:timo",
+  "artifact": "approval-record:accept-wave-15-2026-11-24",
+  "kind": "approval-record",
+  "revision": 3,
+  "change": {
+    "change": "redaction",
+    "literal_sha256": "8b2806d2896d3fe6ca22d55ba945174abeeb3496c1481effac9143cb9b99dd70",
+    "literal_chars": 6,
+    "replacement": "the owner's",
+    "count": 2,
+    "reason": "a person's name does not go into a public repository; the owner is named by role"
+  }
+}
