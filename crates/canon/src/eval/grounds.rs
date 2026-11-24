@@ -281,9 +281,13 @@ impl<'a> Standing<'a> {
     /// digests computes none.
     fn lapse(&self, id: &EvidenceId, digest: Option<&EvidenceDigest>) -> Option<Lapse> {
         if let Some(digest) = digest {
-            match self.given.iter().find(|record| record.id == *id) {
+            match self.given.iter().find(|record| {
+                #[cfg(test)]
+                counted(&READ);
+                record.id == *id
+            }) {
                 None => return Some(Lapse::Absent),
-                Some(record) if super::evidence_digest(record) != *digest => {
+                Some(record) if hashed(record) != *digest => {
                     return Some(Lapse::ContentChanged);
                 }
                 Some(_) => {}
@@ -297,6 +301,28 @@ impl<'a> Standing<'a> {
             None => Lapse::Absent,
         })
     }
+}
+
+/// The digest of `record` ([`super::evidence_digest`]), counted under `HASHED` in tests.
+fn hashed(record: &EvidenceRecord) -> EvidenceDigest {
+    #[cfg(test)]
+    counted(&HASHED);
+    super::evidence_digest(record)
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The given records [`Standing::lapse`] read to find the record under a ground's id on this
+    /// thread, for the operation-count test.
+    static READ: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// The record digests [`Standing::lapse`] computed on this thread.
+    static HASHED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Counts one operation under `counter`.
+#[cfg(test)]
+fn counted(counter: &'static std::thread::LocalKey<std::cell::Cell<usize>>) {
+    counter.with(|count| count.set(count.get() + 1));
 }
 
 /// Refuses a ground artifact the protocol does not declare, as `undeclared-artifact`: each
@@ -342,4 +368,96 @@ pub(super) fn declared(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn record(id: &str) -> EvidenceRecord {
+        super::super::read_evidence(&format!(
+            r#"{{"format":"canon-evidence/1","id":"{id}","kind":"k","subject":"spec","subject_revision":"r1"}}"#
+        ))
+        .expect("reads")
+    }
+
+    fn ground(id: &str, digest: &EvidenceDigest) -> Grounds {
+        Grounds {
+            revisions: BTreeMap::new(),
+            evidence: BTreeSet::from([(EvidenceId::from(id), Some(digest.clone()))]),
+        }
+    }
+
+    /// The given records read and the digests computed while `run` runs.
+    fn counted<T>(run: impl FnOnce() -> T) -> (T, usize, usize) {
+        READ.with(|count| count.set(0));
+        HASHED.with(|count| count.set(0));
+        let value = run();
+        (
+            value,
+            READ.with(std::cell::Cell::get),
+            HASHED.with(std::cell::Cell::get),
+        )
+    }
+
+    /// Wave 15 review F1: grounds with a digest stay linear in the records given. 256 records and
+    /// 1,024 grounds with a digest: each record cited once with its own digest (holds), the first
+    /// record cited 256 more times (holds), each cited once with another digest
+    /// (`content_changed`), and 256 ids no record has (absent). Finding a ground's record reads at
+    /// most one record, and each record is hashed at most once, however often it is cited: at most
+    /// 1,024 records read and 256 digests. A scan of the records for each ground reads about
+    /// 2 x 256 x 256 and hashes 768.
+    #[test]
+    fn digest_grounds_read_one_record_each_and_hash_each_record_once() {
+        const N: usize = 256;
+        let case = super::super::read_case(
+            r#"{"format":"canon-case/1","id":"C-1","protocol":"p","artifacts":{"spec":{"revision":"r1"}}}"#,
+        )
+        .expect("reads");
+        let records: Vec<EvidenceRecord> = (0..N).map(|i| record(&format!("e{i:03}"))).collect();
+        let digests: Vec<EvidenceDigest> =
+            records.iter().map(super::super::evidence_digest).collect();
+        let other = EvidenceDigest::new(format!("sha256:{}", "0".repeat(64)));
+        let standing = Standing::new(
+            &case,
+            &records,
+            &records,
+            &[],
+            std::iter::empty::<&ClaimDecision>(),
+        );
+        let mut cases: Vec<(Grounds, BTreeSet<Failed>)> = Vec::new();
+        for (i, digest) in digests.iter().enumerate() {
+            let id = format!("e{i:03}");
+            cases.push((ground(&id, digest), BTreeSet::new()));
+            cases.push((ground("e000", &digests[0]), BTreeSet::new()));
+            cases.push((
+                ground(&id, &other),
+                BTreeSet::from([Failed::Evidence(id.as_str().into(), Lapse::ContentChanged)]),
+            ));
+            let absent = format!("x{i:03}");
+            cases.push((
+                ground(&absent, digest),
+                BTreeSet::from([Failed::Evidence(absent.as_str().into(), Lapse::Absent)]),
+            ));
+        }
+        let (failed, read, hashed) = counted(|| {
+            cases
+                .iter()
+                .map(|(grounds, _)| standing.failed(grounds))
+                .collect::<Vec<_>>()
+        });
+        for ((grounds, expected), failed) in cases.iter().zip(&failed) {
+            assert_eq!(failed, expected, "{grounds:?}");
+        }
+        assert!(
+            read <= cases.len(),
+            "{} grounds with a digest over {N} records read {read} records, more than one each",
+            cases.len()
+        );
+        assert!(
+            hashed <= N,
+            "{} grounds with a digest over {N} records computed {hashed} digests, more than {N}",
+            cases.len()
+        );
+    }
 }
