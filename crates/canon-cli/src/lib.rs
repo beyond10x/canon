@@ -23,8 +23,8 @@ pub const EXIT_STATUSES: [(u8, &str); 4] = [
         0,
         "Success: the document is valid or compiled, the case was evaluated, every conformance \
          scenario ran and passed, a check or a simulation found nothing, the scenarios were \
-         generated, a protocol stays above its floor, or a mutation run reported no weak \
-         point.",
+         generated, a protocol stays above its floor, a mutation run reported no weak point, or \
+         an evidence record's digest was printed.",
     ),
     (
         REJECTED,
@@ -101,7 +101,10 @@ pub enum Command {
         /// where a claim demands independence, `producer` of the record under it, not by the rest
         /// of its contents: with other contents the entry still applies, and the decision changes
         /// only where a claim reads them. Evidence IDs must be immutable once an approval cites
-        /// them.
+        /// them by id alone. A `ground_evidence` entry written `{id: <id>, digest: <digest>}`,
+        /// with the digest `canon digest` prints for the record, holds only while the record
+        /// under the id has that digest, and lapses as `content_changed` once it has other
+        /// contents.
         #[arg(long)]
         authority: Option<PathBuf>,
         /// A `canon-decisions/1` document: the explicit decisions taken, each naming the decision,
@@ -111,7 +114,10 @@ pub enum Command {
         /// `upstream_revisions` and, where a claim demands independence, `producer` of the record
         /// under it, not by the rest of its contents: with other contents the entry still applies,
         /// and the decision changes only where a claim reads them. Evidence IDs must be immutable
-        /// once an approval cites them.
+        /// once an approval cites them by id alone. A `ground_evidence` entry written `{id: <id>,
+        /// digest: <digest>}`, with the digest `canon digest` prints for the record, holds only
+        /// while the record under the id has that digest, and lapses as `content_changed` once it
+        /// has other contents.
         #[arg(long)]
         decisions: Option<PathBuf>,
         /// The evaluation instant, in UTC as `YYYY-MM-DDTHH:MM:SSZ`, or `YYYY-MM-DDTHH:MM:SS.fffZ`
@@ -395,6 +401,18 @@ pub enum Command {
         /// a symbolic link, is read once.
         #[arg(long, required = true)]
         path: Vec<PathBuf>,
+    },
+    /// Print the digest of one `canon-evidence/1` record: `sha256:` and the 64 lowercase
+    /// hexadecimal digits of the SHA-256 of the record's canonical form, the JSON
+    /// Canonicalization Scheme (RFC 8785) of its fields as Canon reads them, so the key order and
+    /// whitespace of the file change nothing. A `ground_evidence` entry of `--authority` or
+    /// `--decisions` written `{id: <id>, digest: <digest>}` gives it, and holds only while the
+    /// record under the id has it. A file that is not a `canon-evidence/1` record is refused; the
+    /// record is not checked against a protocol.
+    Digest {
+        /// The `canon-evidence/1` record, one file.
+        #[arg(long)]
+        evidence: PathBuf,
     },
     /// Conformance scenarios.
     Conform {

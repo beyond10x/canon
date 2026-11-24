@@ -1345,18 +1345,79 @@ types:
       # read from: crates/canon/src/model/explicit.rs:41-45
       - name: ground_revisions
         type: Map<canon.protocol.ArtifactId, canon.protocol.Revision>
-      # The evidence records the decision rested on, by id (story:decision-grounds). Optional:
-      # absent, it is empty. A ground holds while a record with that id is applicable: given, left
-      # by the revision-binding and freshness stages, and listed in no claim's excluded_evidence
-      # (CANON-FRONTIER-001). A failed one is listed under stale_grounds as {"evidence", "reason"}
-      # with the reason the record was excluded with, or {"evidence", "present": false} when no
-      # record has the id, which is not refused. Each id an identifier, else invalid-identifier.
+      # The evidence records the decision rested on (story:decision-grounds), each an
+      # EvidenceGround: a bare id, or {id, digest} (story:evidence-digest-binds-approvals).
+      # Optional: absent, it is empty. A ground holds while a record with that id is applicable:
+      # given, left by the revision-binding and freshness stages, and listed in no claim's
+      # excluded_evidence (CANON-FRONTIER-001), and, when it gives a digest, while that record's
+      # EvidenceDigest is the one given (CANON-GROUND-002). A failed one is listed under
+      # stale_grounds as {"evidence", "reason": "content_changed"} when the record under the id has
+      # another digest, else {"evidence", "reason"} with the reason the record was excluded with,
+      # or {"evidence", "present": false} when no record has the id, which is not refused. Each id
+      # an identifier, else invalid-identifier.
       # read from: .engineering/planning/story/decision-grounds.md:60
       # read from: .engineering/planning/story/decision-grounds.md:62-64
       # read from: .engineering/planning/story/decision-grounds.md:69-73
-      # read from: crates/canon/src/model/explicit.rs:46-52
+      # read from: .engineering/planning/story/evidence-digest-binds-approvals.md
+      # read from: crates/canon/src/model/explicit.rs:46-57
       - name: ground_evidence
-        type: List<canon.protocol.EvidenceId>
+        type: List<canon.protocol.EvidenceGround>
+
+  # One evidence record an authority or explicit decision rested on, an entry of its
+  # ground_evidence (story:evidence-digest-binds-approvals). Written as the record's id alone (`e1`),
+  # as before, or as a map {id, digest} with an optional digest; the typed model is this union. A
+  # bare id and a map without a digest are one ground and hold alike: by id and by whether the
+  # record under it is applicable, not by the rest of its contents. A map with a digest holds only
+  # while the record given under the id has that EvidenceDigest; with other contents under the id
+  # the ground fails as content_changed, whether or not the record is applicable, and an entry
+  # resting on it no longer applies (CANON-GROUND-002). Refused as malformed-input, naming the
+  # entry: a map with another key or without id, and a digest not written `sha256:` followed by 64
+  # lowercase hexadecimal digits. canon evaluate's computed_from writes a ground without a digest as
+  # its id and one with a digest as {"digest", "id"}, sorted by id, the bare form first, each once.
+  # A Canon before this change refuses a map entry as malformed-input.
+  # read from: .engineering/planning/story/evidence-digest-binds-approvals.md
+  # read from: crates/canon/src/model/authority.rs
+  - name: canon.protocol.EvidenceGround
+    kind: union
+    tag: kind
+    variants:
+      # read from: crates/canon/src/model/authority.rs
+      id: canon.protocol.EvidenceId
+      # read from: crates/canon/src/model/authority.rs
+      cited: canon.protocol.CitedEvidence
+
+  # An evidence ground written as a map: the record's id and, optionally, the digest of the
+  # contents the decision rested on (story:evidence-digest-binds-approvals).
+  # read from: crates/canon/src/model/authority.rs
+  - name: canon.protocol.CitedEvidence
+    kind: struct
+    fields:
+      # The evidence record's id, an identifier, else invalid-identifier.
+      # read from: crates/canon/src/model/authority.rs
+      - name: id
+        type: canon.protocol.EvidenceId
+      # The digest of the record's contents when the decision was taken. Absent, the ground holds
+      # as a bare id does.
+      # read from: crates/canon/src/model/authority.rs
+      - name: digest
+        type: Optional<canon.protocol.EvidenceDigest>
+
+  # The digest of a canon-evidence/1 record's contents (story:evidence-digest-binds-approvals):
+  # `sha256:` followed by the 64 lowercase hexadecimal digits of the SHA-256 of the record's
+  # canonical form. The canonical form is the JSON Canonicalization Scheme (RFC 8785) of one object
+  # holding every field of the record as Canon reads it, under its own key: format, id, kind,
+  # subject and subject_revision always; result, observed_at, producer, child_case and item when
+  # given; upstream_revisions when not empty, as an object of artifact to revision. Every value is a
+  # JSON string, as written (observed_at as its text). So neither the key order nor the whitespace
+  # of the file, nor YAML against JSON, nor an empty upstream_revisions against none changes the
+  # digest; two records have one digest exactly when evidence redelivery counts them as one
+  # (EvidenceRecord.id). `canon digest --evidence <file>` prints it.
+  # read from: .engineering/planning/story/evidence-digest-binds-approvals.md
+  # read from: crates/canon/src/model/ids.rs
+  # read from: crates/canon/src/eval/evidence.rs
+  - name: canon.protocol.EvidenceDigest
+    kind: newtype
+    of: String
 
   # One authority decision of a canon-authority/1 document. `canon evaluate --authority` names that
   # document: a YAML (or JSON) list of these entries; an empty list decides nothing, and an empty
@@ -1443,18 +1504,23 @@ types:
       # read from: crates/canon/src/model/authority.rs:62-67
       - name: ground_revisions
         type: Map<canon.protocol.ArtifactId, canon.protocol.Revision>
-      # The evidence records the decision rested on, by id (story:decision-grounds). Optional:
-      # absent, it is empty. A ground holds while a record with that id is applicable: given, left
-      # by the revision-binding and freshness stages, and listed in no claim's excluded_evidence
-      # (CANON-FRONTIER-001). A failed one is listed under stale_grounds as {"evidence", "reason"}
-      # with the reason the record was excluded with, or {"evidence", "present": false} when no
-      # record has the id, which is not refused. Each id an identifier, else invalid-identifier.
+      # The evidence records the decision rested on (story:decision-grounds), each an
+      # EvidenceGround: a bare id, or {id, digest} (story:evidence-digest-binds-approvals).
+      # Optional: absent, it is empty. A ground holds while a record with that id is applicable:
+      # given, left by the revision-binding and freshness stages, and listed in no claim's
+      # excluded_evidence (CANON-FRONTIER-001), and, when it gives a digest, while that record's
+      # EvidenceDigest is the one given (CANON-GROUND-002). A failed one is listed under
+      # stale_grounds as {"evidence", "reason": "content_changed"} when the record under the id has
+      # another digest, else {"evidence", "reason"} with the reason the record was excluded with,
+      # or {"evidence", "present": false} when no record has the id, which is not refused. Each id
+      # an identifier, else invalid-identifier.
       # read from: .engineering/planning/story/decision-grounds.md:60
       # read from: .engineering/planning/story/decision-grounds.md:62-64
       # read from: .engineering/planning/story/decision-grounds.md:69-73
-      # read from: crates/canon/src/model/authority.rs:68-74
+      # read from: .engineering/planning/story/evidence-digest-binds-approvals.md
+      # read from: crates/canon/src/model/authority.rs:68-79
       - name: ground_evidence
-        type: List<canon.protocol.EvidenceId>
+        type: List<canon.protocol.EvidenceGround>
 
   # A key of a capability scope (cluster, namespace): what the scope narrows the capability to. An
   # identifier: not empty, no whitespace, control or Unicode format characters.

@@ -9,13 +9,15 @@
 //!   principal: lead-investigator
 //!   case_revision: c2
 //!   ground_revisions: {spec: r2}  # optional: the artifact revisions it rested on
-//!   ground_evidence: [e1]         # optional: the evidence records it rested on
+//!   ground_evidence: [e1]         # optional: the evidence records it rested on, each an id
+//!                                 # or {id: e1, digest: sha256:<hex>}
 //! ```
 
 use serde::Deserialize;
 
 use super::Declarations;
-use super::ids::{ArtifactId, DecisionName, EvidenceId, OutcomeId, Principal, Revision};
+use super::authority::EvidenceGround;
+use super::ids::{ArtifactId, DecisionName, OutcomeId, Principal, Revision};
 
 /// The explicit decisions format the evaluator reads.
 pub const DECISIONS_FORMAT: &str = "canon-decisions/1";
@@ -43,11 +45,12 @@ pub struct ExplicitDecision {
     /// revision of the artifact, compared for equality. Absent or empty, it rests on no artifact.
     #[serde(default, deserialize_with = "super::present::defaulted")]
     pub ground_revisions: Declarations<ArtifactId, Revision>,
-    /// The evidence records the decision rested on, by id: a ground holds while a record with
-    /// that id is applicable, the rule of `missing_evidence` (given, left by the revision-binding
-    /// and freshness stages, and listed in no claim's `excluded_evidence`), so expiry and
-    /// invalidation reach the decision through it. An id no record has does not hold and is not
-    /// refused. Absent or empty, it rests on no record.
+    /// The evidence records the decision rested on, each by id or by id and digest
+    /// ([`EvidenceGround`]): a ground holds while a record with that id is applicable, the rule of
+    /// `missing_evidence` (given, left by the revision-binding and freshness stages, and listed in
+    /// no claim's `excluded_evidence`), so expiry and invalidation reach the decision through it,
+    /// and, when it gives a digest, while that record has the digest. An id no record has does not
+    /// hold and is not refused. Absent or empty, it rests on no record.
     #[serde(default, deserialize_with = "super::present::defaulted")]
-    pub ground_evidence: Vec<EvidenceId>,
+    pub ground_evidence: Vec<EvidenceGround>,
 }
