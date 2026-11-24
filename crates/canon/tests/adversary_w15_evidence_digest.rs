@@ -170,7 +170,9 @@ fn every_repository_record_has_the_documented_digest() {
         );
         let text = serde_yaml_ng::to_string(&value).expect("the record is written back");
         assert_eq!(
-            eval::digest_evidence(&text).expect("canon digest reads it").as_str(),
+            eval::digest_evidence(&text)
+                .expect("canon digest reads it")
+                .as_str(),
             expected,
             "{name}: canon digest"
         );
