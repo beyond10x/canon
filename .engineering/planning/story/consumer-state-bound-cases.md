@@ -9,7 +9,7 @@ tags:
 relations:
 - decomposes: epic:canon-kernel
 - serves: vision:governed-autonomy
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-24T08:42:53Z", actor: "human:owner", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-24T08:42:53Z", actor: "human:owner", revision: 3}
@@ -37,3 +37,9 @@ transitions:
 ## Source
 
 - Request: upstream ask A14 of the runbook consumer, relayed by the operator session, 2026-11-24.
+
+## Consumer measurement
+
+- A downstream consumer reported its measurement on Canon 0.15.0, the one `## Scope` waits for: `canon check` counts a slice of 307,773,440 states for one of its protocols, against the bound of 65,536 (`STATE_BOUND`), and refuses the check as `state-space-bound`.
+- That count is the product of the value counts of the slice's dimensions (`crates/canon/src/check/mod.rs`, § The bound), not the number of states the protocol can reach. The consumer's protocol has many value combinations and few reachable states, so the refusal says nothing about the states the check would actually visit.
+- The consumer's ask: the bound counts reachable states, or a case may declare its own bound, so that such a protocol is not refused. Raising `STATE_BOUND` stays out of scope.
