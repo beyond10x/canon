@@ -71,6 +71,19 @@ steps:
         { ... the exact canon-trigger-plan/1 bytes ... }
       # or, instead of `plan`:
       # refusal: duplicate-row            # the code of the refusal
+  - id: edited-key-republished
+    trigger-check-set:
+      rules:
+        - |
+          { ... a canon-trigger/1 document ... }
+      published: { ... a canon-trigger-index/1 document ... }
+      protocols: { ... a canon-trigger-protocols/1 document ... }
+    expect:
+      refusal: key-republished            # the code of every failure
+      rule: stale@1                       # optional: the rule key every failure names
+      # or, instead of `refusal` and `rule`:
+      # index: |
+      #   { ... the exact canon-trigger-index/1 bytes ... }
 ```
 
 - `fixture` is the `protocol/1` document the scenario compiles, as a path relative to the
@@ -90,11 +103,19 @@ steps:
   `fixture does not compile: <code>: <why>; …`. Absent, the fixture imports nothing.
 - `covers` entries are `CANON-` followed by an identifier, each listed once.
 - `steps` is an ordered, non-empty list. Each step is exactly one of `compile`, `evaluate`,
-  `trigger-validate`, `trigger-protocols` or `trigger-evaluate`, with exactly one expectation
-  of the matching kind: a compile step expects `canon-ir`, an evaluate step expects `decision`
-  or `refusal`, a trigger-validate step expects `rule` or `refused`, neither empty, a
-  trigger-protocols step expects `protocols` or `refusal`, and a trigger-evaluate step expects
-  `plan` or `refusal`.
+  `trigger-validate`, `trigger-protocols`, `trigger-evaluate` or `trigger-check-set`, with
+  exactly one expectation of the matching kind: a compile step expects `canon-ir`, an evaluate
+  step expects `decision` or `refusal`, a trigger-validate step expects `rule` or `refused`,
+  neither empty, a trigger-protocols step expects `protocols` or `refusal`, a trigger-evaluate
+  step expects `plan` or `refusal`, and a trigger-check-set step expects `index`, or `refusal`
+  with an optional `rule` that is not empty.
+- A trigger-check-set step (story:trigger-rule-publication) reads each of its `rules` as
+  `canon trigger check-set` reads a rule file, each named `rule <n>`, counted from 1, and its
+  `published` and `protocols` as the `--published` and `--protocols` files, and checks the set
+  (`trigger::check_set`); it does not read the fixture. It passes when the
+  `canon-trigger-index/1` text equals `index` byte for byte, or when the set, or a document it
+  reads, is refused and every failure has the code `refusal` and, when `rule` is given, names
+  that rule key. Otherwise `<what differed>` is `canon-trigger-index/1 differs from the expectation at line <n>`, `expected refusal `&lt;code&gt;`, the rule set gave canon-trigger-index/1`, `expected refusal `&lt;code&gt;`[ of rule `&lt;key&gt;`] alone, the rule set is refused: error[<code>]: <failure>; …`, or `the rule set is refused: error[<code>]: <failure>; …`, each failure written `<rule key>: <why>`, or `<why>` for one of the whole input.
 - A trigger-evaluate step (story:trigger-evaluate) reads each of its `rules` entries'
   `document` as `canon trigger validate` reads a file, with the entry's `state`, and its
   `snapshot`, `protocols` and `history` as `canon trigger evaluate` reads its files, and
@@ -222,7 +243,9 @@ printed on standard output. Then the registry runs as above, and these checks fo
    step runs three times the same way, the permuted run with its rules, the snapshot's kinds,
    each kind's rows, the protocols, and the history's firings, activations and approvals in
    reverse order (CANON-TRIGGER-008); its output is the canonical `canon-trigger-plan/1`
-   document or the refusal's code.
+   document or the refusal's code. Every trigger-check-set step runs three times too, the
+   permuted run with its rules in reverse order (CANON-TRIGGER-017); its output is the
+   canonical `canon-trigger-index/1` document or each failure's code and rule key.
 
 The check lines come after the registry's lines and before its summary, and a second summary
 line follows it:

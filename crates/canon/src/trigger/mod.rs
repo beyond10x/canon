@@ -185,8 +185,9 @@
 //! - `rule` is the rule key and `rule_state` the rule's state; `kind`, `row` and `protocol` are
 //!   the subject kind, the row id and `start.protocol`.
 //! - `input` holds each `start.input`: a `{field}` input is the row's value as read (null when an
-//!   optional field is absent), a `{const}` input its string. It is not checked against the
-//!   protocol.
+//!   optional field is absent), a `{const}` input its string. The value of an input the protocol
+//!   declares is checked against the input's values (`input-value-not-allowed` below); an input
+//!   the protocol does not declare is not checked here, but when the set is published.
 //! - `firing_id` is `<rule key>/<kind>:<row id>/<entered_at>` under `once_per_state_entry`, the
 //!   instant as the snapshot writes it, so a row that enters its state again gets a new one, and
 //!   `<rule key>/<kind>:<row id>` under `once_per_subject`. A row without `entered_at` under
@@ -198,7 +199,10 @@
 //!      rule's mode `auto` (`guarded-auto`); the rule's `access` is not the protocol's class
 //!      (`access-mismatch`); the `access` is `write`, the mode `auto` and the history holds no
 //!      approval of the rule key (`write-unapproved`); a row without `entered_at` under
-//!      `once_per_state_entry` (`entered-at-missing`).
+//!      `once_per_state_entry` (`entered-at-missing`); the value of an input the protocol
+//!      declares, the row's value of a `{field}` input or a `{const}` input's string, not among
+//!      the input's values (`input-value-not-allowed`): a value that is absent, null or not a
+//!      string is not among them.
 //!   2. `undetermined` (with its `reason`, and the `field` it names).
 //!   3. `baseline` when the latest activation of the rule key in the history is at or after the
 //!      row's `entered_at` (each instant read as the start of the interval it names) or an
@@ -228,13 +232,83 @@
 //! protocols and the history: a file that cannot be read exits 2, a document that does not read as
 //! its format is `malformed-input` naming the file, and a rule file that is not a valid rule
 //! prints its errors as `canon trigger validate` does, each line naming the file.
+//!
+//! # Publishing a rule set
+//!
+//! A published rule is immutable: a change is a new version (story:trigger-rule-publication,
+//! `docs/design/trigger-rules.md` § 7). [`check_set`] checks a set of rules before it is
+//! published, against the index of the rule keys already published and the protocols; `canon
+//! trigger check-set --path <rule file> ... --published <index> --protocols <file>` reads the
+//! files and prints its result. Canon stores nothing: the index is the caller's, who adds the
+//! set's own index to it once the set is published.
+//!
+//! The digest of a rule ([`digest`], `canon trigger digest --path <rule file>`) is `sha256:` and
+//! the SHA-256, in lowercase hexadecimal, of the rule's canonical form ([`canonical_form`]): the
+//! JSON Canonicalization Scheme (RFC 8785) of one object holding every field of the rule as read,
+//! `version` and `cap` as decimal integers, `where` left out when the rule has none,
+//! `subject.fields` as a list of `{name, optional, type}` in declaration order (the order decides
+//! which field an undetermined row names), `optional` written `false` and `start.input` written
+//! `{}` when the document leaves them out. So the layout, the key order, the comments and a field
+//! written with its default value change nothing, and every other change of the rule changes the
+//! digest. Only a valid rule has one.
+//!
+//! The index, `canon-trigger-index/1`, maps each published rule key to the digest of its
+//! document:
+//!
+//! ```yaml
+//! format: canon-trigger-index/1
+//! rules:
+//!   stale@1: sha256:2785572303ce15cfe7a3c5f58c846746fc1466b4c78b3980edde1944335c62af
+//! ```
+//!
+//! The rules are grouped by rule key. A key that two or more documents of the set share fails
+//! `duplicate-key`, naming each document, and is not checked further. Each other rule is checked
+//! in this order, every failure reported:
+//!
+//! 1. `key-republished`: the index holds its key with another digest. The same document, or the
+//!    same rule written another way, against the index that holds it passes; two versions of one
+//!    rule id are two keys.
+//! 2. `unknown-protocol`: its protocol is not in the protocols; nothing below is checked.
+//! 3. `guarded-auto`: the protocol is guarded and the rule's mode is `auto`, which
+//!    [`evaluate`] would refuse at every match.
+//! 4. `unknown-input`: a `start.input` name the protocol does not declare, each in input-id order.
+//! 5. `missing-input`: a case input of the protocol that `start.input` does not map, each in
+//!    input-id order; every case input is required when a case opens.
+//! 6. `input-value-not-allowed`: a mapped input whose `{const}` is not among the input's values,
+//!    or whose `{field}` is not a declared `string` field, each in input-id order. A `{field}`
+//!    input of a `string` field passes here; its row value is checked by [`evaluate`].
+//!
+//! A set without a failure passes, and the output is its own `canon-trigger-index/1` index
+//! ([`render_index`]), each rule key with its digest, in key order:
+//!
+//! ```json
+//! {
+//!   "format": "canon-trigger-index/1",
+//!   "rules": {
+//!     "stale@1": "sha256:2785572303ce15cfe7a3c5f58c846746fc1466b4c78b3980edde1944335c62af"
+//!   }
+//! }
+//! ```
+//!
+//! Otherwise each failure is one line `error[<code>]: <rule key>: <why>`, exit 1, in rule-key
+//! order and within a key in the order above. The order of the rules changes no byte of either.
+//! Refused as a whole, one line `error[<code>]: <why>`, the first in this order deciding: an index
+//! or protocols document of another format (`malformed-input`), a rule key listed twice in the
+//! index (`malformed-input`), a protocol id listed twice in the protocols
+//! (`duplicate-protocol-id`). `canon trigger check-set` reads each rule file in sorted order of its
+//! path, a path that resolves to a file already read being that file once, then the index and the
+//! protocols: a file that cannot be read exits 2, a rule file that is not a valid rule prints its
+//! errors as `canon trigger validate` does, each line naming the file, and an index or protocols
+//! document that does not read as its format is `malformed-input` naming the file.
 
 mod evaluate;
+mod publication;
 
 pub use evaluate::{
     Refusal, RuleEntry, evaluate, read_history, read_protocols, read_set, read_snapshot,
     render_plan,
 };
+pub use publication::{Failure, canonical_form, check_set, digest, read_index, render_index};
 
 use std::collections::BTreeMap;
 use std::fmt;

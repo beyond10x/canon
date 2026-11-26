@@ -62,6 +62,19 @@
 //!         { ... the exact canon-trigger-plan/1 bytes ... }
 //!       # or, instead of `plan`:
 //!       # refusal: duplicate-row            # the code of the refusal
+//!   - id: edited-key-republished
+//!     trigger-check-set:
+//!       rules:
+//!         - |
+//!           { ... a canon-trigger/1 document ... }
+//!       published: { ... a canon-trigger-index/1 document ... }
+//!       protocols: { ... a canon-trigger-protocols/1 document ... }
+//!     expect:
+//!       refusal: key-republished            # the code of every failure
+//!       rule: stale@1                       # optional: the rule key every failure names
+//!       # or, instead of `refusal` and `rule`:
+//!       # index: |
+//!       #   { ... the exact canon-trigger-index/1 bytes ... }
 //! ```
 //!
 //! - `fixture` is the `protocol/1` document the scenario compiles, as a path relative to the
@@ -83,11 +96,23 @@
 //!   `fixture does not compile: <code>: <why>; …`. Absent, the fixture imports nothing.
 //! - `covers` entries are `CANON-` followed by an identifier, each listed once.
 //! - `steps` is an ordered, non-empty list. Each step is exactly one of `compile`, `evaluate`,
-//!   `trigger-validate`, `trigger-protocols` or `trigger-evaluate`, with exactly one expectation
-//!   of the matching kind: a compile step expects `canon-ir`, an evaluate step expects `decision`
-//!   or `refusal`, a trigger-validate step expects `rule` or `refused`, neither empty, a
-//!   trigger-protocols step expects `protocols` or `refusal`, and a trigger-evaluate step expects
-//!   `plan` or `refusal`.
+//!   `trigger-validate`, `trigger-protocols`, `trigger-evaluate` or `trigger-check-set`, with
+//!   exactly one expectation of the matching kind: a compile step expects `canon-ir`, an evaluate
+//!   step expects `decision` or `refusal`, a trigger-validate step expects `rule` or `refused`,
+//!   neither empty, a trigger-protocols step expects `protocols` or `refusal`, a trigger-evaluate
+//!   step expects `plan` or `refusal`, and a trigger-check-set step expects `index`, or `refusal`
+//!   with an optional `rule` that is not empty.
+//! - A trigger-check-set step (story:trigger-rule-publication) reads each of its `rules` as
+//!   `canon trigger check-set` reads a rule file, each named `rule <n>`, counted from 1, and its
+//!   `published` and `protocols` as the `--published` and `--protocols` files, and checks the set
+//!   (`trigger::check_set`); it does not read the fixture. It passes when the
+//!   `canon-trigger-index/1` text equals `index` byte for byte, or when the set, or a document it
+//!   reads, is refused and every failure has the code `refusal` and, when `rule` is given, names
+//!   that rule key. Otherwise `<what differed>` is `canon-trigger-index/1 differs from the
+//!   expectation at line <n>`, `expected refusal `<code>`, the rule set gave
+//!   canon-trigger-index/1`, `expected refusal `<code>`[ of rule `<key>`] alone, the rule set is
+//!   refused: error[<code>]: <failure>; …`, or `the rule set is refused: error[<code>]: <failure>;
+//!   …`, each failure written `<rule key>: <why>`, or `<why>` for one of the whole input.
 //! - A trigger-evaluate step (story:trigger-evaluate) reads each of its `rules` entries'
 //!   `document` as `canon trigger validate` reads a file, with the entry's `state`, and its
 //!   `snapshot`, `protocols` and `history` as `canon trigger evaluate` reads its files, and
@@ -231,7 +256,9 @@
 //!    step runs three times the same way, the permuted run with its rules, the snapshot's kinds,
 //!    each kind's rows, the protocols, and the history's firings, activations and approvals in
 //!    reverse order (CANON-TRIGGER-008); its output is the canonical `canon-trigger-plan/1`
-//!    document or the refusal's code.
+//!    document or the refusal's code. Every trigger-check-set step runs three times too, the
+//!    permuted run with its rules in reverse order (CANON-TRIGGER-017); its output is the
+//!    canonical `canon-trigger-index/1` document or each failure's code and rule key.
 //!
 //! The check lines come after the registry's lines and before its summary, and a second summary
 //! line follows it:
@@ -307,6 +334,31 @@ pub enum StepKind {
         inputs: TriggerEvaluateInputs,
         expected: PlanExpectation,
     },
+    /// Check a rule set as `canon trigger check-set` does; the fixture is not read
+    /// (story:trigger-rule-publication).
+    TriggerCheckSet {
+        inputs: TriggerCheckSetInputs,
+        expected: IndexExpectation,
+    },
+}
+
+/// The inputs of a trigger-check-set step: each rule's `canon-trigger/1` text, and the published
+/// index and the protocols as YAML values, read as `canon trigger check-set` reads its files.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TriggerCheckSetInputs {
+    pub rules: Vec<String>,
+    pub published: serde_yaml_ng::Value,
+    pub protocols: serde_yaml_ng::Value,
+}
+
+/// What a trigger-check-set step expects.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IndexExpectation {
+    /// The exact `canon-trigger-index/1` bytes of a set that passes.
+    Index(String),
+    /// The set, or a document it reads, is refused: every failure has this code and, when `rule`
+    /// is given, names this rule key.
+    Refusal { code: String, rule: Option<String> },
 }
 
 /// The inputs of a trigger-evaluate step: each rule's state and `canon-trigger/1` text, and the
@@ -435,6 +487,8 @@ struct RawStep {
     trigger_protocols: Option<RawTriggerProtocols>,
     #[serde(rename = "trigger-evaluate", default, deserialize_with = "optional")]
     trigger_evaluate: Option<RawTriggerEvaluate>,
+    #[serde(rename = "trigger-check-set", default, deserialize_with = "optional")]
+    trigger_check_set: Option<RawTriggerCheckSet>,
     #[serde(deserialize_with = "required")]
     expect: RawExpect,
 }
@@ -452,6 +506,17 @@ struct RawTriggerEvaluate {
     history: serde_yaml_ng::Value,
     #[serde(deserialize_with = "required")]
     now: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawTriggerCheckSet {
+    #[serde(deserialize_with = "required")]
+    rules: Vec<String>,
+    #[serde(deserialize_with = "required")]
+    published: serde_yaml_ng::Value,
+    #[serde(deserialize_with = "required")]
+    protocols: serde_yaml_ng::Value,
 }
 
 #[derive(Deserialize)]
@@ -513,6 +578,8 @@ struct RawExpect {
     protocols: Option<String>,
     #[serde(default, deserialize_with = "optional")]
     plan: Option<String>,
+    #[serde(default, deserialize_with = "optional")]
+    index: Option<String>,
 }
 
 /// Parses `canon-conformance/1` scenario text.
@@ -631,9 +698,60 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
         trigger_validate,
         trigger_protocols,
         trigger_evaluate,
+        trigger_check_set,
         expect,
         id: _,
     } = step;
+    if let Some(inputs) = trigger_check_set {
+        let alone = compile.is_none()
+            && evaluate.is_none()
+            && trigger_validate.is_none()
+            && trigger_protocols.is_none()
+            && trigger_evaluate.is_none();
+        let expected = match expect {
+            RawExpect {
+                canon_ir: None,
+                decision: None,
+                refusal: None,
+                rule: None,
+                refused: None,
+                protocols: None,
+                plan: None,
+                index: Some(index),
+            } => IndexExpectation::Index(index),
+            RawExpect {
+                canon_ir: None,
+                decision: None,
+                refusal: Some(code),
+                rule,
+                refused: None,
+                protocols: None,
+                plan: None,
+                index: None,
+            } if model::is_identifier(&code)
+                && rule.as_deref().is_none_or(|rule| !rule.is_empty()) =>
+            {
+                IndexExpectation::Refusal { code, rule }
+            }
+            _ if !alone => return refuse(exactly_one(&id)),
+            _ => {
+                return refuse(format!(
+                    "trigger-check-set step `{id}` must expect exactly one of `index` or `refusal` (an identifier, with an optional `rule`)"
+                ));
+            }
+        };
+        if !alone {
+            return refuse(exactly_one(&id));
+        }
+        return Ok(StepKind::TriggerCheckSet {
+            inputs: TriggerCheckSetInputs {
+                rules: inputs.rules,
+                published: inputs.published,
+                protocols: inputs.protocols,
+            },
+            expected,
+        });
+    }
     if let Some(inputs) = trigger_evaluate {
         let alone = compile.is_none()
             && evaluate.is_none()
@@ -648,6 +766,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                 refused: None,
                 protocols: None,
                 plan: Some(plan),
+                index: None,
             } => PlanExpectation::Plan(plan),
             RawExpect {
                 canon_ir: None,
@@ -657,6 +776,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                 refused: None,
                 protocols: None,
                 plan: None,
+                index: None,
             } if model::is_identifier(&refusal) => PlanExpectation::Refusal(refusal),
             _ if !alone => return refuse(exactly_one(&id)),
             _ => {
@@ -703,6 +823,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                 refused: None,
                 protocols: None,
                 plan: None,
+                index: None,
             },
         ) => Ok(StepKind::Compile { expected_ir }),
         (Some(_), None, None, None, _) => refuse(format!(
@@ -718,6 +839,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                     refused: None,
                     protocols: None,
                     plan: None,
+                    index: None,
                 } => EvaluateExpectation::Decision(decision),
                 RawExpect {
                     canon_ir: None,
@@ -727,6 +849,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                     refused: None,
                     protocols: None,
                     plan: None,
+                    index: None,
                 } if model::is_identifier(&refusal) => EvaluateExpectation::Refusal(refusal),
                 _ => {
                     return refuse(format!(
@@ -755,6 +878,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                     refused: None,
                     protocols: None,
                     plan: None,
+                    index: None,
                 } if !rule.is_empty() => TriggerExpectation::Rule(rule),
                 RawExpect {
                     canon_ir: None,
@@ -764,6 +888,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                     refused: Some(field),
                     protocols: None,
                     plan: None,
+                    index: None,
                 } if !field.is_empty() => TriggerExpectation::Refused(field),
                 _ => {
                     return refuse(format!(
@@ -786,6 +911,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                     refused: None,
                     protocols: Some(expected),
                     plan: None,
+                    index: None,
                 } => ProtocolsExpectation::Protocols(expected),
                 RawExpect {
                     canon_ir: None,
@@ -795,6 +921,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                     refused: None,
                     protocols: None,
                     plan: None,
+                    index: None,
                 } if model::is_identifier(&refusal) => ProtocolsExpectation::Refusal(refusal),
                 _ => {
                     return refuse(format!(
@@ -817,7 +944,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
 /// Why a step with none, or more than one, of the step kinds does not parse.
 fn exactly_one(id: &str) -> String {
     format!(
-        "step `{id}` must be exactly one of `compile`, `evaluate`, `trigger-validate`, `trigger-protocols` or `trigger-evaluate`"
+        "step `{id}` must be exactly one of `compile`, `evaluate`, `trigger-validate`, `trigger-protocols`, `trigger-evaluate` or `trigger-check-set`"
     )
 }
 
@@ -863,6 +990,7 @@ fn run_compiled(scenario: &Scenario, compiled: &Result<ir::Ir, String>) -> Verdi
                 expected,
             } => protocols_step(documents, expected),
             StepKind::TriggerEvaluate { inputs, expected } => plan_step(inputs, expected),
+            StepKind::TriggerCheckSet { inputs, expected } => check_set_step(inputs, expected),
         };
         if let Some(reason) = failure {
             return Verdict::Failed {
@@ -1141,6 +1269,106 @@ pub(crate) fn trigger_plan(
     )
     .map(|plan| trigger::render_plan(&plan))
     .map_err(one)
+}
+
+/// Checks a trigger-check-set step's rule set as `canon trigger check-set` does and compares the
+/// `canon-trigger-index/1` bytes or the refusal with the expectation (see the module docs).
+fn check_set_step(inputs: &TriggerCheckSetInputs, expected: &IndexExpectation) -> Option<String> {
+    let refused = |failures: &[trigger::Failure]| {
+        failures
+            .iter()
+            .map(|failure| format!("error[{}]: {failure}", failure.code))
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    match (trigger_check_set(inputs, false), expected) {
+        (Ok(printed), IndexExpectation::Index(expected)) => first_difference(&printed, expected)
+            .map(|line| {
+                format!("canon-trigger-index/1 differs from the expectation at line {line}")
+            }),
+        (Ok(_), IndexExpectation::Refusal { code, .. }) => Some(format!(
+            "expected refusal `{}`, the rule set gave canon-trigger-index/1",
+            model::one_line(code)
+        )),
+        (Err(failures), IndexExpectation::Refusal { code, rule })
+            if failures.iter().all(|failure| {
+                failure.code == code
+                    && rule
+                        .as_ref()
+                        .is_none_or(|rule| failure.rule.as_ref() == Some(rule))
+            }) =>
+        {
+            None
+        }
+        (Err(failures), IndexExpectation::Refusal { code, rule }) => Some(format!(
+            "expected refusal `{}`{} alone, the rule set is refused: {}",
+            model::one_line(code),
+            rule.as_ref().map_or(String::new(), |rule| format!(
+                " of rule `{}`",
+                model::one_line(rule)
+            )),
+            refused(&failures)
+        )),
+        (Err(failures), IndexExpectation::Index(_)) => {
+            Some(format!("the rule set is refused: {}", refused(&failures)))
+        }
+    }
+}
+
+/// The `canon-trigger-index/1` text of a trigger-check-set step, or every failure: each error of
+/// the first rule document that is not a valid rule, named `rule <n>`, counted from 1, the refusal
+/// of the index or the protocols, or the failures of the set, each document named `rule <n>`.
+/// `permuted` reverses the rules before checking.
+pub(crate) fn trigger_check_set(
+    inputs: &TriggerCheckSetInputs,
+    permuted: bool,
+) -> Result<String, Vec<trigger::Failure>> {
+    let whole = |code: &'static str, message: String| trigger::Failure {
+        code,
+        rule: None,
+        message,
+    };
+    let mut rules = Vec::with_capacity(inputs.rules.len());
+    for (at, document) in inputs.rules.iter().enumerate() {
+        let name = format!("rule {}", at + 1);
+        match trigger::read(document) {
+            Ok(rule) => rules.push((name, rule)),
+            Err(problems) => {
+                return Err(problems
+                    .iter()
+                    .map(|problem| whole(problem.code, format!("{name}: {problem}")))
+                    .collect());
+            }
+        }
+    }
+    let text = |what: &str, value: &serde_yaml_ng::Value| {
+        serde_yaml_ng::to_string(value).map_err(|error| {
+            vec![whole(
+                "malformed-input",
+                format!(
+                    "{what} cannot be serialized: {}",
+                    model::one_line(&error.to_string())
+                ),
+            )]
+        })
+    };
+    fn one(what: &'static str) -> impl Fn(trigger::Refusal) -> Vec<trigger::Failure> {
+        move |refusal| {
+            vec![trigger::Failure {
+                code: refusal.code,
+                rule: None,
+                message: format!("{what}: {refusal}"),
+            }]
+        }
+    }
+    let published =
+        trigger::read_index(&text("published", &inputs.published)?).map_err(one("published"))?;
+    let protocols = trigger::read_protocols(&text("protocols", &inputs.protocols)?)
+        .map_err(one("protocols"))?;
+    if permuted {
+        rules.reverse();
+    }
+    trigger::check_set(&rules, &published, &protocols).map(|index| trigger::render_index(&index))
 }
 
 fn compile_step(compiled: &Result<ir::Ir, String>, expected_ir: &str) -> Option<String> {
@@ -1719,6 +1947,90 @@ mod tests {
         run(&parse(&source).expect("parses"), Ok(PROTOCOL))
     }
 
+    fn check_set_verdict(published: &str, expect: &str) -> Verdict {
+        let rule: String = RULE.lines().map(|line| format!("  {line}\n")).collect();
+        let source = format!(
+            "{HEAD}steps:\n  - id: t\n    trigger-check-set:\n      rules:\n        - |\n{rule}      \
+             published: {{format: canon-trigger-index/1, rules: {{{published}}}}}\n      \
+             protocols: {{format: canon-trigger-protocols/1, protocols: {{p: {{class: write, \
+             guarded: false, inputs: {{}}}}}}}}\n    expect: {{{expect}}}\n"
+        );
+        run(&parse(&source).expect("parses"), Ok(PROTOCOL))
+    }
+
+    /// story:trigger-rule-publication: a trigger-check-set step compares the index, or the code
+    /// and the rule key of every failure.
+    #[test]
+    fn a_trigger_check_set_step_compares_the_index_or_each_failure() {
+        let rule = trigger::read(
+            &RULE
+                .lines()
+                .map(|line| format!("{}\n", line.trim_start_matches("      ")))
+                .collect::<String>(),
+        )
+        .expect("valid");
+        let digest = trigger::digest(&rule);
+        let index = format!(
+            "{{\\n  \\\"format\\\": \\\"canon-trigger-index/1\\\",\\n  \\\"rules\\\": {{\\n    \
+             \\\"r@3\\\": \\\"{digest}\\\"\\n  }}\\n}}\\n"
+        );
+        assert_eq!(
+            check_set_verdict("", &format!("index: \"{index}\"")),
+            Verdict::Passed
+        );
+        assert_eq!(
+            check_set_verdict(&format!("r@3: '{digest}'"), &format!("index: \"{index}\"")),
+            Verdict::Passed
+        );
+        assert_eq!(
+            check_set_verdict("r@3: sha256:x", "refusal: key-republished, rule: r@3"),
+            Verdict::Passed
+        );
+        assert_eq!(
+            check_set_verdict("r@3: sha256:x", "refusal: key-republished"),
+            Verdict::Passed
+        );
+        let Verdict::Failed { reason, .. } =
+            check_set_verdict("r@3: sha256:x", "refusal: key-republished, rule: q@1")
+        else {
+            panic!("a failure of another rule key passed");
+        };
+        assert!(
+            reason.starts_with(
+                "expected refusal `key-republished` of rule `q@1` alone, the rule set is refused: \
+                 error[key-republished]: r@3: the key is published with sha256:x, this document \
+                 has sha256:"
+            ),
+            "{reason}"
+        );
+        assert_eq!(
+            check_set_verdict("", "refusal: key-republished"),
+            Verdict::Failed {
+                step: "t".to_owned(),
+                reason: "expected refusal `key-republished`, the rule set gave \
+                         canon-trigger-index/1"
+                    .to_owned(),
+            }
+        );
+        for expect in [
+            "index: x, refusal: r",
+            "refusal: r, rule: ''",
+            "plan: x",
+            "rule: r@3",
+        ] {
+            let source = format!(
+                "{HEAD}steps:\n  - id: t\n    trigger-check-set: {{rules: [], published: {{}}, \
+                 protocols: {{}}}}\n    expect: {{{expect}}}\n"
+            );
+            assert!(
+                refusal(&source)
+                    .starts_with("trigger-check-set step `t` must expect exactly one of"),
+                "{expect}: {}",
+                refusal(&source)
+            );
+        }
+    }
+
     #[test]
     fn a_trigger_validate_step_compares_the_rule_key_or_the_refused_field() {
         let failed = |reason: &str| Verdict::Failed {
@@ -1827,13 +2139,13 @@ mod tests {
             ),
             (
                 format!("{HEAD}steps:\n  - id: c\n    expect: {{canon-ir: x}}\n"),
-                "step `c` must be exactly one of `compile`, `evaluate`, `trigger-validate`, `trigger-protocols` or `trigger-evaluate`",
+                "step `c` must be exactly one of `compile`, `evaluate`, `trigger-validate`, `trigger-protocols`, `trigger-evaluate` or `trigger-check-set`",
             ),
             (
                 format!(
                     "{HEAD}steps:\n  - id: c\n    compile: {{}}\n    evaluate: {{case: {{}}, evidence: []}}\n    expect: {{canon-ir: x}}\n"
                 ),
-                "step `c` must be exactly one of `compile`, `evaluate`, `trigger-validate`, `trigger-protocols` or `trigger-evaluate`",
+                "step `c` must be exactly one of `compile`, `evaluate`, `trigger-validate`, `trigger-protocols`, `trigger-evaluate` or `trigger-check-set`",
             ),
             (
                 format!(
@@ -1899,7 +2211,7 @@ mod tests {
                 format!(
                     "{HEAD}steps:\n  - id: t\n    compile: {{}}\n    trigger-validate: {{document: x}}\n    expect: {{canon-ir: x}}\n"
                 ),
-                "step `t` must be exactly one of `compile`, `evaluate`, `trigger-validate`, `trigger-protocols` or `trigger-evaluate`",
+                "step `t` must be exactly one of `compile`, `evaluate`, `trigger-validate`, `trigger-protocols`, `trigger-evaluate` or `trigger-check-set`",
             ),
             (
                 format!(

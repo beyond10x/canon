@@ -254,6 +254,41 @@ when a document reuses a published key with a different digest (acceptance 2), w
 does not declare, and when two documents in the set share a key. The index is the caller's; Canon
 stores nothing.
 
+**As built** (story:trigger-rule-publication), where it is more precise than the text above:
+
+- The command is `canon trigger check-set --path <rule file> ... --published <index> --protocols
+  <file>`: `--path` once per rule file, `--protocols` a `canon-trigger-protocols/1` document as
+  `canon trigger evaluate` reads it. A set that passes prints its own `canon-trigger-index/1`
+  index; the caller adds it to its index once the set is published.
+- The index, `canon-trigger-index/1`, is `{format, rules}`, `rules` mapping each rule key to the
+  digest of its document. The digest, `canon trigger digest --path <rule file>`, is `sha256:` and
+  the lowercase hexadecimal SHA-256 of the RFC 8785 JSON of the rule's canonical form: every field
+  as read, `version` and `cap` as decimal integers, `where` left out when the rule has none,
+  `subject.fields` as a list of `{name, optional, type}` in declaration order (the order decides
+  which field an undetermined row names), `optional` written `false` and `start.input` written
+  `{}` when the document leaves them out. The layout, the key order, comments and a default written
+  out change no digest; every other change of the rule does.
+- Each failure is one line `error[<code>]: <rule key>: <why>`, in rule-key order. A key two
+  documents of the set share fails `duplicate-key` and is not checked further. Each other rule is
+  checked in this order, every failure reported: `key-republished`; `unknown-protocol`, after
+  which nothing else is checked; `guarded-auto`; `unknown-input`; `missing-input`, since every
+  case input of `protocol/1` is required when a case opens (`canon evaluate` refuses a case
+  without one, `missing-input`); `input-value-not-allowed`.
+- Case inputs take their values from a closed list (`CaseInput.values`). A `{const}` input whose
+  value is not among them fails publication, `input-value-not-allowed`. A `{field}` input is
+  allowed only for a declared `string` field (another type fails publication the same way), and
+  its row value is checked at evaluation: `evaluate` refuses the entry, reason
+  `input-value-not-allowed`, last in the refusal order after `entered-at-missing`, when the value
+  of an input the protocol declares, a row value or a constant, is absent, null, not a string or
+  not among the input's values. An input the protocol does not declare is checked at publication
+  only.
+- `access-mismatch` is not a publication failure; `evaluate` refuses it at every match.
+- The set is refused as a whole, one line `error[<code>]: <why>`: an index or protocols document of
+  another format, or a rule key the index lists twice (`malformed-input`), a protocol id the
+  protocols list twice (`duplicate-protocol-id`).
+- Open: a protocol that needs an entity id has no way to take one. A case input takes one value of
+  a closed list, so a row's id, an open value, cannot reach the case a rule opens. Not built.
+
 ## 8. ESS and conformance
 
 A new ESS domain `canon.trigger` declares the four documents; the `canon trigger` subcommands are

@@ -327,3 +327,8 @@ items:
     story: story:trigger-holds-and-refusals
     detail: "canon trigger evaluate refuses what the rule set does not allow, the first reason that applies: a disabled rule, a protocol not in the protocols (unknown-protocol), a guarded protocol in auto (guarded-auto), an access other than the protocol's class (access-mismatch), a write rule in auto without an approval of its exact rule key in the history (write-unapproved). It holds a match whose firing id the history records (already-fired), and one whose rule has reached its cap of firings on the UTC day of --now, counted from the history and then from the plan's earlier would-start entries (cap-reached). Requirements CANON-TRIGGER-012 to 015."
     href: /docs/reference/trigger-rules#evaluating-a-rule-set
+  - label: Trigger rule publication
+    area: Analysis
+    story: story:trigger-rule-publication
+    detail: "canon trigger check-set --path <rule> ... --published <index> --protocols <file> checks a rule set before it is published and prints its canon-trigger-index/1 index, each rule key with its digest (canon trigger digest --path: sha256 of the RFC 8785 JSON of the rule's canonical form). It fails naming the rule key: key-republished (the index holds the key with another digest; a published rule is immutable), duplicate-key, unknown-protocol, guarded-auto, unknown-input, missing-input and input-value-not-allowed (a constant outside the input's values, or a field that is not a declared string). canon trigger evaluate refuses a row whose mapped value is not among the input's values (input-value-not-allowed). Requirements CANON-TRIGGER-016 to 021."
+    href: /docs/reference/trigger-rules#publishing-a-rule-set

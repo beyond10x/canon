@@ -976,3 +976,372 @@ fn a_protocol_listed_twice_is_refused() {
         )
     );
 }
+
+// story:trigger-rule-publication: the digest of a rule, the check of a rule set before it is
+// published, and the input values an evaluation checks.
+
+/// A rule `<id>@<version>` over `invoice` rows with the declared `fields`, starting `protocol`
+/// with `input` (flow mappings), in `mode`.
+fn published_rule(key: &str, fields: &str, protocol: &str, input: &str, mode: &str) -> String {
+    let (id, version) = key.split_once('@').expect("a rule key");
+    format!(
+        "format: canon-trigger/1\nid: {id}\nversion: {version}\nowner: o\nsubject: {{kind: invoice, \
+         state: {{field: status, is: overdue}}, fields: {{status: {{type: string}}{fields}}}}}\n\
+         start: {{protocol: {protocol}, input: {{{input}}}}}\nmode: {mode}\naccess: write\n\
+         refire: once_per_subject\ncap: 5\n"
+    )
+}
+
+/// `send` writes and takes `channel` (email, letter) and `tone` (calm); `guarded` writes, is
+/// guarded and takes nothing.
+fn publication_protocols() -> model::TriggerProtocols {
+    read_protocols(
+        "{format: canon-trigger-protocols/1, protocols: {send: {class: write, guarded: false, \
+         inputs: {channel: [email, letter], tone: [calm]}}, guarded: {class: write, guarded: true, \
+         inputs: {}}}}",
+    )
+    .expect("protocols read")
+}
+
+fn index(entries: &str) -> model::TriggerIndex {
+    read_index(&format!(
+        "{{format: canon-trigger-index/1, rules: {{{entries}}}}}"
+    ))
+    .expect("index reads")
+}
+
+/// Each source is named `<n>` by its position, counted from 1.
+fn named_rules(sources: &[String]) -> Vec<(String, TriggerRule)> {
+    sources
+        .iter()
+        .enumerate()
+        .map(|(at, source)| ((at + 1).to_string(), read(source).expect("valid rule")))
+        .collect()
+}
+
+/// The `(code, rule key)` of each failure, in order.
+fn failures(
+    sources: &[String],
+    published: &model::TriggerIndex,
+) -> Vec<(&'static str, Option<String>)> {
+    match check_set(&named_rules(sources), published, &publication_protocols()) {
+        Ok(index) => panic!("passed: {}", render_index(&index)),
+        Err(failures) => failures
+            .into_iter()
+            .map(|failure| (failure.code, failure.rule))
+            .collect(),
+    }
+}
+
+const MAPPED: &str = "channel: {const: email}, tone: {const: calm}";
+
+/// The canonical form is the RFC 8785 JSON of every field of the rule: keys sorted, no
+/// whitespace, the declared fields a list in declaration order, `optional` and `input` written
+/// when left out, `where` only when the rule has one.
+#[test]
+fn the_canonical_form_of_a_rule_is_its_rfc_8785_json() {
+    let rule = read(&published_rule(
+        "r@3",
+        ", amount: {type: decimal, optional: true}",
+        "send",
+        MAPPED,
+        "offer",
+    ))
+    .expect("valid");
+    assert_eq!(
+        canonical_form(&rule),
+        "{\"access\":\"write\",\"cap\":5,\"format\":\"canon-trigger/1\",\"id\":\"r\",\
+         \"mode\":\"offer\",\"owner\":\"o\",\"refire\":\"once_per_subject\",\"start\":{\
+         \"input\":{\"channel\":{\"const\":\"email\"},\"tone\":{\"const\":\"calm\"}},\
+         \"protocol\":\"send\"},\"subject\":{\"fields\":[{\"name\":\"status\",\
+         \"optional\":false,\"type\":\"string\"},{\"name\":\"amount\",\"optional\":true,\
+         \"type\":\"decimal\"}],\"kind\":\"invoice\",\"state\":{\"field\":\"status\",\
+         \"is\":\"overdue\"}},\"version\":3}"
+    );
+    let with_where = read(
+        &published_rule("r@3", "", "send", MAPPED, "offer")
+            .replace("mode: offer", "where: '$row.status == \"x\"'\nmode: offer"),
+    )
+    .expect("valid");
+    assert!(
+        canonical_form(&with_where)
+            .ends_with(",\"version\":3,\"where\":\"$row.status == \\\"x\\\"\"}"),
+        "{}",
+        canonical_form(&with_where)
+    );
+}
+
+/// The layout, the key order, comments and defaults written out change no digest; a change of any
+/// field, the order of the declared fields included, changes it (CANON-TRIGGER-016).
+#[test]
+fn the_digest_changes_with_the_rule_and_not_with_its_text() {
+    let base = published_rule("r@1", ", amount: {type: decimal}", "send", MAPPED, "offer");
+    let digest_of = |source: &str| digest(&read(source).expect(source));
+    let original = digest_of(&base);
+    assert!(
+        original.starts_with("sha256:") && original.len() == 7 + 64,
+        "{original}"
+    );
+    let same = [
+        format!("# a comment\n{base}"),
+        base.replace(
+            "amount: {type: decimal}",
+            "amount: {optional: false, type: decimal}",
+        ),
+        base.replace("cap: 5\n", "cap: 5 # five\n")
+            .replace("owner: o\n", "")
+            .replace(
+                "format: canon-trigger/1\n",
+                "format: canon-trigger/1\nowner: \"o\"\n",
+            ),
+    ];
+    for source in &same {
+        assert_eq!(digest_of(source), original, "{source}");
+    }
+    let no_input = published_rule("r@1", "", "send", "", "offer");
+    assert_eq!(
+        digest_of(&no_input),
+        digest_of(&no_input.replace(", input: {}", "")),
+        "an absent start.input is {{}}"
+    );
+    let changed = [
+        base.replace("version: 1", "version: 2"),
+        base.replace("owner: o", "owner: p"),
+        base.replace("cap: 5", "cap: 6"),
+        base.replace("mode: offer", "mode: auto"),
+        base.replace("access: write", "access: read_only"),
+        base.replace("once_per_subject", "once_per_state_entry"),
+        base.replace("kind: invoice", "kind: bill"),
+        base.replace("is: overdue", "is: late"),
+        base.replace("type: decimal", "type: integer"),
+        base.replace(
+            "amount: {type: decimal}",
+            "amount: {type: decimal, optional: true}",
+        ),
+        base.replace(
+            "{status: {type: string}, amount: {type: decimal}}",
+            "{amount: {type: decimal}, status: {type: string}}",
+        ),
+        base.replace("protocol: send", "protocol: other"),
+        base.replace("const: email", "const: letter"),
+        base.replace("{const: email}", "{field: status}"),
+        base.replace("mode: offer", "where: 'true'\nmode: offer"),
+    ];
+    let mut seen = std::collections::BTreeSet::from([original.clone()]);
+    for source in &changed {
+        assert!(seen.insert(digest_of(source)), "unchanged digest: {source}");
+    }
+}
+
+/// Two versions of one id pass; the set's index lists each with its digest, in key order,
+/// whatever the order of the set; the index holding a key with its own digest passes.
+#[test]
+fn a_set_that_passes_gives_its_own_index_in_any_order() {
+    let one = published_rule("stale@1", "", "send", MAPPED, "offer");
+    let two = published_rule("stale@2", "", "send", MAPPED, "auto");
+    let digests = |source: &String| digest(&read(source).expect("valid"));
+    let expected = format!(
+        "{{\n  \"format\": \"canon-trigger-index/1\",\n  \"rules\": {{\n    \"stale@1\": \"{}\",\n    \
+         \"stale@2\": \"{}\"\n  }}\n}}\n",
+        digests(&one),
+        digests(&two)
+    );
+    let published = index(&format!("stale@1: '{}'", digests(&one)));
+    for set in [[one.clone(), two.clone()], [two.clone(), one.clone()]] {
+        let checked =
+            check_set(&named_rules(&set), &published, &publication_protocols()).expect("passes");
+        assert_eq!(render_index(&checked), expected);
+    }
+}
+
+/// Every failure is reported, in rule-key order and within a key in the order of the checks, each
+/// naming its key; a key two documents share is `duplicate-key` and nothing else
+/// (CANON-TRIGGER-017 to 020).
+#[test]
+fn every_failure_names_its_rule_key_in_check_order() {
+    let edited = published_rule("a@1", "", "send", MAPPED, "offer");
+    let published = index("a@1: sha256:0000");
+    let everything = published_rule(
+        "b@1",
+        ", amount: {type: integer}",
+        "send",
+        "zone: {const: x}, channel: {field: amount}",
+        "offer",
+    );
+    let guarded = published_rule("c@1", "", "guarded", "", "auto");
+    let unknown = published_rule("d@1", "", "nowhere", "anything: {const: x}", "auto");
+    let twice = published_rule("e@1", "", "send", MAPPED, "offer");
+    let twice_other = published_rule("e@1", "", "guarded", "", "auto");
+    let fine = published_rule(
+        "f@1",
+        ", kind: {type: string}",
+        "send",
+        "channel: {field: kind}, tone: {const: calm}",
+        "offer",
+    );
+    let set = [
+        fine.clone(),
+        twice_other.clone(),
+        unknown.clone(),
+        everything.clone(),
+        guarded.clone(),
+        twice.clone(),
+        edited.clone(),
+    ];
+    let key = |key: &str| Some(key.to_owned());
+    let expected = vec![
+        ("key-republished", key("a@1")),
+        ("unknown-input", key("b@1")),
+        ("missing-input", key("b@1")),
+        ("input-value-not-allowed", key("b@1")),
+        ("guarded-auto", key("c@1")),
+        ("unknown-protocol", key("d@1")),
+        ("duplicate-key", key("e@1")),
+    ];
+    assert_eq!(failures(&set, &published), expected);
+    let mut reversed = set.to_vec();
+    reversed.reverse();
+    assert_eq!(failures(&reversed, &published), expected);
+
+    let rules = named_rules(&set);
+    let all = check_set(&rules, &published, &publication_protocols()).expect_err("fails");
+    let duplicate = all.last().expect("a failure");
+    assert_eq!(
+        duplicate.to_string(),
+        "e@1: the rule key is given by 2 documents: 2, 6"
+    );
+}
+
+/// A constant among the input's values passes and one outside fails; a `{field}` input of a
+/// declared string passes here, one of another type fails (CANON-TRIGGER-020).
+#[test]
+fn an_input_value_is_checked_against_the_values_of_the_input() {
+    let fields = ", s: {type: string}, n: {type: integer}, b: {type: bool}, d: {type: decimal}, \
+                  o: {type: string, optional: true}";
+    let nothing = index("");
+    let passes = |input: &str| {
+        check_set(
+            &named_rules(&[published_rule("r@1", fields, "send", input, "offer")]),
+            &nothing,
+            &publication_protocols(),
+        )
+        .is_ok()
+    };
+    for input in [
+        "channel: {const: letter}, tone: {const: calm}",
+        "channel: {field: s}, tone: {const: calm}",
+        "channel: {field: o}, tone: {field: s}",
+    ] {
+        assert!(passes(input), "{input}");
+    }
+    for input in [
+        "channel: {const: fax}, tone: {const: calm}",
+        "channel: {const: Email}, tone: {const: calm}",
+        "channel: {field: n}, tone: {const: calm}",
+        "channel: {field: b}, tone: {const: calm}",
+        "channel: {field: d}, tone: {const: calm}",
+    ] {
+        assert_eq!(
+            failures(
+                &[published_rule("r@1", fields, "send", input, "offer")],
+                &nothing
+            ),
+            [("input-value-not-allowed", Some("r@1".to_owned()))],
+            "{input}"
+        );
+    }
+}
+
+/// An index or protocols document of another format, a key the index lists twice and a protocol
+/// id the protocols list twice refuse the whole set, naming no rule.
+#[test]
+fn a_malformed_index_or_protocols_refuses_the_whole_set() {
+    let rules = named_rules(&[published_rule("r@1", "", "send", MAPPED, "offer")]);
+    let code = |published: &model::TriggerIndex, protocols: &model::TriggerProtocols| {
+        let failures = check_set(&rules, published, protocols).expect_err("refused");
+        assert_eq!(failures.len(), 1);
+        assert_eq!(failures[0].rule, None);
+        failures[0].code
+    };
+    let mut other = index("");
+    other.format = "canon-trigger-index/2".to_owned();
+    assert_eq!(code(&other, &publication_protocols()), "malformed-input");
+    let twice = model::TriggerIndex {
+        format: model::TRIGGER_INDEX_FORMAT.to_owned(),
+        rules: model::Declarations::new(vec![
+            ("r@1".to_owned(), "sha256:a".to_owned()),
+            ("r@1".to_owned(), "sha256:a".to_owned()),
+        ]),
+    };
+    assert_eq!(code(&twice, &publication_protocols()), "malformed-input");
+    let mut protocols = publication_protocols();
+    let mut entries: Vec<_> = protocols
+        .protocols
+        .iter()
+        .map(|(id, protocol)| (id.clone(), protocol.clone()))
+        .collect();
+    entries.push(entries[0].clone());
+    protocols.protocols = model::Declarations::new(entries);
+    assert_eq!(code(&index(""), &protocols), "duplicate-protocol-id");
+    assert!(read_index("format: canon-trigger-index/1\nrules: {}\nextra: 1\n").is_err());
+}
+
+/// At evaluation, the value of an input the protocol declares must be among its values: a row
+/// value outside them, absent or not a string is refused `input-value-not-allowed`, after
+/// `entered-at-missing`; an input the protocol does not declare is not checked
+/// (CANON-TRIGGER-021).
+#[test]
+fn an_evaluated_input_value_outside_the_inputs_values_is_refused_last() {
+    let rule = |input: &str, refire: &str| RuleEntry {
+        rule: read(
+            &published_rule(
+                "v@1",
+                ", channel: {type: string, optional: true}",
+                "send",
+                input,
+                "offer",
+            )
+            .replace("once_per_subject", refire),
+        )
+        .expect("valid"),
+        state: model::TriggerRuleState::Active,
+    };
+    let rows = snapshot(
+        "    - {id: a, entered_at: 2026-11-20T01:00:00Z, fields: {status: overdue, channel: email}}\n    \
+         - {id: b, entered_at: 2026-11-20T02:00:00Z, fields: {status: overdue, channel: fax}}\n    \
+         - {id: c, entered_at: 2026-11-20T03:00:00Z, fields: {status: overdue}}\n    \
+         - {id: d, fields: {status: overdue, channel: fax}}\n",
+    );
+    let protocols = publication_protocols();
+    let reasons = |entries: &[RuleEntry]| {
+        verdicts(&evaluate(entries, &rows, &protocols, &history(""), &now()).expect("plan"))
+            .into_iter()
+            .map(|(row, verdict, reason, _)| (row, verdict, reason))
+            .collect::<Vec<_>>()
+    };
+    let refused = Some("input-value-not-allowed");
+    assert_eq!(
+        reasons(&[rule(
+            "channel: {field: channel}, tone: {const: calm}, other: {const: x}",
+            "once_per_state_entry"
+        )]),
+        [
+            ("a".to_owned(), "offer", None),
+            ("b".to_owned(), "refused", refused),
+            ("c".to_owned(), "refused", refused),
+            ("d".to_owned(), "refused", Some("entered-at-missing")),
+        ]
+    );
+    assert_eq!(
+        reasons(&[rule(
+            "channel: {field: channel}, tone: {const: loud}",
+            "once_per_subject"
+        )]),
+        [
+            ("a".to_owned(), "refused", refused),
+            ("b".to_owned(), "refused", refused),
+            ("c".to_owned(), "refused", refused),
+            ("d".to_owned(), "refused", refused),
+        ]
+    );
+}

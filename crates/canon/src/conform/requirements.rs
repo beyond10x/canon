@@ -7,8 +7,9 @@ use std::collections::BTreeSet;
 use std::fmt;
 
 use super::{
-    EvaluateInputs, REQUIREMENT_PREFIX, Scenario, StepKind, TriggerEvaluateInputs, evaluation,
-    first_difference, parse_failure, trigger_plan,
+    EvaluateInputs, REQUIREMENT_PREFIX, Scenario, StepKind, TriggerCheckSetInputs,
+    TriggerEvaluateInputs, evaluation, first_difference, parse_failure, trigger_check_set,
+    trigger_plan,
 };
 use crate::ir;
 use crate::model::{self, REQUIREMENTS_FORMAT, RequirementCatalogue, RequirementStatus};
@@ -164,6 +165,7 @@ pub(super) fn check(catalogue: &RequirementCatalogue, ran: &[Ran]) -> Checks {
                     nondeterminism(compiled, inputs)
                 }
                 (StepKind::TriggerEvaluate { inputs, .. }, _) => trigger_nondeterminism(inputs),
+                (StepKind::TriggerCheckSet { inputs, .. }, _) => check_set_nondeterminism(inputs),
                 _ => None,
             };
             if let Some((run, line)) = found {
@@ -188,6 +190,30 @@ fn trigger_nondeterminism(inputs: &TriggerEvaluateInputs) -> Option<(&'static st
         Err(problems) => problems
             .iter()
             .map(|(code, _)| format!("refusal: {code}\n"))
+            .collect(),
+    };
+    let written = output(false);
+    [("rerun", output(false)), ("permuted", output(true))]
+        .into_iter()
+        .find_map(|(run, text)| first_difference(&text, &written).map(|line| (run, line)))
+}
+
+/// Runs a trigger-check-set step three times, as written, again as written, and with its rules
+/// reversed, and returns the first run that differs from the first (`rerun` or `permuted`) with the
+/// line, counted from 1, where it first differs. A refused run's output is each failure's code and
+/// rule key, one per line.
+fn check_set_nondeterminism(inputs: &TriggerCheckSetInputs) -> Option<(&'static str, usize)> {
+    let output = |permuted: bool| match trigger_check_set(inputs, permuted) {
+        Ok(index) => index,
+        Err(failures) => failures
+            .iter()
+            .map(|failure| {
+                format!(
+                    "refusal: {} {}\n",
+                    failure.code,
+                    failure.rule.as_deref().unwrap_or("")
+                )
+            })
             .collect(),
     };
     let written = output(false);
