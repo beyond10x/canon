@@ -229,9 +229,21 @@ firing. Evaluating again with that firing in the history lists the match as `hel
   (`invalid-instant`), a document of another format or a kind or row id with whitespace
   (`malformed-input`), a rule that is not valid (`invalid-rule`), two rules of one rule key
   (`duplicate-rule`), a kind or a row id listed twice (`duplicate-row`).
-- Approvals in the history, `held` and every refusal but `entered-at-missing` come with
-  story:trigger-holds-and-refusals; until then a `disabled` rule is listed like the others, under
-  its state.
+
+**As built** (story:trigger-holds-and-refusals):
+
+- The refusals apply in the order the text lists them, `entered-at-missing` last, and each is the
+  entry's `reason`: `disabled`, `unknown-protocol`, `guarded-auto`, `access-mismatch`,
+  `write-unapproved`. A refusal comes before `undetermined`, so every entry of a `disabled` rule,
+  an undetermined row included, is refused `disabled`.
+- An approval is `{rule, by, at}`; its `at` is a Canon instant and is not compared with `now`.
+- `held` comes before `offer` too: an offer whose firing id is recorded, or whose rule is at its
+  cap, is held. Only `would-start` entries count against the cap.
+- The cap counts the distinct firing ids of the rule key's firings whose `at` (its whole seconds)
+  falls on the UTC day of `now`, before or after `now`; a firing recorded twice counts once.
+  `already-fired` comes before `cap-reached`.
+- Two more whole-input refusals: a protocol id listed twice in the protocols
+  (`duplicate-protocol-id`), and an approval's `at` that is not an instant (`invalid-instant`).
 
 ## 7. Publication
 
