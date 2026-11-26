@@ -1,0 +1,23 @@
+# stale invoices, first version: the rule of stale-1.yaml written another way
+cap: 50
+refire: once_per_subject
+access: write
+mode: offer
+start:
+  input:
+    channel:
+      const: email
+  protocol: send-reminder
+subject:
+  fields:
+    status:
+      type: string
+      optional: false
+  state:
+    is: overdue
+    field: status
+  kind: invoice
+owner: billing-operations
+version: 1
+id: stale
+format: canon-trigger/1

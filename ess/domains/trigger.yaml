@@ -13,6 +13,9 @@
 # (conformance/scenarios/trigger-evaluate.yaml).
 # story:trigger-holds-and-refusals adds the history's approvals, the verdict held and the reasons
 # of held and refused (conformance/scenarios/trigger-holds-and-refusals.yaml).
+# story:trigger-rule-publication adds the canon-trigger-index/1 index of published rule keys
+# `canon trigger check-set --published` reads and prints, and the refusal reason
+# input_value_not_allowed (conformance/scenarios/trigger-rule-publication.yaml).
 # crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
 domain: canon.trigger
 
@@ -26,6 +29,8 @@ summary: >-
   state, a canon-trigger-snapshot/1 snapshot of rows per kind, the protocols, a
   canon-trigger-history/1 history of firings, activations and approvals, and an instant, and
   writes a canon-trigger-plan/1 plan: one entry per match, with its firing id and its verdict.
+  A canon-trigger-index/1 index maps each published rule key to the digest of its document; a
+  rule set is checked against it before it is published.
 
 naming:
   wire: trigger
@@ -426,9 +431,11 @@ types:
       - name: protocol
         type: canon.protocol.ProtocolId
       # Each start.input entry: a {field} input is the row's value of that field as read (null
-      # when an optional field is absent), a {const} input its string. Not checked against the
-      # protocol.
+      # when an optional field is absent), a {const} input its string. A value of an input the
+      # protocol declares that is not among the input's values refuses the entry
+      # (input_value_not_allowed, story:trigger-rule-publication).
       # read from: docs/design/trigger-rules.md:178-179
+      # read from: conformance/scenarios/trigger-rule-publication.yaml
       - name: input
         type: Map<canon.protocol.InputId, Json>
       # `<rule key>/<kind>:<row id>/<entered_at>` under once_per_state_entry,
@@ -459,13 +466,15 @@ types:
   # that applies: disabled, the rule's state; unknown_protocol, its protocol not in the
   # protocols; guarded_auto, a guarded protocol in mode auto; access_mismatch, the rule's access
   # not the protocol's class; write_unapproved, access write in mode auto with no approval of the
-  # exact rule key; entered_at_missing) or held (already_fired, a firing with the entry's firing id
-  # in the history; cap_reached, the rule key's firings on the UTC day of the evaluation instant,
-  # from the history and then from the plan's earlier would_start entries, at its cap). The wire
-  # writes every `_` as `-` (field-missing).
+  # exact rule key; entered_at_missing; input_value_not_allowed, the value of an input the
+  # protocol declares not among the input's values) or held (already_fired, a firing with the
+  # entry's firing id in the history; cap_reached, the rule key's firings on the UTC day of the
+  # evaluation instant, from the history and then from the plan's earlier would_start entries, at
+  # its cap). The wire writes every `_` as `-` (field-missing).
   # read from: docs/design/trigger-rules.md:130-138
   # read from: docs/design/trigger-rules.md:184-186
   # read from: docs/design/trigger-rules.md:190-199
+  # read from: conformance/scenarios/trigger-rule-publication.yaml
   - name: canon.trigger.TriggerReason
     kind: enum
     variants:
@@ -478,5 +487,27 @@ types:
       - access_mismatch
       - write_unapproved
       - entered_at_missing
+      - input_value_not_allowed
       - already_fired
       - cap_reached
+
+  # The canon-trigger-index/1 document `canon trigger check-set --published` reads, and the one it
+  # prints for a set that passes (story:trigger-rule-publication): each published rule key with
+  # the digest of its canon-trigger/1 document. The index is the caller's; Canon stores nothing.
+  # A published rule is immutable: a document whose key the index holds with another digest is
+  # refused (key-republished). Unknown fields are refused.
+  # read from: docs/design/trigger-rules.md:250-255
+  # read from: .engineering/planning/story/trigger-rule-publication.md, section "Scope"
+  - name: canon.trigger.TriggerIndex
+    kind: struct
+    fields:
+      # The only accepted value is canon-trigger-index/1.
+      - name: format
+        type: String
+      # Each rule key, `<id>@<version>`, with the digest of its document: `sha256:` and 64
+      # lowercase hex digits, the SHA-256 of the rule's canonical form as `canon trigger digest`
+      # prints it. A key listed twice is refused (malformed-input).
+      # read from: docs/design/trigger-rules.md:251-252
+      # read from: .engineering/planning/story/trigger-rule-publication.md, section "Scope"
+      - name: rules
+        type: Map<String, String>
