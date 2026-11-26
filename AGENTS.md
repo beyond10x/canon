@@ -117,7 +117,11 @@ compatibility decisions and keep unreleased capability claims explicit.
 - Build into the tree's own `target/`; never set `CARGO_TARGET_DIR`. End every tree with
   `worktree finish --discard-cache --archive <tree>`, and never delete a `target/` by hand.
 - Every commit and push is `b10x-bot[bot]`'s through `b10x-gates bot`; every GitHub write goes
-  through `b10x-gates api`.
+  through `b10x-gates api`. A plain `git rebase`, `git cherry-pick` or `git commit --amend` makes
+  the local user the committer, and the pre-push check refuses the branch ("historical merge
+  committer is not exact GitHub", 2026-11-26). To bring a branch up to date, `b10x-gates bot --
+  merge origin/main`; to re-create commits, apply each one's diff and commit it with `b10x-gates
+  bot -- commit`.
 - Use a managed worktree (`worktree create --repo canon --purpose …`) for changes.
 - A request filed by a session working on a consumer repository of Canon (a repository that uses
   Canon's output and waits on a Canon story) is accepted on arrival: draft one story per request
