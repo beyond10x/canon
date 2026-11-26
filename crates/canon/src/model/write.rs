@@ -443,6 +443,7 @@ fn action(depth: usize, action: &Action) -> String {
         case_open,
         author: who,
         revises,
+        access,
     } = action;
     let mut members = Members::new();
     put_some(
@@ -514,6 +515,11 @@ fn action(depth: usize, action: &Action) -> String {
     );
     put_some(&mut members, "author", who.map(author));
     put_unless_empty(&mut members, "revises", names(depth + 1, revises));
+    put_some(
+        &mut members,
+        "access",
+        access.map(|class| quote(class.as_str())),
+    );
     object(depth, members)
 }
 

@@ -285,6 +285,10 @@
           "items": {
             "$ref": "#/$defs/Identifier"
           }
+        },
+        "access": {
+          "description": "What the action may change (story:protocol-access-class): `read_only`, it moves no artifact to a new revision and opens no case, or `write`. Absent: `write`. `canon validate` refuses `read_only` on an action that `revises` an artifact or has a `case_open` (`read-only-action-writes`). No evaluation reads it; the protocol's class, in `canon-ir/1`, is `read_only` when every action is. Canon cannot prove that a runner honours it.",
+          "$ref": "#/$defs/AccessClass"
         }
       }
     },
@@ -638,6 +642,13 @@
       "enum": [
         "program",
         "judgement"
+      ]
+    },
+    "AccessClass": {
+      "description": "What an action may change, and the class a protocol derives from its actions (story:protocol-access-class).",
+      "enum": [
+        "read_only",
+        "write"
       ]
     },
     "OutcomeRequirement": {

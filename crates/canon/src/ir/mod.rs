@@ -21,7 +21,7 @@
 //! - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
 //!   evidence match without a result has `"result": null`; a claim test without `is` has
 //!   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-//!   true; absent lists and sections are empty. The twenty exceptions are an artifact's
+//!   true; absent lists and sections are empty. The twenty-one exceptions are an artifact's
 //!   `revised_by`, an evidence kind's `max_age`, its `supplied_by` and its `required_at_open`
 //!   (story:supplied-evidence-required-at-open; written only as `"required_at_open": true`, so
 //!   `false` compiles to no key), the `when` of an outcome's
@@ -29,7 +29,8 @@
 //!   `children` form, an evidence match's `independent_on`, an obligation's `applicable_when`, an
 //!   action's `runs_only_when` (story:ordering-guards-provable-by-check; normalized like every
 //!   predicate, and read by `canon check` alone), an action's `arguments`, an action's
-//!   `case_open`, an action's `author` and its `revises`, an action's `records_together`, the
+//!   `case_open`, an action's `author` and its `revises`, an action's `records_together`, its
+//!   `access` (story:protocol-access-class), the
 //!   `decided_by` of an evidence kind an action may produce, the `scope` of a capability
 //!   requirement, the `revision` of a `children` form, the `invalidation` section, the `case`
 //!   section and the `independence_dimensions` section: each written only when it is declared (a
@@ -63,7 +64,15 @@
 //!   members, no count first, then the smaller. An action's `case_open` is `{"protocol": …,
 //!   "subject": …}`, as declared (story:case-composition).
 //!   An action's `arguments` is its JSON Schema as declared, the same JSON value, its object keys
-//!   sorted like every object's (story:action-arguments).
+//!   sorted like every object's (story:action-arguments). An action's `access`
+//!   (story:protocol-access-class) is written only as `"access": "read_only"`, so `access: write`
+//!   compiles to no key.
+//! - **Derived class and guard.** Every IR carries, at its top level, the protocol's access class
+//!   `"access_class"` ([`Ir::access_class`]): `"read_only"` when every action is read-only, a
+//!   protocol without actions included, else `"write"`; and `"guarded"` ([`Ir::guarded`]): `true`
+//!   when some action requires a capability, else `false` (story:protocol-access-class). They are
+//!   derived from the actions, never declared, so the IR of a protocol written before `access`
+//!   existed is the IR it compiled to then with these two keys added. No evaluation reads them.
 //! - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
 //!   it was written, and an input test `{"input": {"id": …, "in": [...]}}`. An outcome that
 //!   requires an explicit decision has the requirement `{"decision": <name>}`, as written, with
@@ -138,17 +147,17 @@
 
 mod composition;
 mod imports;
-mod json;
+pub(crate) mod json;
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::model::{
-    self, ActionId, Age, ArtifactId, Author, CapabilityId, CaseOpening, ChildOutcomes, ClaimId,
-    ClaimTest, DecisionRequirement, EffectClass, EvidenceAfter, EvidenceDescended, EvidenceKindId,
-    EvidenceMatch, EvidenceOrder, EvidenceSince, FirstResult, IndependenceDimensionId, InputId,
-    InputTest, InputValue, InvalidationRuleId, ObligationId, OutcomeId, OutcomeRequirement,
-    Predicate, Protocol, ProtocolId, ScopeKey, ScopeValue, Truth,
+    self, AccessClass, ActionId, Age, ArtifactId, Author, CapabilityId, CaseOpening, ChildOutcomes,
+    ClaimId, ClaimTest, DecisionRequirement, EffectClass, EvidenceAfter, EvidenceDescended,
+    EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceSince, FirstResult,
+    IndependenceDimensionId, InputId, InputTest, InputValue, InvalidationRuleId, ObligationId,
+    OutcomeId, OutcomeRequirement, Predicate, Protocol, ProtocolId, ScopeKey, ScopeValue, Truth,
 };
 use crate::validate::{self, Problem};
 
@@ -284,6 +293,9 @@ pub struct Action {
     /// The child case the action opens, as declared; `None` when it opens none, and `canon-ir/1`
     /// then writes no `case_open` key.
     pub case_open: Option<CaseOpening>,
+    /// What the action may change (story:protocol-access-class); [`AccessClass::Write`] when the
+    /// source declares none, and `canon-ir/1` then writes no `access` key.
+    pub access: AccessClass,
 }
 
 /// A capability scope: one value for each key it names, in key order. Empty: no scope.
@@ -403,6 +415,7 @@ pub fn compile(protocol: &Protocol) -> Result<Ir, Vec<Problem>> {
             revises: unique(action.revises.clone()),
             arguments: action.arguments.clone(),
             case_open: action.case_open.clone(),
+            access: action.access.unwrap_or(AccessClass::Write),
         }),
         outcomes: keyed(&protocol.outcomes, |outcome| Outcome {
             description: outcome.description.clone(),
@@ -725,6 +738,29 @@ impl Ir {
         self.value().render()
     }
 
+    /// The protocol's access class (story:protocol-access-class): [`AccessClass::ReadOnly`] when
+    /// every action is read-only, a protocol without actions included, else
+    /// [`AccessClass::Write`]. Derived from the actions, never stored.
+    pub fn access_class(&self) -> AccessClass {
+        if self
+            .actions
+            .values()
+            .all(|action| action.access == AccessClass::ReadOnly)
+        {
+            AccessClass::ReadOnly
+        } else {
+            AccessClass::Write
+        }
+    }
+
+    /// Whether the protocol is guarded (story:protocol-access-class): some action requires a
+    /// capability, so it cannot run that action until an authority decision grants it.
+    pub fn guarded(&self) -> bool {
+        self.actions
+            .values()
+            .any(|action| action.requirements().next().is_some())
+    }
+
     fn value(&self) -> Value {
         fn section<K: AsRef<str>, T>(map: &BTreeMap<K, T>, f: impl Fn(&T) -> Value) -> Value {
             Value::Object(
@@ -738,6 +774,8 @@ impl Ir {
 
         let mut fields = vec![
             ("format", Value::string(FORMAT)),
+            ("access_class", Value::string(self.access_class().as_str())),
+            ("guarded", Value::Bool(self.guarded())),
             (
                 "protocol",
                 Value::object([
@@ -910,6 +948,9 @@ impl Ir {
                                 ("subject", Value::string(opening.subject.as_str())),
                             ]),
                         ));
+                    }
+                    if action.access == AccessClass::ReadOnly {
+                        fields.push(("access", Value::string(AccessClass::ReadOnly.as_str())));
                     }
                     Value::object(fields)
                 }),
@@ -1174,7 +1215,7 @@ fn truth(value: Truth) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{FORMAT, compile, sorted};
+    use super::{AccessClass, FORMAT, compile, sorted};
     use crate::model::{
         self, ActionId, ArtifactId, CapabilityId, ClaimId, ClaimTest, EvidenceKindId,
         EvidenceMatch, Predicate, Truth,
@@ -1300,6 +1341,112 @@ mod tests {
     }
 
     const HEADER: &str = "format: protocol/1\nprotocol: {id: p, revision: 3}\n";
+
+    /// story:protocol-access-class: `"access"` only on a read-only action, `access: write` the
+    /// bytes of no key; the class `read_only` only when every action is; `guarded` when some
+    /// action requires a capability, scoped or not.
+    #[test]
+    fn access_is_written_only_when_read_only_and_the_class_and_guard_are_derived() {
+        let protocol = |look: &str, report: &str| {
+            format!("{HEADER}actions:\n  look: {{{look}}}\n  report: {{{report}}}\n")
+        };
+        let mixed = compile(&model::parse(&protocol("access: read_only", "")).expect("parses"))
+            .expect("compiles");
+        assert_eq!(mixed.access_class(), AccessClass::Write);
+        assert!(!mixed.guarded());
+        let text = mixed.canonical_json();
+        assert!(
+            text.starts_with("{\n  \"access_class\": \"write\",\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("  \"format\": \"canon-ir/1\",\n  \"guarded\": false,\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "    \"look\": {\n      \"access\": \"read_only\",\n      \"description\": null,\n"
+            ),
+            "{text}"
+        );
+        assert!(
+            text.contains("    \"report\": {\n      \"description\": null,\n"),
+            "{text}"
+        );
+        assert_eq!(
+            ir(&protocol("access: read_only", "access: write")),
+            text,
+            "`access: write` is the bytes of no key"
+        );
+
+        let read_only = ir(&protocol("access: read_only", "access: read_only"));
+        assert!(
+            read_only.starts_with("{\n  \"access_class\": \"read_only\",\n"),
+            "{read_only}"
+        );
+        assert!(ir(HEADER).starts_with("{\n  \"access_class\": \"read_only\",\n"));
+
+        for requires in [
+            "requires: [{capability: c}]",
+            "requires: [{capability: c, scope: {region: west}}]",
+        ] {
+            let guarded =
+                compile(&model::parse(&protocol("access: read_only", requires)).expect("parses"))
+                    .expect("compiles");
+            assert!(guarded.guarded(), "{requires}");
+            assert!(
+                guarded
+                    .canonical_json()
+                    .contains("  \"format\": \"canon-ir/1\",\n  \"guarded\": true,\n"),
+                "{requires}"
+            );
+        }
+    }
+
+    /// story:protocol-access-class: a read-only action that revises or opens a case does not
+    /// compile, one problem naming the action, every artifact it revises and the protocol it
+    /// opens a case under; a write action that does both compiles.
+    #[test]
+    fn a_read_only_action_that_writes_does_not_compile() {
+        let source = |access: &str| {
+            format!(
+                "{HEADER}artifacts: {{a: {{}}, b: {{}}}}\nevidence_kinds: {{case_outcome: {{}}}}\n\
+                 actions:\n  act: {{{access}revises: [b, a], case_open: {{protocol: q, subject: a}}}}\n  \
+                 edit: {{{access}revises: [a]}}\n  open: {{{access}case_open: {{protocol: q, subject: b}}}}\n"
+            )
+        };
+        let problems = compile(&model::parse(&source("access: read_only, ")).expect("parses"))
+            .expect_err("refused");
+        let found: Vec<(&str, String)> = problems
+            .iter()
+            .map(|problem| (problem.code(), problem.to_string()))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                (
+                    "read-only-action-writes",
+                    "action `act` declares access read_only but revises artifacts `b`, `a` and \
+                     opens a case under protocol `q`"
+                        .to_owned()
+                ),
+                (
+                    "read-only-action-writes",
+                    "action `edit` declares access read_only but revises artifact `a`".to_owned()
+                ),
+                (
+                    "read-only-action-writes",
+                    "action `open` declares access read_only but opens a case under protocol `q`"
+                        .to_owned()
+                ),
+            ]
+        );
+        for access in ["", "access: write, "] {
+            let compiled =
+                compile(&model::parse(&source(access)).expect("parses")).expect("compiles");
+            assert_eq!(compiled.access_class(), AccessClass::Write);
+        }
+    }
 
     #[test]
     fn predicate_members_compile_in_one_order_whatever_order_they_are_written_in() {
@@ -1435,6 +1582,7 @@ mod tests {
             revises: Vec::new(),
             arguments: None,
             case_open: None,
+            access: model::AccessClass::Write,
         };
         let found: Vec<(&str, &super::Scope)> = action
             .requirements()
@@ -1450,7 +1598,7 @@ mod tests {
         assert_eq!(
             compiled,
             format!(
-                "{{\n  \"actions\": {{}},\n  \"artifacts\": {{}},\n  \"claims\": {{}},\n  \"evidence_kinds\": {{}},\n  \"format\": \"{FORMAT}\",\n  \"obligations\": {{}},\n  \"outcomes\": {{}},\n  \"protocol\": {{\n    \"description\": null,\n    \"id\": \"p\",\n    \"revision\": 3\n  }}\n}}\n"
+                "{{\n  \"access_class\": \"read_only\",\n  \"actions\": {{}},\n  \"artifacts\": {{}},\n  \"claims\": {{}},\n  \"evidence_kinds\": {{}},\n  \"format\": \"{FORMAT}\",\n  \"guarded\": false,\n  \"obligations\": {{}},\n  \"outcomes\": {{}},\n  \"protocol\": {{\n    \"description\": null,\n    \"id\": \"p\",\n    \"revision\": 3\n  }}\n}}\n"
             )
         );
     }

@@ -81,6 +81,9 @@ fn main() -> ExitCode {
         Command::Trigger {
             command: TriggerCommand::Validate { path },
         } => trigger::validate(&path),
+        Command::Trigger {
+            command: TriggerCommand::Protocols { path },
+        } => trigger::protocols(&path),
     }
 }
 

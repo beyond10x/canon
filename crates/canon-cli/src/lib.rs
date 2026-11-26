@@ -446,6 +446,22 @@ pub enum TriggerCommand {
         #[arg(long)]
         path: PathBuf,
     },
+    /// Print the `canon-trigger-protocols/1` document of a set of `protocol/1` documents, the
+    /// map a trigger evaluation reads: for each protocol, keyed by protocol id, its access class
+    /// (`read_only` when every action declares `access: read_only`, else `write`), whether it is
+    /// guarded (some action requires a capability) and its case inputs with their values. Each
+    /// document is compiled on its own: one that does not parse or compile (a `read_only` action
+    /// that revises an artifact or opens a case is `read-only-action-writes`), or that has
+    /// imports, is refused, exit 1, naming its path; two files that declare one protocol id are
+    /// refused as `duplicate-protocol-id`. The files are read in sorted order of their paths, the
+    /// first refused deciding the exit status; a file that cannot be read exits 2.
+    Protocols {
+        /// A `protocol/1` document of the set. Repeat it once per document, in any order: the
+        /// order changes no byte of the output, and a path given twice, under two spellings or
+        /// through a symbolic link, is read once.
+        #[arg(long, required = true)]
+        path: Vec<PathBuf>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

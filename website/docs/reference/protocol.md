@@ -99,6 +99,7 @@ has and what evidence it may produce (design § 10).
 | `case_open` | [`CaseOpening`](#caseopening) | optional | The child case the action opens (story:case-composition): a case governed by another protocol, about a declared artifact. Absent: the action opens no case. Canon opens nothing itself; whoever takes the action opens the child case. A case has one commission, and a second party works through a child case: this is the one primitive by which a case hands work to another party (D207). |
 | `author` | [`Author`](#author) | optional | Who writes the action's arguments and the content of the artifacts it revises (story:judgement-marking): `program`, a reproducible function of the action's inputs, or `judgement`, a person or a model. Absent: `program`. It has no evaluation meaning, names no executor, model or tool, and Canon cannot prove that a runner honours it. |
 | `revises` | list of [identifier](#identifiers) (`ArtifactId`) | optional | The declared artifacts the action may move to a new revision (story:judgement-marking). Absent: none. It has no evaluation meaning; Canon never refuses a runner that moves an artifact outside it. |
+| `access` | [`AccessClass`](#accessclass) | optional | What the action may change (story:protocol-access-class): `read_only`, it moves no artifact to a new revision and opens no case, or `write`. Absent: `write`. `canon validate` refuses `read_only` on an action that `revises` an artifact or has a `case_open` (`read-only-action-writes`). No evaluation reads it; the protocol's class, in `canon-ir/1`, is `read_only` when every action is. Canon cannot prove that a runner honours it. |
 
 ## `Outcome`
 
@@ -314,6 +315,16 @@ revises; on a production (`decided_by`) who decides the record's result.
 |---|---|
 | `program` | A reproducible function of the action's inputs: the value when nothing is written. |
 | `judgement` | A person or a model, whose result is not a function of the action's inputs. |
+
+## `AccessClass`
+
+What an action may change, and the class a protocol derives from its actions
+(story:protocol-access-class).
+
+| Value | Meaning |
+|---|---|
+| `read_only` | Moves no artifact to a new revision and opens no case. |
+| `write` | May change something: the value when nothing is written. |
 
 ## `OutcomeRequirement`
 

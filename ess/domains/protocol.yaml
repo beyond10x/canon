@@ -21,6 +21,7 @@
 # outcomes of a case's child cases. story:capability-scope adds the scope a capability requirement
 # and an authority decision may carry, and the decision require_approval. story:protocol-imports
 # adds the imports a protocol declares, each pinned to a revision and a digest.
+# story:protocol-access-class adds the access an action declares (canon.protocol.AccessClass).
 # crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
 domain: canon.protocol
 
@@ -329,6 +330,37 @@ types:
       # read from: crates/canon/src/model/mod.rs:258-262
       - name: revises
         type: List<canon.protocol.ArtifactId>
+      # What the action may change (story:protocol-access-class, decision D1 A of
+      # epic:trigger-rules): `read_only`, it moves no artifact to a new revision and opens no
+      # case, or `write`. Absent means write, so an action that says nothing is never read as
+      # read-only. canon validate refuses read_only on an action whose revises lists an artifact
+      # or that has a case_open (read-only-action-writes, one problem naming the action and what it
+      # writes), after the action's records_together groups. Canon cannot prove that a runner
+      # honours it: an action that changes something outside Canon without revises is read_only
+      # because its protocol says so. canon-ir/1 writes `"access": "read_only"` only on a
+      # read_only action, so `access: write` written out compiles to the bytes of no key.
+      # The protocol's derived class and guard are canon-ir/1 keys of every protocol, at the top
+      # level: `"access_class"`, `"read_only"` when every action is read_only (a protocol without
+      # actions included) and `"write"` otherwise; and `"guarded"`, true when some action has a
+      # non-empty requires, false otherwise. So the canon-ir/1 of a protocol written before access
+      # existed is the one it compiled to then, with those two keys added. canon evaluate, canon
+      # check, canon simulate and canon generate read none of the three. canon diff: write to
+      # read_only is TIGHTENING, read_only to write RELAXATION, each naming the action. canon
+      # trigger protocols prints the class and the guard of each protocol it reads
+      # (canon.trigger.TriggerProtocols).
+      # read from: .engineering/planning/story/protocol-access-class.md, section "Scope"
+      # read from: .engineering/planning/story/protocol-access-class.md, section "Acceptance"
+      # read from: docs/design/trigger-rules.md:141-156
+      - name: access
+        type: Optional<canon.protocol.AccessClass>
+
+  # What an action may change, and the class a protocol derives from its actions
+  # (story:protocol-access-class): `read_only`, it moves no artifact and opens no case, or
+  # `write`. An action without one is write; a protocol is read_only when every action is.
+  # read from: docs/design/trigger-rules.md:146-150
+  - name: canon.protocol.AccessClass
+    kind: enum
+    variants: ["read_only", "write"]
 
   # Who decides a judgement-marked result (story:judgement-marking): `program`, a reproducible
   # procedure, or `judgement`, a person or a model. On an action (`author`) it says who writes its

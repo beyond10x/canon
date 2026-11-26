@@ -18,6 +18,7 @@ steps:
     expect:
       canon-ir: |
         {
+          "access_class": "write",
           "actions": {
             "merge": {
               "description": "Merge the change once the test about it was red first and ran before its diff.",
@@ -88,6 +89,7 @@ steps:
             }
           },
           "format": "canon-ir/1",
+          "guarded": false,
           "obligations": {},
           "outcomes": {
             "fixed": {

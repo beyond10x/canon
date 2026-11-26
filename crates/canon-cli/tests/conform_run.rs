@@ -94,7 +94,7 @@ fn conform_run_reports_each_scenario() {
     // 2. The differing scenario is reported failed by its id and step.
     assert_eq!(
         lines[0],
-        "failed: scenario `RUNNER-COMPILE-DIFFERS` step `compile`: canon-ir/1 differs from the expectation at line 80",
+        "failed: scenario `RUNNER-COMPILE-DIFFERS` step `compile`: canon-ir/1 differs from the expectation at line 82",
         "mixed registry: differing scenario"
     );
     assert_eq!(

@@ -4,7 +4,8 @@
 //! `canon-decisions/1` explicit decisions (`explicit.rs`) an evaluation may read, and the
 //! `canon-properties/1` properties `canon check` reads (`properties.rs`), the
 //! `canon-requirements/1` catalogue `canon conform run --requirements` reads (`catalogue.rs`), and
-//! the `canon-trigger/1` rule `canon trigger validate` reads (`trigger.rs`).
+//! the `canon-trigger/1` rule `canon trigger validate` reads and the `canon-trigger-protocols/1`
+//! document `canon trigger protocols` prints (`trigger.rs`).
 //!
 //! A protocol document declares a protocol id and revision, the case inputs a case gives values for
 //! (`case: inputs:`), artifacts, evidence kinds, claims with their predicates, obligations with
@@ -71,9 +72,9 @@ pub use properties::{
 };
 pub use requirement::{DecisionRequirement, OutcomeRequirement};
 pub use trigger::{
-    TRIGGER_FORMAT, TriggerAccess, TriggerField, TriggerFieldName, TriggerFieldType, TriggerInput,
-    TriggerKind, TriggerMode, TriggerRefire, TriggerRule, TriggerRuleId, TriggerStart,
-    TriggerState, TriggerSubject,
+    TRIGGER_FORMAT, TRIGGER_PROTOCOLS_FORMAT, TriggerAccess, TriggerField, TriggerFieldName,
+    TriggerFieldType, TriggerInput, TriggerKind, TriggerMode, TriggerProtocol, TriggerProtocols,
+    TriggerRefire, TriggerRule, TriggerRuleId, TriggerStart, TriggerState, TriggerSubject,
 };
 pub use write::write;
 
@@ -312,6 +313,34 @@ pub struct Action {
     /// artifact outside it.
     #[serde(default, deserialize_with = "present::defaulted")]
     pub revises: Vec<ArtifactId>,
+    /// What the action may change (story:protocol-access-class): `read_only`, it moves no artifact
+    /// to a new revision and opens no case, or `write`. Absent: `write`. `canon validate` refuses
+    /// `read_only` on an action that `revises` an artifact or has a `case_open`
+    /// (`read-only-action-writes`). No evaluation reads it; the protocol's class, in `canon-ir/1`,
+    /// is `read_only` when every action is. Canon cannot prove that a runner honours it.
+    #[serde(default, deserialize_with = "present::optional")]
+    pub access: Option<AccessClass>,
+}
+
+/// What an action may change, and the class a protocol derives from its actions
+/// (story:protocol-access-class).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AccessClass {
+    /// Moves no artifact to a new revision and opens no case.
+    ReadOnly,
+    /// May change something: the value when nothing is written.
+    Write,
+}
+
+impl AccessClass {
+    /// The value as `protocol/1` and `canon-ir/1` write it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AccessClass::ReadOnly => "read_only",
+            AccessClass::Write => "write",
+        }
+    }
 }
 
 /// Who decides (story:judgement-marking): a reproducible procedure, or a judgement by a person or

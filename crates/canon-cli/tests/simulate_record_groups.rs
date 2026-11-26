@@ -122,6 +122,7 @@ fn compiled(case: &str, dir: &Path) -> (String, PathBuf) {
 /// `canon compile fixtures/investigation/record-group/pair/protocol.yaml` with the binary of
 /// `7ef6baa1`, before `records_together` existed.
 const PAIR_IR: &str = r#"{
+  "access_class": "write",
   "actions": {
     "check": {
       "description": "records both kinds in one run, only while neither is recorded",
@@ -189,6 +190,7 @@ const PAIR_IR: &str = r#"{
     }
   },
   "format": "canon-ir/1",
+  "guarded": false,
   "obligations": {},
   "outcomes": {
     "done": {

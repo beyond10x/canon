@@ -38,7 +38,9 @@ Canon's ESS specification lives under `ess/`. It specifies the `protocol/1` sour
 story:decision-outcomes) and `canon-authority/1` (story:review-hardening-w7) in the domain
 `canon.protocol`, the `canon-properties/1` document `canon check` reads (story:canon-check) in the
 domain `canon.check`, the `canon-trigger/1` rule document `canon trigger validate` reads
-(story:trigger-rule-document) in the domain `canon.trigger`, and the `canon` command surface in
+(story:trigger-rule-document) and the `canon-trigger-protocols/1` document `canon trigger
+protocols` writes (story:protocol-access-class) in the domain `canon.trigger`, and the `canon`
+command surface in
 the domain `canon.cli`
 (story:ess-command-surface), completing Atlas ADR 0076's data model and command surface.
 
@@ -209,7 +211,7 @@ through Canon), the JSON Schemas in `website/static/schemas/`, and the whole of 
 those files; `task docs-check` (part of `task check`) fails when they drift. A change to the CLI, the model or
 those module docs regenerates them in the same change. The landing page is `website/product.json`
 (`b10x-product-landing/1`), rendered by the docs-system product-site template through
-`withProductSite`. The landing status strip and the status page's `<StatusTable/>` both read `data/status.json`, which `canon-docs` builds from the hand-written `website/status.yaml`: each capability names the AEP story that delivers it, and its status is read from that story (implemented is shipped; otherwise decided when the story cites an Atlas ADR, else planned), never typed. Docs live under
+`withProductSite`. The landing status strip and the status page's `<StatusTable/>` both read `data/status.json`, which `canon-docs` builds from the hand-written `website/status.yaml`: each capability names the AEP story that delivers it, and its status is read from that story (implemented is shipped; otherwise decided when the story cites an Atlas ADR, else planned), never typed. A move of such a story's status changes `data/status.json`, so the commit that moves it runs `task docs-generate` too (canon#41 went red on that). Docs live under
 `/docs/`; the client-redirects plugin keeps every older `/canon/<page>` address working.
 `pages.yml` builds the site without credentials and `canon-docs site-manifest` binds it to the commit in `.well-known/b10x-site.json`;
 `b10x-docs-site.yml` calls the immutable Website project-site publisher for `/canon/`. Mark every

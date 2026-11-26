@@ -93,7 +93,10 @@ does not depend on the order the sections are written in:
    `case_outcome` on an action that opens a child case (a child's outcome arrives when the
    child ends, never with a record of the run that opened it), or else a kind its
    `may_produce` does not list, and then a kind an earlier group of the action names, every
-   one naming the action and the group, counted from 1), then those in
+   one naming the action and the group, counted from 1), then, when the action declares
+   `access: read_only` (story:protocol-access-class) and `revises` an artifact or has a
+   `case_open`, `read-only-action-writes`, once, naming the action, every artifact it revises
+   and the protocol it opens a case under), then those in
    outcomes (each outcome's requirement, when it is a predicate; when it is a decision, its
    condition `when`, followed by every evidence match, order form and `children` form it holds,
    `evidence-in-decision-condition`, naming the outcome: it tests only claim values and case
@@ -270,6 +273,7 @@ differently in these cases only:
 | `zero-child-count` | A `children` form waits for 0 child cases (`count: 0`), which every case has, so the count would assert nothing. |
 | `vacuous-runs-only-when` | An action's `runs_only_when` (story:ordering-guards-provable-by-check) is the literal `all: []`, which is true in every state and so asserts nothing. Only that literal: another guard true in every state, such as `{any: [{all: []}]}`, is not detected. |
 | `self-opened-case` | An action opens a child case under the protocol's own id: a case could then open cases under its own protocol without end (D206). |
+| `read-only-action-writes` | An action declares `access: read_only` (story:protocol-access-class) but `revises` an artifact or opens a case: `revises` lists the artifacts it moves, in the order written, and `opens` the protocol of its `case_open`. |
 | `invalid-record-group` | A group of an action's `records_together` (story:simulate-record-groups) is not one run's records: `group` counts the action's groups from 1, in the order written. |
 | `self-supplied-evidence` | An evidence kind names the protocol's own id as the protocol that supplies its records (story:supplied-evidence): records of it come from outside the protocol, or from its own actions, never from a case of the same protocol through `supplied_by`. |
 | `at-open-without-supplier` | An evidence kind is required at open (story:supplied-evidence-required-at-open) but names no protocol that supplies it: the opener hands in a record another protocol's case produced, so the kind needs `supplied_by`. |

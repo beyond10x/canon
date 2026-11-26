@@ -10,4 +10,4 @@ protocol:
 imports:
   investigation.reopen:
     revision: 1
-    digest: sha256:5dd008909ba59455182324fbf10b4f088a4656a66c706680ed8bbb582a8508bd
+    digest: sha256:778b6371bec5fb174e01cf6ed9819f77380ecd14bff0442227e02f9406bf3229

@@ -146,14 +146,18 @@ Answer to open question 2: the access class is declared in the protocol and deri
 - Each action of `protocol/1` gets an optional `access: read_only | write`. Absent means `write`.
   `canon validate` refuses `read_only` on an action that `revises` an artifact or has a
   `case_open`.
-- The protocol's class, in `canon-ir/1`, is `read_only` when every action is `read_only`, else
-  `write`.
-- A protocol is `guarded` when one of its actions has a non-empty `requires`: it cannot run that
-  action until an authority decision grants the capability, so it is not started unattended.
+- The protocol's class, in `canon-ir/1` under `access_class`, is `read_only` when every action is
+  `read_only` (a protocol without actions too), else `write`. An action's `access` is written in
+  `canon-ir/1` only when it is `read_only`.
+- A protocol is `guarded`, in `canon-ir/1` under `guarded`, when one of its actions has a
+  non-empty `requires`: it cannot run that action until an authority decision grants the
+  capability, so it is not started unattended.
 
-The `protocols` argument of `evaluate` is a map from protocol id to `{class, guarded, inputs}`,
-which `canon trigger protocols <protocol files>` produces from compiled protocols. The evaluator may
-build it otherwise; the kernel only reads it.
+The `protocols` argument of `evaluate` is a map from protocol id to `{class, guarded, inputs}`.
+`canon trigger protocols --path <file> ...` prints it from compiled protocols as the member
+`protocols` of a `canon-trigger-protocols/1` document, `{format, protocols}`; it refuses two files
+of one protocol id (`duplicate-protocol-id`) and a protocol with imports. The evaluator may build
+the map otherwise; the kernel only reads it.
 
 ## 6. Evaluation
 

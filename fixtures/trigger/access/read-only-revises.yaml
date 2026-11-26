@@ -1,0 +1,37 @@
+format: protocol/1
+
+protocol:
+  id: edit
+  revision: 1
+  description: >-
+    An action that declares access read_only and revises an artifact: canon validate refuses it
+    as read-only-action-writes (story:protocol-access-class).
+
+artifacts:
+  page:
+    description: The page edited.
+
+evidence_kinds:
+  edited:
+    description: The page was edited.
+
+claims:
+  done:
+    description: The page was edited.
+    true_when:
+      evidence:
+        kind: edited
+
+actions:
+  edit:
+    description: Edit the page.
+    access: read_only
+    revises: [page]
+    may_produce:
+      - evidence: edited
+
+outcomes:
+  finished:
+    description: The page was edited.
+    requires:
+      claim: done

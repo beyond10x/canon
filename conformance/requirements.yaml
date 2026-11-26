@@ -318,3 +318,26 @@ requirements:
       A start.input value MUST be a declared row field or a constant string; an expression, or a
       field the rule does not declare, MUST be refused naming start.input.<name>.
     source: story:trigger-rule-document
+  CANON-TRIGGER-004:
+    status: implemented
+    statement: >-
+      An action MAY declare access read_only or write; an action without it MUST be write. A
+      protocol's access class MUST be read_only when every action is read_only and write
+      otherwise, and canon-ir/1 MUST carry it with whether the protocol is guarded; a protocol
+      that declares no access MUST compile to the canon-ir/1 it compiled to before access
+      existed, apart from those two keys.
+    source: story:protocol-access-class
+  CANON-TRIGGER-005:
+    status: implemented
+    statement: >-
+      An action that declares access read_only and revises an artifact or opens a case MUST be
+      refused as read-only-action-writes.
+    source: story:protocol-access-class
+  CANON-TRIGGER-006:
+    status: implemented
+    statement: >-
+      A protocol MUST be guarded when one of its actions requires a capability, and not guarded
+      otherwise. canon trigger protocols MUST print, for each protocol of its set, keyed by
+      protocol id, its access class, whether it is guarded and the case inputs it declares with
+      their values; a set with two documents of one protocol id MUST be refused.
+    source: story:protocol-access-class

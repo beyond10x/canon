@@ -23,13 +23,13 @@ use serde_yaml_ng::Value;
 use super::Refusal;
 use crate::ir::{self, Ir};
 use crate::model::{
-    self, Action, Age, Artifact, ArtifactId, Author, CapabilityId, CapabilityRequirement,
-    CaseInput, CaseOpening, CaseSection, ChildOutcomes, Claim, ClaimId, ClaimTest, Declarations,
-    EffectClass, EvidenceAfter, EvidenceDescended, EvidenceKind, EvidenceKindId, EvidenceMatch,
-    EvidenceOrder, EvidenceProduction, EvidenceSince, FirstResult, IndependenceDimension,
-    IndependenceDimensionId, InputId, InputTest, InputValue, LaterRecord, Obligation, Outcome,
-    OutcomeRequirement, Predicate, Protocol, ProtocolHeader, ProtocolId, RecordGroup, ScopeKey,
-    ScopeValue, Truth, one_line,
+    self, AccessClass, Action, Age, Artifact, ArtifactId, Author, CapabilityId,
+    CapabilityRequirement, CaseInput, CaseOpening, CaseSection, ChildOutcomes, Claim, ClaimId,
+    ClaimTest, Declarations, EffectClass, EvidenceAfter, EvidenceDescended, EvidenceKind,
+    EvidenceKindId, EvidenceMatch, EvidenceOrder, EvidenceProduction, EvidenceSince, FirstResult,
+    IndependenceDimension, IndependenceDimensionId, InputId, InputTest, InputValue, LaterRecord,
+    Obligation, Outcome, OutcomeRequirement, Predicate, Protocol, ProtocolHeader, ProtocolId,
+    RecordGroup, ScopeKey, ScopeValue, Truth, one_line,
 };
 
 /// A `malformed-input` refusal: `what` is not a document of its format, and why.
@@ -441,7 +441,20 @@ fn action(entry: &Json) -> Shape<Action> {
         // by the byte comparison.
         author: author(entry, "author")?,
         revises,
+        // Written only as `read_only` (story:protocol-access-class); a `write` written out reads,
+        // compiles to no key and is refused by the byte comparison.
+        access: access(entry)?,
     })
+}
+
+/// An action's `access`: absent, or `read_only` or `write`.
+fn access(entry: &Json) -> Shape<Option<AccessClass>> {
+    match absent_or_text(entry, "access")?.as_deref() {
+        None => Ok(None),
+        Some("read_only") => Ok(Some(AccessClass::ReadOnly)),
+        Some("write") => Ok(Some(AccessClass::Write)),
+        Some(_) => Err("`access` is not read_only or write".to_owned()),
+    }
 }
 
 /// An action's `author` or a production's `decided_by`: absent, or `program` or `judgement`.

@@ -46,6 +46,16 @@ steps:
       refused: owner                      # the field every error names
       # or, instead of `refused`:
       # rule: stale-invoice-reminder@3    # the key of the valid rule
+  - id: every-action-read-only
+    trigger-protocols:
+      documents:
+        - |
+          { ... a protocol/1 document ... }
+    expect:
+      protocols: |
+        { ... the exact canon-trigger-protocols/1 bytes ... }
+      # or, instead of `protocols`:
+      # refusal: read-only-action-writes  # the code of every problem
 ```
 
 - `fixture` is the `protocol/1` document the scenario compiles, as a path relative to the
@@ -64,10 +74,20 @@ steps:
   the step as `import `&lt;path&gt;` is unreadable: <why>`, one that does not parse as `import `&lt;path&gt;` does not parse: <kind and position>`, and a composition that is refused as
   `fixture does not compile: <code>: <why>; …`. Absent, the fixture imports nothing.
 - `covers` entries are `CANON-` followed by an identifier, each listed once.
-- `steps` is an ordered, non-empty list. Each step is exactly one of `compile`, `evaluate` or
-  `trigger-validate`, with exactly one expectation of the matching kind: a compile step expects
-  `canon-ir`, an evaluate step expects `decision` or `refusal`, a trigger-validate step expects
-  `rule` or `refused`, neither empty.
+- `steps` is an ordered, non-empty list. Each step is exactly one of `compile`, `evaluate`,
+  `trigger-validate` or `trigger-protocols`, with exactly one expectation of the matching kind:
+  a compile step expects `canon-ir`, an evaluate step expects `decision` or `refusal`, a
+  trigger-validate step expects `rule` or `refused`, neither empty, and a trigger-protocols
+  step expects `protocols` or `refusal`.
+- A trigger-protocols step (story:protocol-access-class) reads its non-empty list of
+  `documents` as `canon trigger protocols` reads its files, in list order, each named
+  `document <n>`, counted from 1; it does not read the fixture. Each document is parsed and
+  compiled on its own, and the first one refused stops the step: one that does not parse is
+  `parse`, one with imports `protocol-imports`, one that does not compile has each problem's
+  code (`read-only-action-writes`, …); a set with two documents of one protocol id is
+  `duplicate-protocol-id`. It passes when the `canon-trigger-protocols/1` text equals
+  `protocols` byte for byte, or when the documents are refused and every problem has the code
+  `refusal`. Otherwise `<what differed>` is `canon-trigger-protocols/1 differs from the expectation at line <n>`, `expected refusal `&lt;code&gt;`, the documents gave canon-trigger-protocols/1`, `expected refusal `&lt;code&gt;` alone, the documents are refused: error[<code>]: <why>; …`, or `the documents are refused: error[<code>]: <why>; …`.
 - A trigger-validate step (story:trigger-rule-document) reads its `document` as
   `canon trigger validate` reads a file (`trigger::read`); it does not read the fixture. It
   passes when the document is a valid rule whose key, `<id>@<version>`, is `rule`, or when the

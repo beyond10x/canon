@@ -8,7 +8,7 @@ protocol:
 imports:
   floor.investigation:
     revision: 1
-    digest: sha256:de2c95f1f23052294d159242f5e7292d47dfdfbe51b3097659936b07f6150003
+    digest: sha256:c82e434bf7dd874d6e1b2a029adf6f842df748db123fe471c37c748081da8c93
 
 actions:
   request_review:

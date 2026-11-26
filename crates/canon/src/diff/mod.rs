@@ -43,6 +43,8 @@
 //! | action effect changed | `BREAKING` |
 //! | action `author` changed from program to judgement (story:judgement-marking: a judgement mark only adds obligations) | `TIGHTENING` |
 //! | action `author` changed from judgement to program | `RELAXATION` |
+//! | action `access` changed from write to read_only (story:protocol-access-class: it may change less) | `TIGHTENING` |
+//! | action `access` changed from read_only to write | `RELAXATION` |
 //! | evidence kind an action may produce added | `EXPANSION` |
 //! | evidence kind an action may produce removed | `BREAKING` |
 //! | evidence kind an action may produce in both revisions becoming judgement-decided (its resolved `decided_by`) | `TIGHTENING` |
@@ -156,7 +158,7 @@ use crate::ir::{
     Obligation, Outcome,
 };
 use crate::model::{
-    Age, ArtifactId, Author, CaseOpening, ClaimId, EvidenceKindId, EvidenceMatch,
+    AccessClass, Age, ArtifactId, Author, CaseOpening, ClaimId, EvidenceKindId, EvidenceMatch,
     IndependenceDimensionId, Predicate, ProtocolId, Truth, one_line,
 };
 
@@ -1076,6 +1078,7 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         revises: from_revises,
         arguments: from_arguments,
         case_open: from_case_open,
+        access: from_access,
     } = from;
     let Action {
         description: to_description,
@@ -1091,6 +1094,7 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
         revises: to_revises,
         arguments: to_arguments,
         case_open: to_case_open,
+        access: to_access,
     } = to;
     changes.description(SECTION, id, from_description, to_description);
     changes.predicate(
@@ -1155,6 +1159,24 @@ fn action(changes: &mut Changes, id: &str, from: &Action, to: &Action) {
                 "author changed from {} to {}",
                 from_author.as_str(),
                 to_author.as_str()
+            ),
+        );
+    }
+    // What the action may change (story:protocol-access-class): turned read-only it may change
+    // less, turned write more.
+    if from_access != to_access {
+        let category = match to_access {
+            AccessClass::ReadOnly => Category::Tightening,
+            AccessClass::Write => Category::Relaxation,
+        };
+        changes.push(
+            category,
+            SECTION,
+            id,
+            format!(
+                "access changed from {} to {}",
+                from_access.as_str(),
+                to_access.as_str()
             ),
         );
     }
@@ -1598,6 +1620,24 @@ mod tests {
     /// to program relaxes; an artifact added to `revises` relaxes and one removed tightens. A kind
     /// added or removed is only its own line, whoever decides it; `author: program` written out is
     /// no change. Each line names the action, after its effect and before its argument schema.
+    /// story:protocol-access-class: an action turned read-only tightens, turned write relaxes;
+    /// `access: write` written out is no change.
+    #[test]
+    fn access_turned_read_only_tightens_and_turned_write_relaxes() {
+        let write = ir("actions: {act: {}}\n");
+        let written = ir("actions: {act: {access: write}}\n");
+        let read_only = ir("actions: {act: {access: read_only}}\n");
+        assert!(lines(&write, &written).is_empty());
+        assert_eq!(
+            lines(&write, &read_only),
+            ["TIGHTENING: action `act` access changed from write to read_only"]
+        );
+        assert_eq!(
+            lines(&read_only, &written),
+            ["RELAXATION: action `act` access changed from read_only to write"]
+        );
+    }
+
     #[test]
     fn judgement_marks_tighten_and_revises_relaxes() {
         let kinds = "artifacts: {a: {}, b: {}}\nevidence_kinds: {k: {}, l: {}, m: {}}\n";

@@ -20,6 +20,7 @@ steps:
     expect:
       canon-ir: |
         {
+          "access_class": "write",
           "actions": {
             "merge": {
               "description": "Merge the change once its tests, after they were changed, were seen failing and now pass.",
@@ -100,6 +101,7 @@ steps:
             }
           },
           "format": "canon-ir/1",
+          "guarded": false,
           "obligations": {},
           "outcomes": {
             "done": {

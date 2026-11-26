@@ -4,6 +4,9 @@
 # refire policy and daily cap. What a rule means (its validation, the `where` catalog, and later
 # its evaluation against a snapshot) is Canon's own conformance suite
 # (conformance/scenarios/trigger-rule-document.yaml) and tests, not this file.
+# story:protocol-access-class adds the canon-trigger-protocols/1 document `canon trigger protocols`
+# prints, each protocol's access class, guard and case inputs
+# (conformance/scenarios/protocol-access-class.yaml).
 # crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
 domain: canon.trigger
 
@@ -11,7 +14,9 @@ summary: >-
   One trigger rule per canon-trigger/1 document: its key (id and version), its owner, the kind and
   state of the rows it watches with the row fields it reads, an optional canon-expr/1 condition
   over those fields, the protocol it starts with the case inputs it fills from the row, and its
-  mode, access, refire policy and daily cap.
+  mode, access, refire policy and daily cap. A canon-trigger-protocols/1 document maps each
+  protocol id to the protocol's access class, whether it is guarded, and its case inputs with
+  their values.
 
 naming:
   wire: trigger
@@ -183,3 +188,40 @@ types:
   - name: canon.trigger.TriggerRefire
     kind: enum
     variants: ["once_per_state_entry", "once_per_subject"]
+
+  # The canon-trigger-protocols/1 document `canon trigger protocols --path <file> ...` prints
+  # (story:protocol-access-class): the `protocols` argument a trigger evaluation reads, a map
+  # from protocol id to what a rule is checked against. Canon prints it from compiled protocols;
+  # an evaluator may build it otherwise. Unknown fields are refused.
+  # read from: docs/design/trigger-rules.md:154-156
+  # read from: .engineering/planning/story/protocol-access-class.md, section "Outcome"
+  - name: canon.trigger.TriggerProtocols
+    kind: struct
+    fields:
+      # The only accepted value is canon-trigger-protocols/1.
+      - name: format
+        type: String
+      # One entry per protocol, keyed by protocol id; two documents of one id are refused
+      # (duplicate-protocol-id), since a rule names a protocol by id alone.
+      # read from: docs/design/trigger-rules.md:154-155
+      - name: protocols
+        type: Map<canon.protocol.ProtocolId, canon.trigger.TriggerProtocol>
+
+  # One protocol as a trigger rule sees it: its access class, whether it is guarded, and the case
+  # inputs it declares with the values each may take, sorted, each once.
+  # read from: docs/design/trigger-rules.md:141-156
+  - name: canon.trigger.TriggerProtocol
+    kind: struct
+    fields:
+      # read_only when every action is read_only, else write: the canon-ir/1 key access_class.
+      # read from: docs/design/trigger-rules.md:149-150
+      - name: class
+        type: canon.protocol.AccessClass
+      # True when some action has a non-empty requires: the canon-ir/1 key guarded.
+      # read from: docs/design/trigger-rules.md:151-152
+      - name: guarded
+        type: Boolean
+      # The case inputs, keyed by input id, each with the values it declares.
+      # read from: .engineering/planning/story/protocol-access-class.md, section "Outcome"
+      - name: inputs
+        type: Map<canon.protocol.InputId, List<canon.protocol.InputValue>>

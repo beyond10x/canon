@@ -24,7 +24,7 @@ const SIMULATE: &str = "fixtures/investigation/simulate";
 const REVISED_LINE: &str = "    revised_by: revised.by.owner\n";
 /// The digest of `plain.yaml`'s `canon-ir/1` as canon compiled it before the field existed.
 const PLAIN_DIGEST_BEFORE: &str =
-    "sha256:5ca016df810d6a77dca9e8e2ca7083738766470d8e11183e7ec62a12d99a618c";
+    "sha256:2e5a3de73901536e392640598493d73723420cf46bcaa28473e35534196e47d8";
 
 /// Read at run time, not compile time: a test binary reused from a shared build directory must
 /// still read this tree's fixtures.

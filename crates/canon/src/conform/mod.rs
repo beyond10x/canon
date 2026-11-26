@@ -37,6 +37,16 @@
 //!       refused: owner                      # the field every error names
 //!       # or, instead of `refused`:
 //!       # rule: stale-invoice-reminder@3    # the key of the valid rule
+//!   - id: every-action-read-only
+//!     trigger-protocols:
+//!       documents:
+//!         - |
+//!           { ... a protocol/1 document ... }
+//!     expect:
+//!       protocols: |
+//!         { ... the exact canon-trigger-protocols/1 bytes ... }
+//!       # or, instead of `protocols`:
+//!       # refusal: read-only-action-writes  # the code of every problem
 //! ```
 //!
 //! - `fixture` is the `protocol/1` document the scenario compiles, as a path relative to the
@@ -57,10 +67,23 @@
 //!   `<path>` does not parse: <kind and position>`, and a composition that is refused as
 //!   `fixture does not compile: <code>: <why>; …`. Absent, the fixture imports nothing.
 //! - `covers` entries are `CANON-` followed by an identifier, each listed once.
-//! - `steps` is an ordered, non-empty list. Each step is exactly one of `compile`, `evaluate` or
-//!   `trigger-validate`, with exactly one expectation of the matching kind: a compile step expects
-//!   `canon-ir`, an evaluate step expects `decision` or `refusal`, a trigger-validate step expects
-//!   `rule` or `refused`, neither empty.
+//! - `steps` is an ordered, non-empty list. Each step is exactly one of `compile`, `evaluate`,
+//!   `trigger-validate` or `trigger-protocols`, with exactly one expectation of the matching kind:
+//!   a compile step expects `canon-ir`, an evaluate step expects `decision` or `refusal`, a
+//!   trigger-validate step expects `rule` or `refused`, neither empty, and a trigger-protocols
+//!   step expects `protocols` or `refusal`.
+//! - A trigger-protocols step (story:protocol-access-class) reads its non-empty list of
+//!   `documents` as `canon trigger protocols` reads its files, in list order, each named
+//!   `document <n>`, counted from 1; it does not read the fixture. Each document is parsed and
+//!   compiled on its own, and the first one refused stops the step: one that does not parse is
+//!   `parse`, one with imports `protocol-imports`, one that does not compile has each problem's
+//!   code (`read-only-action-writes`, …); a set with two documents of one protocol id is
+//!   `duplicate-protocol-id`. It passes when the `canon-trigger-protocols/1` text equals
+//!   `protocols` byte for byte, or when the documents are refused and every problem has the code
+//!   `refusal`. Otherwise `<what differed>` is `canon-trigger-protocols/1 differs from the
+//!   expectation at line <n>`, `expected refusal `<code>`, the documents gave
+//!   canon-trigger-protocols/1`, `expected refusal `<code>` alone, the documents are refused:
+//!   error[<code>]: <why>; …`, or `the documents are refused: error[<code>]: <why>; …`.
 //! - A trigger-validate step (story:trigger-rule-document) reads its `document` as
 //!   `canon trigger validate` reads a file (`trigger::read`); it does not read the fixture. It
 //!   passes when the document is a valid rule whose key, `<id>@<version>`, is `rule`, or when the
@@ -241,6 +264,21 @@ pub enum StepKind {
         document: String,
         expected: TriggerExpectation,
     },
+    /// Read `protocol/1` documents as `canon trigger protocols` reads its files; the fixture is
+    /// not read (story:protocol-access-class).
+    TriggerProtocols {
+        documents: Vec<String>,
+        expected: ProtocolsExpectation,
+    },
+}
+
+/// What a trigger-protocols step expects of its documents.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProtocolsExpectation {
+    /// The exact `canon-trigger-protocols/1` bytes.
+    Protocols(String),
+    /// The documents are refused, and every problem has this code.
+    Refusal(String),
 }
 
 /// What a trigger-validate step expects of its document.
@@ -336,6 +374,8 @@ struct RawStep {
     evaluate: Option<RawEvaluate>,
     #[serde(rename = "trigger-validate", default, deserialize_with = "optional")]
     trigger_validate: Option<RawTriggerValidate>,
+    #[serde(rename = "trigger-protocols", default, deserialize_with = "optional")]
+    trigger_protocols: Option<RawTriggerProtocols>,
     #[serde(deserialize_with = "required")]
     expect: RawExpect,
 }
@@ -349,6 +389,13 @@ struct RawCompile {}
 struct RawTriggerValidate {
     #[serde(deserialize_with = "required")]
     document: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawTriggerProtocols {
+    #[serde(deserialize_with = "required")]
+    documents: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -379,6 +426,8 @@ struct RawExpect {
     rule: Option<String>,
     #[serde(default, deserialize_with = "optional")]
     refused: Option<String>,
+    #[serde(default, deserialize_with = "optional")]
+    protocols: Option<String>,
 }
 
 /// Parses `canon-conformance/1` scenario text.
@@ -495,12 +544,20 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
         compile,
         evaluate,
         trigger_validate,
+        trigger_protocols,
         expect,
         id: _,
     } = step;
-    match (compile, evaluate, trigger_validate, expect) {
+    match (
+        compile,
+        evaluate,
+        trigger_validate,
+        trigger_protocols,
+        expect,
+    ) {
         (
             Some(RawCompile {}),
+            None,
             None,
             None,
             RawExpect {
@@ -509,12 +566,13 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                 refusal: None,
                 rule: None,
                 refused: None,
+                protocols: None,
             },
         ) => Ok(StepKind::Compile { expected_ir }),
-        (Some(_), None, None, _) => refuse(format!(
+        (Some(_), None, None, None, _) => refuse(format!(
             "compile step `{id}` must expect `canon-ir` and nothing else"
         )),
-        (None, Some(evaluate), None, expect) => {
+        (None, Some(evaluate), None, None, expect) => {
             let expected = match expect {
                 RawExpect {
                     canon_ir: None,
@@ -522,6 +580,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                     refusal: None,
                     rule: None,
                     refused: None,
+                    protocols: None,
                 } => EvaluateExpectation::Decision(decision),
                 RawExpect {
                     canon_ir: None,
@@ -529,6 +588,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                     refusal: Some(refusal),
                     rule: None,
                     refused: None,
+                    protocols: None,
                 } if model::is_identifier(&refusal) => EvaluateExpectation::Refusal(refusal),
                 _ => {
                     return refuse(format!(
@@ -547,7 +607,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                 expected,
             })
         }
-        (None, None, Some(trigger), expect) => {
+        (None, None, Some(trigger), None, expect) => {
             let expected = match expect {
                 RawExpect {
                     canon_ir: None,
@@ -555,6 +615,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                     refusal: None,
                     rule: Some(rule),
                     refused: None,
+                    protocols: None,
                 } if !rule.is_empty() => TriggerExpectation::Rule(rule),
                 RawExpect {
                     canon_ir: None,
@@ -562,6 +623,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                     refusal: None,
                     rule: None,
                     refused: Some(field),
+                    protocols: None,
                 } if !field.is_empty() => TriggerExpectation::Refused(field),
                 _ => {
                     return refuse(format!(
@@ -574,8 +636,40 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                 expected,
             })
         }
+        (None, None, None, Some(protocols), expect) => {
+            let expected = match expect {
+                RawExpect {
+                    canon_ir: None,
+                    decision: None,
+                    refusal: None,
+                    rule: None,
+                    refused: None,
+                    protocols: Some(expected),
+                } => ProtocolsExpectation::Protocols(expected),
+                RawExpect {
+                    canon_ir: None,
+                    decision: None,
+                    refusal: Some(refusal),
+                    rule: None,
+                    refused: None,
+                    protocols: None,
+                } if model::is_identifier(&refusal) => ProtocolsExpectation::Refusal(refusal),
+                _ => {
+                    return refuse(format!(
+                        "trigger-protocols step `{id}` must expect exactly one of `protocols` or `refusal` (an identifier)"
+                    ));
+                }
+            };
+            if protocols.documents.is_empty() {
+                return refuse(format!("trigger-protocols step `{id}` lists no document"));
+            }
+            Ok(StepKind::TriggerProtocols {
+                documents: protocols.documents,
+                expected,
+            })
+        }
         _ => refuse(format!(
-            "step `{id}` must be exactly one of `compile`, `evaluate` or `trigger-validate`"
+            "step `{id}` must be exactly one of `compile`, `evaluate`, `trigger-validate` or `trigger-protocols`"
         )),
     }
 }
@@ -617,6 +711,10 @@ fn run_compiled(scenario: &Scenario, compiled: &Result<ir::Ir, String>) -> Verdi
             StepKind::Compile { expected_ir } => compile_step(compiled, expected_ir),
             StepKind::Evaluate { inputs, expected } => evaluate_step(compiled, inputs, expected),
             StepKind::TriggerValidate { document, expected } => trigger_step(document, expected),
+            StepKind::TriggerProtocols {
+                documents,
+                expected,
+            } => protocols_step(documents, expected),
         };
         if let Some(reason) = failure {
             return Verdict::Failed {
@@ -714,6 +812,80 @@ fn trigger_step(document: &str, expected: &TriggerExpectation) -> Option<String>
             refused(&problems)
         )),
     }
+}
+
+/// Reads a trigger-protocols step's documents as `canon trigger protocols` reads its files, each
+/// named `document <n>`, counted from 1, and compares the `canon-trigger-protocols/1` bytes or the
+/// refusal with the expectation (see the module docs).
+fn protocols_step(documents: &[String], expected: &ProtocolsExpectation) -> Option<String> {
+    let outcome = trigger_protocols(documents);
+    let refused = |problems: &[(&str, String)]| {
+        problems
+            .iter()
+            .map(|(code, why)| format!("error[{code}]: {why}"))
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    match (outcome, expected) {
+        (Ok(printed), ProtocolsExpectation::Protocols(expected)) => {
+            first_difference(&printed, expected).map(|line| {
+                format!("canon-trigger-protocols/1 differs from the expectation at line {line}")
+            })
+        }
+        (Ok(_), ProtocolsExpectation::Refusal(code)) => Some(format!(
+            "expected refusal `{}`, the documents gave canon-trigger-protocols/1",
+            model::one_line(code)
+        )),
+        (Err(problems), ProtocolsExpectation::Refusal(code))
+            if problems.iter().all(|(found, _)| found == code) =>
+        {
+            None
+        }
+        (Err(problems), ProtocolsExpectation::Refusal(code)) => Some(format!(
+            "expected refusal `{}` alone, the documents are refused: {}",
+            model::one_line(code),
+            refused(&problems)
+        )),
+        (Err(problems), ProtocolsExpectation::Protocols(_)) => {
+            Some(format!("the documents are refused: {}", refused(&problems)))
+        }
+    }
+}
+
+/// The `canon-trigger-protocols/1` text of the documents, or each `(code, why)` of the first
+/// document refused, in list order, or the duplicate protocol id of the set.
+fn trigger_protocols(documents: &[String]) -> Result<String, Vec<(&'static str, String)>> {
+    let mut set = Vec::with_capacity(documents.len());
+    for (at, text) in documents.iter().enumerate() {
+        let name = format!("document {}", at + 1);
+        let Ok(protocol) = model::parse(text) else {
+            return Err(vec![(
+                "parse",
+                format!("{name}: {}", fixture_parse_failure(text)),
+            )]);
+        };
+        if let Some(first) = protocol.imports.ids().next() {
+            return Err(vec![(
+                "protocol-imports",
+                format!(
+                    "{name}: the protocol imports `{}`",
+                    model::one_line(first.as_str())
+                ),
+            )]);
+        }
+        match ir::compile(&protocol) {
+            Ok(compiled) => set.push((name, compiled)),
+            Err(problems) => {
+                return Err(problems
+                    .iter()
+                    .map(|problem| (problem.code(), format!("{name}: {problem}")))
+                    .collect());
+            }
+        }
+    }
+    trigger::protocols(set.iter().map(|(name, compiled)| (name.as_str(), compiled)))
+        .map(|document| trigger::render_protocols(&document))
+        .map_err(|duplicate| vec![(trigger::DuplicateProtocolId::CODE, duplicate.to_string())])
 }
 
 fn compile_step(compiled: &Result<ir::Ir, String>, expected_ir: &str) -> Option<String> {
@@ -1400,13 +1572,13 @@ mod tests {
             ),
             (
                 format!("{HEAD}steps:\n  - id: c\n    expect: {{canon-ir: x}}\n"),
-                "step `c` must be exactly one of `compile`, `evaluate` or `trigger-validate`",
+                "step `c` must be exactly one of `compile`, `evaluate`, `trigger-validate` or `trigger-protocols`",
             ),
             (
                 format!(
                     "{HEAD}steps:\n  - id: c\n    compile: {{}}\n    evaluate: {{case: {{}}, evidence: []}}\n    expect: {{canon-ir: x}}\n"
                 ),
-                "step `c` must be exactly one of `compile`, `evaluate` or `trigger-validate`",
+                "step `c` must be exactly one of `compile`, `evaluate`, `trigger-validate` or `trigger-protocols`",
             ),
             (
                 format!(
@@ -1472,7 +1644,7 @@ mod tests {
                 format!(
                     "{HEAD}steps:\n  - id: t\n    compile: {{}}\n    trigger-validate: {{document: x}}\n    expect: {{canon-ir: x}}\n"
                 ),
-                "step `t` must be exactly one of `compile`, `evaluate` or `trigger-validate`",
+                "step `t` must be exactly one of `compile`, `evaluate`, `trigger-validate` or `trigger-protocols`",
             ),
             (
                 format!(

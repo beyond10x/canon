@@ -187,3 +187,64 @@ fn a_where_left_out_is_no_condition() {
     assert!(rule.r#where.is_none());
     assert!(compile_where(&rule).expect("compiles").is_none());
 }
+
+/// The compiled protocol of a fixture source.
+fn compiled(source: &str) -> ir::Ir {
+    ir::compile(&model::parse(source).expect("parses")).expect("compiles")
+}
+
+const LOOK_UP: &str = include_str!("../../../../fixtures/trigger/access/look-up.yaml");
+const LOOK_UP_AGAIN: &str = include_str!("../../../../fixtures/trigger/access/look-up-again.yaml");
+const PUBLISH: &str = include_str!("../../../../fixtures/trigger/access/publish.yaml");
+const SEND_REMINDER: &str = include_str!("../../../../fixtures/trigger/send-reminder.yaml");
+
+/// story:protocol-access-class: one entry per protocol, keyed and ordered by id whatever order the
+/// set is given in, its inputs' values sorted; the document reads back as itself.
+#[test]
+fn the_protocols_of_a_set_are_keyed_by_id_with_class_guard_and_inputs() {
+    let look = compiled(LOOK_UP);
+    let publish = compiled(PUBLISH);
+    let forward = protocols([("a", &look), ("b", &publish)]).expect("no duplicate");
+    let backward = protocols([("b", &publish), ("a", &look)]).expect("no duplicate");
+    assert_eq!(forward, backward);
+    let ids: Vec<&str> = forward.protocols.ids().map(|id| id.as_str()).collect();
+    assert_eq!(ids, ["look-up", "publish"]);
+    let text = render_protocols(&forward);
+    assert_eq!(
+        text,
+        "{\n  \"format\": \"canon-trigger-protocols/1\",\n  \"protocols\": {\n    \"look-up\": {\n      \
+         \"class\": \"read_only\",\n      \"guarded\": false,\n      \"inputs\": {\n        \
+         \"region\": [\n          \"east\",\n          \"west\"\n        ]\n      }\n    },\n    \
+         \"publish\": {\n      \"class\": \"write\",\n      \"guarded\": true,\n      \
+         \"inputs\": {}\n    }\n  }\n}\n"
+    );
+    let read_back: model::TriggerProtocols = serde_json::from_str(&text).expect("reads back");
+    assert_eq!(read_back, forward);
+    assert_eq!(render_protocols(&read_back), text);
+    let reminder = protocol(&compiled(SEND_REMINDER));
+    assert_eq!(reminder.class, model::AccessClass::Write);
+    assert!(!reminder.guarded);
+    assert_eq!(
+        protocols(std::iter::empty())
+            .map(|document| render_protocols(&document))
+            .expect("empty set"),
+        "{\n  \"format\": \"canon-trigger-protocols/1\",\n  \"protocols\": {}\n}\n"
+    );
+}
+
+/// Two members of one protocol id are refused, naming the id and every member that declares it,
+/// sorted.
+#[test]
+fn two_members_of_one_id_are_refused() {
+    let one = compiled(LOOK_UP);
+    let two = compiled(LOOK_UP_AGAIN);
+    let other = compiled(PUBLISH);
+    let refused =
+        protocols([("z.yaml", &one), ("q.yaml", &other), ("b.yaml", &two)]).expect_err("duplicate");
+    assert_eq!(DuplicateProtocolId::CODE, "duplicate-protocol-id");
+    assert_eq!(refused.id.as_str(), "look-up");
+    assert_eq!(
+        refused.to_string(),
+        "protocol `look-up` is declared by b.yaml and z.yaml"
+    );
+}
