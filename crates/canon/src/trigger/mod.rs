@@ -98,7 +98,8 @@
 //! `docs/design/trigger-rules.md` § 6). It is a pure function of the rules with their states, the
 //! snapshot, the protocols, the history and the instant `now`: it reads no clock, no network and
 //! no file, and the same arguments give the same plan, byte for byte, whatever the order of the
-//! rules, kinds, rows, firings and activations. It starts nothing; the evaluator that links it
+//! rules, kinds, rows, protocols, firings, activations and approvals. It starts nothing; the
+//! evaluator that links it
 //! does. `canon trigger evaluate --rules <set> --snapshot <file> --protocols <file> --history
 //! <file> --now <instant>` reads the documents and prints the plan ([`render_plan`]).
 //!
@@ -118,9 +119,21 @@
 //! its field values; the row id is not a field, so a rule that reads it declares a field the row
 //! carries. The protocols are a `canon-trigger-protocols/1` document, as `canon trigger protocols`
 //! prints it. The history, `canon-trigger-history/1`, lists the evaluator's `firings` (`firing_id`,
-//! `rule`, `at`) and `activations` (`rule`, `at`, and optionally `baseline`, rows written
-//! `<kind>:<row id>`), each list empty when left out. Every instant (`now`, `entered_at`, `at`) is
-//! a Canon instant, `YYYY-MM-DDTHH:MM:SSZ` in UTC with an optional fraction.
+//! `rule`, `at`), `activations` (`rule`, `at`, and optionally `baseline`, rows written
+//! `<kind>:<row id>`) and `approvals` (`rule`, `by`, `at`), each list empty when left out. An
+//! approval counts for the exact rule key it names, never for another version of the rule; Canon
+//! reads `by` and never decides who may approve. Every instant (`now`, `entered_at`, `at`) is a
+//! Canon instant, `YYYY-MM-DDTHH:MM:SSZ` in UTC with an optional fraction.
+//!
+//! ```yaml
+//! format: canon-trigger-history/1
+//! firings:
+//!   - {firing_id: overdue-reminder@1/invoice:inv-9/2026-11-20T08:00:00Z, rule: overdue-reminder@1, at: 2026-11-26T08:00:00Z}
+//! activations:
+//!   - {rule: overdue-reminder@1, at: 2026-11-19T00:00:00Z}
+//! approvals:
+//!   - {rule: overdue-reminder@1, by: billing-lead, at: 2026-11-19T00:00:00Z}
+//! ```
 //!
 //! ```yaml
 //! format: canon-trigger-snapshot/1
@@ -178,29 +191,40 @@
 //!   instant as the snapshot writes it, so a row that enters its state again gets a new one, and
 //!   `<rule key>/<kind>:<row id>` under `once_per_subject`. A row without `entered_at` under
 //!   `once_per_state_entry` has none.
-//! - `verdict` is the first that applies: `refused` for a row without `entered_at` under
-//!   `once_per_state_entry` (`reason: entered-at-missing`); `undetermined` (with its `reason`, and
-//!   the `field` it names); `baseline` when the latest activation of the rule key in the history
-//!   is at or after the row's `entered_at` (each instant read as the start of the interval it
-//!   names) or an activation of it lists the row, listed and never started; `offer` for a rule in
-//!   mode `offer`; `would-start` for one in mode `auto`.
+//! - `verdict` is the first that applies, and `reason` says why for `refused`, `undetermined` and
+//!   `held`:
+//!   1. `refused`, the first reason that applies: the rule's state is `disabled` (`disabled`); its
+//!      protocol is not in the protocols (`unknown-protocol`); the protocol is guarded and the
+//!      rule's mode `auto` (`guarded-auto`); the rule's `access` is not the protocol's class
+//!      (`access-mismatch`); the `access` is `write`, the mode `auto` and the history holds no
+//!      approval of the rule key (`write-unapproved`); a row without `entered_at` under
+//!      `once_per_state_entry` (`entered-at-missing`).
+//!   2. `undetermined` (with its `reason`, and the `field` it names).
+//!   3. `baseline` when the latest activation of the rule key in the history is at or after the
+//!      row's `entered_at` (each instant read as the start of the interval it names) or an
+//!      activation of it lists the row, listed and never started.
+//!   4. `held` when a firing with the entry's firing id is in the history (`already-fired`), or
+//!      when the rule key's firings on the UTC day of `now` have reached the rule's `cap`
+//!      (`cap-reached`): the distinct firing ids of the rule key's firings whose `at` falls on that
+//!      day, whether before or after `now`, then each earlier `would-start` entry of the rule key
+//!      in plan order. An entry held at the cap or offered does not count; a `would-start` entry
+//!      does.
+//!   5. `offer` for a rule in mode `offer`; `would-start` for one in mode `auto`.
 //!
 //! Every state is evaluated by the same steps, so a `draft` rule is simulated against real state;
 //! an evaluator submits only `would-start` entries of an `active` rule, with the firing id as the
-//! idempotency key. The entries are ordered by rule key, kind and row id, each by code point.
-//! `held` (`already-fired`, `cap-reached`) and the refusals for a `disabled` rule, a protocol that
-//! is missing, guarded under `auto` or of another access class, and a missing approval come with
-//! story:trigger-holds-and-refusals; until then a `disabled` rule is listed like the others, under
-//! its state.
+//! idempotency key, and records the firing: evaluating again with it in the history lists the
+//! match `held`, `already-fired`. The entries are ordered by rule key, kind and row id, each by
+//! code point.
 //!
 //! The evaluation is refused as a whole, exit 1 with one line `error[<code>]: <why>`, the first in
 //! this order deciding: `now` that is not an instant (`invalid-instant`); a document of another
 //! format (`malformed-input`); a rule that is not valid (`invalid-rule`); two rules of one rule
 //! key (`duplicate-rule`); a kind listed twice or a row id listed twice within its kind
 //! (`duplicate-row`), a kind or row id with whitespace (`malformed-input`), or an `entered_at`
-//! that is not an instant (`invalid-instant`); a firing's
-//! or an activation's `at` that is not an instant (`invalid-instant`). `canon trigger evaluate`
-//! reads the set, then each rule file in sorted order of its path, then the snapshot, the
+//! that is not an instant (`invalid-instant`); a protocol id listed twice in the protocols
+//! (`duplicate-protocol-id`); a firing's, an activation's or an approval's `at` that is not an
+//! instant (`invalid-instant`). `canon trigger evaluate` reads the set, then each rule file in sorted order of its path, then the snapshot, the
 //! protocols and the history: a file that cannot be read exits 2, a document that does not read as
 //! its format is `malformed-input` naming the file, and a rule file that is not a valid rule
 //! prints its errors as `canon trigger validate` does, each line naming the file.

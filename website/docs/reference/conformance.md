@@ -220,9 +220,9 @@ printed on standard output. Then the registry runs as above, and these checks fo
    the refusal's code, must be byte-identical; otherwise `nondeterministic: scenario `&lt;id&gt;` step `&lt;step&gt;`: <rerun|permuted> differs at line <n>`, `<n>` the first line, counted from 1, where
    that run's output differs from the first. In registry and step order. Every trigger-evaluate
    step runs three times the same way, the permuted run with its rules, the snapshot's kinds,
-   each kind's rows, and the history's firings and activations in reverse order
-   (CANON-TRIGGER-008); its output is the canonical `canon-trigger-plan/1` document or the
-   refusal's code.
+   each kind's rows, the protocols, and the history's firings, activations and approvals in
+   reverse order (CANON-TRIGGER-008); its output is the canonical `canon-trigger-plan/1`
+   document or the refusal's code.
 
 The check lines come after the registry's lines and before its summary, and a second summary
 line follows it:

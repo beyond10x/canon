@@ -436,13 +436,14 @@ Read by `canon trigger evaluate --history`. The [JSON Schema](https://beyond10x.
 ### `TriggerHistory`
 
 The `canon-trigger-history/1` document `canon trigger evaluate --history` reads: what the
-evaluator recorded. Approvals come with story:trigger-holds-and-refusals.
+evaluator recorded, its firings, activations and approvals.
 
 | Key | Value | Required | Meaning |
 |---|---|---|---|
 | `format` | text | required | The document format, `canon-trigger-history/1`. |
 | `firings` | list of [`TriggerFiring`](#triggerfiring) | optional | Every recorded firing; empty when left out. |
 | `activations` | list of [`TriggerActivation`](#triggeractivation) | optional | Every activation of a rule key; empty when left out. |
+| `approvals` | list of [`TriggerApproval`](#triggerapproval) | optional | Every approval of a rule key; empty when left out. |
 
 ### `TriggerFiring`
 
@@ -464,6 +465,18 @@ One activation of a rule key, with the rows the evaluator listed as matching the
 | `rule` | text | required | The rule key, `<id>@<version>`. |
 | `at` | [text](#text-formats) (`Instant`) | required | When the rule key was activated. |
 | `baseline` | list of text | optional | The rows that matched at activation; empty when left out. |
+
+### `TriggerApproval`
+
+One approval of a rule key: a `write` rule in mode `auto` is refused (`write-unapproved`)
+unless the history holds one for its exact rule key. Canon reads `by` and never decides who
+may approve.
+
+| Key | Value | Required | Meaning |
+|---|---|---|---|
+| `rule` | text | required | The rule key, `<id>@<version>`. |
+| `by` | text | required | Who approved, as the evaluator recorded it. |
+| `at` | [text](#text-formats) (`Instant`) | required | When. |
 
 ## `canon-trigger-plan/1`
 
@@ -505,19 +518,27 @@ The verdict of a plan entry, the first that applies, in this order.
 | `refused` | Not to be started, for the entry's reason. |
 | `undetermined` | The match cannot be decided, for the entry's reason. |
 | `baseline` | The row matched when the rule key was activated: listed, never started. |
+| `held` | Not to be started now, for the entry's reason: it fired already, or the rule's cap for the day is reached. |
 | `offer` | A match of a rule in mode `offer`. |
 | `would-start` | A match of a rule in mode `auto`. |
 
 ### `TriggerReason`
 
-Why an entry is undetermined or refused.
+Why an entry is undetermined, refused or held.
 
 | Value | Meaning |
 |---|---|
 | `field-missing` | A declared required field is absent or null. |
 | `field-type` | A field holds a value of another type than declared. |
 | `where-unknown` | The `where` evaluates to neither true nor false. |
+| `disabled` | The rule's state is `disabled`. |
+| `unknown-protocol` | The rule's protocol is not in the protocols. |
+| `guarded-auto` | The protocol is guarded and the rule's mode is `auto`. |
+| `access-mismatch` | The rule's `access` is not the protocol's class. |
+| `write-unapproved` | A `write` rule in mode `auto` without an approval of its rule key. |
 | `entered-at-missing` | The row has no `entered_at` under `once_per_state_entry`. |
+| `already-fired` | A firing with the entry's firing id is in the history. |
+| `cap-reached` | The rule's firings on the UTC day of the evaluation instant have reached its cap. |
 
 ## Identifiers
 

@@ -1,0 +1,716 @@
+format: canon-conformance/1
+id: CANON-TRIGGER-HOLDS-AND-REFUSALS
+covers: [CANON-TRIGGER-008, CANON-TRIGGER-012, CANON-TRIGGER-013, CANON-TRIGGER-014, CANON-TRIGGER-015]
+fixture: fixtures/trigger/send-reminder.yaml
+# What a rule set does not allow, and what must not start twice (story:trigger-holds-and-refusals,
+# docs/design/trigger-rules.md § 6). Each trigger-evaluate step reads its rules, snapshot,
+# protocols, history and instant as `canon trigger evaluate` reads its files and expects the
+# canon-trigger-plan/1 bytes it prints; it does not read the fixture. `canon conform run
+# --requirements` runs every step again and with its rules, kinds, rows, firings, activations and
+# approvals in reverse order (CANON-TRIGGER-008). One step per reason; each step that refuses or
+# holds a match holds a control beside it that the same reason does not touch.
+#
+# The protocols: send-reminder writes, look-up only reads, and publish writes and is guarded.
+steps:
+  # Acceptance 1, first half: a write rule in auto with no approval in the history is refused,
+  # write-unapproved.
+  - id: write-unapproved
+    trigger-evaluate:
+      rules:
+        - state: active
+          document: |
+            format: canon-trigger/1
+            id: reminder
+            version: 1
+            owner: billing-operations
+            subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+            start: {protocol: send-reminder}
+            mode: auto
+            access: write
+            refire: once_per_subject
+            cap: 50
+      snapshot: &one-row
+        format: canon-trigger-snapshot/1
+        kinds:
+          invoice:
+            - {id: inv-1, entered_at: 2026-11-20T09:00:00Z, fields: {status: overdue}}
+      protocols: &protocols
+        format: canon-trigger-protocols/1
+        protocols:
+          send-reminder: {class: write, guarded: false, inputs: {}}
+          look-up: {class: read_only, guarded: false, inputs: {}}
+          publish: {class: write, guarded: true, inputs: {}}
+      history:
+        format: canon-trigger-history/1
+      now: &now 2026-11-26T12:00:00Z
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "firing_id": "reminder@1/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "write-unapproved",
+              "row": "inv-1",
+              "rule": "reminder@1",
+              "rule_state": "active",
+              "verdict": "refused"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # Acceptance 1, second half: version 2 of the rule, with an approval for version 1 only, is still
+  # refused, write-unapproved: an approval counts for its exact rule key.
+  - id: write-unapproved-previous-version
+    trigger-evaluate:
+      rules:
+        - state: active
+          document: &reminder-2 |
+            format: canon-trigger/1
+            id: reminder
+            version: 2
+            owner: billing-operations
+            subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+            start: {protocol: send-reminder}
+            mode: auto
+            access: write
+            refire: once_per_subject
+            cap: 50
+      snapshot: *one-row
+      protocols: *protocols
+      history:
+        format: canon-trigger-history/1
+        approvals:
+          - {rule: reminder@1, by: billing-lead, at: 2026-11-19T00:00:00Z}
+      now: *now
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "firing_id": "reminder@2/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "write-unapproved",
+              "row": "inv-1",
+              "rule": "reminder@2",
+              "rule_state": "active",
+              "verdict": "refused"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # The controls of write-unapproved: version 2 with an approval of its own key would start,
+  # whoever the approval names (Canon does not judge `by`); a write rule in offer needs no
+  # approval, nor does a read_only rule in auto.
+  - id: write-approved
+    trigger-evaluate:
+      rules:
+        - state: active
+          document: *reminder-2
+        - state: active
+          document: |
+            format: canon-trigger/1
+            id: offered
+            version: 1
+            owner: billing-operations
+            subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+            start: {protocol: send-reminder}
+            mode: offer
+            access: write
+            refire: once_per_subject
+            cap: 50
+        - state: active
+          document: &reader |
+            format: canon-trigger/1
+            id: reader
+            version: 1
+            owner: billing-operations
+            subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+            start: {protocol: look-up}
+            mode: auto
+            access: read_only
+            refire: once_per_subject
+            cap: 50
+      snapshot: *one-row
+      protocols: *protocols
+      history:
+        format: canon-trigger-history/1
+        approvals:
+          - {rule: reminder@2, by: "", at: 2026-11-30T00:00:00Z}
+          - {rule: reminder@1, by: billing-lead, at: 2026-11-19T00:00:00Z}
+      now: *now
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "firing_id": "offered@1/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-1",
+              "rule": "offered@1",
+              "rule_state": "active",
+              "verdict": "offer"
+            },
+            {
+              "firing_id": "reader@1/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "look-up",
+              "row": "inv-1",
+              "rule": "reader@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            },
+            {
+              "firing_id": "reminder@2/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-1",
+              "rule": "reminder@2",
+              "rule_state": "active",
+              "verdict": "would-start"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # Acceptance 2: a guarded protocol in auto is refused, guarded-auto, though its rule key is
+  # approved; the same protocol in offer is offered.
+  - id: guarded-auto
+    trigger-evaluate:
+      rules:
+        - state: active
+          document: |
+            format: canon-trigger/1
+            id: publish-auto
+            version: 1
+            owner: billing-operations
+            subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+            start: {protocol: publish}
+            mode: auto
+            access: write
+            refire: once_per_subject
+            cap: 50
+        - state: active
+          document: |
+            format: canon-trigger/1
+            id: publish-offer
+            version: 1
+            owner: billing-operations
+            subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+            start: {protocol: publish}
+            mode: offer
+            access: write
+            refire: once_per_subject
+            cap: 50
+      snapshot: *one-row
+      protocols: *protocols
+      history:
+        format: canon-trigger-history/1
+        approvals:
+          - {rule: publish-auto@1, by: billing-lead, at: 2026-11-19T00:00:00Z}
+      now: *now
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "firing_id": "publish-auto@1/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "publish",
+              "reason": "guarded-auto",
+              "row": "inv-1",
+              "rule": "publish-auto@1",
+              "rule_state": "active",
+              "verdict": "refused"
+            },
+            {
+              "firing_id": "publish-offer@1/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "publish",
+              "row": "inv-1",
+              "rule": "publish-offer@1",
+              "rule_state": "active",
+              "verdict": "offer"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # Acceptance 3: a rule whose access differs from its protocol's class is refused,
+  # access-mismatch, either way round: read_only against send-reminder, which writes, and write
+  # against look-up, which only reads. The read_only rule against look-up is the control.
+  - id: access-mismatch
+    trigger-evaluate:
+      rules:
+        - state: active
+          document: |
+            format: canon-trigger/1
+            id: flag-read
+            version: 1
+            owner: billing-operations
+            subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+            start: {protocol: send-reminder}
+            mode: auto
+            access: read_only
+            refire: once_per_subject
+            cap: 50
+        - state: active
+          document: |
+            format: canon-trigger/1
+            id: flag-write
+            version: 1
+            owner: billing-operations
+            subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+            start: {protocol: look-up}
+            mode: offer
+            access: write
+            refire: once_per_subject
+            cap: 50
+        - state: active
+          document: *reader
+      snapshot: *one-row
+      protocols: *protocols
+      history:
+        format: canon-trigger-history/1
+      now: *now
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "firing_id": "flag-read@1/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "access-mismatch",
+              "row": "inv-1",
+              "rule": "flag-read@1",
+              "rule_state": "active",
+              "verdict": "refused"
+            },
+            {
+              "firing_id": "flag-write@1/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "look-up",
+              "reason": "access-mismatch",
+              "row": "inv-1",
+              "rule": "flag-write@1",
+              "rule_state": "active",
+              "verdict": "refused"
+            },
+            {
+              "firing_id": "reader@1/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "look-up",
+              "row": "inv-1",
+              "rule": "reader@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # Acceptance 4: every entry of a disabled rule is refused, disabled, ahead of every other
+  # reason: a row in the state (inv-1), one without entered_at (inv-2, entered-at-missing
+  # otherwise) and one whose state field is not a string (inv-3, undetermined otherwise). The
+  # same rule active is the control.
+  - id: disabled
+    trigger-evaluate:
+      rules:
+        - state: disabled
+          document: |
+            format: canon-trigger/1
+            id: switched-off
+            version: 1
+            owner: billing-operations
+            subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+            start: {protocol: send-reminder}
+            mode: auto
+            access: write
+            refire: once_per_state_entry
+            cap: 50
+        - state: active
+          document: |
+            format: canon-trigger/1
+            id: switched-on
+            version: 1
+            owner: billing-operations
+            subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+            start: {protocol: send-reminder}
+            mode: auto
+            access: write
+            refire: once_per_state_entry
+            cap: 50
+      snapshot:
+        format: canon-trigger-snapshot/1
+        kinds:
+          invoice:
+            - {id: inv-3, entered_at: 2026-11-20T11:00:00Z, fields: {status: 7}}
+            - {id: inv-2, fields: {status: overdue}}
+            - {id: inv-1, entered_at: 2026-11-20T09:00:00Z, fields: {status: overdue}}
+      protocols: *protocols
+      history:
+        format: canon-trigger-history/1
+        approvals:
+          - {rule: switched-off@1, by: billing-lead, at: 2026-11-19T00:00:00Z}
+          - {rule: switched-on@1, by: billing-lead, at: 2026-11-19T00:00:00Z}
+      now: *now
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "firing_id": "switched-off@1/invoice:inv-1/2026-11-20T09:00:00Z",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "disabled",
+              "row": "inv-1",
+              "rule": "switched-off@1",
+              "rule_state": "disabled",
+              "verdict": "refused"
+            },
+            {
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "disabled",
+              "row": "inv-2",
+              "rule": "switched-off@1",
+              "rule_state": "disabled",
+              "verdict": "refused"
+            },
+            {
+              "firing_id": "switched-off@1/invoice:inv-3/2026-11-20T11:00:00Z",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "disabled",
+              "row": "inv-3",
+              "rule": "switched-off@1",
+              "rule_state": "disabled",
+              "verdict": "refused"
+            },
+            {
+              "firing_id": "switched-on@1/invoice:inv-1/2026-11-20T09:00:00Z",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-1",
+              "rule": "switched-on@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            },
+            {
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "entered-at-missing",
+              "row": "inv-2",
+              "rule": "switched-on@1",
+              "rule_state": "active",
+              "verdict": "refused"
+            },
+            {
+              "field": "status",
+              "firing_id": "switched-on@1/invoice:inv-3/2026-11-20T11:00:00Z",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "field-type",
+              "row": "inv-3",
+              "rule": "switched-on@1",
+              "rule_state": "active",
+              "verdict": "undetermined"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # A rule whose protocol the protocols do not hold is refused, unknown-protocol, ahead of
+  # write-unapproved: its rule key has no approval either.
+  - id: unknown-protocol
+    trigger-evaluate:
+      rules:
+        - state: active
+          document: |
+            format: canon-trigger/1
+            id: archive
+            version: 1
+            owner: billing-operations
+            subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+            start: {protocol: archive-record}
+            mode: auto
+            access: write
+            refire: once_per_subject
+            cap: 50
+        - state: active
+          document: *reader
+      snapshot: *one-row
+      protocols: *protocols
+      history:
+        format: canon-trigger-history/1
+      now: *now
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "firing_id": "archive@1/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "archive-record",
+              "reason": "unknown-protocol",
+              "row": "inv-1",
+              "rule": "archive@1",
+              "rule_state": "active",
+              "verdict": "refused"
+            },
+            {
+              "firing_id": "reader@1/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "look-up",
+              "row": "inv-1",
+              "rule": "reader@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # Acceptance 5: cap 2, one firing of the rule key today in the history, three matches: the
+  # first in plan order would start and brings the day to 2, the other two are held,
+  # cap-reached. A firing of the rule key yesterday, and one of another rule key today, do not
+  # count.
+  - id: cap-reached
+    trigger-evaluate:
+      rules:
+        - state: active
+          document: |
+            format: canon-trigger/1
+            id: capped
+            version: 1
+            owner: billing-operations
+            subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+            start: {protocol: send-reminder}
+            mode: auto
+            access: write
+            refire: once_per_subject
+            cap: 2
+      snapshot: &three-rows
+        format: canon-trigger-snapshot/1
+        kinds:
+          invoice:
+            - {id: inv-3, entered_at: 2026-11-20T11:00:00Z, fields: {status: overdue}}
+            - {id: inv-1, entered_at: 2026-11-20T09:00:00Z, fields: {status: overdue}}
+            - {id: inv-2, entered_at: 2026-11-20T10:00:00Z, fields: {status: overdue}}
+      protocols: *protocols
+      history:
+        format: canon-trigger-history/1
+        firings:
+          - {firing_id: capped@1/invoice:inv-9, rule: capped@1, at: 2026-11-26T00:00:00Z}
+          - {firing_id: capped@1/invoice:inv-8, rule: capped@1, at: 2026-11-25T23:59:59Z}
+          - {firing_id: capped@2/invoice:inv-7, rule: capped@2, at: 2026-11-26T09:00:00Z}
+        approvals:
+          - {rule: capped@1, by: billing-lead, at: 2026-11-19T00:00:00Z}
+      now: *now
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "firing_id": "capped@1/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-1",
+              "rule": "capped@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            },
+            {
+              "firing_id": "capped@1/invoice:inv-2",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "cap-reached",
+              "row": "inv-2",
+              "rule": "capped@1",
+              "rule_state": "active",
+              "verdict": "held"
+            },
+            {
+              "firing_id": "capped@1/invoice:inv-3",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "cap-reached",
+              "row": "inv-3",
+              "rule": "capped@1",
+              "rule_state": "active",
+              "verdict": "held"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # Acceptance 6, first evaluation: three matches of a rule in auto, nothing fired yet, all
+  # would start.
+  - id: first-evaluation
+    trigger-evaluate:
+      rules:
+        - state: active
+          document: &again |
+            format: canon-trigger/1
+            id: again
+            version: 1
+            owner: billing-operations
+            subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+            start: {protocol: send-reminder}
+            mode: auto
+            access: write
+            refire: once_per_state_entry
+            cap: 3
+      snapshot: *three-rows
+      protocols: *protocols
+      history:
+        format: canon-trigger-history/1
+        approvals:
+          - {rule: again@1, by: billing-lead, at: 2026-11-19T00:00:00Z}
+      now: *now
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "firing_id": "again@1/invoice:inv-1/2026-11-20T09:00:00Z",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-1",
+              "rule": "again@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            },
+            {
+              "firing_id": "again@1/invoice:inv-2/2026-11-20T10:00:00Z",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-2",
+              "rule": "again@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            },
+            {
+              "firing_id": "again@1/invoice:inv-3/2026-11-20T11:00:00Z",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-3",
+              "rule": "again@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # Acceptance 6, second evaluation: the same input with the first plan's three firings recorded
+  # lists every match held, already-fired. The three firings also fill the day's cap of 3;
+  # already-fired is the reason, being the first that applies.
+  - id: second-evaluation
+    trigger-evaluate:
+      rules:
+        - state: active
+          document: *again
+      snapshot: *three-rows
+      protocols: *protocols
+      history:
+        format: canon-trigger-history/1
+        firings:
+          - firing_id: again@1/invoice:inv-1/2026-11-20T09:00:00Z
+            rule: again@1
+            at: 2026-11-26T12:00:00Z
+          - firing_id: again@1/invoice:inv-2/2026-11-20T10:00:00Z
+            rule: again@1
+            at: 2026-11-26T12:00:00Z
+          - firing_id: again@1/invoice:inv-3/2026-11-20T11:00:00Z
+            rule: again@1
+            at: 2026-11-26T12:00:00Z
+        approvals:
+          - {rule: again@1, by: billing-lead, at: 2026-11-19T00:00:00Z}
+      now: *now
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "firing_id": "again@1/invoice:inv-1/2026-11-20T09:00:00Z",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "already-fired",
+              "row": "inv-1",
+              "rule": "again@1",
+              "rule_state": "active",
+              "verdict": "held"
+            },
+            {
+              "firing_id": "again@1/invoice:inv-2/2026-11-20T10:00:00Z",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "already-fired",
+              "row": "inv-2",
+              "rule": "again@1",
+              "rule_state": "active",
+              "verdict": "held"
+            },
+            {
+              "firing_id": "again@1/invoice:inv-3/2026-11-20T11:00:00Z",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "already-fired",
+              "row": "inv-3",
+              "rule": "again@1",
+              "rule_state": "active",
+              "verdict": "held"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # An approval's `at` that is not an instant refuses the whole evaluation, as a firing's does.
+  - id: approval-not-an-instant
+    trigger-evaluate:
+      rules:
+        - state: active
+          document: *again
+      snapshot: *three-rows
+      protocols: *protocols
+      history:
+        format: canon-trigger-history/1
+        approvals:
+          - {rule: again@1, by: billing-lead, at: yesterday}
+      now: *now
+    expect:
+      refusal: invalid-instant

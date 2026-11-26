@@ -356,7 +356,7 @@ requirements:
     statement: >-
       The canon-trigger-plan/1 plan MUST be ordered by rule key, kind and row id, and MUST be
       byte-identical over repeated evaluations of one input and whatever the order of its rules,
-      kinds, rows, firings and activations.
+      kinds, rows, firings, activations and approvals.
     source: story:trigger-evaluate
   CANON-TRIGGER-009:
     status: implemented
@@ -382,3 +382,33 @@ requirements:
       or its state field is that field; a where that does not evaluate to true or false MUST be
       listed undetermined with the reason where-unknown. Unknown is not false.
     source: story:trigger-evaluate
+  CANON-TRIGGER-012:
+    status: implemented
+    statement: >-
+      An entry MUST be listed refused, ahead of every other verdict, naming the first reason that
+      applies: disabled when the rule's state is disabled; unknown-protocol when its protocol is
+      not in the protocols; guarded-auto when the protocol is guarded and the rule's mode is auto;
+      access-mismatch when the rule's access differs from the protocol's class; write-unapproved
+      when the rule's access is write, its mode auto and the history holds no approval of its
+      rule key; entered-at-missing.
+    source: story:trigger-holds-and-refusals
+  CANON-TRIGGER-013:
+    status: implemented
+    statement: >-
+      An approval MUST count only for the exact rule key it names: an approval of another version
+      of the rule MUST NOT lift write-unapproved. Who approved MUST NOT be checked.
+    source: story:trigger-holds-and-refusals
+  CANON-TRIGGER-014:
+    status: implemented
+    statement: >-
+      A match whose firing id is the firing id of a firing in the history MUST be listed held with
+      the reason already-fired, never offer or would-start, so evaluating again with the plan's
+      firings recorded starts nothing twice.
+    source: story:trigger-holds-and-refusals
+  CANON-TRIGGER-015:
+    status: implemented
+    statement: >-
+      A match MUST be listed held with the reason cap-reached when its rule key's firings on the
+      UTC day of the evaluation instant, counted from the history and then from the plan's earlier
+      would-start entries of that rule key in plan order, have reached the rule's cap.
+    source: story:trigger-holds-and-refusals

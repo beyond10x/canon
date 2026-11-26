@@ -11,11 +11,12 @@ use serde::de::DeserializeOwned;
 use super::{ROW, check, compile_where, first_of_each};
 use crate::ir::json::Value;
 use crate::model::{
-    self, Declarations, Instant, Json, TRIGGER_HISTORY_FORMAT, TRIGGER_PLAN_FORMAT,
-    TRIGGER_PROTOCOLS_FORMAT, TRIGGER_SET_FORMAT, TRIGGER_SNAPSHOT_FORMAT, TriggerFieldName,
-    TriggerFieldType, TriggerHistory, TriggerInput, TriggerKind, TriggerMode, TriggerPlan,
-    TriggerPlanEntry, TriggerProtocols, TriggerReason, TriggerRefire, TriggerRow, TriggerRule,
-    TriggerRuleState, TriggerSet, TriggerSnapshot, TriggerVerdict,
+    self, AccessClass, Declarations, Instant, Json, ProtocolId, TRIGGER_HISTORY_FORMAT,
+    TRIGGER_PLAN_FORMAT, TRIGGER_PROTOCOLS_FORMAT, TRIGGER_SET_FORMAT, TRIGGER_SNAPSHOT_FORMAT,
+    TriggerAccess, TriggerFieldName, TriggerFieldType, TriggerHistory, TriggerInput, TriggerKind,
+    TriggerMode, TriggerPlan, TriggerPlanEntry, TriggerProtocol, TriggerProtocols, TriggerReason,
+    TriggerRefire, TriggerRow, TriggerRule, TriggerRuleState, TriggerSet, TriggerSnapshot,
+    TriggerVerdict,
 };
 
 /// One rule of the set [`evaluate`] reads, with its lifecycle state.
@@ -135,6 +136,20 @@ struct Activation<'a> {
     listed: BTreeSet<&'a str>,
 }
 
+/// What an evaluation reads from the history: each rule key's activations, every recorded firing
+/// id, each rule key's firing ids on the UTC day of `now`, and every approved rule key.
+struct Recorded<'a> {
+    activations: BTreeMap<&'a str, Activation<'a>>,
+    fired: BTreeSet<&'a str>,
+    today: BTreeMap<&'a str, BTreeSet<&'a str>>,
+    approved: BTreeSet<&'a str>,
+}
+
+/// The UTC day of an instant's whole seconds, counted from `1970-01-01`.
+fn day(seconds: i64) -> i64 {
+    seconds.div_euclid(86_400)
+}
+
 /// Whether a row of a rule's kind matches, or cannot be decided and why.
 enum Assessment {
     Match,
@@ -144,8 +159,8 @@ enum Assessment {
 /// Evaluates a rule set against a snapshot (see the module docs of `crate::trigger`): every match
 /// of every rule, and every row whose match cannot be decided, with its firing id and verdict,
 /// ordered by rule key, kind and row id. A pure function of its arguments: `now` is the only time
-/// it reads, and the order of the rules, kinds, rows, firings and activations changes no byte of
-/// the plan [`render_plan`] writes.
+/// it reads, and the order of the rules, kinds, rows, protocols, firings, activations and approvals
+/// changes no byte of the plan [`render_plan`] writes.
 ///
 /// Refused as a whole, the first in this order deciding: `now` that is not an instant
 /// (`invalid-instant`); a snapshot, protocols or history document of another format
@@ -153,7 +168,8 @@ enum Assessment {
 /// rule-key order; two rules of one rule key (`duplicate-rule`); a kind listed twice, or a row id
 /// listed twice within its kind (`duplicate-row`), a kind or row id that is not an identifier
 /// (`malformed-input`), or an `entered_at` that is not an instant (`invalid-instant`), in kind and
-/// row-id order; a firing's or an activation's `at` that is not an instant (`invalid-instant`).
+/// row-id order; a protocol id listed twice in the protocols (`duplicate-protocol-id`); a
+/// firing's, an activation's or an approval's `at` that is not an instant (`invalid-instant`).
 pub fn evaluate(
     rules: &[RuleEntry],
     snapshot: &TriggerSnapshot,
@@ -193,7 +209,8 @@ pub fn evaluate(
     }
 
     let kinds = rows_by_kind(snapshot)?;
-    let activations = activations(history)?;
+    let by_id = protocols_by_id(protocols)?;
+    let recorded = recorded(history, now_seconds)?;
 
     let mut entries = Vec::new();
     for (key, entry) in &sorted {
@@ -207,28 +224,105 @@ pub fn evaluate(
         let Some(rows) = kinds.get(&rule.subject.kind) else {
             continue;
         };
+        let protocol = by_id.get(&rule.start.protocol).copied();
+        let approved = recorded.approved.contains(key.as_str());
         for row in rows {
             let context = format!("{}:{}", rule.subject.kind, row.id);
             let Some(assessment) = assess(rule, checked.as_ref(), row, key, &context, now_seconds)
             else {
                 continue;
             };
+            let refused = refusal(entry, protocol, approved, row);
             entries.push(plan_entry(
                 entry,
                 key,
                 row,
+                refused,
                 assessment,
-                activations.get(key.as_str()),
+                recorded.activations.get(key.as_str()),
             ));
         }
     }
     entries.sort_by(|a, b| {
         (a.rule.as_str(), &a.kind, &a.row).cmp(&(b.rule.as_str(), &b.kind, &b.row))
     });
+    let caps: BTreeMap<&str, &RuleEntry> = sorted
+        .iter()
+        .map(|(key, entry)| (key.as_str(), *entry))
+        .collect();
+    hold(&mut entries, &caps, &recorded);
     Ok(TriggerPlan {
         format: TRIGGER_PLAN_FORMAT.to_owned(),
         entries,
     })
+}
+
+/// Each protocol of the protocols by id; refuses a protocol id listed twice
+/// (`duplicate-protocol-id`), checked in id order.
+fn protocols_by_id(
+    protocols: &TriggerProtocols,
+) -> Result<BTreeMap<&ProtocolId, &TriggerProtocol>, Refusal> {
+    let mut by_id = BTreeMap::new();
+    let mut ids: Vec<&ProtocolId> = protocols.protocols.ids().collect();
+    ids.sort();
+    if let Some(pair) = ids.windows(2).find(|pair| pair[0] == pair[1]) {
+        return Err(Refusal::new(
+            super::DuplicateProtocolId::CODE,
+            format!(
+                "protocols: protocol `{}` is listed twice",
+                model::one_line(pair[0].as_str())
+            ),
+        ));
+    }
+    for (id, protocol) in protocols.protocols.iter() {
+        by_id.insert(id, protocol);
+    }
+    Ok(by_id)
+}
+
+/// The fourth verdict, over the entries in plan order: an entry that would be offered or started is
+/// `held` when a firing with its firing id is in the history (`already-fired`), or when its rule
+/// key's firings on the UTC day of `now`, counted from the history and then from the plan's
+/// earlier `would-start` entries of that rule key, have reached the rule's cap (`cap-reached`).
+/// Only a `would-start` entry counts against the cap.
+fn hold(
+    entries: &mut [TriggerPlanEntry],
+    rules: &BTreeMap<&str, &RuleEntry>,
+    recorded: &Recorded<'_>,
+) {
+    let mut counted: BTreeMap<String, u64> = BTreeMap::new();
+    for entry in entries {
+        if !matches!(
+            entry.verdict,
+            TriggerVerdict::Offer | TriggerVerdict::WouldStart
+        ) {
+            continue;
+        }
+        if entry
+            .firing_id
+            .as_deref()
+            .is_some_and(|id| recorded.fired.contains(id))
+        {
+            entry.verdict = TriggerVerdict::Held;
+            entry.reason = Some(TriggerReason::AlreadyFired);
+            continue;
+        }
+        let Some(rule) = rules.get(entry.rule.as_str()) else {
+            continue;
+        };
+        let count = counted.entry(entry.rule.clone()).or_insert_with(|| {
+            recorded
+                .today
+                .get(entry.rule.as_str())
+                .map_or(0, |ids| ids.len() as u64)
+        });
+        if *count >= rule.rule.cap {
+            entry.verdict = TriggerVerdict::Held;
+            entry.reason = Some(TriggerReason::CapReached);
+        } else if entry.verdict == TriggerVerdict::WouldStart {
+            *count += 1;
+        }
+    }
 }
 
 /// The rows of each kind, each kind's rows in row-id order; refuses a kind or a row id listed
@@ -292,20 +386,55 @@ fn rows_by_kind(
     Ok(kinds)
 }
 
-/// Each rule key's activations; refuses a firing's or an activation's `at` that is not an instant,
-/// checked in sorted order.
-fn activations(history: &TriggerHistory) -> Result<BTreeMap<&str, Activation<'_>>, Refusal> {
+/// What the history records (see [`Recorded`]), `now` being `now_seconds`; refuses a firing's, an
+/// activation's or an approval's `at` that is not an instant, checked in that order, each in
+/// sorted order.
+fn recorded(history: &TriggerHistory, now_seconds: i64) -> Result<Recorded<'_>, Refusal> {
     let mut firings: Vec<_> = history.firings.iter().collect();
     firings.sort_by(|a, b| (&a.firing_id, &a.rule, &a.at).cmp(&(&b.firing_id, &b.rule, &b.at)));
+    let mut fired = BTreeSet::new();
+    let mut today: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
     for firing in firings {
-        if firing.at.interval().is_none() {
+        let Some(at) = firing.at.seconds() else {
             let what = format!(
                 "history: firing `{}`: at",
                 model::one_line(&firing.firing_id)
             );
             return Err(invalid_instant(&what, &firing.at));
+        };
+        fired.insert(firing.firing_id.as_str());
+        if day(at) == day(now_seconds) {
+            today
+                .entry(firing.rule.as_str())
+                .or_default()
+                .insert(firing.firing_id.as_str());
         }
     }
+    let activations = activations(history)?;
+    let mut approvals: Vec<_> = history.approvals.iter().collect();
+    approvals.sort_by(|a, b| (&a.rule, &a.by, &a.at).cmp(&(&b.rule, &b.by, &b.at)));
+    let mut approved = BTreeSet::new();
+    for approval in approvals {
+        if approval.at.interval().is_none() {
+            let what = format!(
+                "history: approval of `{}`: at",
+                model::one_line(&approval.rule)
+            );
+            return Err(invalid_instant(&what, &approval.at));
+        }
+        approved.insert(approval.rule.as_str());
+    }
+    Ok(Recorded {
+        activations,
+        fired,
+        today,
+        approved,
+    })
+}
+
+/// Each rule key's activations; refuses an activation's `at` that is not an instant, checked in
+/// sorted order.
+fn activations(history: &TriggerHistory) -> Result<BTreeMap<&str, Activation<'_>>, Refusal> {
     let mut sorted: Vec<_> = history.activations.iter().collect();
     sorted.sort_by(|a, b| (&a.rule, &a.at).cmp(&(&b.rule, &b.at)));
     let mut activations: BTreeMap<&str, Activation<'_>> = BTreeMap::new();
@@ -451,26 +580,25 @@ fn truth(
 }
 
 /// The plan entry of one assessed row: its firing id, its input and its verdict, the first that
-/// applies.
+/// applies of `refused` (for `refused`, when given), `undetermined`, `baseline`, and `offer` or
+/// `would-start` by the rule's mode; [`hold`] decides `held` over the sorted entries.
 fn plan_entry(
     entry: &RuleEntry,
     key: &str,
     row: &TriggerRow,
+    refused: Option<TriggerReason>,
     assessment: Assessment,
     activation: Option<&Activation<'_>>,
 ) -> TriggerPlanEntry {
     let rule = &entry.rule;
     let kind = &rule.subject.kind;
-    let (verdict, reason, field) = if let Some(reason) = refusal(rule, row) {
+    let (verdict, reason, field) = if let Some(reason) = refused {
         (TriggerVerdict::Refused, Some(reason), None)
     } else if let Assessment::Undetermined(reason, field) = assessment {
         (TriggerVerdict::Undetermined, Some(reason), field)
     } else if is_baseline(activation, kind, row) {
         (TriggerVerdict::Baseline, None, None)
     } else {
-        // The fourth verdict, `held`, is decided here by story:trigger-holds-and-refusals: a
-        // firing with this firing id in the history (`already-fired`), or the rule's firings on
-        // the UTC day of `now` at its cap (`cap-reached`).
         match rule.mode {
             TriggerMode::Offer => (TriggerVerdict::Offer, None, None),
             TriggerMode::Auto => (TriggerVerdict::WouldStart, None, None),
@@ -516,12 +644,40 @@ fn firing_id(rule: &TriggerRule, key: &str, row: &TriggerRow) -> Option<String> 
     }
 }
 
-/// Why an entry is refused, the first verdict. This story decides one reason, a row without
-/// `entered_at` under `once_per_state_entry` (`entered-at-missing`); story:trigger-holds-and-refusals
-/// adds the others here, ahead of it: the rule `disabled`, its protocol not in `protocols`, a
-/// guarded protocol in mode `auto`, an `access` that differs from the protocol's class, and a
-/// `write` rule in mode `auto` without an approval in the history.
-fn refusal(rule: &TriggerRule, row: &TriggerRow) -> Option<TriggerReason> {
+/// Why an entry is refused, the first verdict, the first reason that applies: the rule's state is
+/// `disabled`; its protocol is not in the protocols (`protocol` is `None`, `unknown-protocol`); the
+/// protocol is guarded and the mode `auto` (`guarded-auto`); the rule's `access` is not the
+/// protocol's class (`access-mismatch`); the `access` is `write`, the mode `auto` and the rule key
+/// has no approval (`write-unapproved`); a row without `entered_at` under `once_per_state_entry`
+/// (`entered-at-missing`).
+fn refusal(
+    entry: &RuleEntry,
+    protocol: Option<&TriggerProtocol>,
+    approved: bool,
+    row: &TriggerRow,
+) -> Option<TriggerReason> {
+    let rule = &entry.rule;
+    let auto = rule.mode == TriggerMode::Auto;
+    if entry.state == TriggerRuleState::Disabled {
+        return Some(TriggerReason::Disabled);
+    }
+    let Some(protocol) = protocol else {
+        return Some(TriggerReason::UnknownProtocol);
+    };
+    if protocol.guarded && auto {
+        return Some(TriggerReason::GuardedAuto);
+    }
+    let same_class = matches!(
+        (rule.access, protocol.class),
+        (TriggerAccess::ReadOnly, AccessClass::ReadOnly)
+            | (TriggerAccess::Write, AccessClass::Write)
+    );
+    if !same_class {
+        return Some(TriggerReason::AccessMismatch);
+    }
+    if rule.access == TriggerAccess::Write && auto && !approved {
+        return Some(TriggerReason::WriteUnapproved);
+    }
     (rule.refire == TriggerRefire::OncePerStateEntry && row.entered_at.is_none())
         .then_some(TriggerReason::EnteredAtMissing)
 }

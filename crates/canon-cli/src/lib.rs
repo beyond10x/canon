@@ -465,15 +465,17 @@ pub enum TriggerCommand {
     /// Evaluate a rule set against a snapshot of rows and print the `canon-trigger-plan/1` plan:
     /// every match of every rule, and every row whose match cannot be decided, with its rule key
     /// and state, kind, row id, protocol, the input built from `start.input`, its firing id and
-    /// its verdict (`refused` for a row without `entered_at` under `once_per_state_entry`,
-    /// `undetermined` with `field-missing`, `field-type` or `where-unknown`, `baseline`, `offer`
-    /// or `would-start`), ordered by rule key, kind and row id whatever the order of the input.
-    /// The evaluation reads no clock, no network and no file besides those named: `--now` is the
-    /// only time it reads. Refused with one `error[<code>]: <why>` line, exit 1: a document that
-    /// does not read as its format (`malformed-input`), an instant that is not one
-    /// (`invalid-instant`), two rules of one rule key (`duplicate-rule`), a kind or a row id listed
-    /// twice (`duplicate-row`); a rule file that is not a valid rule prints its errors as `canon
-    /// trigger validate` does, each naming the file. A file that cannot be read exits 2.
+    /// its verdict, the first that applies: `refused` (`disabled`, `unknown-protocol`,
+    /// `guarded-auto`, `access-mismatch`, `write-unapproved` or `entered-at-missing`),
+    /// `undetermined` (`field-missing`, `field-type` or `where-unknown`), `baseline`, `held`
+    /// (`already-fired` or `cap-reached`), `offer` or `would-start`; ordered by rule key, kind and
+    /// row id whatever the order of the input. The evaluation reads no clock, no network and no
+    /// file besides those named: `--now` is the only time it reads. Refused with one
+    /// `error[<code>]: <why>` line, exit 1: a document that does not read as its format
+    /// (`malformed-input`), an instant that is not one (`invalid-instant`), two rules of one rule
+    /// key (`duplicate-rule`), a kind or a row id listed twice (`duplicate-row`); a rule file that
+    /// is not a valid rule prints its errors as `canon trigger validate` does, each naming the
+    /// file. A file that cannot be read exits 2.
     Evaluate {
         /// The `canon-trigger-set/1` rule set, one file: each `canon-trigger/1` file, relative to
         /// this file's directory or absolute, with its state, `draft`, `active` or `disabled`.
@@ -487,8 +489,8 @@ pub enum TriggerCommand {
         /// prints it.
         #[arg(long)]
         protocols: PathBuf,
-        /// The `canon-trigger-history/1` document, one file: the recorded firings and the
-        /// activations of each rule key.
+        /// The `canon-trigger-history/1` document, one file: the recorded firings, and the
+        /// activations and approvals of each rule key.
         #[arg(long)]
         history: PathBuf,
         /// The evaluation instant, `YYYY-MM-DDTHH:MM:SSZ` in UTC with an optional fraction.
