@@ -207,6 +207,32 @@ firing. Evaluating again with that firing in the history lists the match as `hel
 
 `canon trigger evaluate --rules … --snapshot … --protocols … --history … --now …` prints the plan.
 
+**As built** (story:trigger-evaluate), where it is more precise than the text above:
+
+- `--rules` names a `canon-trigger-set/1` document, `{format, rules: [{path, state}]}`, each
+  `path` a `canon-trigger/1` file relative to the set file's directory.
+- A snapshot row is `{id, entered_at?, fields}`: `id` is an identifier unique within its kind,
+  and the values are under `fields`, keyed by field name; the row id is not a field. Every
+  instant (`now`, `entered_at`, `at`) is a Canon instant, `YYYY-MM-DDTHH:MM:SSZ` in UTC with an
+  optional fraction, not every RFC 3339 form.
+- `undetermined` also lists a row of the kind whose state field is absent or not a string, and a
+  row in the state that lacks a required declared field or holds a value of another type (§ 4),
+  with the reason `field-missing` or `field-type` and the field in the entry's `field`;
+  `where-unknown` is the reason for a `where` that is `UNKNOWN` or that `canon-expr/1` cannot
+  evaluate (a row over its value bounds).
+- A `{field}` input is the row's value as read, null for an absent optional field. The firing id
+  writes `entered_at` as the snapshot writes it; an `entered-at-missing` entry has none.
+- `baseline` reads the latest activation of the rule key, and the rows any activation of it lists;
+  instants are compared by the start of the interval each names.
+- The entries are ordered by rule key, kind and row id, each by code point.
+- The input is refused as a whole, rather than listed: an instant that is not one
+  (`invalid-instant`), a document of another format or a kind or row id with whitespace
+  (`malformed-input`), a rule that is not valid (`invalid-rule`), two rules of one rule key
+  (`duplicate-rule`), a kind or a row id listed twice (`duplicate-row`).
+- Approvals in the history, `held` and every refusal but `entered-at-missing` come with
+  story:trigger-holds-and-refusals; until then a `disabled` rule is listed like the others, under
+  its state.
+
 ## 7. Publication
 
 A published rule is immutable: a change is a new version. `canon trigger check-set <rule files>

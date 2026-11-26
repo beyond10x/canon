@@ -1,0 +1,642 @@
+format: canon-conformance/1
+id: CANON-TRIGGER-EVALUATE
+covers: [CANON-TRIGGER-007, CANON-TRIGGER-008, CANON-TRIGGER-009, CANON-TRIGGER-010, CANON-TRIGGER-011]
+fixture: fixtures/trigger/send-reminder.yaml
+# A rule set evaluated against a snapshot (story:trigger-evaluate, docs/design/trigger-rules.md
+# § 6). Each trigger-evaluate step reads its rules (each a canon-trigger/1 document with its
+# state), snapshot, protocols, history and instant as `canon trigger evaluate` reads its files,
+# and expects the canon-trigger-plan/1 bytes it prints, or the code of its refusal; it does not
+# read the fixture, which is the protocol the rules start. `canon conform run --requirements`
+# runs every step again and with its rules, kinds, rows, firings and activations in reverse
+# order, and fails unless the three outputs are byte-identical (CANON-TRIGGER-008). The rows are
+# written out of order here for the same reason.
+steps:
+  # Acceptance 1: 3 matching and 4 non-matching rows (another state, an amount not over 100, a
+  # segment the where excludes, twice) give the active auto rule 3 would-start and the active
+  # offer rule 3 offer, ordered by rule key, then kind, then row id.
+  - id: auto-and-offer
+    trigger-evaluate:
+      rules:
+        - state: active
+          document: &offer |
+            format: canon-trigger/1
+            id: overdue-offer
+            version: 2
+            owner: billing-operations
+            subject:
+              kind: invoice
+              state: {field: status, is: overdue}
+              fields:
+                id: {type: string}
+                status: {type: string}
+                amount: {type: decimal}
+                segment: {type: string}
+                note: {type: string, optional: true}
+            where: '$row.amount > 100 and not contains(["test", "internal"], $row.segment)'
+            start:
+              protocol: send-reminder
+              input:
+                invoice: {field: id}
+                channel: {const: letter}
+            mode: offer
+            access: write
+            refire: once_per_state_entry
+            cap: 50
+        - state: active
+          document: &reminder |
+            format: canon-trigger/1
+            id: overdue-reminder
+            version: 1
+            owner: billing-operations
+            subject:
+              kind: invoice
+              state: {field: status, is: overdue}
+              fields:
+                id: {type: string}
+                status: {type: string}
+                amount: {type: decimal}
+                segment: {type: string}
+                note: {type: string, optional: true}
+            where: '$row.amount > 100 and not contains(["test", "internal"], $row.segment)'
+            start:
+              protocol: send-reminder
+              input:
+                invoice: {field: id}
+                channel: {const: email}
+            mode: auto
+            access: write
+            refire: once_per_state_entry
+            cap: 50
+      snapshot: &invoices
+        format: canon-trigger-snapshot/1
+        kinds:
+          invoice:
+            - id: inv-5
+              entered_at: 2026-11-20T13:00:00Z
+              fields: {id: inv-5, status: overdue, amount: 100, segment: retail}
+            - id: inv-3
+              entered_at: 2026-11-20T11:00:00Z
+              fields: {id: inv-3, status: overdue, amount: 101, segment: wholesale}
+            - id: inv-4
+              entered_at: 2026-11-20T12:00:00Z
+              fields: {id: inv-4, status: paid, amount: 500, segment: retail}
+            - id: inv-1
+              entered_at: 2026-11-20T09:00:00Z
+              fields: {id: inv-1, status: overdue, amount: 250, segment: retail}
+            - id: inv-7
+              entered_at: 2026-11-20T15:00:00Z
+              fields: {id: inv-7, status: overdue, amount: 300, segment: internal}
+            - id: inv-2
+              entered_at: 2026-11-20T10:00:00Z
+              fields: {id: inv-2, status: overdue, amount: 120.5, segment: retail, note: late}
+            - id: inv-6
+              entered_at: 2026-11-20T14:00:00Z
+              fields: {id: inv-6, status: overdue, amount: 300, segment: test}
+      protocols: &protocols
+        format: canon-trigger-protocols/1
+        protocols:
+          send-reminder:
+            class: write
+            guarded: false
+            inputs:
+              channel: [email, letter]
+      history: &empty
+        format: canon-trigger-history/1
+      now: &now 2026-11-26T12:00:00Z
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "firing_id": "overdue-offer@2/invoice:inv-1/2026-11-20T09:00:00Z",
+              "input": {
+                "channel": "letter",
+                "invoice": "inv-1"
+              },
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-1",
+              "rule": "overdue-offer@2",
+              "rule_state": "active",
+              "verdict": "offer"
+            },
+            {
+              "firing_id": "overdue-offer@2/invoice:inv-2/2026-11-20T10:00:00Z",
+              "input": {
+                "channel": "letter",
+                "invoice": "inv-2"
+              },
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-2",
+              "rule": "overdue-offer@2",
+              "rule_state": "active",
+              "verdict": "offer"
+            },
+            {
+              "firing_id": "overdue-offer@2/invoice:inv-3/2026-11-20T11:00:00Z",
+              "input": {
+                "channel": "letter",
+                "invoice": "inv-3"
+              },
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-3",
+              "rule": "overdue-offer@2",
+              "rule_state": "active",
+              "verdict": "offer"
+            },
+            {
+              "firing_id": "overdue-reminder@1/invoice:inv-1/2026-11-20T09:00:00Z",
+              "input": {
+                "channel": "email",
+                "invoice": "inv-1"
+              },
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-1",
+              "rule": "overdue-reminder@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            },
+            {
+              "firing_id": "overdue-reminder@1/invoice:inv-2/2026-11-20T10:00:00Z",
+              "input": {
+                "channel": "email",
+                "invoice": "inv-2"
+              },
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-2",
+              "rule": "overdue-reminder@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            },
+            {
+              "firing_id": "overdue-reminder@1/invoice:inv-3/2026-11-20T11:00:00Z",
+              "input": {
+                "channel": "email",
+                "invoice": "inv-3"
+              },
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-3",
+              "rule": "overdue-reminder@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # A draft rule is evaluated by the same steps; its entries carry rule_state draft. Rows of a
+  # kind the rule does not watch are not read.
+  - id: draft-rule
+    trigger-evaluate:
+      rules:
+        - state: draft
+          document: *reminder
+      snapshot:
+        format: canon-trigger-snapshot/1
+        kinds:
+          customer:
+            - id: inv-1
+              fields: {id: inv-1, status: overdue, amount: 900, segment: retail}
+          invoice:
+            - id: inv-1
+              entered_at: 2026-11-20T09:00:00Z
+              fields: {id: inv-1, status: overdue, amount: 250, segment: retail}
+      protocols: *protocols
+      history: *empty
+      now: *now
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "firing_id": "overdue-reminder@1/invoice:inv-1/2026-11-20T09:00:00Z",
+              "input": {
+                "channel": "email",
+                "invoice": "inv-1"
+              },
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-1",
+              "rule": "overdue-reminder@1",
+              "rule_state": "draft",
+              "verdict": "would-start"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # Acceptance 3, first half: a row in the state since 2026-11-20 has a firing id with that
+  # instant under once_per_state_entry, and one without it under once_per_subject.
+  - id: firing-id-first-entry
+    trigger-evaluate:
+      rules:
+        - state: active
+          document: &entry |
+            format: canon-trigger/1
+            id: entry-reminder
+            version: 1
+            owner: billing-operations
+            subject:
+              kind: invoice
+              state: {field: status, is: overdue}
+              fields:
+                status: {type: string}
+            start: {protocol: send-reminder}
+            mode: auto
+            access: write
+            refire: once_per_state_entry
+            cap: 50
+        - state: active
+          document: &subject |
+            format: canon-trigger/1
+            id: subject-reminder
+            version: 1
+            owner: billing-operations
+            subject:
+              kind: invoice
+              state: {field: status, is: overdue}
+              fields:
+                status: {type: string}
+            start: {protocol: send-reminder}
+            mode: auto
+            access: write
+            refire: once_per_subject
+            cap: 50
+      snapshot:
+        format: canon-trigger-snapshot/1
+        kinds:
+          invoice:
+            - {id: inv-1, entered_at: 2026-11-20T09:00:00Z, fields: {status: overdue}}
+      protocols: *protocols
+      history: *empty
+      now: *now
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "firing_id": "entry-reminder@1/invoice:inv-1/2026-11-20T09:00:00Z",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-1",
+              "rule": "entry-reminder@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            },
+            {
+              "firing_id": "subject-reminder@1/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-1",
+              "rule": "subject-reminder@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # Acceptance 3, second half: the same row, entered into the state again on 2026-11-24, gets a
+  # second firing id under once_per_state_entry and keeps its one firing id under
+  # once_per_subject.
+  - id: firing-id-second-entry
+    trigger-evaluate:
+      rules:
+        - {state: active, document: *entry}
+        - {state: active, document: *subject}
+      snapshot:
+        format: canon-trigger-snapshot/1
+        kinds:
+          invoice:
+            - {id: inv-1, entered_at: 2026-11-24T09:00:00Z, fields: {status: overdue}}
+      protocols: *protocols
+      history: *empty
+      now: *now
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "firing_id": "entry-reminder@1/invoice:inv-1/2026-11-24T09:00:00Z",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-1",
+              "rule": "entry-reminder@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            },
+            {
+              "firing_id": "subject-reminder@1/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-1",
+              "rule": "subject-reminder@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # A row without entered_at has no firing id under once_per_state_entry and is refused,
+  # entered-at-missing; under once_per_subject it needs none.
+  - id: entered-at-missing
+    trigger-evaluate:
+      rules:
+        - {state: active, document: *entry}
+        - {state: active, document: *subject}
+      snapshot:
+        format: canon-trigger-snapshot/1
+        kinds:
+          invoice:
+            - {id: inv-1, fields: {status: overdue}}
+      protocols: *protocols
+      history: *empty
+      now: *now
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "entered-at-missing",
+              "row": "inv-1",
+              "rule": "entry-reminder@1",
+              "rule_state": "active",
+              "verdict": "refused"
+            },
+            {
+              "firing_id": "subject-reminder@1/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-1",
+              "rule": "subject-reminder@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # Acceptance 4: entry-reminder@1 was activated on 2026-11-22, so a row in the state since before
+  # it (inv-1) or since that very instant (inv-3) is baseline, and one that entered later (inv-2)
+  # would start. subject-reminder@1 was activated on 2026-11-19 and listed inv-2 as matching
+  # then: inv-2 is baseline, the others entered later and would start. The activation of
+  # entry-reminder@2, another rule key, and the recorded firing change nothing here.
+  - id: baseline
+    trigger-evaluate:
+      rules:
+        - {state: active, document: *entry}
+        - {state: active, document: *subject}
+      snapshot:
+        format: canon-trigger-snapshot/1
+        kinds:
+          invoice:
+            - {id: inv-2, entered_at: 2026-11-23T08:00:00Z, fields: {status: overdue}}
+            - {id: inv-1, entered_at: 2026-11-21T08:00:00Z, fields: {status: overdue}}
+            - {id: inv-3, entered_at: 2026-11-22T00:00:00Z, fields: {status: overdue}}
+      protocols: *protocols
+      history:
+        format: canon-trigger-history/1
+        firings:
+          - firing_id: entry-reminder@1/invoice:inv-9/2026-11-01T00:00:00Z
+            rule: entry-reminder@1
+            at: 2026-11-01T00:05:00Z
+        activations:
+          - {rule: entry-reminder@2, at: 2026-11-30T00:00:00Z}
+          - {rule: subject-reminder@1, at: 2026-11-19T00:00:00Z, baseline: ["invoice:inv-2"]}
+          - {rule: entry-reminder@1, at: 2026-11-22T00:00:00Z}
+      now: *now
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "firing_id": "entry-reminder@1/invoice:inv-1/2026-11-21T08:00:00Z",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-1",
+              "rule": "entry-reminder@1",
+              "rule_state": "active",
+              "verdict": "baseline"
+            },
+            {
+              "firing_id": "entry-reminder@1/invoice:inv-2/2026-11-23T08:00:00Z",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-2",
+              "rule": "entry-reminder@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            },
+            {
+              "firing_id": "entry-reminder@1/invoice:inv-3/2026-11-22T00:00:00Z",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-3",
+              "rule": "entry-reminder@1",
+              "rule_state": "active",
+              "verdict": "baseline"
+            },
+            {
+              "firing_id": "subject-reminder@1/invoice:inv-1",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-1",
+              "rule": "subject-reminder@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            },
+            {
+              "firing_id": "subject-reminder@1/invoice:inv-2",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-2",
+              "rule": "subject-reminder@1",
+              "rule_state": "active",
+              "verdict": "baseline"
+            },
+            {
+              "firing_id": "subject-reminder@1/invoice:inv-3",
+              "input": {},
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-3",
+              "rule": "subject-reminder@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # Acceptance 5: a row in the state that lacks the amount the where reads (inv-1), holds a
+  # string for it (inv-2), lacks the state field itself (inv-3), or holds a number for the
+  # optional string note (inv-5) is undetermined, naming the field; the where is not evaluated.
+  # A row in another state that lacks the amount (inv-4) is not listed; an optional field that is
+  # null (inv-6) is absent, and the row matches.
+  - id: undetermined
+    trigger-evaluate:
+      rules:
+        - {state: active, document: *reminder}
+      snapshot:
+        format: canon-trigger-snapshot/1
+        kinds:
+          invoice:
+            - id: inv-1
+              entered_at: 2026-11-20T09:00:00Z
+              fields: {id: inv-1, status: overdue, segment: retail}
+            - id: inv-2
+              entered_at: 2026-11-20T10:00:00Z
+              fields: {id: inv-2, status: overdue, amount: high, segment: retail}
+            - id: inv-3
+              entered_at: 2026-11-20T11:00:00Z
+              fields: {id: inv-3, amount: 150, segment: retail}
+            - id: inv-4
+              entered_at: 2026-11-20T12:00:00Z
+              fields: {id: inv-4, status: paid, segment: retail}
+            - id: inv-5
+              entered_at: 2026-11-20T13:00:00Z
+              fields: {id: inv-5, status: overdue, amount: 150, segment: retail, note: 7}
+            - id: inv-6
+              entered_at: 2026-11-20T14:00:00Z
+              fields: {id: inv-6, status: overdue, amount: 150, segment: retail, note: null}
+      protocols: *protocols
+      history: *empty
+      now: *now
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "field": "amount",
+              "firing_id": "overdue-reminder@1/invoice:inv-1/2026-11-20T09:00:00Z",
+              "input": {
+                "channel": "email",
+                "invoice": "inv-1"
+              },
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "field-missing",
+              "row": "inv-1",
+              "rule": "overdue-reminder@1",
+              "rule_state": "active",
+              "verdict": "undetermined"
+            },
+            {
+              "field": "amount",
+              "firing_id": "overdue-reminder@1/invoice:inv-2/2026-11-20T10:00:00Z",
+              "input": {
+                "channel": "email",
+                "invoice": "inv-2"
+              },
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "field-type",
+              "row": "inv-2",
+              "rule": "overdue-reminder@1",
+              "rule_state": "active",
+              "verdict": "undetermined"
+            },
+            {
+              "field": "status",
+              "firing_id": "overdue-reminder@1/invoice:inv-3/2026-11-20T11:00:00Z",
+              "input": {
+                "channel": "email",
+                "invoice": "inv-3"
+              },
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "field-missing",
+              "row": "inv-3",
+              "rule": "overdue-reminder@1",
+              "rule_state": "active",
+              "verdict": "undetermined"
+            },
+            {
+              "field": "note",
+              "firing_id": "overdue-reminder@1/invoice:inv-5/2026-11-20T13:00:00Z",
+              "input": {
+                "channel": "email",
+                "invoice": "inv-5"
+              },
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "field-type",
+              "row": "inv-5",
+              "rule": "overdue-reminder@1",
+              "rule_state": "active",
+              "verdict": "undetermined"
+            },
+            {
+              "firing_id": "overdue-reminder@1/invoice:inv-6/2026-11-20T14:00:00Z",
+              "input": {
+                "channel": "email",
+                "invoice": "inv-6"
+              },
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-6",
+              "rule": "overdue-reminder@1",
+              "rule_state": "active",
+              "verdict": "would-start"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }
+
+  # The whole evaluation is refused when its input is: an instant that is not a Canon instant,
+  # a row id listed twice within a kind, or two rules of one rule key.
+  - id: now-not-an-instant
+    trigger-evaluate:
+      rules:
+        - {state: active, document: *entry}
+      snapshot: *invoices
+      protocols: *protocols
+      history: *empty
+      now: 2026-11-26
+    expect:
+      refusal: invalid-instant
+  - id: row-listed-twice
+    trigger-evaluate:
+      rules:
+        - {state: active, document: *entry}
+      snapshot:
+        format: canon-trigger-snapshot/1
+        kinds:
+          invoice:
+            - {id: inv-1, entered_at: 2026-11-20T09:00:00Z, fields: {status: overdue}}
+            - {id: inv-1, entered_at: 2026-11-21T09:00:00Z, fields: {status: paid}}
+      protocols: *protocols
+      history: *empty
+      now: *now
+    expect:
+      refusal: duplicate-row
+  - id: rule-key-twice
+    trigger-evaluate:
+      rules:
+        - {state: active, document: *entry}
+        - {state: draft, document: *entry}
+      snapshot: *invoices
+      protocols: *protocols
+      history: *empty
+      now: *now
+    expect:
+      refusal: duplicate-rule

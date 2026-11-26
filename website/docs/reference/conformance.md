@@ -56,6 +56,21 @@ steps:
         { ... the exact canon-trigger-protocols/1 bytes ... }
       # or, instead of `protocols`:
       # refusal: read-only-action-writes  # the code of every problem
+  - id: auto-and-offer
+    trigger-evaluate:
+      rules:
+        - state: active                   # draft | active | disabled
+          document: |
+            { ... a canon-trigger/1 document ... }
+      snapshot: { ... a canon-trigger-snapshot/1 document ... }
+      protocols: { ... a canon-trigger-protocols/1 document ... }
+      history: { ... a canon-trigger-history/1 document ... }
+      now: 2026-11-26T12:00:00Z
+    expect:
+      plan: |
+        { ... the exact canon-trigger-plan/1 bytes ... }
+      # or, instead of `plan`:
+      # refusal: duplicate-row            # the code of the refusal
 ```
 
 - `fixture` is the `protocol/1` document the scenario compiles, as a path relative to the
@@ -75,10 +90,20 @@ steps:
   `fixture does not compile: <code>: <why>; …`. Absent, the fixture imports nothing.
 - `covers` entries are `CANON-` followed by an identifier, each listed once.
 - `steps` is an ordered, non-empty list. Each step is exactly one of `compile`, `evaluate`,
-  `trigger-validate` or `trigger-protocols`, with exactly one expectation of the matching kind:
-  a compile step expects `canon-ir`, an evaluate step expects `decision` or `refusal`, a
-  trigger-validate step expects `rule` or `refused`, neither empty, and a trigger-protocols
-  step expects `protocols` or `refusal`.
+  `trigger-validate`, `trigger-protocols` or `trigger-evaluate`, with exactly one expectation
+  of the matching kind: a compile step expects `canon-ir`, an evaluate step expects `decision`
+  or `refusal`, a trigger-validate step expects `rule` or `refused`, neither empty, a
+  trigger-protocols step expects `protocols` or `refusal`, and a trigger-evaluate step expects
+  `plan` or `refusal`.
+- A trigger-evaluate step (story:trigger-evaluate) reads each of its `rules` entries'
+  `document` as `canon trigger validate` reads a file, with the entry's `state`, and its
+  `snapshot`, `protocols` and `history` as `canon trigger evaluate` reads its files, and
+  evaluates them at `now` (`trigger::evaluate`); it does not read the fixture. It passes when
+  the `canon-trigger-plan/1` text equals `plan` byte for byte, or when the evaluation, or a
+  document it reads, is refused with the code `refusal`. Otherwise `<what differed>` is
+  `canon-trigger-plan/1 differs from the expectation at line <n>`, `expected refusal `&lt;code&gt;`, the evaluation gave canon-trigger-plan/1`, `expected refusal `&lt;code&gt;`, the evaluation is refused: error[<code>]: <why>; …`, or `the evaluation is refused: error[<code>]: <why>; …`; a
+  rule document that is not a valid rule is refused with each of its errors, named `rule <n>`,
+  counted from 1.
 - A trigger-protocols step (story:protocol-access-class) reads its non-empty list of
   `documents` as `canon trigger protocols` reads its files, in list order, each named
   `document <n>`, counted from 1; it does not read the fixture. Each document is parsed and
@@ -193,7 +218,11 @@ printed on standard output. Then the registry runs as above, and these checks fo
    lists in reverse order, an equivalent input, since none of the three is ordered by position
    (CANON-DETERMINISM-001). The three outputs, each the canonical `canon-decision/1` document or
    the refusal's code, must be byte-identical; otherwise `nondeterministic: scenario `&lt;id&gt;` step `&lt;step&gt;`: <rerun|permuted> differs at line <n>`, `<n>` the first line, counted from 1, where
-   that run's output differs from the first. In registry and step order.
+   that run's output differs from the first. In registry and step order. Every trigger-evaluate
+   step runs three times the same way, the permuted run with its rules, the snapshot's kinds,
+   each kind's rows, and the history's firings and activations in reverse order
+   (CANON-TRIGGER-008); its output is the canonical `canon-trigger-plan/1` document or the
+   refusal's code.
 
 The check lines come after the registry's lines and before its summary, and a second summary
 line follows it:

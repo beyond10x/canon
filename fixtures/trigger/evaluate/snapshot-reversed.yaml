@@ -1,0 +1,24 @@
+format: canon-trigger-snapshot/1
+kinds:
+  invoice:
+    - id: inv-6
+      entered_at: 2026-11-20T14:00:00Z
+      fields: {id: inv-6, status: overdue, amount: 300, segment: test}
+    - id: inv-2
+      entered_at: 2026-11-20T10:00:00Z
+      fields: {id: inv-2, status: overdue, amount: 120.5, segment: retail, note: late}
+    - id: inv-7
+      entered_at: 2026-11-20T15:00:00Z
+      fields: {id: inv-7, status: overdue, amount: 300, segment: internal}
+    - id: inv-1
+      entered_at: 2026-11-20T09:00:00Z
+      fields: {id: inv-1, status: overdue, amount: 250, segment: retail}
+    - id: inv-4
+      entered_at: 2026-11-20T12:00:00Z
+      fields: {id: inv-4, status: paid, amount: 500, segment: retail}
+    - id: inv-3
+      entered_at: 2026-11-20T11:00:00Z
+      fields: {id: inv-3, status: overdue, amount: 101, segment: wholesale}
+    - id: inv-5
+      entered_at: 2026-11-20T13:00:00Z
+      fields: {id: inv-5, status: overdue, amount: 100, segment: retail}

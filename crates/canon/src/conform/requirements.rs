@@ -7,8 +7,8 @@ use std::collections::BTreeSet;
 use std::fmt;
 
 use super::{
-    EvaluateInputs, REQUIREMENT_PREFIX, Scenario, StepKind, evaluation, first_difference,
-    parse_failure,
+    EvaluateInputs, REQUIREMENT_PREFIX, Scenario, StepKind, TriggerEvaluateInputs, evaluation,
+    first_difference, parse_failure, trigger_plan,
 };
 use crate::ir;
 use crate::model::{self, REQUIREMENTS_FORMAT, RequirementCatalogue, RequirementStatus};
@@ -158,14 +158,15 @@ pub(super) fn check(catalogue: &RequirementCatalogue, ran: &[Ran]) -> Checks {
         }
     }
     for ran in ran {
-        let Some(compiled) = &ran.compiled else {
-            continue;
-        };
         for step in &ran.scenario.steps {
-            let StepKind::Evaluate { inputs, .. } = &step.kind else {
-                continue;
+            let found = match (&step.kind, &ran.compiled) {
+                (StepKind::Evaluate { inputs, .. }, Some(compiled)) => {
+                    nondeterminism(compiled, inputs)
+                }
+                (StepKind::TriggerEvaluate { inputs, .. }, _) => trigger_nondeterminism(inputs),
+                _ => None,
             };
-            if let Some((run, line)) = nondeterminism(compiled, inputs) {
+            if let Some((run, line)) = found {
                 checks.fail(format!(
                     "nondeterministic: scenario `{}` step `{}`: {run} differs at line {line}",
                     model::one_line(&ran.scenario.id),
@@ -175,6 +176,24 @@ pub(super) fn check(catalogue: &RequirementCatalogue, ran: &[Ran]) -> Checks {
         }
     }
     checks
+}
+
+/// Runs a trigger-evaluate step three times, as written, again as written, and with its rules,
+/// the snapshot's kinds and rows, and the history's firings and activations reversed, and returns
+/// the first run that differs from the first (`rerun` or `permuted`) with the line, counted from
+/// 1, where it first differs.
+fn trigger_nondeterminism(inputs: &TriggerEvaluateInputs) -> Option<(&'static str, usize)> {
+    let output = |permuted: bool| match trigger_plan(inputs, permuted) {
+        Ok(plan) => plan,
+        Err(problems) => problems
+            .iter()
+            .map(|(code, _)| format!("refusal: {code}\n"))
+            .collect(),
+    };
+    let written = output(false);
+    [("rerun", output(false)), ("permuted", output(true))]
+        .into_iter()
+        .find_map(|(run, text)| first_difference(&text, &written).map(|line| (run, line)))
 }
 
 /// Runs an evaluate step three times, as written, again as written, and with its `evidence`,

@@ -14,9 +14,9 @@ domain: canon.cli
 
 summary: >-
   The canon command line: validate, compile, evaluate, digest, check, check-set, simulate,
-  generate, diff, floor, mutate, conform run, trigger validate and trigger protocols, each reading
-  files named by its flags and printing its result, or refusing with exit status 1 when a
-  document is rejected and 2 when an input cannot be read.
+  generate, diff, floor, mutate, conform run, trigger validate, trigger protocols and trigger
+  evaluate, each reading files named by its flags and printing its result, or refusing with exit
+  status 1 when a document is rejected and 2 when an input cannot be read.
 
 naming:
   wire: cli
@@ -782,5 +782,69 @@ commands:
           one protocol id
         error: canon.cli.Rejected
       # read from: docs/design/trigger-rules.md:154-156
+      - name: printed
+        returns: true
+
+  # The clap path `trigger evaluate` (story:trigger-evaluate): read a canon-trigger-set/1 rule
+  # set and the rule files it names, a canon-trigger-snapshot/1 snapshot, a
+  # canon-trigger-protocols/1 map, a canon-trigger-history/1 history and an instant, and print
+  # the canon-trigger-plan/1 plan: every match of every rule with its firing id and verdict. The
+  # evaluation is a pure function of what the flags name: it reads no clock, no network and no
+  # other file, and writes nothing but the plan.
+  # read from: docs/design/trigger-rules.md:162-208
+  # read from: .engineering/planning/story/trigger-evaluate.md, section "Outcome"
+  - name: canon.cli.TriggerEvaluate
+    naming:
+      wire: trigger-evaluate
+      display: Trigger evaluate
+      summary: >-
+        Evaluate a rule set against a snapshot, the protocols, a history and an instant, and
+        print the canon-trigger-plan/1 plan: every match with its firing id and verdict.
+    input:
+      # The canon-trigger-set/1 rule set (canon.trigger.TriggerSet), one file; its rule paths are
+      # relative to its directory.
+      # read from: docs/design/trigger-rules.md:168
+      - name: rules
+        type: String
+      # The canon-trigger-snapshot/1 document (canon.trigger.TriggerSnapshot), one file.
+      # read from: docs/design/trigger-rules.md:169-170
+      - name: snapshot
+        type: String
+      # The canon-trigger-protocols/1 document (canon.trigger.TriggerProtocols), one file.
+      # read from: docs/design/trigger-rules.md:171
+      - name: protocols
+        type: String
+      # The canon-trigger-history/1 document (canon.trigger.TriggerHistory), one file.
+      # read from: docs/design/trigger-rules.md:172-174
+      - name: history
+        type: String
+      # The evaluation instant, a Canon instant (`2026-11-26T12:00:00Z`): the only time the
+      # evaluation reads.
+      # read from: docs/design/trigger-rules.md:175
+      - name: now
+        type: String
+    response:
+      # The canon-trigger-plan/1 document (canon.trigger.TriggerPlan), canonical JSON.
+      # read from: docs/design/trigger-rules.md:177-180
+      - name: output
+        type: String
+    outcomes:
+      # Exit 2: the set, a rule file it names, the snapshot, the protocols or the history cannot be
+      # read.
+      # read from: docs/design/trigger-rules.md:208
+      - name: unreadable
+        external: an input file cannot be read
+        error: canon.cli.Unreadable
+      # One `error[<code>]: <why>` line: a document that does not read as its format
+      # (malformed-input), a rule file that is not a valid rule (each of its errors), an instant
+      # that is not one (invalid-instant), two rules of one rule key (duplicate-rule), or a kind or
+      # a row id listed twice (duplicate-row).
+      # read from: docs/design/trigger-rules.md:162-208
+      - name: rejected
+        external: >-
+          a document does not read as its format, a rule file is not a valid rule, an instant is
+          not one, two rules share a rule key, or the snapshot lists a kind or a row twice
+        error: canon.cli.Rejected
+      # read from: docs/design/trigger-rules.md:208
       - name: printed
         returns: true

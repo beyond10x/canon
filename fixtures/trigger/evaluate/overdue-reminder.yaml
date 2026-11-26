@@ -1,0 +1,23 @@
+format: canon-trigger/1
+id: overdue-reminder
+version: 1
+owner: billing-operations
+subject:
+  kind: invoice
+  state: {field: status, is: overdue}
+  fields:
+    id: {type: string}
+    status: {type: string}
+    amount: {type: decimal}
+    segment: {type: string}
+    note: {type: string, optional: true}
+where: '$row.amount > 100 and not contains(["test", "internal"], $row.segment)'
+start:
+  protocol: send-reminder
+  input:
+    invoice: {field: id}
+    channel: {const: email}
+mode: auto
+access: write
+refire: once_per_state_entry
+cap: 50

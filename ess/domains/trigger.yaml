@@ -7,6 +7,10 @@
 # story:protocol-access-class adds the canon-trigger-protocols/1 document `canon trigger protocols`
 # prints, each protocol's access class, guard and case inputs
 # (conformance/scenarios/protocol-access-class.yaml).
+# story:trigger-evaluate adds what `canon trigger evaluate` reads and prints: the
+# canon-trigger-set/1 rule set (each rule file with its state), the canon-trigger-snapshot/1 rows,
+# the canon-trigger-history/1 firings and activations, and the canon-trigger-plan/1 plan
+# (conformance/scenarios/trigger-evaluate.yaml).
 # crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
 domain: canon.trigger
 
@@ -16,7 +20,10 @@ summary: >-
   over those fields, the protocol it starts with the case inputs it fills from the row, and its
   mode, access, refire policy and daily cap. A canon-trigger-protocols/1 document maps each
   protocol id to the protocol's access class, whether it is guarded, and its case inputs with
-  their values.
+  their values. A trigger evaluation reads a canon-trigger-set/1 rule set, each rule with its
+  state, a canon-trigger-snapshot/1 snapshot of rows per kind, the protocols, a
+  canon-trigger-history/1 history of firings and activations, and an instant, and writes a
+  canon-trigger-plan/1 plan: one entry per match, with its firing id and its verdict.
 
 naming:
   wire: trigger
@@ -225,3 +232,208 @@ types:
       # read from: .engineering/planning/story/protocol-access-class.md, section "Outcome"
       - name: inputs
         type: Map<canon.protocol.InputId, List<canon.protocol.InputValue>>
+
+  # The canon-trigger-set/1 document `canon trigger evaluate --rules` reads
+  # (story:trigger-evaluate): the rule set, each canon-trigger/1 rule file with its lifecycle
+  # state. A rule's state is deployment state, not part of its document, so the set carries it.
+  # Unknown fields are refused.
+  # read from: docs/design/trigger-rules.md:99-100
+  # read from: docs/design/trigger-rules.md:168
+  # read from: .engineering/planning/story/trigger-evaluate.md, section "Scope"
+  - name: canon.trigger.TriggerSet
+    kind: struct
+    fields:
+      # The only accepted value is canon-trigger-set/1.
+      - name: format
+        type: String
+      # The rules, in any order: the order changes no byte of the plan. Two entries whose rules
+      # have one rule key are refused (duplicate-rule).
+      # read from: docs/design/trigger-rules.md:168
+      # read from: docs/design/trigger-rules.md:180
+      - name: rules
+        type: List<canon.trigger.TriggerSetEntry>
+
+  # One rule of a set: its canon-trigger/1 file and its state.
+  # read from: docs/design/trigger-rules.md:168
+  - name: canon.trigger.TriggerSetEntry
+    kind: struct
+    fields:
+      # The canon-trigger/1 file, relative to the directory of the set file, or absolute. The file
+      # must hold a valid rule; one that does not is refused, naming the file.
+      - name: path
+        type: String
+      # read from: docs/design/trigger-rules.md:168
+      - name: state
+        type: canon.trigger.TriggerRuleState
+
+  # A rule's lifecycle state. Every state is evaluated by the same steps and each plan entry
+  # carries its rule's state; an evaluator starts only would-start entries of an active rule.
+  # read from: docs/design/trigger-rules.md:168
+  # read from: docs/design/trigger-rules.md:203-206
+  - name: canon.trigger.TriggerRuleState
+    kind: enum
+    variants: ["draft", "active", "disabled"]
+
+  # The id of one row of a kind, as the snapshot names it: text without whitespace, unique within
+  # its kind.
+  # read from: docs/design/trigger-rules.md:169-170
+  - name: canon.trigger.TriggerRowId
+    kind: newtype
+    of: String
+
+  # The canon-trigger-snapshot/1 document `canon trigger evaluate --snapshot` reads: the rows of
+  # each kind, as the evaluator read them from its source. Unknown fields are refused. A kind
+  # listed twice, or a row id listed twice within a kind, is refused (duplicate-row).
+  # read from: docs/design/trigger-rules.md:169-170
+  - name: canon.trigger.TriggerSnapshot
+    kind: struct
+    fields:
+      # The only accepted value is canon-trigger-snapshot/1.
+      - name: format
+        type: String
+      # The rows of each kind, keyed by kind, in any order.
+      # read from: docs/design/trigger-rules.md:169
+      - name: kinds
+        type: Map<canon.trigger.TriggerKind, List<canon.trigger.TriggerRow>>
+
+  # One row: its id, the instant it entered its current state when the source knows it, and its
+  # field values. A rule reads only the fields it declares; a declared required field that is
+  # absent or null is field-missing, a value of another type than declared is field-type.
+  # read from: docs/design/trigger-rules.md:169-170
+  # read from: docs/design/trigger-rules.md:130-138
+  - name: canon.trigger.TriggerRow
+    kind: struct
+    fields:
+      # read from: docs/design/trigger-rules.md:169
+      - name: id
+        type: canon.trigger.TriggerRowId
+      # The instant the row entered its current state, a Canon instant (UTC, `Z`). Absent: a
+      # once_per_state_entry rule refuses the row (entered-at-missing).
+      # read from: docs/design/trigger-rules.md:170
+      # read from: docs/design/trigger-rules.md:184-186
+      - name: entered_at
+        type: Optional<canon.protocol.Instant>
+      # The field values, keyed by field name: a string, a number, true or false, or null.
+      # read from: docs/design/trigger-rules.md:169
+      - name: fields
+        type: Map<canon.trigger.TriggerFieldName, Json>
+
+  # The canon-trigger-history/1 document `canon trigger evaluate --history` reads: what the
+  # evaluator recorded. This story reads firings and activations; approvals come with
+  # story:trigger-holds-and-refusals. Unknown fields are refused.
+  # read from: docs/design/trigger-rules.md:172-174
+  - name: canon.trigger.TriggerHistory
+    kind: struct
+    fields:
+      # The only accepted value is canon-trigger-history/1.
+      - name: format
+        type: String
+      # Every firing the evaluator recorded; empty when left out.
+      # read from: docs/design/trigger-rules.md:172
+      - name: firings
+        type: List<canon.trigger.TriggerFiring>
+      # Every activation of a rule key; empty when left out.
+      # read from: docs/design/trigger-rules.md:172-173
+      - name: activations
+        type: List<canon.trigger.TriggerActivation>
+
+  # One recorded firing: the firing id the evaluator submitted, its rule key and when.
+  # read from: docs/design/trigger-rules.md:172
+  - name: canon.trigger.TriggerFiring
+    kind: struct
+    fields:
+      - name: firing_id
+        type: String
+      # The rule key, `<id>@<version>`.
+      - name: rule
+        type: String
+      - name: at
+        type: canon.protocol.Instant
+
+  # One activation of a rule key: when, and the rows the evaluator listed as matching then. A
+  # match whose row entered its state at or before the latest activation of its rule key, or that
+  # an activation of its rule key lists, is baseline.
+  # read from: docs/design/trigger-rules.md:172-173
+  # read from: docs/design/trigger-rules.md:195-196
+  - name: canon.trigger.TriggerActivation
+    kind: struct
+    fields:
+      # The rule key, `<id>@<version>`.
+      - name: rule
+        type: String
+      - name: at
+        type: canon.protocol.Instant
+      # Rows written `<kind>:<row id>`; empty when left out.
+      # read from: docs/design/trigger-rules.md:173
+      - name: baseline
+        type: List<String>
+
+  # The canon-trigger-plan/1 document `canon trigger evaluate` prints, canonical JSON: one entry
+  # per match of every rule, ordered by rule key, kind and row id (by code point), whatever the
+  # order of rules, kinds and rows in the input.
+  # read from: docs/design/trigger-rules.md:177-180
+  - name: canon.trigger.TriggerPlan
+    kind: struct
+    fields:
+      # Always canon-trigger-plan/1.
+      - name: format
+        type: String
+      # read from: docs/design/trigger-rules.md:178-180
+      - name: entries
+        type: List<canon.trigger.TriggerPlanEntry>
+
+  # One match, or one row whose match cannot be decided: the rule key and its state, the kind and
+  # row id, the protocol, the input built from start.input, the firing id and the verdict.
+  # read from: docs/design/trigger-rules.md:177-186
+  - name: canon.trigger.TriggerPlanEntry
+    kind: struct
+    fields:
+      # The rule key, `<id>@<version>`.
+      - name: rule
+        type: String
+      - name: rule_state
+        type: canon.trigger.TriggerRuleState
+      - name: kind
+        type: canon.trigger.TriggerKind
+      - name: row
+        type: canon.trigger.TriggerRowId
+      - name: protocol
+        type: canon.protocol.ProtocolId
+      # Each start.input entry: a {field} input is the row's value of that field as read (null
+      # when an optional field is absent), a {const} input its string. Not checked against the
+      # protocol.
+      # read from: docs/design/trigger-rules.md:178-179
+      - name: input
+        type: Map<canon.protocol.InputId, Json>
+      # `<rule key>/<kind>:<row id>/<entered_at>` under once_per_state_entry,
+      # `<rule key>/<kind>:<row id>` under once_per_subject; absent when the row has no
+      # entered_at under once_per_state_entry.
+      # read from: docs/design/trigger-rules.md:182-186
+      - name: firing_id
+        type: Optional<String>
+      # read from: docs/design/trigger-rules.md:188-201
+      - name: verdict
+        type: canon.trigger.TriggerVerdict
+      # Written with an undetermined or refused verdict.
+      - name: reason
+        type: Optional<canon.trigger.TriggerReason>
+      # The declared field a field-missing or field-type reason names.
+      - name: field
+        type: Optional<canon.trigger.TriggerFieldName>
+
+  # The verdict of one entry, the first that applies: refused, undetermined, baseline, offer (mode
+  # offer), would_start (mode auto). The wire writes every `_` as `-` (would-start), since ESS
+  # names a variant in snake case. held, and the refusals other than entered-at-missing, come with
+  # story:trigger-holds-and-refusals.
+  # read from: docs/design/trigger-rules.md:188-201
+  - name: canon.trigger.TriggerVerdict
+    kind: enum
+    variants: ["refused", "undetermined", "baseline", "offer", "would_start"]
+
+  # Why an entry is undetermined (field_missing, field_type, where_unknown) or refused
+  # (entered_at_missing). The wire writes every `_` as `-` (field-missing).
+  # read from: docs/design/trigger-rules.md:130-138
+  # read from: docs/design/trigger-rules.md:184-186
+  - name: canon.trigger.TriggerReason
+    kind: enum
+    variants: ["field_missing", "field_type", "where_unknown", "entered_at_missing"]

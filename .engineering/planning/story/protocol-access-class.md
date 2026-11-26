@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:protocol-access-class
 kind: story
-status: active
+status: implemented
 title: A protocol declares its access class and whether it is guarded
 relations:
 - decomposes: epic:trigger-rules
 - serves: vision:governed-autonomy
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-26T11:25:20Z", actor: "human:operator", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-26T11:25:20Z", actor: "human:operator", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-26T14:48:17Z", actor: "human:operator", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

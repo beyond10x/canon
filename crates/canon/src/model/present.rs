@@ -109,7 +109,7 @@ where
 }
 
 /// The JSON value a YAML value writes, or why it has none.
-fn json(yaml: serde_yaml_ng::Value) -> Result<serde_json::Value, &'static str> {
+pub(crate) fn json(yaml: serde_yaml_ng::Value) -> Result<serde_json::Value, &'static str> {
     use serde_json::Value as Json;
     use serde_yaml_ng::Value as Yaml;
     Ok(match yaml {

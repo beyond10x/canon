@@ -38,8 +38,11 @@ Canon's ESS specification lives under `ess/`. It specifies the `protocol/1` sour
 story:decision-outcomes) and `canon-authority/1` (story:review-hardening-w7) in the domain
 `canon.protocol`, the `canon-properties/1` document `canon check` reads (story:canon-check) in the
 domain `canon.check`, the `canon-trigger/1` rule document `canon trigger validate` reads
-(story:trigger-rule-document) and the `canon-trigger-protocols/1` document `canon trigger
-protocols` writes (story:protocol-access-class) in the domain `canon.trigger`, and the `canon`
+(story:trigger-rule-document), the `canon-trigger-protocols/1` document `canon trigger
+protocols` writes (story:protocol-access-class), and the `canon-trigger-set/1`,
+`canon-trigger-snapshot/1` and `canon-trigger-history/1` documents `canon trigger evaluate` reads
+with the `canon-trigger-plan/1` plan it writes (story:trigger-evaluate) in the domain
+`canon.trigger`, and the `canon`
 command surface in
 the domain `canon.cli`
 (story:ess-command-surface), completing Atlas ADR 0076's data model and command surface.
@@ -114,7 +117,11 @@ compatibility decisions and keep unreleased capability claims explicit.
 - Build into the tree's own `target/`; never set `CARGO_TARGET_DIR`. End every tree with
   `worktree finish --discard-cache --archive <tree>`, and never delete a `target/` by hand.
 - Every commit and push is `b10x-bot[bot]`'s through `b10x-gates bot`; every GitHub write goes
-  through `b10x-gates api`.
+  through `b10x-gates api`. A plain `git rebase`, `git cherry-pick` or `git commit --amend` makes
+  the local user the committer, and the pre-push check refuses the branch ("historical merge
+  committer is not exact GitHub", 2026-11-26). To bring a branch up to date, `b10x-gates bot --
+  merge origin/main`; to re-create commits, apply each one's diff and commit it with `b10x-gates
+  bot -- commit`.
 - Use a managed worktree (`worktree create --repo canon --purpose …`) for changes.
 - A request filed by a session working on a consumer repository of Canon (a repository that uses
   Canon's output and waits on a Canon story) is accepted on arrival: draft one story per request
@@ -161,6 +168,10 @@ crate has one integration-test binary, `tests/main.rs` (`autotests = false`), wi
 `every_test_file_is_a_module_of_this_binary` fails on a file left out. `.cargo/config.toml`
 builds tests without debug info and with `b10x-canon` and the dependencies optimized; it wins over
 `~/.cargo/config.toml`, so the workstation and CI build alike.
+`trigger_evaluate::evaluate_exits_0_in_a_read_only_directory_without_network` runs `canon` in a
+directory it cannot write under `unshare --net --map-current-user`: the workstation and the CI
+runner need util-linux's `unshare` and unprivileged user namespaces (`check.yml` lifts the
+AppArmor restriction of the Ubuntu runner before `task check`).
 
 ## Releases
 

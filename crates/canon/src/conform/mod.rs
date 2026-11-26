@@ -47,6 +47,21 @@
 //!         { ... the exact canon-trigger-protocols/1 bytes ... }
 //!       # or, instead of `protocols`:
 //!       # refusal: read-only-action-writes  # the code of every problem
+//!   - id: auto-and-offer
+//!     trigger-evaluate:
+//!       rules:
+//!         - state: active                   # draft | active | disabled
+//!           document: |
+//!             { ... a canon-trigger/1 document ... }
+//!       snapshot: { ... a canon-trigger-snapshot/1 document ... }
+//!       protocols: { ... a canon-trigger-protocols/1 document ... }
+//!       history: { ... a canon-trigger-history/1 document ... }
+//!       now: 2026-11-26T12:00:00Z
+//!     expect:
+//!       plan: |
+//!         { ... the exact canon-trigger-plan/1 bytes ... }
+//!       # or, instead of `plan`:
+//!       # refusal: duplicate-row            # the code of the refusal
 //! ```
 //!
 //! - `fixture` is the `protocol/1` document the scenario compiles, as a path relative to the
@@ -68,10 +83,22 @@
 //!   `fixture does not compile: <code>: <why>; …`. Absent, the fixture imports nothing.
 //! - `covers` entries are `CANON-` followed by an identifier, each listed once.
 //! - `steps` is an ordered, non-empty list. Each step is exactly one of `compile`, `evaluate`,
-//!   `trigger-validate` or `trigger-protocols`, with exactly one expectation of the matching kind:
-//!   a compile step expects `canon-ir`, an evaluate step expects `decision` or `refusal`, a
-//!   trigger-validate step expects `rule` or `refused`, neither empty, and a trigger-protocols
-//!   step expects `protocols` or `refusal`.
+//!   `trigger-validate`, `trigger-protocols` or `trigger-evaluate`, with exactly one expectation
+//!   of the matching kind: a compile step expects `canon-ir`, an evaluate step expects `decision`
+//!   or `refusal`, a trigger-validate step expects `rule` or `refused`, neither empty, a
+//!   trigger-protocols step expects `protocols` or `refusal`, and a trigger-evaluate step expects
+//!   `plan` or `refusal`.
+//! - A trigger-evaluate step (story:trigger-evaluate) reads each of its `rules` entries'
+//!   `document` as `canon trigger validate` reads a file, with the entry's `state`, and its
+//!   `snapshot`, `protocols` and `history` as `canon trigger evaluate` reads its files, and
+//!   evaluates them at `now` (`trigger::evaluate`); it does not read the fixture. It passes when
+//!   the `canon-trigger-plan/1` text equals `plan` byte for byte, or when the evaluation, or a
+//!   document it reads, is refused with the code `refusal`. Otherwise `<what differed>` is
+//!   `canon-trigger-plan/1 differs from the expectation at line <n>`, `expected refusal `<code>`,
+//!   the evaluation gave canon-trigger-plan/1`, `expected refusal `<code>`, the evaluation is
+//!   refused: error[<code>]: <why>; …`, or `the evaluation is refused: error[<code>]: <why>; …`; a
+//!   rule document that is not a valid rule is refused with each of its errors, named `rule <n>`,
+//!   counted from 1.
 //! - A trigger-protocols step (story:protocol-access-class) reads its non-empty list of
 //!   `documents` as `canon trigger protocols` reads its files, in list order, each named
 //!   `document <n>`, counted from 1; it does not read the fixture. Each document is parsed and
@@ -200,7 +227,11 @@
 //!    (CANON-DETERMINISM-001). The three outputs, each the canonical `canon-decision/1` document or
 //!    the refusal's code, must be byte-identical; otherwise `nondeterministic: scenario `<id>` step
 //!    `<step>`: <rerun|permuted> differs at line <n>`, `<n>` the first line, counted from 1, where
-//!    that run's output differs from the first. In registry and step order.
+//!    that run's output differs from the first. In registry and step order. Every trigger-evaluate
+//!    step runs three times the same way, the permuted run with its rules, the snapshot's kinds,
+//!    each kind's rows, and the history's firings and activations in reverse order
+//!    (CANON-TRIGGER-008); its output is the canonical `canon-trigger-plan/1` document or the
+//!    refusal's code.
 //!
 //! The check lines come after the registry's lines and before its summary, and a second summary
 //! line follows it:
@@ -270,6 +301,32 @@ pub enum StepKind {
         documents: Vec<String>,
         expected: ProtocolsExpectation,
     },
+    /// Evaluate a rule set as `canon trigger evaluate` does; the fixture is not read
+    /// (story:trigger-evaluate).
+    TriggerEvaluate {
+        inputs: TriggerEvaluateInputs,
+        expected: PlanExpectation,
+    },
+}
+
+/// The inputs of a trigger-evaluate step: each rule's state and `canon-trigger/1` text, and the
+/// snapshot, protocols and history as YAML values, read as `canon trigger evaluate` reads its files.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TriggerEvaluateInputs {
+    pub rules: Vec<(model::TriggerRuleState, String)>,
+    pub snapshot: serde_yaml_ng::Value,
+    pub protocols: serde_yaml_ng::Value,
+    pub history: serde_yaml_ng::Value,
+    pub now: String,
+}
+
+/// What a trigger-evaluate step expects.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlanExpectation {
+    /// The exact `canon-trigger-plan/1` bytes.
+    Plan(String),
+    /// The evaluation, or a document it reads, is refused with this code.
+    Refusal(String),
 }
 
 /// What a trigger-protocols step expects of its documents.
@@ -376,8 +433,34 @@ struct RawStep {
     trigger_validate: Option<RawTriggerValidate>,
     #[serde(rename = "trigger-protocols", default, deserialize_with = "optional")]
     trigger_protocols: Option<RawTriggerProtocols>,
+    #[serde(rename = "trigger-evaluate", default, deserialize_with = "optional")]
+    trigger_evaluate: Option<RawTriggerEvaluate>,
     #[serde(deserialize_with = "required")]
     expect: RawExpect,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawTriggerEvaluate {
+    #[serde(deserialize_with = "required")]
+    rules: Vec<RawRuleEntry>,
+    #[serde(deserialize_with = "required")]
+    snapshot: serde_yaml_ng::Value,
+    #[serde(deserialize_with = "required")]
+    protocols: serde_yaml_ng::Value,
+    #[serde(deserialize_with = "required")]
+    history: serde_yaml_ng::Value,
+    #[serde(deserialize_with = "required")]
+    now: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawRuleEntry {
+    #[serde(deserialize_with = "required")]
+    state: model::TriggerRuleState,
+    #[serde(deserialize_with = "required")]
+    document: String,
 }
 
 #[derive(Deserialize)]
@@ -428,6 +511,8 @@ struct RawExpect {
     refused: Option<String>,
     #[serde(default, deserialize_with = "optional")]
     protocols: Option<String>,
+    #[serde(default, deserialize_with = "optional")]
+    plan: Option<String>,
 }
 
 /// Parses `canon-conformance/1` scenario text.
@@ -545,9 +630,59 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
         evaluate,
         trigger_validate,
         trigger_protocols,
+        trigger_evaluate,
         expect,
         id: _,
     } = step;
+    if let Some(inputs) = trigger_evaluate {
+        let alone = compile.is_none()
+            && evaluate.is_none()
+            && trigger_validate.is_none()
+            && trigger_protocols.is_none();
+        let expected = match expect {
+            RawExpect {
+                canon_ir: None,
+                decision: None,
+                refusal: None,
+                rule: None,
+                refused: None,
+                protocols: None,
+                plan: Some(plan),
+            } => PlanExpectation::Plan(plan),
+            RawExpect {
+                canon_ir: None,
+                decision: None,
+                refusal: Some(refusal),
+                rule: None,
+                refused: None,
+                protocols: None,
+                plan: None,
+            } if model::is_identifier(&refusal) => PlanExpectation::Refusal(refusal),
+            _ if !alone => return refuse(exactly_one(&id)),
+            _ => {
+                return refuse(format!(
+                    "trigger-evaluate step `{id}` must expect exactly one of `plan` or `refusal` (an identifier)"
+                ));
+            }
+        };
+        if !alone {
+            return refuse(exactly_one(&id));
+        }
+        return Ok(StepKind::TriggerEvaluate {
+            inputs: TriggerEvaluateInputs {
+                rules: inputs
+                    .rules
+                    .into_iter()
+                    .map(|entry| (entry.state, entry.document))
+                    .collect(),
+                snapshot: inputs.snapshot,
+                protocols: inputs.protocols,
+                history: inputs.history,
+                now: inputs.now,
+            },
+            expected,
+        });
+    }
     match (
         compile,
         evaluate,
@@ -567,6 +702,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                 rule: None,
                 refused: None,
                 protocols: None,
+                plan: None,
             },
         ) => Ok(StepKind::Compile { expected_ir }),
         (Some(_), None, None, None, _) => refuse(format!(
@@ -581,6 +717,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                     rule: None,
                     refused: None,
                     protocols: None,
+                    plan: None,
                 } => EvaluateExpectation::Decision(decision),
                 RawExpect {
                     canon_ir: None,
@@ -589,6 +726,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                     rule: None,
                     refused: None,
                     protocols: None,
+                    plan: None,
                 } if model::is_identifier(&refusal) => EvaluateExpectation::Refusal(refusal),
                 _ => {
                     return refuse(format!(
@@ -616,6 +754,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                     rule: Some(rule),
                     refused: None,
                     protocols: None,
+                    plan: None,
                 } if !rule.is_empty() => TriggerExpectation::Rule(rule),
                 RawExpect {
                     canon_ir: None,
@@ -624,6 +763,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                     rule: None,
                     refused: Some(field),
                     protocols: None,
+                    plan: None,
                 } if !field.is_empty() => TriggerExpectation::Refused(field),
                 _ => {
                     return refuse(format!(
@@ -645,6 +785,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                     rule: None,
                     refused: None,
                     protocols: Some(expected),
+                    plan: None,
                 } => ProtocolsExpectation::Protocols(expected),
                 RawExpect {
                     canon_ir: None,
@@ -653,6 +794,7 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                     rule: None,
                     refused: None,
                     protocols: None,
+                    plan: None,
                 } if model::is_identifier(&refusal) => ProtocolsExpectation::Refusal(refusal),
                 _ => {
                     return refuse(format!(
@@ -668,10 +810,15 @@ fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
                 expected,
             })
         }
-        _ => refuse(format!(
-            "step `{id}` must be exactly one of `compile`, `evaluate`, `trigger-validate` or `trigger-protocols`"
-        )),
+        _ => refuse(exactly_one(&id)),
     }
+}
+
+/// Why a step with none, or more than one, of the step kinds does not parse.
+fn exactly_one(id: &str) -> String {
+    format!(
+        "step `{id}` must be exactly one of `compile`, `evaluate`, `trigger-validate`, `trigger-protocols` or `trigger-evaluate`"
+    )
 }
 
 /// The result of running one scenario.
@@ -715,6 +862,7 @@ fn run_compiled(scenario: &Scenario, compiled: &Result<ir::Ir, String>) -> Verdi
                 documents,
                 expected,
             } => protocols_step(documents, expected),
+            StepKind::TriggerEvaluate { inputs, expected } => plan_step(inputs, expected),
         };
         if let Some(reason) = failure {
             return Verdict::Failed {
@@ -886,6 +1034,103 @@ fn trigger_protocols(documents: &[String]) -> Result<String, Vec<(&'static str, 
     trigger::protocols(set.iter().map(|(name, compiled)| (name.as_str(), compiled)))
         .map(|document| trigger::render_protocols(&document))
         .map_err(|duplicate| vec![(trigger::DuplicateProtocolId::CODE, duplicate.to_string())])
+}
+
+/// Evaluates a trigger-evaluate step's inputs as `canon trigger evaluate` does and compares the
+/// `canon-trigger-plan/1` bytes or the refusal with the expectation (see the module docs).
+fn plan_step(inputs: &TriggerEvaluateInputs, expected: &PlanExpectation) -> Option<String> {
+    let refused = |problems: &[(&str, String)]| {
+        problems
+            .iter()
+            .map(|(code, why)| format!("error[{code}]: {why}"))
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    match (trigger_plan(inputs, false), expected) {
+        (Ok(printed), PlanExpectation::Plan(expected)) => {
+            first_difference(&printed, expected).map(|line| {
+                format!("canon-trigger-plan/1 differs from the expectation at line {line}")
+            })
+        }
+        (Ok(_), PlanExpectation::Refusal(code)) => Some(format!(
+            "expected refusal `{}`, the evaluation gave canon-trigger-plan/1",
+            model::one_line(code)
+        )),
+        (Err(problems), PlanExpectation::Refusal(code))
+            if problems.iter().all(|(found, _)| found == code) =>
+        {
+            None
+        }
+        (Err(problems), PlanExpectation::Refusal(code)) => Some(format!(
+            "expected refusal `{}`, the evaluation is refused: {}",
+            model::one_line(code),
+            refused(&problems)
+        )),
+        (Err(problems), PlanExpectation::Plan(_)) => {
+            Some(format!("the evaluation is refused: {}", refused(&problems)))
+        }
+    }
+}
+
+/// The `canon-trigger-plan/1` text of a trigger-evaluate step, or each `(code, why)` of its
+/// refusal: every error of the first rule document that is not a valid rule, named `rule <n>`, or
+/// the refusal of a document or of the evaluation. `permuted` reverses the rules, the snapshot's
+/// kinds and each kind's rows, and the history's firings and activations before evaluating.
+pub(crate) fn trigger_plan(
+    inputs: &TriggerEvaluateInputs,
+    permuted: bool,
+) -> Result<String, Vec<(&'static str, String)>> {
+    let one = |refusal: trigger::Refusal| vec![(refusal.code, refusal.message)];
+    let mut rules = Vec::with_capacity(inputs.rules.len());
+    for (at, (state, document)) in inputs.rules.iter().enumerate() {
+        match trigger::read(document) {
+            Ok(rule) => rules.push(trigger::RuleEntry {
+                rule,
+                state: *state,
+            }),
+            Err(problems) => {
+                return Err(problems
+                    .iter()
+                    .map(|problem| (problem.code, format!("rule {}: {problem}", at + 1)))
+                    .collect());
+            }
+        }
+    }
+    let text = |what: &str, value: &serde_yaml_ng::Value| {
+        serde_yaml_ng::to_string(value).map_err(|error| {
+            vec![(
+                "malformed-input",
+                format!(
+                    "{what} cannot be serialized: {}",
+                    model::one_line(&error.to_string())
+                ),
+            )]
+        })
+    };
+    let mut snapshot = trigger::read_snapshot(&text("snapshot", &inputs.snapshot)?).map_err(one)?;
+    let protocols = trigger::read_protocols(&text("protocols", &inputs.protocols)?).map_err(one)?;
+    let mut history = trigger::read_history(&text("history", &inputs.history)?).map_err(one)?;
+    if permuted {
+        rules.reverse();
+        let mut kinds: Vec<_> = snapshot
+            .kinds
+            .iter()
+            .map(|(kind, rows)| (kind.clone(), rows.iter().rev().cloned().collect()))
+            .collect();
+        kinds.reverse();
+        snapshot.kinds = model::Declarations::new(kinds);
+        history.firings.reverse();
+        history.activations.reverse();
+    }
+    trigger::evaluate(
+        &rules,
+        &snapshot,
+        &protocols,
+        &history,
+        &model::Instant::new(inputs.now.as_str()),
+    )
+    .map(|plan| trigger::render_plan(&plan))
+    .map_err(one)
 }
 
 fn compile_step(compiled: &Result<ir::Ir, String>, expected_ir: &str) -> Option<String> {
@@ -1572,13 +1817,13 @@ mod tests {
             ),
             (
                 format!("{HEAD}steps:\n  - id: c\n    expect: {{canon-ir: x}}\n"),
-                "step `c` must be exactly one of `compile`, `evaluate`, `trigger-validate` or `trigger-protocols`",
+                "step `c` must be exactly one of `compile`, `evaluate`, `trigger-validate`, `trigger-protocols` or `trigger-evaluate`",
             ),
             (
                 format!(
                     "{HEAD}steps:\n  - id: c\n    compile: {{}}\n    evaluate: {{case: {{}}, evidence: []}}\n    expect: {{canon-ir: x}}\n"
                 ),
-                "step `c` must be exactly one of `compile`, `evaluate`, `trigger-validate` or `trigger-protocols`",
+                "step `c` must be exactly one of `compile`, `evaluate`, `trigger-validate`, `trigger-protocols` or `trigger-evaluate`",
             ),
             (
                 format!(
@@ -1644,7 +1889,7 @@ mod tests {
                 format!(
                     "{HEAD}steps:\n  - id: t\n    compile: {{}}\n    trigger-validate: {{document: x}}\n    expect: {{canon-ir: x}}\n"
                 ),
-                "step `t` must be exactly one of `compile`, `evaluate`, `trigger-validate` or `trigger-protocols`",
+                "step `t` must be exactly one of `compile`, `evaluate`, `trigger-validate`, `trigger-protocols` or `trigger-evaluate`",
             ),
             (
                 format!(

@@ -86,7 +86,7 @@ pub fn all(root: &Path) -> Result<BTreeMap<String, String>, String> {
             "crates/canon/src/trigger/mod.rs",
             "Trigger rules",
             "Trigger rules",
-            "What canon trigger validate checks in a canon-trigger/1 rule, the error it names for each field, the catalog a rule's where is compiled against, and the protocols canon trigger protocols prints.",
+            "What canon trigger validate checks in a canon-trigger/1 rule, the error it names for each field, the catalog a rule's where is compiled against, the protocols canon trigger protocols prints, and the plan canon trigger evaluate prints for a rule set against a snapshot.",
         )?,
     );
     files.insert(
@@ -301,9 +301,9 @@ const PROTOCOL: Document = Document {
 };
 
 /// The documents the documents page lists, in order: those `canon evaluate` reads and writes,
-/// then the one `canon check` reads, then the one `canon trigger validate` reads, then the one
-/// `canon trigger protocols` writes.
-const DOCUMENTS: [Document; 8] = [
+/// then the one `canon check` reads, then the one `canon trigger validate` reads, the one
+/// `canon trigger protocols` writes, and those `canon trigger evaluate` reads and writes.
+const DOCUMENTS: [Document; 12] = [
     Document {
         root: "Case",
         format: "CASE_FORMAT",
@@ -369,6 +369,38 @@ const DOCUMENTS: [Document; 8] = [
         list: None,
         twice: "",
         command: "canon trigger protocols --path",
+    },
+    Document {
+        root: "TriggerSet",
+        format: "TRIGGER_SET_FORMAT",
+        schema: Some("trigger-set-1.schema.json"),
+        list: None,
+        twice: "",
+        command: "canon trigger evaluate --rules",
+    },
+    Document {
+        root: "TriggerSnapshot",
+        format: "TRIGGER_SNAPSHOT_FORMAT",
+        schema: Some("trigger-snapshot-1.schema.json"),
+        list: None,
+        twice: "",
+        command: "canon trigger evaluate --snapshot",
+    },
+    Document {
+        root: "TriggerHistory",
+        format: "TRIGGER_HISTORY_FORMAT",
+        schema: Some("trigger-history-1.schema.json"),
+        list: None,
+        twice: "",
+        command: "canon trigger evaluate --history",
+    },
+    Document {
+        root: "TriggerPlan",
+        format: "TRIGGER_PLAN_FORMAT",
+        schema: None,
+        list: None,
+        twice: "",
+        command: "canon trigger evaluate",
     },
 ];
 
@@ -662,6 +694,11 @@ fn used_identifiers(model: &Model, sections: &[&TypeDef]) -> Result<BTreeSet<Str
     Ok(used)
 }
 
+/// The lists of a written document that are written even when empty, as (type, field):
+/// `canon-trigger-plan/1` writes `entries: []` when nothing matches
+/// (`crates/canon/src/trigger/evaluate.rs`, `render_plan`).
+const ALWAYS_WRITTEN: &[(&str, &str)] = &[("TriggerPlan", "entries")];
+
 fn fields_table(
     owner: &str,
     fields: &[source::Field],
@@ -674,8 +711,10 @@ fn fields_table(
         .map(|field| {
             // A written document (`canon-decision/1`) leaves out an absent slot and an empty
             // list (`crates/canon/src/eval/decision.rs`), so only its other fields are always
-            // there.
+            // there. A list in ALWAYS_WRITTEN is the exception: written even when empty.
+            let always = ALWAYS_WRITTEN.contains(&(owner, field.name.as_str()));
             let presence = match (read, field.optional, &field.ty) {
+                (false, _, _) if always => "always",
                 (false, _, Ty::Option(_)) => "when present",
                 (false, _, Ty::List(_)) => "when not empty",
                 (false, _, _) => "always",
@@ -727,9 +766,18 @@ fn type_sections(
                 out.push_str(&fields_table(&def.name, fields, links, model, false));
             }
             (Reading::NotRead, Shape::Enum(variants)) => {
+                // Canon writes a variant in snake case, or as its `rename_all` names it
+                // (`canon-trigger-plan/1` writes `would-start`).
                 let rows: Vec<Vec<String>> = variants
                     .iter()
-                    .map(|variant| vec![code(&snake_case(&variant.name)), meaning(&variant.doc)])
+                    .map(|variant| {
+                        let value = if variant.written == variant.name {
+                            snake_case(&variant.name)
+                        } else {
+                            variant.written.clone()
+                        };
+                        vec![code(&value), meaning(&variant.doc)]
+                    })
                     .collect();
                 out.push_str(&table(&["Value", "Meaning"], &rows));
             }
@@ -958,7 +1006,8 @@ fn documents(model: &Model) -> Result<String, String> {
         "Evaluation documents",
         "The case snapshot, evidence records, authority decisions and explicit decisions canon \
          evaluate reads, the decision it writes, the properties canon check reads, the trigger \
-         rule canon trigger validate reads, and the protocols canon trigger protocols writes.",
+         rule canon trigger validate reads, the protocols canon trigger protocols writes, and the \
+         rule set, snapshot and history canon trigger evaluate reads with the plan it writes.",
     );
     out.push_str(&format!(
         "Generated from the model types in {}. `canon evaluate` reads a compiled protocol, one \
@@ -966,8 +1015,9 @@ fn documents(model: &Model) -> Result<String, String> {
          and a list of explicit decisions, and writes a decision. `canon check` reads a protocol \
          and, optionally, the properties declared beside it. `canon trigger validate` reads one \
          trigger rule (see [Trigger rules](./trigger-rules.md)); `canon trigger protocols` writes \
-         the access class, guard and inputs of a set of protocols. Every key is listed; a key \
-         Canon does not know is refused.\n",
+         the access class, guard and inputs of a set of protocols; `canon trigger evaluate` reads \
+         a rule set, a snapshot of rows, those protocols and a history, and writes a plan. Every \
+         key is listed; a key Canon does not know is refused.\n",
         source_link(source::MODEL_DIR),
     ));
     let mut all_defs = Vec::new();

@@ -58,10 +58,13 @@ fn repo_root() -> PathBuf {
         .expect("repository root resolves")
 }
 
-/// A fresh directory under `CARGO_TARGET_TMPDIR` for one case, distinct per tree under test.
+/// A fresh directory under `CARGO_TARGET_TMPDIR` for one case, distinct per tree under test and
+/// per module this file is compiled into: `adversary_ess_commands` and `adversary2_ess_commands`
+/// compile it again as `parity`, and nextest runs their equal cases at once.
 fn scratch(case: &str) -> PathBuf {
     let mut hasher = DefaultHasher::new();
     repo_root().hash(&mut hasher);
+    module_path!().hash(&mut hasher);
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
         .join("canon-ess-commands")
         .join(format!("{:016x}", hasher.finish()))

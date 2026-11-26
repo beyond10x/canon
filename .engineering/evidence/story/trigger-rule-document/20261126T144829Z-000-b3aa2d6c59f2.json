@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-26T14:48:29Z",
+  "actor": "human:operator",
+  "artifact": "story:trigger-rule-document",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "https://github.com/beyond10x/canon/actions/runs/45820990179",
+    "reference": "canon#40"
+  }
+}
