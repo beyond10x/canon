@@ -810,11 +810,16 @@ commands:
       # read from: docs/design/trigger-rules.md:169-170
       - name: snapshot
         type: String
-      # The canon-trigger-protocols/1 document (canon.trigger.TriggerProtocols), one file.
+      # The canon-trigger-protocols/1 document (canon.trigger.TriggerProtocols), one file, as
+      # `canon trigger protocols` prints it: a rule whose protocol it does not hold is refused
+      # (unknown-protocol), and a rule is checked against its protocol's class and guard
+      # (story:trigger-holds-and-refusals).
       # read from: docs/design/trigger-rules.md:171
+      # read from: docs/design/trigger-rules.md:190-192
       - name: protocols
         type: String
-      # The canon-trigger-history/1 document (canon.trigger.TriggerHistory), one file.
+      # The canon-trigger-history/1 document (canon.trigger.TriggerHistory), one file: its
+      # firings, activations and approvals.
       # read from: docs/design/trigger-rules.md:172-174
       - name: history
         type: String
