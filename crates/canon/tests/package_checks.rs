@@ -152,11 +152,7 @@ fn glibc_check_compares_versions_as_numbers() {
         "a floor of 2.{highest}, the highest version named, passes:\n{}",
         text(&at)
     );
-    let below = package(&[
-        "check-glibc",
-        &host_binary(),
-        &format!("2.{}", highest - 1),
-    ]);
+    let below = package(&["check-glibc", &host_binary(), &format!("2.{}", highest - 1)]);
     assert!(
         !below.status.success(),
         "a floor of 2.{} fails:\n{}",
@@ -174,7 +170,10 @@ fn static_check_refuses_a_dynamically_linked_binary() {
         !out.status.success(),
         "check-static passes a dynamically linked binary:\n{said}"
     );
-    assert!(said.contains("INTERP"), "check-static names INTERP:\n{said}");
+    assert!(
+        said.contains("INTERP"),
+        "check-static names INTERP:\n{said}"
+    );
 
     let fixture = write(
         &scratch("interp.elf"),
