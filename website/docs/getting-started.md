@@ -23,9 +23,13 @@ canon --help
 From the next release, each release also carries two archives of the `canon` binary for Linux
 x86_64 beside its source, and a `SHA256SUMS` file naming their checksums:
 
-- `canon-<version>-x86_64-unknown-linux-gnu.tar.gz`, linked against glibc 2.17 or older;
-- `canon-<version>-x86_64-unknown-linux-musl.tar.gz`, statically linked, with no C library
-  needed on the host.
+- `canon-<version>-x86_64-unknown-linux-musl.tar.gz`, the default: statically linked, with no C
+  library needed on the host, and the mimalloc allocator;
+- `canon-<version>-x86_64-unknown-linux-gnu.tar.gz`, linked against glibc 2.17 or older, for a
+  host where you prefer glibc. Its peak memory was about half the musl archive's.
+
+On the measured workloads the musl archive was not slower than the gnu one; the measurement and
+the rule that chose the default are in the repository's `docs/design/linux-release.md`.
 
 Each holds the binary, `LICENSE` and `README.md` in a directory `canon-<version>-<target>/`.
 Release `0.16.0` carries neither; build it from source as above.

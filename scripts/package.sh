@@ -28,7 +28,7 @@ GLIBC_FLOOR=2.17
 # The allocator of the musl archive: `system` (musl's own) or `mimalloc` (the `mimalloc` feature
 # of canon-cli). The gnu archive always uses glibc's. docs/design/linux-release.md holds the
 # measurement that decides it; crates/canon/tests/release_decision.rs holds this line to it.
-MUSL_ALLOCATOR=system
+MUSL_ALLOCATOR=mimalloc
 
 fail() {
     echo "package: $*" >&2
