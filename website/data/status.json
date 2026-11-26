@@ -436,7 +436,7 @@
     },
     {
       "label": "Trigger rule documents",
-      "status": "planned",
+      "status": "shipped",
       "detail": "canon-trigger/1 declares one rule: the kind, state and declared row fields it watches, a canon-expr/1 where over $row compiled against a catalog of only contains and present_<type>, the protocol it starts with inputs from a field or a constant, and its mode, access, refire and cap. canon trigger validate --path prints the rule key <id>@<version> or names the field of each error. Requirements CANON-TRIGGER-001 to 003.",
       "href": "/docs/reference/trigger-rules",
       "area": "Language"
