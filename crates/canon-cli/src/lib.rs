@@ -420,6 +420,32 @@ pub enum Command {
         #[command(subcommand)]
         command: ConformCommand,
     },
+    /// Trigger rules: `canon-trigger/1` documents, each saying when rows of a kind in a state start
+    /// a protocol.
+    Trigger {
+        #[command(subcommand)]
+        command: TriggerCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TriggerCommand {
+    /// Validate one `canon-trigger/1` document field by field and print `valid: trigger rule
+    /// `<id>@<version>``, its rule key. The rule's `where` is compiled with `canon-expr/1` against a
+    /// catalog of only `contains` over strings and `present_<type>` for the type of each optional
+    /// declared field, with `$row` the record of the declared fields. A refused document prints one
+    /// line `error[<code>]: <field>: <why>` per error on standard error, naming the field, and
+    /// exits 1: `parse` (no field: not well-formed YAML, or not a mapping), `missing-field`,
+    /// `unknown-field`, `invalid-value`, `undeclared-field` (a state field or an input field
+    /// `subject.fields` does not declare, or a state field that is not a required string),
+    /// `invalid-input` (an input that is not `{field}` or `{const}`, such as an expression) and
+    /// `invalid-where`. A document without the format's shape is reported with its first error, one
+    /// with the shape with every error. A file that cannot be read exits 2.
+    Validate {
+        /// The `canon-trigger/1` document, one file.
+        #[arg(long)]
+        path: PathBuf,
+    },
 }
 
 #[derive(Debug, Subcommand)]

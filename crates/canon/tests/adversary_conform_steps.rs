@@ -123,7 +123,8 @@ fn an_alias_bomb_in_evaluate_inputs_is_refused() {
 }
 
 /// The module documentation's own example scenario is a `canon-conformance/1` document: read at
-/// run time from this tree, it parses into the compile step and the evaluate step it shows.
+/// run time from this tree, it parses into the compile, evaluate and trigger-validate steps it
+/// shows.
 #[test]
 fn the_documented_example_scenario_parses() {
     let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR").expect("run through cargo");
@@ -151,5 +152,5 @@ fn the_documented_example_scenario_parses() {
     assert_eq!(scenario.id, "CANON-CLAIM-001");
     assert_eq!(scenario.covers, ["CANON-CLAIM-001", "CANON-CLAIM-002"]);
     let steps: Vec<&str> = scenario.steps.iter().map(|step| step.id.as_str()).collect();
-    assert_eq!(steps, ["compile", "no-evidence"]);
+    assert_eq!(steps, ["compile", "no-evidence", "owner-missing"]);
 }

@@ -65,7 +65,7 @@ fn protocols(dir: &Path, found: &mut Vec<PathBuf>) {
 fn inputs(scenario: &mut conform::Scenario) -> &mut EvaluateInputs {
     match &mut scenario.steps[0].kind {
         StepKind::Evaluate { inputs, .. } => inputs,
-        StepKind::Compile { .. } => panic!("a witness step evaluates"),
+        _ => panic!("a witness step evaluates"),
     }
 }
 
