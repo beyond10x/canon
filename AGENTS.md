@@ -38,7 +38,9 @@ Canon's ESS specification lives under `ess/`. It specifies the `protocol/1` sour
 story:decision-outcomes) and `canon-authority/1` (story:review-hardening-w7) in the domain
 `canon.protocol`, the `canon-properties/1` document `canon check` reads (story:canon-check) in the
 domain `canon.check`, the `canon-trigger/1` rule document `canon trigger validate` reads
-(story:trigger-rule-document) in the domain `canon.trigger`, and the `canon` command surface in
+(story:trigger-rule-document) and the `canon-trigger-protocols/1` document `canon trigger
+protocols` writes (story:protocol-access-class) in the domain `canon.trigger`, and the `canon`
+command surface in
 the domain `canon.cli`
 (story:ess-command-surface), completing Atlas ADR 0076's data model and command surface.
 

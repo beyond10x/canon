@@ -440,6 +440,13 @@
       "detail": "canon-trigger/1 declares one rule: the kind, state and declared row fields it watches, a canon-expr/1 where over $row compiled against a catalog of only contains and present_<type>, the protocol it starts with inputs from a field or a constant, and its mode, access, refire and cap. canon trigger validate --path prints the rule key <id>@<version> or names the field of each error. Requirements CANON-TRIGGER-001 to 003.",
       "href": "/docs/reference/trigger-rules",
       "area": "Language"
+    },
+    {
+      "label": "Protocol access class and guard",
+      "status": "planned",
+      "detail": "An action may declare access: read_only or write, write when absent; canon validate refuses read_only on an action that revises or opens a case (read-only-action-writes). canon-ir/1 carries access_class, read_only when every action is, and guarded, true when an action has a non-empty requires. canon trigger protocols --path prints a canon-trigger-protocols/1 document mapping each protocol id to its class, guard and inputs. Requirements CANON-TRIGGER-004 to 006.",
+      "href": "/docs/reference/trigger-rules#the-protocols-a-rule-is-checked-against",
+      "area": "Language"
     }
   ]
 }
