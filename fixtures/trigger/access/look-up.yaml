@@ -1,0 +1,43 @@
+format: protocol/1
+
+protocol:
+  id: look-up
+  revision: 1
+  description: >-
+    Look a record up and report it, changing nothing: every action is read_only, so the protocol's
+    access class is read_only (story:protocol-access-class).
+
+case:
+  inputs:
+    region:
+      description: Where the record is looked up.
+      values: [west, east]
+
+evidence_kinds:
+  looked_up:
+    description: The record was found.
+
+claims:
+  found:
+    description: The record was found.
+    true_when:
+      evidence:
+        kind: looked_up
+
+actions:
+  look:
+    description: Look the record up.
+    access: read_only
+    may_produce:
+      - evidence: looked_up
+  report:
+    description: Report what was found.
+    access: read_only
+    precondition:
+      claim: found
+
+outcomes:
+  done:
+    description: The record was found.
+    requires:
+      claim: found

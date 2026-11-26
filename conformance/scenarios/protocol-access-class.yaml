@@ -1,0 +1,250 @@
+format: canon-conformance/1
+id: CANON-PROTOCOL-ACCESS-CLASS
+covers: [CANON-TRIGGER-004, CANON-TRIGGER-005, CANON-TRIGGER-006]
+fixture: fixtures/trigger/send-reminder.yaml
+# A protocol's access class and guard (story:protocol-access-class, docs/design/trigger-rules.md
+# § 5). Each trigger-protocols step reads its documents as `canon trigger protocols` reads its
+# files and expects the canon-trigger-protocols/1 bytes it prints, or the code of every refusal;
+# it does not read the fixture. The compile step compiles the fixture, a protocol written before
+# `access` existed: its canon-ir/1 is the one it compiled to then, with the two new keys
+# `access_class` and `guarded`.
+steps:
+  - id: existing-protocol
+    compile: {}
+    expect:
+      canon-ir: |
+        {
+          "access_class": "write",
+          "actions": {
+            "send": {
+              "description": "Send the reminder.",
+              "effect": null,
+              "may_produce": [
+                {
+                  "evidence": "reminder_sent"
+                }
+              ],
+              "precondition": {
+                "all": []
+              },
+              "requires": []
+            }
+          },
+          "artifacts": {},
+          "case": {
+            "inputs": {
+              "channel": {
+                "description": "How the reminder is sent.",
+                "values": [
+                  "email",
+                  "letter"
+                ]
+              }
+            }
+          },
+          "claims": {
+            "reminded": {
+              "description": "The reminder went out.",
+              "true_when": {
+                "evidence": {
+                  "kind": "reminder_sent",
+                  "result": null
+                }
+              }
+            }
+          },
+          "evidence_kinds": {
+            "reminder_sent": {
+              "description": "The reminder went out."
+            }
+          },
+          "format": "canon-ir/1",
+          "guarded": false,
+          "obligations": {},
+          "outcomes": {
+            "done": {
+              "description": "The reminder went out.",
+              "requires": {
+                "claim": {
+                  "id": "reminded",
+                  "is": "true"
+                }
+              }
+            }
+          },
+          "protocol": {
+            "description": "Send a reminder about one overdue record, the protocol the trigger rules of conformance/scenarios/trigger-rule-document.yaml start.",
+            "id": "send-reminder",
+            "revision": 1
+          }
+        }
+
+  # Acceptance 1: every action read_only, so the class is read_only. The case inputs are listed
+  # with their values, sorted, each once.
+  - id: every-action-read-only
+    trigger-protocols:
+      documents:
+        - |
+          format: protocol/1
+          protocol: {id: look-up, revision: 1}
+          case:
+            inputs:
+              region: {values: [west, east, west]}
+          evidence_kinds:
+            looked_up: {}
+          claims:
+            found: {true_when: {evidence: {kind: looked_up}}}
+          actions:
+            look: {access: read_only, may_produce: [{evidence: looked_up}]}
+            report: {access: read_only, precondition: {claim: found}}
+          outcomes:
+            done: {requires: {claim: found}}
+    expect:
+      protocols: |
+        {
+          "format": "canon-trigger-protocols/1",
+          "protocols": {
+            "look-up": {
+              "class": "read_only",
+              "guarded": false,
+              "inputs": {
+                "region": [
+                  "east",
+                  "west"
+                ]
+              }
+            }
+          }
+        }
+
+  # Acceptance 2: one action without `access` is write, so the class is write.
+  - id: one-action-without-access
+    trigger-protocols:
+      documents:
+        - |
+          format: protocol/1
+          protocol: {id: look-up, revision: 1}
+          evidence_kinds:
+            looked_up: {}
+          claims:
+            found: {true_when: {evidence: {kind: looked_up}}}
+          actions:
+            look: {access: read_only, may_produce: [{evidence: looked_up}]}
+            report: {precondition: {claim: found}}
+          outcomes:
+            done: {requires: {claim: found}}
+    expect:
+      protocols: |
+        {
+          "format": "canon-trigger-protocols/1",
+          "protocols": {
+            "look-up": {
+              "class": "write",
+              "guarded": false,
+              "inputs": {}
+            }
+          }
+        }
+
+  # Acceptance 3: a read_only action that revises an artifact is refused.
+  - id: read-only-action-revises
+    trigger-protocols:
+      documents:
+        - |
+          format: protocol/1
+          protocol: {id: edit, revision: 1}
+          artifacts:
+            page: {}
+          evidence_kinds:
+            edited: {}
+          claims:
+            done: {true_when: {evidence: {kind: edited}}}
+          actions:
+            edit: {access: read_only, revises: [page], may_produce: [{evidence: edited}]}
+          outcomes:
+            finished: {requires: {claim: done}}
+    expect:
+      refusal: read-only-action-writes
+
+  # A read_only action that opens a case is refused the same way (decision D1 A).
+  - id: read-only-action-opens-a-case
+    trigger-protocols:
+      documents:
+        - |
+          format: protocol/1
+          protocol: {id: delegate, revision: 1}
+          artifacts:
+            page: {}
+          evidence_kinds:
+            case_outcome: {}
+          claims:
+            done: {true_when: {children: {in: [accepted]}}}
+          actions:
+            hand_over: {access: read_only, case_open: {protocol: review, subject: page}}
+          outcomes:
+            finished: {requires: {claim: done}}
+    expect:
+      refusal: read-only-action-writes
+
+  # Acceptance 4: one action that requires a capability makes the protocol guarded, whatever its
+  # class. Two documents give two entries, keyed and ordered by protocol id.
+  - id: one-action-requires-a-capability
+    trigger-protocols:
+      documents:
+        - |
+          format: protocol/1
+          protocol: {id: publish, revision: 1}
+          evidence_kinds:
+            published: {}
+          claims:
+            out: {true_when: {evidence: {kind: published}}}
+          actions:
+            check: {access: read_only}
+            publish: {requires: [{capability: release}], may_produce: [{evidence: published}]}
+          outcomes:
+            done: {requires: {claim: out}}
+        - |
+          format: protocol/1
+          protocol: {id: look-up, revision: 1}
+          evidence_kinds:
+            looked_up: {}
+          claims:
+            found: {true_when: {evidence: {kind: looked_up}}}
+          actions:
+            look: {access: read_only, requires: [{capability: read, scope: {region: west}}], may_produce: [{evidence: looked_up}]}
+          outcomes:
+            done: {requires: {claim: found}}
+    expect:
+      protocols: |
+        {
+          "format": "canon-trigger-protocols/1",
+          "protocols": {
+            "look-up": {
+              "class": "read_only",
+              "guarded": true,
+              "inputs": {}
+            },
+            "publish": {
+              "class": "write",
+              "guarded": true,
+              "inputs": {}
+            }
+          }
+        }
+
+  # The map is keyed by protocol id: two documents with one id are refused.
+  - id: two-documents-with-one-id
+    trigger-protocols:
+      documents:
+        - |
+          format: protocol/1
+          protocol: {id: look-up, revision: 1}
+          actions:
+            look: {access: read_only}
+        - |
+          format: protocol/1
+          protocol: {id: look-up, revision: 2}
+          actions:
+            look: {}
+    expect:
+      refusal: duplicate-protocol-id

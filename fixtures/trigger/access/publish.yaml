@@ -1,0 +1,37 @@
+format: protocol/1
+
+protocol:
+  id: publish
+  revision: 1
+  description: >-
+    Check a page and publish it. check is read_only; publish says nothing, so it is write, and the
+    protocol's access class is write. publish requires a capability, so the protocol is guarded
+    (story:protocol-access-class).
+
+evidence_kinds:
+  published:
+    description: The page went out.
+
+claims:
+  out:
+    description: The page went out.
+    true_when:
+      evidence:
+        kind: published
+
+actions:
+  check:
+    description: Read the page.
+    access: read_only
+  publish:
+    description: Publish the page.
+    requires:
+      - capability: release
+    may_produce:
+      - evidence: published
+
+outcomes:
+  done:
+    description: The page went out.
+    requires:
+      claim: out

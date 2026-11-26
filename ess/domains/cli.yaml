@@ -14,9 +14,9 @@ domain: canon.cli
 
 summary: >-
   The canon command line: validate, compile, evaluate, digest, check, check-set, simulate,
-  generate, diff, floor, mutate, conform run and trigger validate, each reading files named by its
-  flags and printing its result, or refusing with exit status 1 when a document is rejected and 2
-  when an input cannot be read.
+  generate, diff, floor, mutate, conform run, trigger validate and trigger protocols, each reading
+  files named by its flags and printing its result, or refusing with exit status 1 when a
+  document is rejected and 2 when an input cannot be read.
 
 naming:
   wire: cli
@@ -739,4 +739,48 @@ commands:
         error: canon.cli.Rejected
       # read from: docs/design/trigger-rules.md:80-82
       - name: valid
+        returns: true
+
+  # The clap path `trigger protocols` (story:protocol-access-class): read a set of protocol/1
+  # files, compile each on its own and print the canon-trigger-protocols/1 map a trigger
+  # evaluation reads, each protocol's access class, whether it is guarded and its case inputs.
+  # The files are read in sorted order of their paths, a path that resolves to a file already
+  # read is that file once, and the first file refused decides, as canon check-set does.
+  # read from: .engineering/planning/story/protocol-access-class.md, section "Outcome"
+  # read from: docs/design/trigger-rules.md:154-156
+  - name: canon.cli.TriggerProtocols
+    naming:
+      wire: trigger-protocols
+      display: Trigger protocols
+      summary: >-
+        Print the canon-trigger-protocols/1 map of a set of protocol/1 documents: each
+        protocol's access class, whether it is guarded, and its case inputs with their values.
+    input:
+      # A protocol/1 document of the set, each given with its own `--path`. A repeatable flag
+      # clap requires, so a List and not Optional. The order changes no byte of the output.
+      # read from: .engineering/planning/story/protocol-access-class.md, section "Outcome"
+      - name: path
+        type: List<String>
+    response:
+      # The canon-trigger-protocols/1 document (canon.trigger.TriggerProtocols), canonical JSON.
+      # read from: docs/design/trigger-rules.md:154-156
+      - name: output
+        type: String
+    outcomes:
+      # Exit 2: a file of the set cannot be read, and no file before it in sorted order is refused.
+      # read from: docs/design/trigger-rules.md:154-156
+      - name: unreadable
+        external: a file of the set cannot be read, and no file before it in sorted order is refused
+        error: canon.cli.Unreadable
+      # One `error[<code>]: <path>: <why>` line per problem of the first file refused, or the
+      # duplicate-protocol-id line naming the id and the files that declare it.
+      # read from: .engineering/planning/story/protocol-access-class.md, section "Scope"
+      - name: rejected
+        external: >-
+          a document does not parse or compile (a read_only action that revises an artifact or
+          opens a case is read-only-action-writes), a document has imports, or two files declare
+          one protocol id
+        error: canon.cli.Rejected
+      # read from: docs/design/trigger-rules.md:154-156
+      - name: printed
         returns: true

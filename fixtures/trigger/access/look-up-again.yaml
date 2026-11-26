@@ -1,0 +1,13 @@
+format: protocol/1
+
+protocol:
+  id: look-up
+  revision: 2
+  description: >-
+    A second document of the protocol id look-up: canon trigger protocols keys its map by
+    protocol id and refuses a set holding both (duplicate-protocol-id).
+
+actions:
+  look:
+    description: Look the record up.
+    access: read_only
