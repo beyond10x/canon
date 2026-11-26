@@ -107,6 +107,7 @@ const DOCUMENTS: &[&str] = &[
     "TriggerSnapshot",
     "TriggerHistory",
     "TriggerPlan",
+    "TriggerIndex",
 ];
 
 /// `(owner, field)` Integer fields that are never negative although `ess/` cannot say so: ess

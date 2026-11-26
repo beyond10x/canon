@@ -110,7 +110,7 @@ fn conform_run_checks_requirements() {
     );
     assert_line(
         &checked,
-        "requirements: 44 implemented, 44 covered, 0 planned",
+        "requirements: 54 implemented, 54 covered, 0 planned",
         "real registry with conformance/requirements.yaml",
     );
 

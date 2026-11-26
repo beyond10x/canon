@@ -465,15 +465,18 @@ pub enum TriggerCommand {
     /// Evaluate a rule set against a snapshot of rows and print the `canon-trigger-plan/1` plan:
     /// every match of every rule, and every row whose match cannot be decided, with its rule key
     /// and state, kind, row id, protocol, the input built from `start.input`, its firing id and
-    /// its verdict (`refused` for a row without `entered_at` under `once_per_state_entry`,
-    /// `undetermined` with `field-missing`, `field-type` or `where-unknown`, `baseline`, `offer`
-    /// or `would-start`), ordered by rule key, kind and row id whatever the order of the input.
-    /// The evaluation reads no clock, no network and no file besides those named: `--now` is the
-    /// only time it reads. Refused with one `error[<code>]: <why>` line, exit 1: a document that
-    /// does not read as its format (`malformed-input`), an instant that is not one
-    /// (`invalid-instant`), two rules of one rule key (`duplicate-rule`), a kind or a row id listed
-    /// twice (`duplicate-row`); a rule file that is not a valid rule prints its errors as `canon
-    /// trigger validate` does, each naming the file. A file that cannot be read exits 2.
+    /// its verdict, the first that applies: `refused` (`disabled`, `unknown-protocol`,
+    /// `guarded-auto`, `access-mismatch`, `write-unapproved`, `entered-at-missing` or
+    /// `input-value-not-allowed`),
+    /// `undetermined` (`field-missing`, `field-type` or `where-unknown`), `baseline`, `held`
+    /// (`already-fired` or `cap-reached`), `offer` or `would-start`; ordered by rule key, kind and
+    /// row id whatever the order of the input. The evaluation reads no clock, no network and no
+    /// file besides those named: `--now` is the only time it reads. Refused with one
+    /// `error[<code>]: <why>` line, exit 1: a document that does not read as its format
+    /// (`malformed-input`), an instant that is not one (`invalid-instant`), two rules of one rule
+    /// key (`duplicate-rule`), a kind or a row id listed twice (`duplicate-row`); a rule file that
+    /// is not a valid rule prints its errors as `canon trigger validate` does, each naming the
+    /// file. A file that cannot be read exits 2.
     Evaluate {
         /// The `canon-trigger-set/1` rule set, one file: each `canon-trigger/1` file, relative to
         /// this file's directory or absolute, with its state, `draft`, `active` or `disabled`.
@@ -487,13 +490,53 @@ pub enum TriggerCommand {
         /// prints it.
         #[arg(long)]
         protocols: PathBuf,
-        /// The `canon-trigger-history/1` document, one file: the recorded firings and the
-        /// activations of each rule key.
+        /// The `canon-trigger-history/1` document, one file: the recorded firings, and the
+        /// activations and approvals of each rule key.
         #[arg(long)]
         history: PathBuf,
         /// The evaluation instant, `YYYY-MM-DDTHH:MM:SSZ` in UTC with an optional fraction.
         #[arg(long)]
         now: String,
+    },
+    /// Print the digest of one `canon-trigger/1` rule, the value a `canon-trigger-index/1` index
+    /// holds for its rule key: `sha256:` and the 64 lowercase hexadecimal digits of the SHA-256
+    /// of the rule's canonical form, the JSON Canonicalization Scheme (RFC 8785) of its fields as
+    /// Canon reads them, the declared fields in declaration order. The layout, the key order, the
+    /// comments and a field written with its default value change nothing; every other change of
+    /// the rule changes the digest. A document that is not a valid rule prints its errors as
+    /// `canon trigger validate` does and exits 1; a file that cannot be read exits 2.
+    Digest {
+        /// The `canon-trigger/1` document, one file.
+        #[arg(long)]
+        path: PathBuf,
+    },
+    /// Check a set of `canon-trigger/1` rules before it is published and print the set's own
+    /// `canon-trigger-index/1` index, each rule key with its digest (`canon trigger digest`). A
+    /// published rule is immutable, so a change is a new version. Each failure prints one line
+    /// `error[<code>]: <rule key>: <why>` and the command exits 1: `duplicate-key` (two documents
+    /// of the set share a key), `key-republished` (the published index holds the key with another
+    /// digest), `unknown-protocol`, `guarded-auto` (a rule in mode `auto` over a guarded
+    /// protocol), `unknown-input` (an input the protocol does not declare), `missing-input` (a
+    /// case input of the protocol not mapped) and `input-value-not-allowed` (a constant that is
+    /// not among the input's values, or a row field that is not a declared string). The files are
+    /// read in sorted order of their paths; a rule file that is not a valid rule prints its errors
+    /// as `canon trigger validate` does, each naming the file; an index or protocols document that
+    /// does not read as its format is `malformed-input`, naming the file; a file that cannot be
+    /// read exits 2.
+    CheckSet {
+        /// A `canon-trigger/1` document of the set. Repeat it once per document, in any order: the
+        /// order changes no byte of the output, and a path given twice, under two spellings or
+        /// through a symbolic link, is read once.
+        #[arg(long, required = true)]
+        path: Vec<PathBuf>,
+        /// The `canon-trigger-index/1` document, one file: the rule keys already published, each
+        /// with the digest of its document.
+        #[arg(long)]
+        published: PathBuf,
+        /// The `canon-trigger-protocols/1` document, one file, as `canon trigger protocols`
+        /// prints it.
+        #[arg(long)]
+        protocols: PathBuf,
     },
 }
 

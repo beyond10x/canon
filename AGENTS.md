@@ -41,8 +41,10 @@ domain `canon.check`, the `canon-trigger/1` rule document `canon trigger validat
 (story:trigger-rule-document), the `canon-trigger-protocols/1` document `canon trigger
 protocols` writes (story:protocol-access-class), and the `canon-trigger-set/1`,
 `canon-trigger-snapshot/1` and `canon-trigger-history/1` documents `canon trigger evaluate` reads
-with the `canon-trigger-plan/1` plan it writes (story:trigger-evaluate) in the domain
-`canon.trigger`, and the `canon`
+with the `canon-trigger-plan/1` plan it writes (story:trigger-evaluate; the history's approvals,
+`held` and the refusal reasons with story:trigger-holds-and-refusals), and the
+`canon-trigger-index/1` index `canon trigger check-set` reads and writes
+(story:trigger-rule-publication) in the domain `canon.trigger`, and the `canon`
 command surface in
 the domain `canon.cli`
 (story:ess-command-surface), completing Atlas ADR 0076's data model and command surface.

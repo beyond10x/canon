@@ -356,7 +356,7 @@ requirements:
     statement: >-
       The canon-trigger-plan/1 plan MUST be ordered by rule key, kind and row id, and MUST be
       byte-identical over repeated evaluations of one input and whatever the order of its rules,
-      kinds, rows, firings and activations.
+      kinds, rows, firings, activations and approvals.
     source: story:trigger-evaluate
   CANON-TRIGGER-009:
     status: implemented
@@ -382,3 +382,78 @@ requirements:
       or its state field is that field; a where that does not evaluate to true or false MUST be
       listed undetermined with the reason where-unknown. Unknown is not false.
     source: story:trigger-evaluate
+  CANON-TRIGGER-012:
+    status: implemented
+    statement: >-
+      An entry MUST be listed refused, ahead of every other verdict, naming the first reason that
+      applies: disabled when the rule's state is disabled; unknown-protocol when its protocol is
+      not in the protocols; guarded-auto when the protocol is guarded and the rule's mode is auto;
+      access-mismatch when the rule's access differs from the protocol's class; write-unapproved
+      when the rule's access is write, its mode auto and the history holds no approval of its
+      rule key; entered-at-missing; input-value-not-allowed when the value of an input the
+      protocol declares is not among the input's values.
+    source: story:trigger-holds-and-refusals, story:trigger-rule-publication
+  CANON-TRIGGER-013:
+    status: implemented
+    statement: >-
+      An approval MUST count only for the exact rule key it names: an approval of another version
+      of the rule MUST NOT lift write-unapproved. Who approved MUST NOT be checked.
+    source: story:trigger-holds-and-refusals
+  CANON-TRIGGER-014:
+    status: implemented
+    statement: >-
+      A match whose firing id is the firing id of a firing in the history MUST be listed held with
+      the reason already-fired, never offer or would-start, so evaluating again with the plan's
+      firings recorded starts nothing twice.
+    source: story:trigger-holds-and-refusals
+  CANON-TRIGGER-015:
+    status: implemented
+    statement: >-
+      A match MUST be listed held with the reason cap-reached when its rule key's firings on the
+      UTC day of the evaluation instant, counted from the history and then from the plan's earlier
+      would-start entries of that rule key in plan order, have reached the rule's cap.
+    source: story:trigger-holds-and-refusals
+  CANON-TRIGGER-016:
+    status: implemented
+    statement: >-
+      The digest of a canon-trigger/1 rule MUST be `sha256:` followed by the lowercase hexadecimal
+      SHA-256 of the RFC 8785 JSON of the rule's canonical form, so the layout, the key order, the
+      comments and a field written with its default value MUST NOT change it, and every other
+      change of the rule MUST change it.
+    source: story:trigger-rule-publication
+  CANON-TRIGGER-017:
+    status: implemented
+    statement: >-
+      A rule set MUST be refused for publication, naming the rule key, when the published index
+      holds a document's rule key with another digest (key-republished). A document whose key the
+      index holds with its own digest, and two versions of one rule id in one set, MUST pass. A
+      set that passes MUST print its own index, byte-identical whatever the order of its rules.
+    source: story:trigger-rule-publication
+  CANON-TRIGGER-018:
+    status: implemented
+    statement: >-
+      A rule set in which two documents have one rule key MUST be refused for publication, naming
+      the key (duplicate-key).
+    source: story:trigger-rule-publication
+  CANON-TRIGGER-019:
+    status: implemented
+    statement: >-
+      A rule set MUST be refused for publication, naming the rule key, when a rule names a
+      protocol the protocols do not hold (unknown-protocol), or is in mode auto over a guarded
+      protocol (guarded-auto).
+    source: story:trigger-rule-publication
+  CANON-TRIGGER-020:
+    status: implemented
+    statement: >-
+      A rule set MUST be refused for publication, naming the rule key, when a rule maps an input
+      its protocol does not declare (unknown-input), leaves a case input of its protocol unmapped
+      (missing-input), maps an input to a constant that is not among the input's values, or to a
+      row field that is not a declared string (input-value-not-allowed).
+    source: story:trigger-rule-publication
+  CANON-TRIGGER-021:
+    status: implemented
+    statement: >-
+      An entry whose row value, mapped to an input its protocol declares, is not among the
+      input's values MUST be listed refused with the reason input-value-not-allowed, never offer
+      or would-start.
+    source: story:trigger-rule-publication
