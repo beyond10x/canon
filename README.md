@@ -19,19 +19,35 @@ acquisition; Canon remains independent of that domain.
 
 ## Status
 
-Source release **0.16.0**. `b10x-canon` implements protocol parsing, validation,
-compilation, evaluation, semantic diff and a walk of the states a case can reach, with protocols composed from pinned imports, case inputs, predicates over evidence order, cases that open child cases and read their outcomes, evidence requirements that demand an independent producer, scoped capabilities with authority decisions bound to a case revision and to the grounds they rested on, one argument schema per action with a validator a runner calls, and a normative requirements catalogue its conformance suite is checked against; `canon-cli` exposes those operations. `b10x-canon-expr` is the
+Release **0.17.0**. `b10x-canon` implements protocol parsing, validation,
+compilation, evaluation, semantic diff and a walk of the states a case can reach, with protocols composed from pinned imports, case inputs, predicates over evidence order, cases that open child cases and read their outcomes, evidence requirements that demand an independent producer, scoped capabilities with authority decisions bound to a case revision and to the grounds they rested on, one argument schema per action with a validator a runner calls, actions declared read-only or write, trigger rules that say which rows of a snapshot start a protocol, evaluated to a plan and checked before they are published, and a normative requirements catalogue its conformance suite is checked against; `canon-cli` exposes those operations. `b10x-canon-expr` is the
 generic assertion library. See the [current status](https://beyond10x.github.io/canon/docs/status/where-this-stands)
 and [release notes](CHANGELOG.md).
 
 ## Install
 
+On Linux x86_64, download one archive from the
+[GitHub Release 0.17.0](https://github.com/beyond10x/canon/releases/tag/0.17.0), check it against
+`SHA256SUMS` and put `canon` on your `PATH`:
+
+- `canon-0.17.0-x86_64-unknown-linux-musl.tar.gz`, the default: static, no C library needed, with
+  the mimalloc allocator;
+- `canon-0.17.0-x86_64-unknown-linux-gnu.tar.gz`: linked against glibc 2.17 or older.
+
 ```console
-cargo install --locked --git https://github.com/beyond10x/canon --tag 0.16.0 canon-cli
+sha256sum --check --ignore-missing SHA256SUMS
+tar -xzf canon-0.17.0-x86_64-unknown-linux-musl.tar.gz
+canon-0.17.0-x86_64-unknown-linux-musl/canon --version
 ```
 
-The library crates `b10x-canon` and `b10x-canon-expr` can likewise be pinned to Git tag `0.16.0`.
-This release provides source archives; it does not publish binaries or crates to crates.io.
+Elsewhere, or to build from source:
+
+```console
+cargo install --locked --git https://github.com/beyond10x/canon --tag 0.17.0 canon-cli
+```
+
+The library crates `b10x-canon` and `b10x-canon-expr` can likewise be pinned to Git tag `0.17.0`.
+Nothing is published to crates.io.
 
 ## Build
 

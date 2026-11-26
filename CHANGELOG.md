@@ -1,5 +1,110 @@
 # Changelog
 
+## [0.17.0] - 2026-11-26
+
+A minor release: trigger rules, a declared access class for actions, and the first Linux binaries.
+Every compiled protocol's `canon-ir/1` bytes change (two new top-level keys), so every import pin
+and every stored IR must be refreshed. Install the CLI from a Linux archive attached to the GitHub
+Release, or from Git tag `0.17.0`; depend on the libraries from Git tag `0.17.0`.
+
+What changes, and for whom (read against the diff since 0.16.0):
+
+- Anyone who starts protocols from rows of another system (epic:trigger-rules). A
+  `canon-trigger/1` document is one rule: the row kind, the declared row fields (`string`,
+  `integer`, `decimal`, `bool`, each optional or not), the state field and value it watches, a
+  `where` in `canon-expr/1` over `$row` compiled against a catalog of only `contains` and
+  `present_<type>`, the protocol it starts with each input from a row field or a constant, its
+  `mode` (`offer` or `auto`), `access`, `refire` (`once_per_state_entry` or `once_per_subject`)
+  and a daily `cap`. A rule is known by its key `<id>@<version>`. New commands:
+  - `canon trigger validate --path <rule>` prints the rule key, or one
+    `error[<code>]: <field>: <why>` line per error: `parse`, `missing-field`, `unknown-field`,
+    `invalid-value`, `undeclared-field`, `invalid-input`, `invalid-where`.
+  - `canon trigger protocols --path <protocol> ...` prints a `canon-trigger-protocols/1` document:
+    each protocol's access class, whether it is guarded, and its case inputs with their values.
+  - `canon trigger evaluate --rules <set> --snapshot <file> --protocols <file> --history <file>
+    --now <instant>` reads a `canon-trigger-set/1` rule set (each rule with its state `draft`,
+    `active` or `disabled`), a `canon-trigger-snapshot/1` snapshot, the protocols and a
+    `canon-trigger-history/1` history (firings, activations, approvals), and prints a
+    `canon-trigger-plan/1` plan: each match with its input, its firing id and a verdict, the first
+    that applies: `refused` (`disabled`, `unknown-protocol`, `guarded-auto`, `access-mismatch`,
+    `write-unapproved`, `entered-at-missing`, `input-value-not-allowed`), `undetermined`
+    (`field-missing`, `field-type`, `where-unknown`), `baseline`, `held` (`already-fired`,
+    `cap-reached`), `offer` or `would-start`. It reads no clock: `--now` is the only time. The
+    same inputs give the same bytes in any order. A whole evaluation is refused as
+    `invalid-instant`, `malformed-input`, `invalid-rule`, `duplicate-rule`, `duplicate-row` or
+    `duplicate-protocol-id`.
+  - `canon trigger digest --path <rule>` prints `sha256:<hex>` over the RFC 8785 JSON of the
+    rule's canonical form; layout, key order, comments and defaults written out do not change it.
+  - `canon trigger check-set --path <rule> ... --published <index> --protocols <file>` checks a
+    set before it is published and prints its `canon-trigger-index/1` index (rule key to digest).
+    Failures, one line each naming the rule key, exit 1: `duplicate-key`, `key-republished` (a
+    published rule is immutable; a change is a new version), `unknown-protocol`, `guarded-auto`,
+    `unknown-input`, `missing-input`, `input-value-not-allowed`.
+
+  Canon stores nothing and starts nothing: the evaluator that links it submits `would-start`
+  entries of `active` rules and records the firings. JSON Schemas for the rule, set, snapshot,
+  history and index documents are published beside the others. Conformance requirements
+  `CANON-TRIGGER-001` to `021`; scenarios carry four new step kinds, `trigger-validate`,
+  `trigger-protocols`, `trigger-evaluate` and `trigger-check-set`.
+- Anyone who writes protocols. An action may declare `access: read_only` or `access: write`
+  (absent is `write`). `canon validate` refuses `read_only` on an action that `revises` an
+  artifact or has a `case_open`, as `read-only-action-writes`. `canon diff` reports an action
+  turned read-only as `TIGHTENING` and one turned write as `RELAXATION`; `access: write` written
+  out is no change.
+- Anyone who pins an import or stores compiled IR. Every `canon-ir/1` document now has two
+  top-level keys, `access_class` (`read_only` when every action is, a protocol without actions
+  included, else `write`) and `guarded` (`true` when an action requires a capability), and an
+  action declared `read_only` carries `"access": "read_only"`. So the IR bytes of every protocol
+  change, also of one that does not use `access`, and so does its SHA-256:
+  - every `imports` pin (`digest: sha256:…` of the imported protocol's IR) must be recomputed,
+    or compilation fails with `import-digest-mismatch`; in this repository 16 pins in 14
+    fixture files moved;
+  - an IR file compiled by 0.16.0 is refused by `canon evaluate --ir` of 0.17.0 (`not canon-ir/1:
+    not the canonical text`), and the other way round: compile again;
+  - a conformance scenario whose `compile` step expects IR bytes must expect the two keys; a
+    scenario a consumer generated with `canon generate` holds such a step.
+- Rust consumers of `b10x-canon`, and anyone who relies on how the binary reads numbers.
+  `b10x-canon` now depends on `b10x-canon-expr` (it compiles a rule's `where`), which turns on
+  `serde_json`'s `arbitrary_precision`. Cargo unifies features, so every build that links
+  `b10x-canon` has it on, including the `canon` binary from `cargo install` or an archive (the
+  0.16.0 binary had it off; the workspace build and its tests already had it on) and every other
+  crate in a consumer's build that uses `serde_json`. `check_arguments` then reads a JSON number
+  as the decimal its text writes instead of the nearest double: `9007199254740993.0` is no longer
+  2^53, an integer beyond 64 bits is not rounded, and `1e400` reads as a number above every finite
+  bound (without the feature `serde_json` refuses to read it). The module documentation of
+  `validate::arguments` lists every case in which the two builds answer differently; every other
+  number answers as before.
+- Anyone installing on Linux x86_64. From this release each GitHub Release carries
+  `canon-0.17.0-x86_64-unknown-linux-musl.tar.gz` (static, with the mimalloc allocator; the
+  default) and `canon-0.17.0-x86_64-unknown-linux-gnu.tar.gz` (glibc 2.17 or older), each holding
+  `canon`, `LICENSE` and `README.md` in `canon-0.17.0-<target>/`, and `SHA256SUMS`. Check with
+  `sha256sum --check --ignore-missing SHA256SUMS`, unpack, put `canon` on your `PATH`; `canon
+  --version` prints `canon 0.17.0`. The binary unpacked from each archive is checked to print that
+  and to pass `conform run --requirements`; the gnu binary to need no glibc symbol above 2.17,
+  the musl binary to be static. musl with mimalloc was measured not slower than gnu on both
+  workloads and used about twice the peak memory (`docs/design/linux-release.md`).
+
+Same bytes as 0.16.0, for inputs that do not use `access` or trigger documents:
+
+- `canon evaluate`: every evaluate expectation of the 32 scenarios of 0.16.0 is unchanged, apart
+  from `computed_from.semantics.canon`, which reads `0.17.0` in the 11 decisions that pin it
+  (`explanation`, `pending-decisions`, `evidence-redelivery`).
+- `canon simulate`: none of the committed `simulate` reports of the fixtures changed, nor any
+  other expected output of `validate`, `check`, `check-set`, `floor`, `mutate` or `diff`.
+
+Not the same bytes: `canon compile` on every protocol, and so whatever embeds or hashes IR
+(`canon generate` scenarios, import pins). Checked against the conformance suite: all 14
+compile expectations of the 32 scenarios of 0.16.0 (one each in 14 scenarios) gained exactly the
+lines `access_class` and `guarded`, and no other expected byte of those scenarios changed. The
+suite now has 37 scenarios and 54 requirements (33 before).
+
+Format note: a 0.16.0 reader refuses a protocol that declares `access` (`unknown field`) and a
+`canon-ir/1` document of 0.17.0 (not canonical text).
+
+Contributors: `task package -- <target>` builds, checks and archives one Linux target
+(`scripts/package.sh`, run by `.github/workflows/package.yml` on a version tag); the ESS
+specification gains the domain `canon.trigger`.
+
 ## [0.16.0] - 2026-11-24
 
 A minor release: an approval or grant that cites evidence can bind to that evidence's content.

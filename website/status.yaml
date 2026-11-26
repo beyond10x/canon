@@ -325,7 +325,7 @@ items:
   - label: Linux x86_64 release archives
     area: Distribution
     story: story:linux-release-archives
-    detail: "canon-<version>-x86_64-unknown-linux-gnu.tar.gz, linked against glibc 2.17 at most, and canon-<version>-x86_64-unknown-linux-musl.tar.gz, static, with SHA256SUMS: built by package.yml and task package with cargo-zigbuild, the glibc floor checked with objdump -T and the static link with readelf -l, each archived binary run over the conformance suite. Attached to the GitHub Release from the next release."
+    detail: "canon-<version>-x86_64-unknown-linux-gnu.tar.gz, linked against glibc 2.17 at most, and canon-<version>-x86_64-unknown-linux-musl.tar.gz, static, with SHA256SUMS: built by package.yml and task package with cargo-zigbuild, the glibc floor checked with objdump -T and the static link with readelf -l, each archived binary run over the conformance suite. Attached to the GitHub Release from 0.17.0."
     href: /docs/getting-started#linux-binaries
   - label: Default Linux archive chosen by measurement
     area: Distribution
