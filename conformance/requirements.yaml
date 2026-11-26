@@ -294,3 +294,27 @@ requirements:
       its compiled form MUST be the form it had before the count existed. A blocked action MUST
       name the predicate in its reasons with its count.
     source: story:children-form-counts-unopened-children
+  CANON-TRIGGER-001:
+    status: implemented
+    statement: >-
+      A canon-trigger/1 document MUST be refused, naming the field, when a required field is
+      missing, a field is not part of the format, a value is outside what the format allows (a
+      mode other than offer or auto, an access other than read_only or write, a version or cap
+      that is not a positive integer), or its state field is not a declared row field; a document
+      with every field valid MUST be accepted with its rule key `<id>@<version>`.
+    source: story:trigger-rule-document
+  CANON-TRIGGER-002:
+    status: implemented
+    statement: >-
+      A trigger rule's where MUST compile with canon-expr/1 against a catalog holding only the Pure
+      builtins contains and present_<type> of its optional declared fields' types, with $row the
+      record of its declared fields as the one context variable; a where that calls any other
+      function, reads a field the rule does not declare, or is not Bool MUST be refused naming
+      where.
+    source: story:trigger-rule-document
+  CANON-TRIGGER-003:
+    status: implemented
+    statement: >-
+      A start.input value MUST be a declared row field or a constant string; an expression, or a
+      field the rule does not declare, MUST be refused naming start.input.<name>.
+    source: story:trigger-rule-document

@@ -1,0 +1,185 @@
+# Specified first (story:trigger-rule-document, Atlas ADR 0080): the canon-trigger/1 document
+# `canon trigger validate --path` reads, one trigger rule: when rows of a kind in a state, where an
+# expression over the row's declared fields holds, start a protocol, under which mode, access,
+# refire policy and daily cap. What a rule means (its validation, the `where` catalog, and later
+# its evaluation against a snapshot) is Canon's own conformance suite
+# (conformance/scenarios/trigger-rule-document.yaml) and tests, not this file.
+# crates/canon/tests/ess_model_matches.rs keeps this file and the Rust model equal.
+domain: canon.trigger
+
+summary: >-
+  One trigger rule per canon-trigger/1 document: its key (id and version), its owner, the kind and
+  state of the rows it watches with the row fields it reads, an optional canon-expr/1 condition
+  over those fields, the protocol it starts with the case inputs it fills from the row, and its
+  mode, access, refire policy and daily cap.
+
+naming:
+  wire: trigger
+  display: Trigger
+
+types:
+  # The id of a rule; with its version, the rule key `<id>@<version>`.
+  # read from: docs/design/trigger-rules.md:38
+  # read from: docs/design/trigger-rules.md:65
+  - name: canon.trigger.TriggerRuleId
+    kind: newtype
+    of: String
+
+  # The kind name of the rows a rule watches, as the snapshot names it.
+  # read from: docs/design/trigger-rules.md:42
+  # read from: docs/design/trigger-rules.md:67
+  - name: canon.trigger.TriggerKind
+    kind: newtype
+    of: String
+
+  # The name of a row field a rule declares and reads.
+  # read from: docs/design/trigger-rules.md:44-49
+  # read from: docs/design/trigger-rules.md:68
+  - name: canon.trigger.TriggerFieldName
+    kind: newtype
+    of: String
+
+  # The canon-trigger/1 document: one rule. Unknown fields are refused.
+  # read from: docs/design/trigger-rules.md:36-60
+  # read from: docs/design/trigger-rules.md:62-76
+  - name: canon.trigger.TriggerRule
+    kind: struct
+    fields:
+      # The only accepted value is canon-trigger/1.
+      # read from: docs/design/trigger-rules.md:64
+      - name: format
+        type: String
+      # A Canon identifier.
+      # read from: docs/design/trigger-rules.md:65
+      - name: id
+        type: canon.trigger.TriggerRuleId
+      # A positive integer: 0 is refused (invalid-value), a negative number does not read.
+      # read from: docs/design/trigger-rules.md:65
+      - name: version
+        type: Integer
+      # Who answers for the rule, not empty; Canon does not resolve it.
+      # read from: docs/design/trigger-rules.md:66
+      - name: owner
+        type: String
+      # read from: docs/design/trigger-rules.md:67-69
+      - name: subject
+        type: canon.trigger.TriggerSubject
+      # One canon-expr/1 expression of type Bool over `$row`, the declared fields; absent, true.
+      # read from: docs/design/trigger-rules.md:70
+      # read from: docs/design/trigger-rules.md:103-139
+      - name: where
+        type: Optional<String>
+      # read from: docs/design/trigger-rules.md:71-72
+      - name: start
+        type: canon.trigger.TriggerStart
+      # read from: docs/design/trigger-rules.md:73
+      - name: mode
+        type: canon.trigger.TriggerMode
+      # read from: docs/design/trigger-rules.md:74
+      - name: access
+        type: canon.trigger.TriggerAccess
+      # read from: docs/design/trigger-rules.md:75
+      - name: refire
+        type: canon.trigger.TriggerRefire
+      # Starts per rule per UTC day, a positive integer: 0 is refused (invalid-value).
+      # read from: docs/design/trigger-rules.md:76
+      - name: cap
+        type: Integer
+
+  # The rows a rule watches: their kind, the row fields the rule reads, and the state a row must be
+  # in. The state field is a declared required `string` field.
+  # read from: docs/design/trigger-rules.md:41-49
+  # read from: docs/design/trigger-rules.md:67-69
+  - name: canon.trigger.TriggerSubject
+    kind: struct
+    fields:
+      # read from: docs/design/trigger-rules.md:67
+      - name: kind
+        type: canon.trigger.TriggerKind
+      # The row fields the rule reads, keyed by field name, each declared once; `$row` is a
+      # closed record of exactly these.
+      # read from: docs/design/trigger-rules.md:68
+      # read from: docs/design/trigger-rules.md:78-80
+      - name: fields
+        type: Map<canon.trigger.TriggerFieldName, canon.trigger.TriggerField>
+      # read from: docs/design/trigger-rules.md:69
+      - name: state
+        type: canon.trigger.TriggerState
+
+  # The state a row must be in: its declared field `field` equals the string `is`.
+  # read from: docs/design/trigger-rules.md:43
+  # read from: docs/design/trigger-rules.md:69
+  - name: canon.trigger.TriggerState
+    kind: struct
+    fields:
+      # read from: docs/design/trigger-rules.md:69
+      - name: field
+        type: canon.trigger.TriggerFieldName
+      # read from: docs/design/trigger-rules.md:69
+      - name: is
+        type: String
+
+  # One declared row field: its type, and whether a row may lack it. `optional` is false when left
+  # out; an optional field is `Optional<T>` in `$row`.
+  # read from: docs/design/trigger-rules.md:44-49
+  # read from: docs/design/trigger-rules.md:68
+  - name: canon.trigger.TriggerField
+    kind: struct
+    fields:
+      # read from: docs/design/trigger-rules.md:68
+      - name: type
+        type: canon.trigger.TriggerFieldType
+      # read from: docs/design/trigger-rules.md:68
+      - name: optional
+        type: Boolean
+
+  # The type of a declared row field, the canon-expr/1 scalar `$row` gives it: String, Integer,
+  # Decimal or Bool.
+  # read from: docs/design/trigger-rules.md:68
+  # read from: docs/design/trigger-rules.md:121-123
+  - name: canon.trigger.TriggerFieldType
+    kind: enum
+    variants: ["string", "integer", "decimal", "bool"]
+
+  # The protocol a match starts, and the case inputs it fills, keyed by case input id.
+  # read from: docs/design/trigger-rules.md:51-55
+  # read from: docs/design/trigger-rules.md:71-72
+  - name: canon.trigger.TriggerStart
+    kind: struct
+    fields:
+      # read from: docs/design/trigger-rules.md:71
+      - name: protocol
+        type: canon.protocol.ProtocolId
+      # Absent: no input.
+      # read from: docs/design/trigger-rules.md:72
+      - name: input
+        type: Map<canon.protocol.InputId, canon.trigger.TriggerInput>
+
+  # The value of one case input: a declared row field, or a constant string; nothing else, so no
+  # expression. Written as a map with exactly one of the keys `field` or `const`.
+  # read from: docs/design/trigger-rules.md:54-55
+  # read from: docs/design/trigger-rules.md:72
+  - name: canon.trigger.TriggerInput
+    kind: union
+    tag: kind
+    variants:
+      field: canon.trigger.TriggerFieldName
+      const: String
+
+  # offer: a match is offered for approval; auto: a match would start the protocol.
+  # read from: docs/design/trigger-rules.md:73
+  - name: canon.trigger.TriggerMode
+    kind: enum
+    variants: ["offer", "auto"]
+
+  # The access class the rule expects of the protocol it starts.
+  # read from: docs/design/trigger-rules.md:74
+  - name: canon.trigger.TriggerAccess
+    kind: enum
+    variants: ["read_only", "write"]
+
+  # Whether a row fires again after it leaves its state and re-enters it, or only once ever.
+  # read from: docs/design/trigger-rules.md:75
+  - name: canon.trigger.TriggerRefire
+    kind: enum
+    variants: ["once_per_state_entry", "once_per_subject"]

@@ -1,0 +1,37 @@
+format: protocol/1
+
+protocol:
+  id: send-reminder
+  revision: 1
+  description: >-
+    Send a reminder about one overdue record, the protocol the trigger rules of
+    conformance/scenarios/trigger-rule-document.yaml start.
+
+case:
+  inputs:
+    channel:
+      description: How the reminder is sent.
+      values: [email, letter]
+
+evidence_kinds:
+  reminder_sent:
+    description: The reminder went out.
+
+claims:
+  reminded:
+    description: The reminder went out.
+    true_when:
+      evidence:
+        kind: reminder_sent
+
+actions:
+  send:
+    description: Send the reminder.
+    may_produce:
+      - evidence: reminder_sent
+
+outcomes:
+  done:
+    description: The reminder went out.
+    requires:
+      claim: reminded
