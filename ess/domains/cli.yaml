@@ -14,8 +14,9 @@ domain: canon.cli
 
 summary: >-
   The canon command line: validate, compile, evaluate, digest, check, check-set, simulate,
-  generate, diff, floor, mutate, conform run, trigger validate, trigger protocols and trigger
-  evaluate, each reading files named by its flags and printing its result, or refusing with exit
+  generate, diff, floor, mutate, conform run, trigger validate, trigger protocols, trigger
+  evaluate, trigger digest and trigger check-set, each reading files named by its flags and
+  printing its result, or refusing with exit
   status 1 when a document is rejected and 2 when an input cannot be read.
 
 naming:
@@ -810,11 +811,16 @@ commands:
       # read from: docs/design/trigger-rules.md:169-170
       - name: snapshot
         type: String
-      # The canon-trigger-protocols/1 document (canon.trigger.TriggerProtocols), one file.
+      # The canon-trigger-protocols/1 document (canon.trigger.TriggerProtocols), one file, as
+      # `canon trigger protocols` prints it: a rule whose protocol it does not hold is refused
+      # (unknown-protocol), and a rule is checked against its protocol's class and guard
+      # (story:trigger-holds-and-refusals).
       # read from: docs/design/trigger-rules.md:171
+      # read from: docs/design/trigger-rules.md:190-192
       - name: protocols
         type: String
-      # The canon-trigger-history/1 document (canon.trigger.TriggerHistory), one file.
+      # The canon-trigger-history/1 document (canon.trigger.TriggerHistory), one file: its
+      # firings, activations and approvals.
       # read from: docs/design/trigger-rules.md:172-174
       - name: history
         type: String
@@ -847,4 +853,108 @@ commands:
         error: canon.cli.Rejected
       # read from: docs/design/trigger-rules.md:208
       - name: printed
+        returns: true
+
+  # The clap path `trigger digest` (story:trigger-rule-publication): read one canon-trigger/1
+  # document and print the digest of its canonical form, the value a canon-trigger-index/1 index
+  # holds for its rule key. The key order, the layout, the comments and the fields written with
+  # their default value change nothing; every other change of the rule changes the digest.
+  # read from: docs/design/trigger-rules.md:250-255
+  # read from: .engineering/planning/story/trigger-rule-publication.md, section "Scope"
+  - name: canon.cli.TriggerDigest
+    naming:
+      wire: trigger-digest
+      display: Trigger digest
+      summary: >-
+        Print the digest of one canon-trigger/1 rule, the value a canon-trigger-index/1 index
+        holds for its rule key.
+    input:
+      # The canon-trigger/1 document, one file.
+      # read from: docs/design/trigger-rules.md:250-252
+      - name: path
+        type: String
+    response:
+      # `sha256:` followed by 64 lowercase hexadecimal digits, and a newline.
+      # read from: docs/design/trigger-rules.md:251-252
+      - name: output
+        type: String
+    outcomes:
+      # read from: docs/design/trigger-rules.md:250-252
+      - name: unreadable
+        external: the file cannot be read
+        error: canon.cli.Unreadable
+      # Each error as canon trigger validate prints it: only a valid rule has a digest.
+      # read from: docs/design/trigger-rules.md:78-101
+      - name: rejected
+        external: the document is not a valid canon-trigger/1 rule
+        error: canon.cli.Rejected
+      # read from: docs/design/trigger-rules.md:251-252
+      - name: digested
+        returns: true
+
+  # The clap path `trigger check-set` (story:trigger-rule-publication): read a set of
+  # canon-trigger/1 rule files, the canon-trigger-index/1 index of the rule keys already published
+  # and a canon-trigger-protocols/1 map, and check the set before it is published. A set that
+  # passes prints its own canon-trigger-index/1 index, each rule key with its digest; a set that
+  # does not is refused with one line per failure naming the rule key and the reason:
+  # key-republished, duplicate-key, unknown-protocol, guarded-auto, unknown-input, missing-input
+  # or input-value-not-allowed. The files are read in sorted order of their paths, a path that
+  # resolves to a file already read is that file once, and the order changes no byte of the
+  # output.
+  # read from: docs/design/trigger-rules.md:248-255
+  # read from: .engineering/planning/story/trigger-rule-publication.md, section "Outcome"
+  # read from: .engineering/planning/story/trigger-rule-publication.md, section "Scope"
+  - name: canon.cli.TriggerCheckSet
+    naming:
+      wire: trigger-check-set
+      display: Trigger check-set
+      summary: >-
+        Check a set of canon-trigger/1 rules against the index of published rule keys and the
+        protocols before it is published, and print the set's own index.
+    input:
+      # A canon-trigger/1 document of the set, each given with its own `--path`. A repeatable flag
+      # clap requires, so a List and not Optional. The order changes no byte of the output.
+      # read from: .engineering/planning/story/trigger-rule-publication.md, section "Outcome"
+      - name: path
+        type: List<String>
+      # The canon-trigger-index/1 document (canon.trigger.TriggerIndex), one file: the rule keys
+      # already published, each with the digest of its document. The caller's; Canon stores
+      # nothing.
+      # read from: docs/design/trigger-rules.md:251-252
+      - name: published
+        type: String
+      # The canon-trigger-protocols/1 document (canon.trigger.TriggerProtocols), one file, as
+      # `canon trigger protocols` prints it: each rule's protocol, guard and case inputs.
+      # read from: .engineering/planning/story/trigger-rule-publication.md, section "Outcome"
+      - name: protocols
+        type: String
+    response:
+      # The canon-trigger-index/1 document (canon.trigger.TriggerIndex) of the set, canonical
+      # JSON: each rule key of the set with its digest.
+      # read from: docs/design/trigger-rules.md:251-252
+      - name: output
+        type: String
+    outcomes:
+      # Exit 2: a rule file, the index or the protocols cannot be read.
+      # read from: docs/design/trigger-rules.md:250-255
+      - name: unreadable
+        external: an input file cannot be read
+        error: canon.cli.Unreadable
+      # One `error[<code>]: <rule key>: <why>` line per failure: key-republished, duplicate-key,
+      # unknown-protocol, guarded-auto, unknown-input, missing-input, input-value-not-allowed; a
+      # rule file that is not a valid rule prints its errors as canon trigger validate does, each
+      # naming the file, and an index or protocols document that does not read as its format is
+      # malformed-input naming the file.
+      # read from: docs/design/trigger-rules.md:250-255
+      # read from: .engineering/planning/story/trigger-rule-publication.md, section "Scope"
+      - name: rejected
+        external: >-
+          a rule file is not a valid rule, the index or the protocols do not read as their format,
+          or a rule of the set reuses a published key with another digest, shares its key with
+          another rule of the set, names a protocol the map does not hold, is in mode auto over a
+          guarded protocol, maps an input its protocol does not declare, leaves one of its
+          protocol's inputs unmapped, or maps an input to a value it cannot take
+        error: canon.cli.Rejected
+      # read from: docs/design/trigger-rules.md:250-255
+      - name: checked
         returns: true

@@ -1,0 +1,396 @@
+format: canon-conformance/1
+id: CANON-TRIGGER-RULE-PUBLICATION
+covers: [CANON-TRIGGER-012, CANON-TRIGGER-016, CANON-TRIGGER-017, CANON-TRIGGER-018, CANON-TRIGGER-019, CANON-TRIGGER-020, CANON-TRIGGER-021]
+fixture: fixtures/trigger/send-reminder.yaml
+# Checking a rule set before it is published (story:trigger-rule-publication,
+# docs/design/trigger-rules.md § 7). Each trigger-check-set step reads its rules as
+# `canon trigger check-set --path` reads its files, its published index and its protocols as the
+# `--published` and `--protocols` files, and expects either the canon-trigger-index/1 bytes the
+# command prints for a set that passes, or a refusal: every failure has the code `refusal` and,
+# when `rule` is given, names that rule key. Each refusing step holds a rule beside the refused one
+# that the same check passes. `canon conform run --requirements` runs every step again and with
+# its rules in reverse order. The last step evaluates a rule whose input takes a row value its
+# protocol does not allow.
+#
+# The digest of a rule is `sha256:` and the SHA-256, in lowercase hex, of the RFC 8785 JSON of its
+# canonical form (`canon trigger digest`). The digests below are those of stale@1 (cap 50, channel
+# email) and stale@2 (cap 20, channel letter).
+#
+# The protocols: send-reminder writes and takes the input channel (email or letter); publish
+# writes, is guarded and takes no input.
+steps:
+  # Acceptance 1: two versions of one rule id are two rule keys, and pass in one set; the set's
+  # index lists each with its digest.
+  - id: two-versions-pass
+    trigger-check-set:
+      rules:
+        - &stale-1 |
+          format: canon-trigger/1
+          id: stale
+          version: 1
+          owner: billing-operations
+          subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+          start: {protocol: send-reminder, input: {channel: {const: email}}}
+          mode: offer
+          access: write
+          refire: once_per_subject
+          cap: 50
+        - &stale-2 |
+          format: canon-trigger/1
+          id: stale
+          version: 2
+          owner: billing-operations
+          subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+          start: {protocol: send-reminder, input: {channel: {const: letter}}}
+          mode: offer
+          access: write
+          refire: once_per_subject
+          cap: 20
+      published: &nothing-published
+        format: canon-trigger-index/1
+        rules: {}
+      protocols: &protocols
+        format: canon-trigger-protocols/1
+        protocols:
+          send-reminder: {class: write, guarded: false, inputs: {channel: [email, letter]}}
+          publish: {class: write, guarded: true, inputs: {}}
+    expect:
+      index: |
+        {
+          "format": "canon-trigger-index/1",
+          "rules": {
+            "stale@1": "sha256:2785572303ce15cfe7a3c5f58c846746fc1466b4c78b3980edde1944335c62af",
+            "stale@2": "sha256:6c9ce26ad1108a304b9ea7201dfa7ccd305a7d9550a4dd624bd6706cac64dbc8"
+          }
+        }
+
+  # Acceptance 2: stale@1 is published; the same key with its cap edited is refused,
+  # key-republished. A published rule is immutable: a change is a new version. stale@2, not
+  # published, passes beside it.
+  - id: edited-key-republished
+    trigger-check-set:
+      rules:
+        - |
+          format: canon-trigger/1
+          id: stale
+          version: 1
+          owner: billing-operations
+          subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+          start: {protocol: send-reminder, input: {channel: {const: email}}}
+          mode: offer
+          access: write
+          refire: once_per_subject
+          cap: 20
+        - *stale-2
+      published: &stale-1-published
+        format: canon-trigger-index/1
+        rules:
+          stale@1: sha256:2785572303ce15cfe7a3c5f58c846746fc1466b4c78b3980edde1944335c62af
+      protocols: *protocols
+    expect:
+      refusal: key-republished
+      rule: stale@1
+
+  # Acceptance 3: the same document, unedited, against the index that holds it, passes.
+  - id: unedited-passes
+    trigger-check-set:
+      rules:
+        - *stale-1
+      published: *stale-1-published
+      protocols: *protocols
+    expect:
+      index: &stale-1-index |
+        {
+          "format": "canon-trigger-index/1",
+          "rules": {
+            "stale@1": "sha256:2785572303ce15cfe7a3c5f58c846746fc1466b4c78b3980edde1944335c62af"
+          }
+        }
+
+  # The digest is of the rule, not of its text: the same rule in block style, its keys in another
+  # order, with a comment and with `optional: false` written out, has the same digest and passes.
+  - id: reformatted-passes
+    trigger-check-set:
+      rules:
+        - |
+          # stale invoices, first version
+          cap: 50
+          refire: once_per_subject
+          access: write
+          mode: offer
+          start:
+            input:
+              channel:
+                const: email
+            protocol: send-reminder
+          subject:
+            fields:
+              status:
+                type: string
+                optional: false
+            state:
+              is: overdue
+              field: status
+            kind: invoice
+          owner: billing-operations
+          version: 1
+          id: stale
+          format: canon-trigger/1
+      published: *stale-1-published
+      protocols: *protocols
+    expect:
+      index: *stale-1-index
+
+  # Acceptance 4: a rule in auto over a guarded protocol is refused at publication,
+  # guarded-auto. The same protocol in offer passes beside it.
+  - id: guarded-auto
+    trigger-check-set:
+      rules:
+        - |
+          format: canon-trigger/1
+          id: publish-auto
+          version: 1
+          owner: billing-operations
+          subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+          start: {protocol: publish}
+          mode: auto
+          access: write
+          refire: once_per_subject
+          cap: 50
+        - |
+          format: canon-trigger/1
+          id: publish-offer
+          version: 1
+          owner: billing-operations
+          subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+          start: {protocol: publish}
+          mode: offer
+          access: write
+          refire: once_per_subject
+          cap: 50
+      published: *nothing-published
+      protocols: *protocols
+    expect:
+      refusal: guarded-auto
+      rule: publish-auto@1
+
+  # Two documents of one rule key in one set are refused, duplicate-key, whatever their digests;
+  # stale@2 passes beside them.
+  - id: duplicate-key
+    trigger-check-set:
+      rules:
+        - *stale-1
+        - |
+          format: canon-trigger/1
+          id: stale
+          version: 1
+          owner: billing-operations
+          subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+          start: {protocol: send-reminder, input: {channel: {const: letter}}}
+          mode: offer
+          access: write
+          refire: once_per_subject
+          cap: 50
+        - *stale-2
+      published: *nothing-published
+      protocols: *protocols
+    expect:
+      refusal: duplicate-key
+      rule: stale@1
+
+  # A protocol the map does not hold is refused, unknown-protocol.
+  - id: unknown-protocol
+    trigger-check-set:
+      rules:
+        - |
+          format: canon-trigger/1
+          id: letter
+          version: 1
+          owner: billing-operations
+          subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+          start: {protocol: send-letter}
+          mode: offer
+          access: write
+          refire: once_per_subject
+          cap: 50
+        - *stale-1
+      published: *nothing-published
+      protocols: *protocols
+    expect:
+      refusal: unknown-protocol
+      rule: letter@1
+
+  # An input the protocol does not declare is refused, unknown-input.
+  - id: unknown-input
+    trigger-check-set:
+      rules:
+        - |
+          format: canon-trigger/1
+          id: with-invoice
+          version: 1
+          owner: billing-operations
+          subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}, id: {type: string}}}
+          start: {protocol: send-reminder, input: {channel: {const: email}, invoice: {field: id}}}
+          mode: offer
+          access: write
+          refire: once_per_subject
+          cap: 50
+        - *stale-1
+      published: *nothing-published
+      protocols: *protocols
+    expect:
+      refusal: unknown-input
+      rule: with-invoice@1
+
+  # A case input of the protocol that the rule does not map is refused, missing-input: every
+  # case input is required when a case opens.
+  - id: missing-input
+    trigger-check-set:
+      rules:
+        - |
+          format: canon-trigger/1
+          id: no-channel
+          version: 1
+          owner: billing-operations
+          subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+          start: {protocol: send-reminder}
+          mode: offer
+          access: write
+          refire: once_per_subject
+          cap: 50
+        - *stale-1
+      published: *nothing-published
+      protocols: *protocols
+    expect:
+      refusal: missing-input
+      rule: no-channel@1
+
+  # A constant the input does not allow is refused, input-value-not-allowed.
+  - id: input-const-not-allowed
+    trigger-check-set:
+      rules:
+        - |
+          format: canon-trigger/1
+          id: by-fax
+          version: 1
+          owner: billing-operations
+          subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+          start: {protocol: send-reminder, input: {channel: {const: fax}}}
+          mode: offer
+          access: write
+          refire: once_per_subject
+          cap: 50
+        - *stale-1
+      published: *nothing-published
+      protocols: *protocols
+    expect:
+      refusal: input-value-not-allowed
+      rule: by-fax@1
+
+  # A row field that is not a declared string cannot hold one of an input's values, so a {field}
+  # input mapped to it is refused, input-value-not-allowed. A string field passes beside it: its
+  # row value is checked when the rule is evaluated.
+  - id: input-field-not-a-string
+    trigger-check-set:
+      rules:
+        - |
+          format: canon-trigger/1
+          id: by-amount
+          version: 1
+          owner: billing-operations
+          subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}, amount: {type: decimal}}}
+          start: {protocol: send-reminder, input: {channel: {field: amount}}}
+          mode: offer
+          access: write
+          refire: once_per_subject
+          cap: 50
+        - |
+          format: canon-trigger/1
+          id: by-channel
+          version: 1
+          owner: billing-operations
+          subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}, channel: {type: string}}}
+          start: {protocol: send-reminder, input: {channel: {field: channel}}}
+          mode: offer
+          access: write
+          refire: once_per_subject
+          cap: 50
+      published: *nothing-published
+      protocols: *protocols
+    expect:
+      refusal: input-value-not-allowed
+      rule: by-amount@1
+
+  # An index that is not a canon-trigger-index/1 document is refused as a whole,
+  # malformed-input.
+  - id: index-of-another-format
+    trigger-check-set:
+      rules:
+        - *stale-1
+      published:
+        format: canon-trigger-index/2
+        rules: {}
+      protocols: *protocols
+    expect:
+      refusal: malformed-input
+
+  # At evaluation, a row whose value a {field} input maps is not among the input's values is
+  # refused, input-value-not-allowed; a row whose value is passes beside it.
+  - id: evaluate-input-value-not-allowed
+    trigger-evaluate:
+      rules:
+        - state: active
+          document: |
+            format: canon-trigger/1
+            id: by-channel
+            version: 1
+            owner: billing-operations
+            subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}, channel: {type: string}}}
+            start: {protocol: send-reminder, input: {channel: {field: channel}}}
+            mode: offer
+            access: write
+            refire: once_per_subject
+            cap: 50
+      snapshot:
+        format: canon-trigger-snapshot/1
+        kinds:
+          invoice:
+            - {id: inv-1, fields: {status: overdue, channel: email}}
+            - {id: inv-2, fields: {status: overdue, channel: fax}}
+            - {id: inv-3, fields: {status: paid, channel: fax}}
+      protocols: *protocols
+      history:
+        format: canon-trigger-history/1
+      now: 2026-11-26T12:00:00Z
+    expect:
+      plan: |
+        {
+          "entries": [
+            {
+              "firing_id": "by-channel@1/invoice:inv-1",
+              "input": {
+                "channel": "email"
+              },
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "row": "inv-1",
+              "rule": "by-channel@1",
+              "rule_state": "active",
+              "verdict": "offer"
+            },
+            {
+              "firing_id": "by-channel@1/invoice:inv-2",
+              "input": {
+                "channel": "fax"
+              },
+              "kind": "invoice",
+              "protocol": "send-reminder",
+              "reason": "input-value-not-allowed",
+              "row": "inv-2",
+              "rule": "by-channel@1",
+              "rule_state": "active",
+              "verdict": "refused"
+            }
+          ],
+          "format": "canon-trigger-plan/1"
+        }

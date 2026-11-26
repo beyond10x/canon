@@ -7,7 +7,8 @@
 //! the `canon-trigger/1` rule `canon trigger validate` reads, the `canon-trigger-protocols/1`
 //! document `canon trigger protocols` prints, and the `canon-trigger-set/1`,
 //! `canon-trigger-snapshot/1` and `canon-trigger-history/1` documents `canon trigger evaluate`
-//! reads with the `canon-trigger-plan/1` plan it prints (`trigger.rs`).
+//! reads with the `canon-trigger-plan/1` plan it prints, and the `canon-trigger-index/1` index
+//! `canon trigger check-set` reads and prints (`trigger.rs`).
 //!
 //! A protocol document declares a protocol id and revision, the case inputs a case gives values for
 //! (`case: inputs:`), artifacts, evidence kinds, claims with their predicates, obligations with
@@ -74,13 +75,13 @@ pub use properties::{
 };
 pub use requirement::{DecisionRequirement, OutcomeRequirement};
 pub use trigger::{
-    TRIGGER_FORMAT, TRIGGER_HISTORY_FORMAT, TRIGGER_PLAN_FORMAT, TRIGGER_PROTOCOLS_FORMAT,
-    TRIGGER_SET_FORMAT, TRIGGER_SNAPSHOT_FORMAT, TriggerAccess, TriggerActivation, TriggerField,
-    TriggerFieldName, TriggerFieldType, TriggerFiring, TriggerHistory, TriggerInput, TriggerKind,
-    TriggerMode, TriggerPlan, TriggerPlanEntry, TriggerProtocol, TriggerProtocols, TriggerReason,
-    TriggerRefire, TriggerRow, TriggerRowId, TriggerRule, TriggerRuleId, TriggerRuleState,
-    TriggerSet, TriggerSetEntry, TriggerSnapshot, TriggerStart, TriggerState, TriggerSubject,
-    TriggerVerdict,
+    TRIGGER_FORMAT, TRIGGER_HISTORY_FORMAT, TRIGGER_INDEX_FORMAT, TRIGGER_PLAN_FORMAT,
+    TRIGGER_PROTOCOLS_FORMAT, TRIGGER_SET_FORMAT, TRIGGER_SNAPSHOT_FORMAT, TriggerAccess,
+    TriggerActivation, TriggerApproval, TriggerField, TriggerFieldName, TriggerFieldType,
+    TriggerFiring, TriggerHistory, TriggerIndex, TriggerInput, TriggerKind, TriggerMode,
+    TriggerPlan, TriggerPlanEntry, TriggerProtocol, TriggerProtocols, TriggerReason, TriggerRefire,
+    TriggerRow, TriggerRowId, TriggerRule, TriggerRuleId, TriggerRuleState, TriggerSet,
+    TriggerSetEntry, TriggerSnapshot, TriggerStart, TriggerState, TriggerSubject, TriggerVerdict,
 };
 pub use write::write;
 

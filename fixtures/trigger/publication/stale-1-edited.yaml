@@ -1,0 +1,10 @@
+format: canon-trigger/1
+id: stale
+version: 1
+owner: billing-operations
+subject: {kind: invoice, state: {field: status, is: overdue}, fields: {status: {type: string}}}
+start: {protocol: send-reminder, input: {channel: {const: email}}}
+mode: offer
+access: write
+refire: once_per_subject
+cap: 20

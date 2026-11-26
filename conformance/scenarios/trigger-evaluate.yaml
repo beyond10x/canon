@@ -7,9 +7,10 @@ fixture: fixtures/trigger/send-reminder.yaml
 # state), snapshot, protocols, history and instant as `canon trigger evaluate` reads its files,
 # and expects the canon-trigger-plan/1 bytes it prints, or the code of its refusal; it does not
 # read the fixture, which is the protocol the rules start. `canon conform run --requirements`
-# runs every step again and with its rules, kinds, rows, firings and activations in reverse
-# order, and fails unless the three outputs are byte-identical (CANON-TRIGGER-008). The rows are
-# written out of order here for the same reason.
+# runs every step again and with its rules, kinds, rows, firings, activations and approvals in
+# reverse order, and fails unless the three outputs are byte-identical (CANON-TRIGGER-008). The rows
+# are written out of order here for the same reason. Each auto rule writes, so the history
+# approves its rule key (story:trigger-holds-and-refusals).
 steps:
   # Acceptance 1: 3 matching and 4 non-matching rows (another state, an amount not over 100, a
   # segment the where excludes, twice) give the active auto rule 3 would-start and the active
@@ -100,8 +101,14 @@ steps:
             guarded: false
             inputs:
               channel: [email, letter]
-      history: &empty
+      # The auto rules write, so each rule key is approved
+      # (story:trigger-holds-and-refusals); nothing has fired.
+      history: &approved
         format: canon-trigger-history/1
+        approvals:
+          - {rule: overdue-reminder@1, by: billing-lead, at: 2026-11-19T00:00:00Z}
+          - {rule: entry-reminder@1, by: billing-lead, at: 2026-11-19T00:00:00Z}
+          - {rule: subject-reminder@1, by: billing-lead, at: 2026-11-19T00:00:00Z}
       now: &now 2026-11-26T12:00:00Z
     expect:
       plan: |
@@ -207,7 +214,7 @@ steps:
               entered_at: 2026-11-20T09:00:00Z
               fields: {id: inv-1, status: overdue, amount: 250, segment: retail}
       protocols: *protocols
-      history: *empty
+      history: *approved
       now: *now
     expect:
       plan: |
@@ -273,7 +280,7 @@ steps:
           invoice:
             - {id: inv-1, entered_at: 2026-11-20T09:00:00Z, fields: {status: overdue}}
       protocols: *protocols
-      history: *empty
+      history: *approved
       now: *now
     expect:
       plan: |
@@ -317,7 +324,7 @@ steps:
           invoice:
             - {id: inv-1, entered_at: 2026-11-24T09:00:00Z, fields: {status: overdue}}
       protocols: *protocols
-      history: *empty
+      history: *approved
       now: *now
     expect:
       plan: |
@@ -360,7 +367,7 @@ steps:
           invoice:
             - {id: inv-1, fields: {status: overdue}}
       protocols: *protocols
-      history: *empty
+      history: *approved
       now: *now
     expect:
       plan: |
@@ -418,6 +425,9 @@ steps:
           - {rule: entry-reminder@2, at: 2026-11-30T00:00:00Z}
           - {rule: subject-reminder@1, at: 2026-11-19T00:00:00Z, baseline: ["invoice:inv-2"]}
           - {rule: entry-reminder@1, at: 2026-11-22T00:00:00Z}
+        approvals:
+          - {rule: entry-reminder@1, by: billing-lead, at: 2026-11-19T00:00:00Z}
+          - {rule: subject-reminder@1, by: billing-lead, at: 2026-11-19T00:00:00Z}
       now: *now
     expect:
       plan: |
@@ -519,7 +529,7 @@ steps:
               entered_at: 2026-11-20T14:00:00Z
               fields: {id: inv-6, status: overdue, amount: 150, segment: retail, note: null}
       protocols: *protocols
-      history: *empty
+      history: *approved
       now: *now
     expect:
       plan: |
@@ -610,7 +620,7 @@ steps:
         - {state: active, document: *entry}
       snapshot: *invoices
       protocols: *protocols
-      history: *empty
+      history: *approved
       now: 2026-11-26
     expect:
       refusal: invalid-instant
@@ -625,7 +635,7 @@ steps:
             - {id: inv-1, entered_at: 2026-11-20T09:00:00Z, fields: {status: overdue}}
             - {id: inv-1, entered_at: 2026-11-21T09:00:00Z, fields: {status: paid}}
       protocols: *protocols
-      history: *empty
+      history: *approved
       now: *now
     expect:
       refusal: duplicate-row
@@ -636,7 +646,7 @@ steps:
         - {state: draft, document: *entry}
       snapshot: *invoices
       protocols: *protocols
-      history: *empty
+      history: *approved
       now: *now
     expect:
       refusal: duplicate-rule

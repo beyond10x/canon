@@ -100,6 +100,17 @@ fn main() -> ExitCode {
                     now,
                 },
         } => trigger::evaluate(&rules, &snapshot, &protocols, &history, &now),
+        Command::Trigger {
+            command: TriggerCommand::Digest { path },
+        } => trigger::digest(&path),
+        Command::Trigger {
+            command:
+                TriggerCommand::CheckSet {
+                    path,
+                    published,
+                    protocols,
+                },
+        } => trigger::check_set(&path, &published, &protocols),
     }
 }
 

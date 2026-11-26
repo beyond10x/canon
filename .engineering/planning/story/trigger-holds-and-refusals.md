@@ -2,17 +2,18 @@
 format: aep.planning-md/3
 id: story:trigger-holds-and-refusals
 kind: story
-status: active
+status: implemented
 title: evaluate holds repeated and capped matches and refuses what the rule set does not allow
 relations:
 - decomposes: epic:trigger-rules
 - serves: vision:governed-autonomy
 - depends_on: story:trigger-evaluate
 - depends_on: story:protocol-access-class
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-26T11:25:20Z", actor: "human:operator", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-26T11:25:21Z", actor: "human:operator", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-26T16:12:10Z", actor: "human:operator", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

@@ -98,7 +98,8 @@
 //! `docs/design/trigger-rules.md` § 6). It is a pure function of the rules with their states, the
 //! snapshot, the protocols, the history and the instant `now`: it reads no clock, no network and
 //! no file, and the same arguments give the same plan, byte for byte, whatever the order of the
-//! rules, kinds, rows, firings and activations. It starts nothing; the evaluator that links it
+//! rules, kinds, rows, protocols, firings, activations and approvals. It starts nothing; the
+//! evaluator that links it
 //! does. `canon trigger evaluate --rules <set> --snapshot <file> --protocols <file> --history
 //! <file> --now <instant>` reads the documents and prints the plan ([`render_plan`]).
 //!
@@ -118,9 +119,21 @@
 //! its field values; the row id is not a field, so a rule that reads it declares a field the row
 //! carries. The protocols are a `canon-trigger-protocols/1` document, as `canon trigger protocols`
 //! prints it. The history, `canon-trigger-history/1`, lists the evaluator's `firings` (`firing_id`,
-//! `rule`, `at`) and `activations` (`rule`, `at`, and optionally `baseline`, rows written
-//! `<kind>:<row id>`), each list empty when left out. Every instant (`now`, `entered_at`, `at`) is
-//! a Canon instant, `YYYY-MM-DDTHH:MM:SSZ` in UTC with an optional fraction.
+//! `rule`, `at`), `activations` (`rule`, `at`, and optionally `baseline`, rows written
+//! `<kind>:<row id>`) and `approvals` (`rule`, `by`, `at`), each list empty when left out. An
+//! approval counts for the exact rule key it names, never for another version of the rule; Canon
+//! reads `by` and never decides who may approve. Every instant (`now`, `entered_at`, `at`) is a
+//! Canon instant, `YYYY-MM-DDTHH:MM:SSZ` in UTC with an optional fraction.
+//!
+//! ```yaml
+//! format: canon-trigger-history/1
+//! firings:
+//!   - {firing_id: overdue-reminder@1/invoice:inv-9/2026-11-20T08:00:00Z, rule: overdue-reminder@1, at: 2026-11-26T08:00:00Z}
+//! activations:
+//!   - {rule: overdue-reminder@1, at: 2026-11-19T00:00:00Z}
+//! approvals:
+//!   - {rule: overdue-reminder@1, by: billing-lead, at: 2026-11-19T00:00:00Z}
+//! ```
 //!
 //! ```yaml
 //! format: canon-trigger-snapshot/1
@@ -172,45 +185,130 @@
 //! - `rule` is the rule key and `rule_state` the rule's state; `kind`, `row` and `protocol` are
 //!   the subject kind, the row id and `start.protocol`.
 //! - `input` holds each `start.input`: a `{field}` input is the row's value as read (null when an
-//!   optional field is absent), a `{const}` input its string. It is not checked against the
-//!   protocol.
+//!   optional field is absent), a `{const}` input its string. The value of an input the protocol
+//!   declares is checked against the input's values (`input-value-not-allowed` below); an input
+//!   the protocol does not declare is not checked here, but when the set is published.
 //! - `firing_id` is `<rule key>/<kind>:<row id>/<entered_at>` under `once_per_state_entry`, the
 //!   instant as the snapshot writes it, so a row that enters its state again gets a new one, and
 //!   `<rule key>/<kind>:<row id>` under `once_per_subject`. A row without `entered_at` under
 //!   `once_per_state_entry` has none.
-//! - `verdict` is the first that applies: `refused` for a row without `entered_at` under
-//!   `once_per_state_entry` (`reason: entered-at-missing`); `undetermined` (with its `reason`, and
-//!   the `field` it names); `baseline` when the latest activation of the rule key in the history
-//!   is at or after the row's `entered_at` (each instant read as the start of the interval it
-//!   names) or an activation of it lists the row, listed and never started; `offer` for a rule in
-//!   mode `offer`; `would-start` for one in mode `auto`.
+//! - `verdict` is the first that applies, and `reason` says why for `refused`, `undetermined` and
+//!   `held`:
+//!   1. `refused`, the first reason that applies: the rule's state is `disabled` (`disabled`); its
+//!      protocol is not in the protocols (`unknown-protocol`); the protocol is guarded and the
+//!      rule's mode `auto` (`guarded-auto`); the rule's `access` is not the protocol's class
+//!      (`access-mismatch`); the `access` is `write`, the mode `auto` and the history holds no
+//!      approval of the rule key (`write-unapproved`); a row without `entered_at` under
+//!      `once_per_state_entry` (`entered-at-missing`); the value of an input the protocol
+//!      declares, the row's value of a `{field}` input or a `{const}` input's string, not among
+//!      the input's values (`input-value-not-allowed`): a value that is absent, null or not a
+//!      string is not among them.
+//!   2. `undetermined` (with its `reason`, and the `field` it names).
+//!   3. `baseline` when the latest activation of the rule key in the history is at or after the
+//!      row's `entered_at` (each instant read as the start of the interval it names) or an
+//!      activation of it lists the row, listed and never started.
+//!   4. `held` when a firing with the entry's firing id is in the history (`already-fired`), or
+//!      when the rule key's firings on the UTC day of `now` have reached the rule's `cap`
+//!      (`cap-reached`): the distinct firing ids of the rule key's firings whose `at` falls on that
+//!      day, whether before or after `now`, then each earlier `would-start` entry of the rule key
+//!      in plan order. An entry held at the cap or offered does not count; a `would-start` entry
+//!      does.
+//!   5. `offer` for a rule in mode `offer`; `would-start` for one in mode `auto`.
 //!
 //! Every state is evaluated by the same steps, so a `draft` rule is simulated against real state;
 //! an evaluator submits only `would-start` entries of an `active` rule, with the firing id as the
-//! idempotency key. The entries are ordered by rule key, kind and row id, each by code point.
-//! `held` (`already-fired`, `cap-reached`) and the refusals for a `disabled` rule, a protocol that
-//! is missing, guarded under `auto` or of another access class, and a missing approval come with
-//! story:trigger-holds-and-refusals; until then a `disabled` rule is listed like the others, under
-//! its state.
+//! idempotency key, and records the firing: evaluating again with it in the history lists the
+//! match `held`, `already-fired`. The entries are ordered by rule key, kind and row id, each by
+//! code point.
 //!
 //! The evaluation is refused as a whole, exit 1 with one line `error[<code>]: <why>`, the first in
 //! this order deciding: `now` that is not an instant (`invalid-instant`); a document of another
 //! format (`malformed-input`); a rule that is not valid (`invalid-rule`); two rules of one rule
 //! key (`duplicate-rule`); a kind listed twice or a row id listed twice within its kind
 //! (`duplicate-row`), a kind or row id with whitespace (`malformed-input`), or an `entered_at`
-//! that is not an instant (`invalid-instant`); a firing's
-//! or an activation's `at` that is not an instant (`invalid-instant`). `canon trigger evaluate`
-//! reads the set, then each rule file in sorted order of its path, then the snapshot, the
+//! that is not an instant (`invalid-instant`); a protocol id listed twice in the protocols
+//! (`duplicate-protocol-id`); a firing's, an activation's or an approval's `at` that is not an
+//! instant (`invalid-instant`). `canon trigger evaluate` reads the set, then each rule file in sorted order of its path, then the snapshot, the
 //! protocols and the history: a file that cannot be read exits 2, a document that does not read as
 //! its format is `malformed-input` naming the file, and a rule file that is not a valid rule
 //! prints its errors as `canon trigger validate` does, each line naming the file.
+//!
+//! # Publishing a rule set
+//!
+//! A published rule is immutable: a change is a new version (story:trigger-rule-publication,
+//! `docs/design/trigger-rules.md` § 7). [`check_set`] checks a set of rules before it is
+//! published, against the index of the rule keys already published and the protocols; `canon
+//! trigger check-set --path <rule file> ... --published <index> --protocols <file>` reads the
+//! files and prints its result. Canon stores nothing: the index is the caller's, who adds the
+//! set's own index to it once the set is published.
+//!
+//! The digest of a rule ([`digest`], `canon trigger digest --path <rule file>`) is `sha256:` and
+//! the SHA-256, in lowercase hexadecimal, of the rule's canonical form ([`canonical_form`]): the
+//! JSON Canonicalization Scheme (RFC 8785) of one object holding every field of the rule as read,
+//! `version` and `cap` as decimal integers, `where` left out when the rule has none,
+//! `subject.fields` as a list of `{name, optional, type}` in declaration order (the order decides
+//! which field an undetermined row names), `optional` written `false` and `start.input` written
+//! `{}` when the document leaves them out. So the layout, the key order, the comments and a field
+//! written with its default value change nothing, and every other change of the rule changes the
+//! digest. Only a valid rule has one.
+//!
+//! The index, `canon-trigger-index/1`, maps each published rule key to the digest of its
+//! document:
+//!
+//! ```yaml
+//! format: canon-trigger-index/1
+//! rules:
+//!   stale@1: sha256:2785572303ce15cfe7a3c5f58c846746fc1466b4c78b3980edde1944335c62af
+//! ```
+//!
+//! The rules are grouped by rule key. A key that two or more documents of the set share fails
+//! `duplicate-key`, naming each document, and is not checked further. Each other rule is checked
+//! in this order, every failure reported:
+//!
+//! 1. `key-republished`: the index holds its key with another digest. The same document, or the
+//!    same rule written another way, against the index that holds it passes; two versions of one
+//!    rule id are two keys.
+//! 2. `unknown-protocol`: its protocol is not in the protocols; nothing below is checked.
+//! 3. `guarded-auto`: the protocol is guarded and the rule's mode is `auto`, which
+//!    [`evaluate`] would refuse at every match.
+//! 4. `unknown-input`: a `start.input` name the protocol does not declare, each in input-id order.
+//! 5. `missing-input`: a case input of the protocol that `start.input` does not map, each in
+//!    input-id order; every case input is required when a case opens.
+//! 6. `input-value-not-allowed`: a mapped input whose `{const}` is not among the input's values,
+//!    or whose `{field}` is not a declared `string` field, each in input-id order. A `{field}`
+//!    input of a `string` field passes here; its row value is checked by [`evaluate`].
+//!
+//! A set without a failure passes, and the output is its own `canon-trigger-index/1` index
+//! ([`render_index`]), each rule key with its digest, in key order:
+//!
+//! ```json
+//! {
+//!   "format": "canon-trigger-index/1",
+//!   "rules": {
+//!     "stale@1": "sha256:2785572303ce15cfe7a3c5f58c846746fc1466b4c78b3980edde1944335c62af"
+//!   }
+//! }
+//! ```
+//!
+//! Otherwise each failure is one line `error[<code>]: <rule key>: <why>`, exit 1, in rule-key
+//! order and within a key in the order above. The order of the rules changes no byte of either.
+//! Refused as a whole, one line `error[<code>]: <why>`, the first in this order deciding: an index
+//! or protocols document of another format (`malformed-input`), a rule key listed twice in the
+//! index (`malformed-input`), a protocol id listed twice in the protocols
+//! (`duplicate-protocol-id`). `canon trigger check-set` reads each rule file in sorted order of its
+//! path, a path that resolves to a file already read being that file once, then the index and the
+//! protocols: a file that cannot be read exits 2, a rule file that is not a valid rule prints its
+//! errors as `canon trigger validate` does, each line naming the file, and an index or protocols
+//! document that does not read as its format is `malformed-input` naming the file.
 
 mod evaluate;
+mod publication;
 
 pub use evaluate::{
     Refusal, RuleEntry, evaluate, read_history, read_protocols, read_set, read_snapshot,
     render_plan,
 };
+pub use publication::{Failure, canonical_form, check_set, digest, read_index, render_index};
 
 use std::collections::BTreeMap;
 use std::fmt;

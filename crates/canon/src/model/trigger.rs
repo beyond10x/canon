@@ -32,7 +32,9 @@
 //! `canon-trigger-protocols/1` document `canon trigger protocols` prints
 //! (story:protocol-access-class), and of the documents `canon trigger evaluate` reads and prints
 //! (story:trigger-evaluate): the `canon-trigger-set/1` rule set, the `canon-trigger-snapshot/1`
-//! snapshot, the `canon-trigger-history/1` history and the `canon-trigger-plan/1` plan.
+//! snapshot, the `canon-trigger-history/1` history and the `canon-trigger-plan/1` plan, and of the
+//! `canon-trigger-index/1` index `canon trigger check-set` reads and prints
+//! (story:trigger-rule-publication).
 
 use std::fmt;
 
@@ -58,6 +60,10 @@ pub const TRIGGER_HISTORY_FORMAT: &str = "canon-trigger-history/1";
 
 /// The plan format `canon trigger evaluate` prints (story:trigger-evaluate).
 pub const TRIGGER_PLAN_FORMAT: &str = "canon-trigger-plan/1";
+
+/// The index format `canon trigger check-set --published` reads and `canon trigger check-set`
+/// prints (story:trigger-rule-publication).
+pub const TRIGGER_INDEX_FORMAT: &str = "canon-trigger-index/1";
 
 identifier!(
     /// Identifies a trigger rule; with its version, the rule key `<id>@<version>`.
@@ -378,7 +384,7 @@ where
 }
 
 /// The `canon-trigger-history/1` document `canon trigger evaluate --history` reads: what the
-/// evaluator recorded. Approvals come with story:trigger-holds-and-refusals.
+/// evaluator recorded, its firings, activations and approvals.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TriggerHistory {
@@ -391,6 +397,9 @@ pub struct TriggerHistory {
     /// Every activation of a rule key; empty when left out.
     #[serde(default, deserialize_with = "super::present::defaulted")]
     pub activations: Vec<TriggerActivation>,
+    /// Every approval of a rule key; empty when left out.
+    #[serde(default, deserialize_with = "super::present::defaulted")]
+    pub approvals: Vec<TriggerApproval>,
 }
 
 /// One recorded firing.
@@ -422,6 +431,23 @@ pub struct TriggerActivation {
     /// The rows that matched at activation; empty when left out.
     #[serde(default, deserialize_with = "super::present::defaulted")]
     pub baseline: Vec<String>,
+}
+
+/// One approval of a rule key: a `write` rule in mode `auto` is refused (`write-unapproved`)
+/// unless the history holds one for its exact rule key. Canon reads `by` and never decides who
+/// may approve.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerApproval {
+    /// The rule key, `<id>@<version>`.
+    #[serde(deserialize_with = "super::present::required")]
+    pub rule: String,
+    /// Who approved, as the evaluator recorded it.
+    #[serde(deserialize_with = "super::present::required")]
+    pub by: String,
+    /// When.
+    #[serde(deserialize_with = "super::present::required")]
+    pub at: Instant,
 }
 
 /// The `canon-trigger-plan/1` document `canon trigger evaluate` prints
@@ -472,6 +498,9 @@ pub enum TriggerVerdict {
     Undetermined,
     /// The row matched when the rule key was activated: listed, never started.
     Baseline,
+    /// Not to be started now, for the entry's reason: it fired already, or the rule's cap for the
+    /// day is reached.
+    Held,
     /// A match of a rule in mode `offer`.
     Offer,
     /// A match of a rule in mode `auto`.
@@ -485,13 +514,14 @@ impl TriggerVerdict {
             TriggerVerdict::Refused => "refused",
             TriggerVerdict::Undetermined => "undetermined",
             TriggerVerdict::Baseline => "baseline",
+            TriggerVerdict::Held => "held",
             TriggerVerdict::Offer => "offer",
             TriggerVerdict::WouldStart => "would-start",
         }
     }
 }
 
-/// Why an entry is undetermined or refused.
+/// Why an entry is undetermined, refused or held.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TriggerReason {
@@ -501,8 +531,24 @@ pub enum TriggerReason {
     FieldType,
     /// The `where` evaluates to neither true nor false.
     WhereUnknown,
+    /// The rule's state is `disabled`.
+    Disabled,
+    /// The rule's protocol is not in the protocols.
+    UnknownProtocol,
+    /// The protocol is guarded and the rule's mode is `auto`.
+    GuardedAuto,
+    /// The rule's `access` is not the protocol's class.
+    AccessMismatch,
+    /// A `write` rule in mode `auto` without an approval of its rule key.
+    WriteUnapproved,
     /// The row has no `entered_at` under `once_per_state_entry`.
     EnteredAtMissing,
+    /// The value of an input the protocol declares is not among the input's values.
+    InputValueNotAllowed,
+    /// A firing with the entry's firing id is in the history.
+    AlreadyFired,
+    /// The rule's firings on the UTC day of the evaluation instant have reached its cap.
+    CapReached,
 }
 
 impl TriggerReason {
@@ -512,9 +558,33 @@ impl TriggerReason {
             TriggerReason::FieldMissing => "field-missing",
             TriggerReason::FieldType => "field-type",
             TriggerReason::WhereUnknown => "where-unknown",
+            TriggerReason::Disabled => "disabled",
+            TriggerReason::UnknownProtocol => "unknown-protocol",
+            TriggerReason::GuardedAuto => "guarded-auto",
+            TriggerReason::AccessMismatch => "access-mismatch",
+            TriggerReason::WriteUnapproved => "write-unapproved",
             TriggerReason::EnteredAtMissing => "entered-at-missing",
+            TriggerReason::InputValueNotAllowed => "input-value-not-allowed",
+            TriggerReason::AlreadyFired => "already-fired",
+            TriggerReason::CapReached => "cap-reached",
         }
     }
+}
+
+/// The `canon-trigger-index/1` document `canon trigger check-set --published` reads, and the one
+/// it prints for a set that passes (story:trigger-rule-publication): each published rule key with
+/// the digest of its document (`crate::trigger::digest`). The index is the caller's; Canon stores
+/// nothing.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerIndex {
+    /// The document format, [`TRIGGER_INDEX_FORMAT`].
+    #[serde(deserialize_with = "super::present::required")]
+    pub format: String,
+    /// Each rule key, `<id>@<version>`, with the digest of its document, `sha256:` and 64
+    /// lowercase hexadecimal digits.
+    #[serde(deserialize_with = "super::present::required")]
+    pub rules: Declarations<String, String>,
 }
 
 /// An input as written: each form a key, exactly one of them present.
