@@ -450,7 +450,7 @@
     },
     {
       "label": "Trigger rule evaluation",
-      "status": "planned",
+      "status": "shipped",
       "detail": "canon trigger evaluate reads a canon-trigger-set/1 rule set (each rule file with its state draft, active or disabled), a canon-trigger-snapshot/1 snapshot, the protocols, a canon-trigger-history/1 history and --now, and prints a canon-trigger-plan/1 plan: every match with its input, its firing id and a verdict, would-start, offer, baseline, undetermined (field-missing, field-type, where-unknown) or refused (entered-at-missing), byte-identical whatever the input order, with no clock, network or other file. Requirements CANON-TRIGGER-007 to 011.",
       "href": "/docs/reference/trigger-rules#evaluating-a-rule-set",
       "area": "Evaluation"
