@@ -147,7 +147,9 @@ Tests run under cargo-nextest in two lanes; `.config/nextest.toml` holds the run
 test is killed at 60 s and counts as failed in both lanes (`slow-timeout`). The gate lane is `task
 test`, part of `task check`: every test outside the `slow` list, once (the `task ess-gate` tests
 run first and are counted, not run again), plus the `adversary_action_arguments` probes with `-p
-b10x-canon`, the feature set the CLI ships. It prints `nproc`, the ten slowest tests and the summed
+b10x-canon`, the feature set the CLI ships. Since story:trigger-rule-document `b10x-canon` depends
+on `b10x-canon-expr`, so serde_json's `arbitrary_precision` is on in that lane, in the workspace
+lane and in the shipped binary alike. It prints `nproc`, the ten slowest tests and the summed
 test time, and fails when its test runs take over 120 s (`global-timeout` cuts a run there). The
 `slow` lane is `task test-slow`, run by CI after `task check` and before a release: the tests the
 default profile's `default-filter` leaves out, each measured over 5 s. A test that takes more than
