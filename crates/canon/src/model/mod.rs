@@ -75,12 +75,12 @@ pub use properties::{
 pub use requirement::{DecisionRequirement, OutcomeRequirement};
 pub use trigger::{
     TRIGGER_FORMAT, TRIGGER_HISTORY_FORMAT, TRIGGER_PLAN_FORMAT, TRIGGER_PROTOCOLS_FORMAT,
-    TRIGGER_SET_FORMAT, TRIGGER_SNAPSHOT_FORMAT, TriggerAccess, TriggerActivation, TriggerField,
-    TriggerFieldName, TriggerFieldType, TriggerFiring, TriggerHistory, TriggerInput, TriggerKind,
-    TriggerMode, TriggerPlan, TriggerPlanEntry, TriggerProtocol, TriggerProtocols, TriggerReason,
-    TriggerRefire, TriggerRow, TriggerRowId, TriggerRule, TriggerRuleId, TriggerRuleState,
-    TriggerSet, TriggerSetEntry, TriggerSnapshot, TriggerStart, TriggerState, TriggerSubject,
-    TriggerVerdict,
+    TRIGGER_SET_FORMAT, TRIGGER_SNAPSHOT_FORMAT, TriggerAccess, TriggerActivation, TriggerApproval,
+    TriggerField, TriggerFieldName, TriggerFieldType, TriggerFiring, TriggerHistory, TriggerInput,
+    TriggerKind, TriggerMode, TriggerPlan, TriggerPlanEntry, TriggerProtocol, TriggerProtocols,
+    TriggerReason, TriggerRefire, TriggerRow, TriggerRowId, TriggerRule, TriggerRuleId,
+    TriggerRuleState, TriggerSet, TriggerSetEntry, TriggerSnapshot, TriggerStart, TriggerState,
+    TriggerSubject, TriggerVerdict,
 };
 pub use write::write;
 

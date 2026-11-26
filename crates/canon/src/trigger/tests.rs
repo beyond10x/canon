@@ -917,6 +917,7 @@ fn a_verdict_and_a_reason_are_written_as_their_documented_name() {
         TriggerVerdict::Refused,
         TriggerVerdict::Undetermined,
         TriggerVerdict::Baseline,
+        TriggerVerdict::Held,
         TriggerVerdict::Offer,
         TriggerVerdict::WouldStart,
     ] {
@@ -926,8 +927,52 @@ fn a_verdict_and_a_reason_are_written_as_their_documented_name() {
         TriggerReason::FieldMissing,
         TriggerReason::FieldType,
         TriggerReason::WhereUnknown,
+        TriggerReason::Disabled,
+        TriggerReason::UnknownProtocol,
+        TriggerReason::GuardedAuto,
+        TriggerReason::AccessMismatch,
+        TriggerReason::WriteUnapproved,
         TriggerReason::EnteredAtMissing,
+        TriggerReason::AlreadyFired,
+        TriggerReason::CapReached,
     ] {
         assert_eq!(serde_json::json!(reason), reason.as_str());
     }
+}
+
+/// A protocols argument that lists one protocol id twice would make the plan depend on its order:
+/// the evaluation is refused, `duplicate-protocol-id`.
+#[test]
+fn a_protocol_listed_twice_is_refused() {
+    let rules = [rule_with(
+        "r@1",
+        "writer",
+        "offer",
+        "write",
+        "once_per_subject",
+        1,
+    )];
+    let mut protocols = protocols_in(&["writer", "reader"]);
+    let mut entries: Vec<_> = protocols
+        .protocols
+        .iter()
+        .map(|(id, protocol)| (id.clone(), protocol.clone()))
+        .collect();
+    entries.push((model::ProtocolId::new("writer"), entries[1].1.clone()));
+    protocols.protocols = model::Declarations::new(entries);
+    let refused = evaluate(
+        &rules,
+        &snapshot(THREE_ROWS),
+        &protocols,
+        &history_of(&[], &[]),
+        &now(),
+    )
+    .expect_err("refused");
+    assert_eq!(
+        (refused.code, refused.message.as_str()),
+        (
+            "duplicate-protocol-id",
+            "protocols: protocol `writer` is listed twice"
+        )
+    );
 }

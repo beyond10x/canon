@@ -229,9 +229,9 @@
 //!    `<step>`: <rerun|permuted> differs at line <n>`, `<n>` the first line, counted from 1, where
 //!    that run's output differs from the first. In registry and step order. Every trigger-evaluate
 //!    step runs three times the same way, the permuted run with its rules, the snapshot's kinds,
-//!    each kind's rows, and the history's firings and activations in reverse order
-//!    (CANON-TRIGGER-008); its output is the canonical `canon-trigger-plan/1` document or the
-//!    refusal's code.
+//!    each kind's rows, the protocols, and the history's firings, activations and approvals in
+//!    reverse order (CANON-TRIGGER-008); its output is the canonical `canon-trigger-plan/1`
+//!    document or the refusal's code.
 //!
 //! The check lines come after the registry's lines and before its summary, and a second summary
 //! line follows it:
@@ -1075,7 +1075,8 @@ fn plan_step(inputs: &TriggerEvaluateInputs, expected: &PlanExpectation) -> Opti
 /// The `canon-trigger-plan/1` text of a trigger-evaluate step, or each `(code, why)` of its
 /// refusal: every error of the first rule document that is not a valid rule, named `rule <n>`, or
 /// the refusal of a document or of the evaluation. `permuted` reverses the rules, the snapshot's
-/// kinds and each kind's rows, and the history's firings and activations before evaluating.
+/// kinds and each kind's rows, the protocols, and the history's firings, activations and approvals
+/// before evaluating.
 pub(crate) fn trigger_plan(
     inputs: &TriggerEvaluateInputs,
     permuted: bool,
@@ -1108,7 +1109,8 @@ pub(crate) fn trigger_plan(
         })
     };
     let mut snapshot = trigger::read_snapshot(&text("snapshot", &inputs.snapshot)?).map_err(one)?;
-    let protocols = trigger::read_protocols(&text("protocols", &inputs.protocols)?).map_err(one)?;
+    let mut protocols =
+        trigger::read_protocols(&text("protocols", &inputs.protocols)?).map_err(one)?;
     let mut history = trigger::read_history(&text("history", &inputs.history)?).map_err(one)?;
     if permuted {
         rules.reverse();
@@ -1119,8 +1121,16 @@ pub(crate) fn trigger_plan(
             .collect();
         kinds.reverse();
         snapshot.kinds = model::Declarations::new(kinds);
+        let mut entries: Vec<_> = protocols
+            .protocols
+            .iter()
+            .map(|(id, protocol)| (id.clone(), protocol.clone()))
+            .collect();
+        entries.reverse();
+        protocols.protocols = model::Declarations::new(entries);
         history.firings.reverse();
         history.activations.reverse();
+        history.approvals.reverse();
     }
     trigger::evaluate(
         &rules,
