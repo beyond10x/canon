@@ -30,20 +30,34 @@
 //! What the rule's fields must hold beyond their shape, and how `where` is compiled, is
 //! `crate::trigger`'s; this file is the document's shape, and the shape of the
 //! `canon-trigger-protocols/1` document `canon trigger protocols` prints
-//! (story:protocol-access-class).
+//! (story:protocol-access-class), and of the documents `canon trigger evaluate` reads and prints
+//! (story:trigger-evaluate): the `canon-trigger-set/1` rule set, the `canon-trigger-snapshot/1`
+//! snapshot, the `canon-trigger-history/1` history and the `canon-trigger-plan/1` plan.
 
 use std::fmt;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-use super::ids::{InputId, InputValue, ProtocolId};
-use super::{AccessClass, Declarations};
+use super::ids::{InputId, InputValue, Instant, ProtocolId};
+use super::{AccessClass, Declarations, Json};
 
 /// The trigger rule format `canon trigger validate` reads.
 pub const TRIGGER_FORMAT: &str = "canon-trigger/1";
 
 /// The format `canon trigger protocols` prints (story:protocol-access-class).
 pub const TRIGGER_PROTOCOLS_FORMAT: &str = "canon-trigger-protocols/1";
+
+/// The rule set format `canon trigger evaluate --rules` reads (story:trigger-evaluate).
+pub const TRIGGER_SET_FORMAT: &str = "canon-trigger-set/1";
+
+/// The snapshot format `canon trigger evaluate --snapshot` reads (story:trigger-evaluate).
+pub const TRIGGER_SNAPSHOT_FORMAT: &str = "canon-trigger-snapshot/1";
+
+/// The history format `canon trigger evaluate --history` reads (story:trigger-evaluate).
+pub const TRIGGER_HISTORY_FORMAT: &str = "canon-trigger-history/1";
+
+/// The plan format `canon trigger evaluate` prints (story:trigger-evaluate).
+pub const TRIGGER_PLAN_FORMAT: &str = "canon-trigger-plan/1";
 
 identifier!(
     /// Identifies a trigger rule; with its version, the rule key `<id>@<version>`.
@@ -56,6 +70,10 @@ identifier!(
 identifier!(
     /// The name of a row field a trigger rule declares and reads.
     TriggerFieldName
+);
+identifier!(
+    /// The id of one row of a kind in a snapshot, unique within its kind.
+    TriggerRowId
 );
 
 /// A `canon-trigger/1` document as written: one rule.
@@ -253,6 +271,250 @@ pub struct TriggerProtocol {
     /// each once.
     #[serde(deserialize_with = "super::present::required")]
     pub inputs: Declarations<InputId, Vec<InputValue>>,
+}
+
+/// The `canon-trigger-set/1` document `canon trigger evaluate --rules` reads
+/// (story:trigger-evaluate): each rule file with its lifecycle state, which is deployment state and
+/// not part of the rule's document.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerSet {
+    /// The document format, [`TRIGGER_SET_FORMAT`].
+    #[serde(deserialize_with = "super::present::required")]
+    pub format: String,
+    /// The rules, in any order.
+    #[serde(deserialize_with = "super::present::required")]
+    pub rules: Vec<TriggerSetEntry>,
+}
+
+/// One rule of a set: its `canon-trigger/1` file, relative to the set file's directory or
+/// absolute, and its state.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerSetEntry {
+    /// The rule's `canon-trigger/1` file: relative to the set file's directory, or absolute.
+    #[serde(deserialize_with = "super::present::required")]
+    pub path: String,
+    /// The rule's state: `draft`, `active` or `disabled`; the plan carries it per entry.
+    #[serde(deserialize_with = "super::present::required")]
+    pub state: TriggerRuleState,
+}
+
+/// A rule's lifecycle state. Every state is evaluated by the same steps; each plan entry carries
+/// its rule's state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TriggerRuleState {
+    /// Under test: simulated against real state, never started.
+    Draft,
+    /// Live.
+    Active,
+    /// Switched off.
+    Disabled,
+}
+
+impl TriggerRuleState {
+    /// The value a document writes for this state.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TriggerRuleState::Draft => "draft",
+            TriggerRuleState::Active => "active",
+            TriggerRuleState::Disabled => "disabled",
+        }
+    }
+}
+
+/// The `canon-trigger-snapshot/1` document `canon trigger evaluate --snapshot` reads: the rows of
+/// each kind.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerSnapshot {
+    /// The document format, [`TRIGGER_SNAPSHOT_FORMAT`].
+    #[serde(deserialize_with = "super::present::required")]
+    pub format: String,
+    /// The rows of each kind, keyed by kind.
+    #[serde(deserialize_with = "super::present::required")]
+    pub kinds: Declarations<TriggerKind, Vec<TriggerRow>>,
+}
+
+/// One row of a snapshot.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerRow {
+    /// The row's id, unique within its kind.
+    #[serde(deserialize_with = "super::present::required")]
+    pub id: TriggerRowId,
+    /// The instant the row entered its current state, when the source knows it.
+    #[serde(default, deserialize_with = "super::present::optional")]
+    pub entered_at: Option<Instant>,
+    /// The row's field values, keyed by field name: a string, a number, `true` or `false`, or
+    /// null.
+    #[serde(deserialize_with = "row_fields")]
+    pub fields: Declarations<TriggerFieldName, Json>,
+}
+
+/// Reads a row's `fields`: a mapping from field name to a JSON scalar, a null value kept as null
+/// (an optional field may be written so), a non-finite number or a tagged value refused.
+fn row_fields<'de, D>(deserializer: D) -> Result<Declarations<TriggerFieldName, Json>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+    let yaml: serde_yaml_ng::Value = super::present::required(deserializer)?;
+    let serde_yaml_ng::Value::Mapping(mapping) = yaml else {
+        return Err(D::Error::custom(
+            "the fields are a mapping from field name to value",
+        ));
+    };
+    let mut entries = Vec::with_capacity(mapping.len());
+    for (key, value) in mapping {
+        let serde_yaml_ng::Value::String(key) = key else {
+            return Err(D::Error::custom("a field name is a string"));
+        };
+        let value = super::present::json(value).map_err(D::Error::custom)?;
+        entries.push((TriggerFieldName::new(key), value));
+    }
+    Ok(Declarations::new(entries))
+}
+
+/// The `canon-trigger-history/1` document `canon trigger evaluate --history` reads: what the
+/// evaluator recorded. Approvals come with story:trigger-holds-and-refusals.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerHistory {
+    /// The document format, [`TRIGGER_HISTORY_FORMAT`].
+    #[serde(deserialize_with = "super::present::required")]
+    pub format: String,
+    /// Every recorded firing; empty when left out.
+    #[serde(default, deserialize_with = "super::present::defaulted")]
+    pub firings: Vec<TriggerFiring>,
+    /// Every activation of a rule key; empty when left out.
+    #[serde(default, deserialize_with = "super::present::defaulted")]
+    pub activations: Vec<TriggerActivation>,
+}
+
+/// One recorded firing.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerFiring {
+    /// The firing id the evaluator submitted.
+    #[serde(deserialize_with = "super::present::required")]
+    pub firing_id: String,
+    /// The rule key, `<id>@<version>`.
+    #[serde(deserialize_with = "super::present::required")]
+    pub rule: String,
+    /// When it fired.
+    #[serde(deserialize_with = "super::present::required")]
+    pub at: Instant,
+}
+
+/// One activation of a rule key, with the rows the evaluator listed as matching then, each written
+/// `<kind>:<row id>`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerActivation {
+    /// The rule key, `<id>@<version>`.
+    #[serde(deserialize_with = "super::present::required")]
+    pub rule: String,
+    /// When the rule key was activated.
+    #[serde(deserialize_with = "super::present::required")]
+    pub at: Instant,
+    /// The rows that matched at activation; empty when left out.
+    #[serde(default, deserialize_with = "super::present::defaulted")]
+    pub baseline: Vec<String>,
+}
+
+/// The `canon-trigger-plan/1` document `canon trigger evaluate` prints
+/// (`crate::trigger::render_plan`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TriggerPlan {
+    /// Always [`TRIGGER_PLAN_FORMAT`].
+    pub format: String,
+    /// One entry per match, ordered by rule key, kind and row id; written `[]` when nothing
+    /// matches.
+    pub entries: Vec<TriggerPlanEntry>,
+}
+
+/// One entry of a plan: a match, or a row whose match cannot be decided.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TriggerPlanEntry {
+    /// The rule key, `<id>@<version>`.
+    pub rule: String,
+    /// The state the rule set gives the rule.
+    pub rule_state: TriggerRuleState,
+    /// The rule's `subject.kind`, the snapshot kind the row is from.
+    pub kind: TriggerKind,
+    /// The row's `id`.
+    pub row: TriggerRowId,
+    /// The rule's `start.protocol`.
+    pub protocol: ProtocolId,
+    /// The input built from `start.input`.
+    pub input: Declarations<InputId, Json>,
+    /// The firing id: `<rule>/<kind>:<row>/<entered_at>` under `once_per_state_entry`,
+    /// `<rule>/<kind>:<row>` under `once_per_subject`; absent for a row without `entered_at`
+    /// under `once_per_state_entry`.
+    pub firing_id: Option<String>,
+    /// What a later step does with the match.
+    pub verdict: TriggerVerdict,
+    /// Why the entry is undetermined or refused.
+    pub reason: Option<TriggerReason>,
+    /// The declared field a `field-missing` or `field-type` reason names.
+    pub field: Option<TriggerFieldName>,
+}
+
+/// The verdict of a plan entry, the first that applies, in this order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TriggerVerdict {
+    /// Not to be started, for the entry's reason.
+    Refused,
+    /// The match cannot be decided, for the entry's reason.
+    Undetermined,
+    /// The row matched when the rule key was activated: listed, never started.
+    Baseline,
+    /// A match of a rule in mode `offer`.
+    Offer,
+    /// A match of a rule in mode `auto`.
+    WouldStart,
+}
+
+impl TriggerVerdict {
+    /// The value the plan writes, its serde name (`would-start`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TriggerVerdict::Refused => "refused",
+            TriggerVerdict::Undetermined => "undetermined",
+            TriggerVerdict::Baseline => "baseline",
+            TriggerVerdict::Offer => "offer",
+            TriggerVerdict::WouldStart => "would-start",
+        }
+    }
+}
+
+/// Why an entry is undetermined or refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TriggerReason {
+    /// A declared required field is absent or null.
+    FieldMissing,
+    /// A field holds a value of another type than declared.
+    FieldType,
+    /// The `where` evaluates to neither true nor false.
+    WhereUnknown,
+    /// The row has no `entered_at` under `once_per_state_entry`.
+    EnteredAtMissing,
+}
+
+impl TriggerReason {
+    /// The value the plan writes, its serde name (`field-missing`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TriggerReason::FieldMissing => "field-missing",
+            TriggerReason::FieldType => "field-type",
+            TriggerReason::WhereUnknown => "where-unknown",
+            TriggerReason::EnteredAtMissing => "entered-at-missing",
+        }
+    }
 }
 
 /// An input as written: each form a key, exactly one of them present.

@@ -91,7 +91,7 @@ fn the_real_registry_with_the_flag_is_the_plain_report_and_one_line() {
     assert_eq!(
         out(&checked),
         format!(
-            "{}requirements: 39 implemented, 39 covered, 0 planned\n",
+            "{}requirements: 44 implemented, 44 covered, 0 planned\n",
             out(&plain)
         )
     );
@@ -183,6 +183,11 @@ fn the_real_catalogue_is_the_requirements_the_stories_name() {
         "CANON-TRIGGER-004",
         "CANON-TRIGGER-005",
         "CANON-TRIGGER-006",
+        "CANON-TRIGGER-007",
+        "CANON-TRIGGER-008",
+        "CANON-TRIGGER-009",
+        "CANON-TRIGGER-010",
+        "CANON-TRIGGER-011",
     ];
     story.sort();
     assert_eq!(ids, story);

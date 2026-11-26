@@ -1,13 +1,15 @@
 //! `canon trigger validate`: read one `canon-trigger/1` document and print its rule key, or each
 //! error with the field it names. `canon trigger protocols`: compile a set of `protocol/1`
 //! documents and print the `canon-trigger-protocols/1` map a trigger evaluation reads
-//! (story:protocol-access-class). What a rule must hold, and what a protocol's class and guard
-//! are, is the library's (`b10x_canon::trigger`).
+//! (story:protocol-access-class). `canon trigger evaluate`: read a rule set, a snapshot, the
+//! protocols and a history, and print the `canon-trigger-plan/1` plan (story:trigger-evaluate).
+//! What a rule must hold, what a protocol's class and guard are and what a plan lists is the
+//! library's (`b10x_canon::trigger`).
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use b10x_canon::trigger::DuplicateProtocolId;
+use b10x_canon::trigger::{DuplicateProtocolId, Refusal, RuleEntry};
 use b10x_canon::{model, trigger};
 use canon_cli::REJECTED;
 
@@ -58,4 +60,97 @@ pub fn protocols(paths: &[PathBuf]) -> ExitCode {
             ExitCode::from(REJECTED)
         }
     }
+}
+
+/// Prints the `canon-trigger-plan/1` plan of the rule set against the snapshot and exits 0. Reads
+/// the set, then each rule file it names in sorted order of its path (a relative path read from
+/// the set file's directory), then the snapshot, the protocols and the history: the first file
+/// that cannot be read exits 2; a document that does not read as its format exits 1 as
+/// `error[malformed-input]: <path>: <why>`, and a rule file that is not a valid rule with each
+/// error as `error[<code>]: <path>: <field>: <why>`. A refused evaluation exits 1 with
+/// `error[<code>]: <why>`.
+pub fn evaluate(
+    rules: &Path,
+    snapshot: &Path,
+    protocols: &Path,
+    history: &Path,
+    now: &str,
+) -> ExitCode {
+    let set = match document(rules, trigger::read_set) {
+        Ok(set) => set,
+        Err(code) => return code,
+    };
+    let directory = rules.parent().unwrap_or(Path::new(""));
+    let mut files: Vec<(PathBuf, model::TriggerRuleState)> = set
+        .rules
+        .iter()
+        .map(|entry| {
+            let path = Path::new(&entry.path);
+            let path = if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                directory.join(path)
+            };
+            (path, entry.state)
+        })
+        .collect();
+    files.sort();
+    let mut entries = Vec::with_capacity(files.len());
+    for (path, state) in files {
+        let source = match crate::read_text(&path) {
+            Ok(source) => source,
+            Err(error) => return crate::unreadable(&path, error),
+        };
+        match trigger::read(&source) {
+            Ok(rule) => entries.push(RuleEntry { rule, state }),
+            Err(problems) => {
+                for problem in &problems {
+                    eprintln!("error[{}]: {}: {problem}", problem.code, shown(&path));
+                }
+                return ExitCode::from(REJECTED);
+            }
+        }
+    }
+    let snapshot = match document(snapshot, trigger::read_snapshot) {
+        Ok(snapshot) => snapshot,
+        Err(code) => return code,
+    };
+    let protocols = match document(protocols, trigger::read_protocols) {
+        Ok(protocols) => protocols,
+        Err(code) => return code,
+    };
+    let history = match document(history, trigger::read_history) {
+        Ok(history) => history,
+        Err(code) => return code,
+    };
+    match trigger::evaluate(
+        &entries,
+        &snapshot,
+        &protocols,
+        &history,
+        &model::Instant::new(now),
+    ) {
+        Ok(plan) => {
+            print!("{}", trigger::render_plan(&plan));
+            ExitCode::SUCCESS
+        }
+        Err(refusal) => {
+            eprintln!("error[{}]: {refusal}", refusal.code);
+            ExitCode::from(REJECTED)
+        }
+    }
+}
+
+/// Reads one document with `read`: exit 2 when the file cannot be read, 1 naming the file when the
+/// document is refused.
+fn document<T>(path: &Path, read: fn(&str) -> Result<T, Refusal>) -> Result<T, ExitCode> {
+    let source = crate::read_text(path).map_err(|error| crate::unreadable(path, error))?;
+    read(&source).map_err(|refusal| {
+        eprintln!("error[{}]: {}: {refusal}", refusal.code, shown(path));
+        ExitCode::from(REJECTED)
+    })
+}
+
+fn shown(path: &Path) -> String {
+    model::one_line(&path.display().to_string())
 }

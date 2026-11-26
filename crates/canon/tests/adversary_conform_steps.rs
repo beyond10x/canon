@@ -123,8 +123,8 @@ fn an_alias_bomb_in_evaluate_inputs_is_refused() {
 }
 
 /// The module documentation's own example scenario is a `canon-conformance/1` document: read at
-/// run time from this tree, it parses into the compile, evaluate and trigger-validate steps it
-/// shows.
+/// run time from this tree, it parses into the compile, evaluate, trigger-validate,
+/// trigger-protocols and trigger-evaluate steps it shows.
 #[test]
 fn the_documented_example_scenario_parses() {
     let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR").expect("run through cargo");
@@ -158,7 +158,8 @@ fn the_documented_example_scenario_parses() {
             "compile",
             "no-evidence",
             "owner-missing",
-            "every-action-read-only"
+            "every-action-read-only",
+            "auto-and-offer"
         ]
     );
 }

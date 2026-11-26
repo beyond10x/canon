@@ -58,7 +58,8 @@ pub struct Variant {
     pub payload: Option<Ty>,
     /// The value a document writes for a unit variant of a derived enum: its name, lowercased
     /// when the enum says `#[serde(rename_all = "lowercase")]`, in snake case when it says
-    /// `#[serde(rename_all = "snake_case")]`.
+    /// `#[serde(rename_all = "snake_case")]`, in kebab case when it says
+    /// `#[serde(rename_all = "kebab-case")]`.
     pub written: String,
 }
 
@@ -223,7 +224,7 @@ fn derives_deserialize(attrs: &[Attribute]) -> Result<bool, String> {
 struct Serde {
     default: bool,
     try_from: Option<String>,
-    /// `rename_all = "lowercase"` or `rename_all = "snake_case"`, the renamings this reader
+    /// `rename_all = "lowercase"`, `"snake_case"` or `"kebab-case"`, the renamings this reader
     /// understands, on an enum.
     rename_all: Option<RenameAll>,
 }
@@ -235,6 +236,8 @@ enum RenameAll {
     Lowercase,
     /// `Granted` is written `granted`, `RequireApproval` `require_approval`.
     SnakeCase,
+    /// `Granted` is written `granted`, `WouldStart` `would-start`.
+    KebabCase,
 }
 
 impl RenameAll {
@@ -242,22 +245,26 @@ impl RenameAll {
     fn written(self, name: &str) -> String {
         match self {
             RenameAll::Lowercase => name.to_lowercase(),
-            RenameAll::SnakeCase => {
-                let mut out = String::with_capacity(name.len() + 4);
-                for (index, ch) in name.chars().enumerate() {
-                    if ch.is_uppercase() {
-                        if index > 0 {
-                            out.push('_');
-                        }
-                        out.extend(ch.to_lowercase());
-                    } else {
-                        out.push(ch);
-                    }
-                }
-                out
-            }
+            RenameAll::SnakeCase => snake(name),
+            RenameAll::KebabCase => snake(name).replace('_', "-"),
         }
     }
+}
+
+/// `RequireApproval` in snake case: `require_approval`.
+fn snake(name: &str) -> String {
+    let mut out = String::with_capacity(name.len() + 4);
+    for (index, ch) in name.chars().enumerate() {
+        if ch.is_uppercase() {
+            if index > 0 {
+                out.push('_');
+            }
+            out.extend(ch.to_lowercase());
+        } else {
+            out.push(ch);
+        }
+    }
+    out
 }
 
 fn serde(attrs: &[Attribute], owner: &str) -> Result<Serde, String> {
@@ -277,10 +284,11 @@ fn serde(attrs: &[Attribute], owner: &str) -> Result<Serde, String> {
                 found.rename_all = Some(match rule.value().as_str() {
                     "lowercase" => RenameAll::Lowercase,
                     "snake_case" => RenameAll::SnakeCase,
+                    "kebab-case" => RenameAll::KebabCase,
                     _ => {
                         return Err(meta.error(
-                            "canon-docs understands only rename_all = \"lowercase\" or \
-                             \"snake_case\"",
+                            "canon-docs understands only rename_all = \"lowercase\", \"snake_case\" \
+                             or \"kebab-case\"",
                         ));
                     }
                 });

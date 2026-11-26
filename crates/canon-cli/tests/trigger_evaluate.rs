@@ -179,7 +179,9 @@ fn isolated(dir: &Path, program: &str, args: &[String]) -> Output {
         .args(["--net", "--map-current-user", "--", program])
         .args(args)
         .output()
-        .expect("unshare runs: the test needs util-linux's unshare and unprivileged user namespaces")
+        .expect(
+            "unshare runs: the test needs util-linux's unshare and unprivileged user namespaces",
+        )
 }
 
 #[test]
@@ -242,7 +244,8 @@ fn now_that_is_not_an_instant_is_refused() {
     assert_eq!(text(&output.stdout), "");
     let stderr = text(&output.stderr);
     assert!(
-        stderr.starts_with("error[invalid-instant]: now: `2026-11-26`") && stderr.lines().count() == 1,
+        stderr.starts_with("error[invalid-instant]: now: `2026-11-26`")
+            && stderr.lines().count() == 1,
         "{stderr}"
     );
 }

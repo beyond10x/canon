@@ -84,6 +84,16 @@ fn main() -> ExitCode {
         Command::Trigger {
             command: TriggerCommand::Protocols { path },
         } => trigger::protocols(&path),
+        Command::Trigger {
+            command:
+                TriggerCommand::Evaluate {
+                    rules,
+                    snapshot,
+                    protocols,
+                    history,
+                    now,
+                },
+        } => trigger::evaluate(&rules, &snapshot, &protocols, &history, &now),
     }
 }
 

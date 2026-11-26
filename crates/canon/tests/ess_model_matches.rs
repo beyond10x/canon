@@ -88,8 +88,11 @@ const ENTITIES: &[EntityMapping] = &[
 /// `obligations` section is untyped `Json`, so the decision does not reach the status), and the
 /// properties (`canon-properties/1`) `canon check` reads, the requirement catalogue
 /// (`canon-requirements/1`) `canon conform run --requirements` reads, the trigger rule
-/// (`canon-trigger/1`) `canon trigger validate` reads and the `canon-trigger-protocols/1` document
-/// `canon trigger protocols` prints. They, and what they reach, are compared too.
+/// (`canon-trigger/1`) `canon trigger validate` reads, the `canon-trigger-protocols/1` document
+/// `canon trigger protocols` prints, and the rule set (`canon-trigger-set/1`), snapshot
+/// (`canon-trigger-snapshot/1`) and history (`canon-trigger-history/1`) `canon trigger evaluate`
+/// reads with the plan (`canon-trigger-plan/1`) it prints. They, and what they reach, are compared
+/// too.
 const DOCUMENTS: &[&str] = &[
     "EvidenceRecord",
     "AuthorityDecision",
@@ -100,6 +103,10 @@ const DOCUMENTS: &[&str] = &[
     "RequirementCatalogue",
     "TriggerRule",
     "TriggerProtocols",
+    "TriggerSet",
+    "TriggerSnapshot",
+    "TriggerHistory",
+    "TriggerPlan",
 ];
 
 /// `(owner, field)` Integer fields that are never negative although `ess/` cannot say so: ess
