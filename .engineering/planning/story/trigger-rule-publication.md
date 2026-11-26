@@ -2,14 +2,17 @@
 format: aep.planning-md/3
 id: story:trigger-rule-publication
 kind: story
-status: draft
+status: active
 title: canon trigger check-set refuses a republished key and an auto rule over a guarded protocol
 relations:
 - decomposes: epic:trigger-rules
 - serves: vision:governed-autonomy
 - depends_on: story:trigger-rule-document
 - depends_on: story:protocol-access-class
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-26T11:25:21Z", actor: "human:operator", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-26T11:25:21Z", actor: "human:operator", revision: 3}
 ---
 ## Outcome
 

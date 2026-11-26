@@ -2,12 +2,15 @@
 format: aep.planning-md/3
 id: story:trigger-rule-document
 kind: story
-status: draft
+status: active
 title: 'canon-trigger/1: one rule document, validated field by field'
 relations:
 - decomposes: epic:trigger-rules
 - serves: vision:governed-autonomy
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-26T11:25:20Z", actor: "human:operator", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-26T11:25:20Z", actor: "human:operator", revision: 3}
 ---
 ## Outcome
 
