@@ -1,38 +1,53 @@
 ---
 title: Getting started
-description: Build the canon command line from source, then validate, compile and evaluate a protocol.
+description: Install the canon command line from a Linux archive or from source, then validate, compile and evaluate a protocol.
 ---
 
 # Getting started
 
-Install source release `0.16.0`. You need `rustup`: the repository's
+Install release `0.17.0`: on Linux x86_64 from one of its [archives](#linux-binaries), anywhere
+else from source. From source you need `rustup`: the repository's
 `rust-toolchain.toml` pins the compiler (1.100.0) and rustup installs it on first use;
 the code uses the 2024 edition. The `canon-cli` crate installs a binary named `canon`.
 
 ```bash
-git clone --branch 0.16.0 https://github.com/beyond10x/canon.git
+git clone --branch 0.17.0 https://github.com/beyond10x/canon.git
 cd canon
 cargo install --locked --path crates/canon-cli
 canon --help
 ```
 
+The examples below run from the root of that checkout, so clone it also when you install an
+archive.
+
 ## Linux binaries
 
-:::planned[Linux x86_64 archives]
+:::shipped[Linux x86_64 archives]
 
-From the next release, each release also carries two archives of the `canon` binary for Linux
-x86_64 beside its source, and a `SHA256SUMS` file naming their checksums:
+From release `0.17.0`, each release carries two archives of the `canon` binary for Linux x86_64
+beside its source, and a `SHA256SUMS` file naming their checksums, all attached to its
+[GitHub Release](https://github.com/beyond10x/canon/releases/tag/0.17.0):
 
-- `canon-<version>-x86_64-unknown-linux-musl.tar.gz`, the default: statically linked, with no C
+- `canon-0.17.0-x86_64-unknown-linux-musl.tar.gz`, the default: statically linked, with no C
   library needed on the host, and the mimalloc allocator;
-- `canon-<version>-x86_64-unknown-linux-gnu.tar.gz`, linked against glibc 2.17 or older, for a
+- `canon-0.17.0-x86_64-unknown-linux-gnu.tar.gz`, linked against glibc 2.17 or older, for a
   host where you prefer glibc. Its peak memory was about half the musl archive's.
 
 On the measured workloads the musl archive was not slower than the gnu one; the measurement and
 the rule that chose the default are in the repository's `docs/design/linux-release.md`.
 
 Each holds the binary, `LICENSE` and `README.md` in a directory `canon-<version>-<target>/`.
-Release `0.16.0` carries neither; build it from source as above.
+Download the archive and `SHA256SUMS` into one directory, then:
+
+```bash
+sha256sum --check --ignore-missing SHA256SUMS
+tar -xzf canon-0.17.0-x86_64-unknown-linux-musl.tar.gz
+install -m 0755 canon-0.17.0-x86_64-unknown-linux-musl/canon ~/.local/bin/canon
+canon --version
+```
+
+`canon --version` prints `canon 0.17.0`. Releases up to `0.16.0` carry no archives; build those
+from source as above.
 
 :::
 

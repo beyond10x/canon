@@ -2,16 +2,17 @@
 format: aep.planning-md/3
 id: story:musl-workload-measurement
 kind: story
-status: active
+status: implemented
 title: gnu, musl and musl with mimalloc are measured on one workload before a default is named
 relations:
 - decomposes: epic:linux-release-archives
 - serves: vision:governed-autonomy
 - depends_on: story:linux-release-archives
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-26T15:34:04Z", actor: "human:operator", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-26T15:34:04Z", actor: "human:operator", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-26T17:52:01Z", actor: "human:operator", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

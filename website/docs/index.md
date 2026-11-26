@@ -14,7 +14,7 @@ case under one protocol it is meant to answer: what is known, what is unknown, w
 remain open, which actions are admissible, which need authority, and whether an outcome has been
 earned.
 
-:::note[Source release 0.16.0]
+:::note[Release 0.17.0]
 
 Canon is early. Today it parses, validates and compiles protocols, and runs conformance
 scenarios. `canon evaluate` gives every claim of a case a three-valued value, applying evidence
@@ -28,7 +28,11 @@ protocol. Predicates over evidence order read a case's evidence history: the fir
 kind, and one kind's first record before another's. An evidence match can demand an independent
 producer: a record counts only when the case lists its producer as independent on the dimensions
 the match names. Each action can declare one argument schema, which a runner reads from the
-protocol it loads and validates calls against. Every page says which parts are shipped and
+protocol it loads and validates calls against. An action can be declared read-only, and a
+[trigger rule](./reference/trigger-rules.md) says which rows of a snapshot start a protocol:
+`canon trigger evaluate` lists each match with a verdict, and `canon trigger check-set` checks a
+rule set before it is published. Linux x86_64 archives of the binary are attached to the
+release. Every page says which parts are shipped and
 which are planned;
 [where this stands](./status/where-this-stands.md) has the full list.
 
