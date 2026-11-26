@@ -317,3 +317,8 @@ items:
     story: story:protocol-access-class
     detail: "An action may declare access: read_only or write, write when absent; canon validate refuses read_only on an action that revises or opens a case (read-only-action-writes). canon-ir/1 carries access_class, read_only when every action is, and guarded, true when an action has a non-empty requires. canon trigger protocols --path prints a canon-trigger-protocols/1 document mapping each protocol id to its class, guard and inputs. Requirements CANON-TRIGGER-004 to 006."
     href: /docs/reference/trigger-rules#the-protocols-a-rule-is-checked-against
+  - label: Trigger rule evaluation
+    area: Evaluation
+    story: story:trigger-evaluate
+    detail: "canon trigger evaluate reads a canon-trigger-set/1 rule set (each rule file with its state draft, active or disabled), a canon-trigger-snapshot/1 snapshot, the protocols, a canon-trigger-history/1 history and --now, and prints a canon-trigger-plan/1 plan: every match with its input, its firing id and a verdict, would-start, offer, baseline, undetermined (field-missing, field-type, where-unknown) or refused (entered-at-missing), byte-identical whatever the input order, with no clock, network or other file. Requirements CANON-TRIGGER-007 to 011."
+    href: /docs/reference/trigger-rules#evaluating-a-rule-set
