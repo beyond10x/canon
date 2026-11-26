@@ -16,6 +16,22 @@ cargo install --locked --path crates/canon-cli
 canon --help
 ```
 
+## Linux binaries
+
+:::planned[Linux x86_64 archives]
+
+From the next release, each release also carries two archives of the `canon` binary for Linux
+x86_64 beside its source, and a `SHA256SUMS` file naming their checksums:
+
+- `canon-<version>-x86_64-unknown-linux-gnu.tar.gz`, linked against glibc 2.17 or older;
+- `canon-<version>-x86_64-unknown-linux-musl.tar.gz`, statically linked, with no C library
+  needed on the host.
+
+Each holds the binary, `LICENSE` and `README.md` in a directory `canon-<version>-<target>/`.
+Release `0.16.0` carries neither; build it from source as above.
+
+:::
+
 ## Validate a protocol
 
 The repository ships a small protocol, an investigation. Run this from the repository root:
