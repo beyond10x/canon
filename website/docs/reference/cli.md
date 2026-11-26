@@ -26,6 +26,8 @@ Generated from the clap definition of the `canon` command line in [`crates/canon
 | [`canon digest`](#canon-digest) | Print the digest of one `canon-evidence/1` record: `sha256:` and the 64 lowercase hexadecimal digits of the SHA-256 of the record's canonical form, the JSON Canonicalization Scheme (RFC 8785) of its fields as Canon reads them, so the key order and whitespace of the file change nothing. A `ground_evidence` entry of `--authority` or `--decisions` written `{id: <id>, digest: <digest>}` gives it, and holds only while the record under the id has it. A file that does not read as a `canon-evidence/1` record is refused; the identifier and instant checks of `canon evaluate` are not run, and the record is not checked against a protocol |
 | [`canon conform`](#canon-conform) | Conformance scenarios |
 | [`canon conform run`](#canon-conform-run) | Run every `canon-conformance/1` scenario of a registry directory and report each |
+| [`canon trigger`](#canon-trigger) | Trigger rules: `canon-trigger/1` documents, each saying when rows of a kind in a state start a protocol |
+| [`canon trigger validate`](#canon-trigger-validate) | Validate one `canon-trigger/1` document field by field and print `valid: trigger rule `&lt;id&gt;@&lt;version&gt;``, its rule key. The rule's `where` is compiled with `canon-expr/1` against a catalog of only `contains` over strings and `present_<type>` for the type of each optional declared field, with `$row` the record of the declared fields. A refused document prints one line `error[<code>]: <field>: <why>` per error on standard error, naming the field, and exits 1: `parse` (no field: not well-formed YAML, or not a mapping), `missing-field`, `unknown-field`, `invalid-value`, `undeclared-field` (a state field or an input field `subject.fields` does not declare, or a state field that is not a required string), `invalid-input` (an input that is not `{field}` or `{const}`, such as an expression) and `invalid-where`. A document without the format's shape is reported with its first error, one with the shape with every error. A file that cannot be read exits 2 |
 
 ## `canon validate`
 
@@ -356,6 +358,47 @@ Options:
 
       --requirements <REQUIREMENTS>
           A `canon-requirements/1` catalogue of the normative requirements the registry answers for. After the run, every implemented requirement must be covered by a passing scenario, no scenario may cover one the catalogue does not list, no planned one may be covered, and every evaluate step must give byte-identical output when run again and with its `evidence`, `authority` and `decisions` lists reversed. Adds a `requirements:` summary line
+
+  -h, --help
+          Print help
+```
+
+## `canon trigger`
+
+Trigger rules: `canon-trigger/1` documents, each saying when rows of a kind in a state start a protocol
+
+Subcommands: [`validate`](#canon-trigger-validate).
+
+```text
+Trigger rules: `canon-trigger/1` documents, each saying when rows of a kind in a state start a protocol
+
+Usage: canon trigger <COMMAND>
+
+Commands:
+  validate  Validate one `canon-trigger/1` document field by field and print `valid: trigger rule `<id>@<version>``, its rule key. The rule's `where` is compiled with `canon-expr/1` against a catalog of only `contains` over strings and `present_<type>` for the type of each optional declared field, with `$row` the record of the declared fields. A refused document prints one line `error[<code>]: <field>: <why>` per error on standard error, naming the field, and exits 1: `parse` (no field: not well-formed YAML, or not a mapping), `missing-field`, `unknown-field`, `invalid-value`, `undeclared-field` (a state field or an input field `subject.fields` does not declare, or a state field that is not a required string), `invalid-input` (an input that is not `{field}` or `{const}`, such as an expression) and `invalid-where`. A document without the format's shape is reported with its first error, one with the shape with every error. A file that cannot be read exits 2
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `canon trigger validate`
+
+Validate one `canon-trigger/1` document field by field and print `valid: trigger rule `&lt;id&gt;@&lt;version&gt;``, its rule key. The rule's `where` is compiled with `canon-expr/1` against a catalog of only `contains` over strings and `present_<type>` for the type of each optional declared field, with `$row` the record of the declared fields. A refused document prints one line `error[<code>]: <field>: <why>` per error on standard error, naming the field, and exits 1: `parse` (no field: not well-formed YAML, or not a mapping), `missing-field`, `unknown-field`, `invalid-value`, `undeclared-field` (a state field or an input field `subject.fields` does not declare, or a state field that is not a required string), `invalid-input` (an input that is not `{field}` or `{const}`, such as an expression) and `invalid-where`. A document without the format's shape is reported with its first error, one with the shape with every error. A file that cannot be read exits 2
+
+| Option | Required | Default | Meaning |
+|---|---|---|---|
+| `--path <PATH>` | yes | none | The `canon-trigger/1` document, one file |
+
+```text
+Validate one `canon-trigger/1` document field by field and print `valid: trigger rule `<id>@<version>``, its rule key. The rule's `where` is compiled with `canon-expr/1` against a catalog of only `contains` over strings and `present_<type>` for the type of each optional declared field, with `$row` the record of the declared fields. A refused document prints one line `error[<code>]: <field>: <why>` per error on standard error, naming the field, and exits 1: `parse` (no field: not well-formed YAML, or not a mapping), `missing-field`, `unknown-field`, `invalid-value`, `undeclared-field` (a state field or an input field `subject.fields` does not declare, or a state field that is not a required string), `invalid-input` (an input that is not `{field}` or `{const}`, such as an expression) and `invalid-where`. A document without the format's shape is reported with its first error, one with the shape with every error. A file that cannot be read exits 2
+
+Usage: canon trigger validate --path <PATH>
+
+Options:
+      --path <PATH>
+          The `canon-trigger/1` document, one file
 
   -h, --help
           Print help

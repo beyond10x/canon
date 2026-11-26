@@ -38,6 +38,14 @@ steps:
         { ... the exact canon-decision/1 bytes ... }
       # or, instead of `decision`:
       # refusal: <the identifier the refusal names>
+  - id: owner-missing
+    trigger-validate:
+      document: |
+        { ... a canon-trigger/1 document ... }
+    expect:
+      refused: owner                      # the field every error names
+      # or, instead of `refused`:
+      # rule: stale-invoice-reminder@3    # the key of the valid rule
 ```
 
 - `fixture` is the `protocol/1` document the scenario compiles, as a path relative to the
@@ -56,9 +64,15 @@ steps:
   the step as `import `&lt;path&gt;` is unreadable: <why>`, one that does not parse as `import `&lt;path&gt;` does not parse: <kind and position>`, and a composition that is refused as
   `fixture does not compile: <code>: <why>; …`. Absent, the fixture imports nothing.
 - `covers` entries are `CANON-` followed by an identifier, each listed once.
-- `steps` is an ordered, non-empty list. Each step is exactly one of `compile` or `evaluate`,
-  with exactly one expectation of the matching kind: a compile step expects `canon-ir`, an
-  evaluate step expects `decision` or `refusal`.
+- `steps` is an ordered, non-empty list. Each step is exactly one of `compile`, `evaluate` or
+  `trigger-validate`, with exactly one expectation of the matching kind: a compile step expects
+  `canon-ir`, an evaluate step expects `decision` or `refusal`, a trigger-validate step expects
+  `rule` or `refused`, neither empty.
+- A trigger-validate step (story:trigger-rule-document) reads its `document` as
+  `canon trigger validate` reads a file (`trigger::read`); it does not read the fixture. It
+  passes when the document is a valid rule whose key, `<id>@<version>`, is `rule`, or when the
+  document is refused and every error names the field `refused`. Otherwise `<what differed>` is
+  `expected rule `&lt;key&gt;`, the document is rule `&lt;key&gt;``, `expected a refusal naming `<field>`, the document is rule `<key>``, or `expected … , the document is refused: error[<code>]: <field>: <why>; …`, listing every error.
 - An expectation is compared byte for byte with the step's output. A YAML literal block (`|`)
   keeps one trailing newline, which is the one `canon compile` prints.
 - Unknown keys are refused: a file with one does not parse as a scenario.

@@ -80,6 +80,16 @@ pub fn all(root: &Path) -> Result<BTreeMap<String, String>, String> {
         )?,
     );
     files.insert(
+        format!("{REFERENCE}/trigger-rules.md"),
+        module_page(
+            root,
+            "crates/canon/src/trigger/mod.rs",
+            "Trigger rules",
+            "Trigger rules",
+            "What canon trigger validate checks in a canon-trigger/1 rule, the error it names for each field, and the catalog a rule's where is compiled against.",
+        )?,
+    );
+    files.insert(
         format!("{REFERENCE}/investigation-example.md"),
         example(root)?,
     );
@@ -291,8 +301,8 @@ const PROTOCOL: Document = Document {
 };
 
 /// The documents the documents page lists, in order: those `canon evaluate` reads and writes,
-/// then the one `canon check` reads.
-const DOCUMENTS: [Document; 6] = [
+/// then the one `canon check` reads, then the one `canon trigger validate` reads.
+const DOCUMENTS: [Document; 7] = [
     Document {
         root: "Case",
         format: "CASE_FORMAT",
@@ -342,6 +352,14 @@ const DOCUMENTS: [Document; 6] = [
         list: None,
         twice: "",
         command: "canon check --properties",
+    },
+    Document {
+        root: "TriggerRule",
+        format: "TRIGGER_FORMAT",
+        schema: Some("trigger-1.schema.json"),
+        list: None,
+        twice: "",
+        command: "canon trigger validate --path",
     },
 ];
 
@@ -930,13 +948,15 @@ fn documents(model: &Model) -> Result<String, String> {
         "Evaluation documents",
         "Evaluation documents",
         "The case snapshot, evidence records, authority decisions and explicit decisions canon \
-         evaluate reads, the decision it writes, and the properties canon check reads.",
+         evaluate reads, the decision it writes, the properties canon check reads, and the trigger \
+         rule canon trigger validate reads.",
     );
     out.push_str(&format!(
         "Generated from the model types in {}. `canon evaluate` reads a compiled protocol, one \
          case snapshot, a set of evidence records and, optionally, a list of authority decisions \
          and a list of explicit decisions, and writes a decision. `canon check` reads a protocol \
-         and, optionally, the properties declared beside it. Every key is listed; a key Canon \
+         and, optionally, the properties declared beside it. `canon trigger validate` reads one \
+         trigger rule (see [Trigger rules](./trigger-rules.md)). Every key is listed; a key Canon \
          does not know is refused.\n",
         source_link(source::MODEL_DIR),
     ));

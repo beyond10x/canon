@@ -36,6 +36,7 @@ const sidebars: SidebarsConfig = {
         'reference/validation',
         'reference/canon-ir',
         'reference/conformance',
+        'reference/trigger-rules',
         'reference/assertions',
       ],
     },
