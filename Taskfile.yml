@@ -120,6 +120,11 @@ tasks:
       - npm --prefix website ci
       - npm --prefix website run build
 
+  package:
+    desc: "Build, check and archive canon for one Linux target into target/package/ (task package -- x86_64-unknown-linux-gnu | x86_64-unknown-linux-musl); .github/workflows/package.yml runs the same script."
+    cmds:
+      - sh scripts/package.sh {{.CLI_ARGS}}
+
   ci-watch:
     desc: "Wait for the checks of a pull request, or of a branch that has one (task ci-watch -- <pull request or branch>); non-zero unless all passed and canon / task check reported. A pushed commit with no pull request: gh run list --branch <branch>."
     cmds:

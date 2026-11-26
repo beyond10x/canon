@@ -107,6 +107,7 @@ mod invalidation_evaluation_cost;
 mod judgement_marking;
 mod missing_keys;
 mod pending_decisions;
+mod package_checks;
 mod planning_only_classifier;
 mod protocol_write;
 mod review_depth_beyond_bound;
