@@ -341,3 +341,44 @@ requirements:
       protocol id, its access class, whether it is guarded and the case inputs it declares with
       their values; a set with two documents of one protocol id MUST be refused.
     source: story:protocol-access-class
+  CANON-TRIGGER-007:
+    status: implemented
+    statement: >-
+      A row MUST match a trigger rule when its kind is the rule's subject.kind, its state field
+      equals is and its where is true, and a row that does not match MUST NOT be listed. canon
+      trigger evaluate MUST list each match once with the rule key, the rule's state, the kind,
+      the row id, the protocol, the input built from start.input and the firing id, with the
+      verdict offer for a rule in mode offer and would-start for one in mode auto; a draft rule
+      MUST be evaluated alike, its entries marked rule_state draft.
+    source: story:trigger-evaluate
+  CANON-TRIGGER-008:
+    status: implemented
+    statement: >-
+      The canon-trigger-plan/1 plan MUST be ordered by rule key, kind and row id, and MUST be
+      byte-identical over repeated evaluations of one input and whatever the order of its rules,
+      kinds, rows, firings and activations.
+    source: story:trigger-evaluate
+  CANON-TRIGGER-009:
+    status: implemented
+    statement: >-
+      A match's firing id MUST be `<rule key>/<kind>:<row id>/<entered_at>` under
+      once_per_state_entry, so a row that enters its state again gets a new one, and
+      `<rule key>/<kind>:<row id>` under once_per_subject; a row without entered_at under
+      once_per_state_entry MUST be listed refused with the reason entered-at-missing.
+    source: story:trigger-evaluate
+  CANON-TRIGGER-010:
+    status: implemented
+    statement: >-
+      A match MUST be listed baseline, never offer or would-start, when an activation of its rule
+      key in the history is at or after the row's entered_at, or lists the row as
+      `<kind>:<row id>`.
+    source: story:trigger-evaluate
+  CANON-TRIGGER-011:
+    status: implemented
+    statement: >-
+      A row of the rule's kind that lacks a declared required field, or holds a value of another
+      type than its declaration, MUST be listed undetermined with the reason field-missing or
+      field-type naming the field, without evaluating where, when the row is in the rule's state
+      or its state field is that field; a where that does not evaluate to true or false MUST be
+      listed undetermined with the reason where-unknown. Unknown is not false.
+    source: story:trigger-evaluate

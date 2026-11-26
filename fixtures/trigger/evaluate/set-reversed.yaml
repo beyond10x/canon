@@ -1,0 +1,4 @@
+format: canon-trigger-set/1
+rules:
+  - {path: overdue-reminder.yaml, state: active}
+  - {path: overdue-offer.yaml, state: active}

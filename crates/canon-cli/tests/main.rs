@@ -76,6 +76,7 @@ mod subject_bound_evidence_match;
 mod supplied_at_open;
 mod supplied_evidence;
 mod three_valued_claims;
+mod trigger_evaluate;
 mod trigger_protocols;
 mod trigger_validate;
 mod usage_exit;

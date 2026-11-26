@@ -1,0 +1,15 @@
+{
+  "format": "canon-trigger-protocols/1",
+  "protocols": {
+    "send-reminder": {
+      "class": "write",
+      "guarded": false,
+      "inputs": {
+        "channel": [
+          "email",
+          "letter"
+        ]
+      }
+    }
+  }
+}
