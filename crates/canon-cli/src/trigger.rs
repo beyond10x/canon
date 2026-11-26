@@ -3,6 +3,8 @@
 //! documents and print the `canon-trigger-protocols/1` map a trigger evaluation reads
 //! (story:protocol-access-class). `canon trigger evaluate`: read a rule set, a snapshot, the
 //! protocols and a history, and print the `canon-trigger-plan/1` plan (story:trigger-evaluate).
+//! `canon trigger digest` and `canon trigger check-set`: the digest of a rule, and a rule set checked
+//! before it is published (story:trigger-rule-publication).
 //! What a rule must hold, what a protocol's class and guard are and what a plan lists is the
 //! library's (`b10x_canon::trigger`).
 
@@ -136,6 +138,74 @@ pub fn evaluate(
         }
         Err(refusal) => {
             eprintln!("error[{}]: {refusal}", refusal.code);
+            ExitCode::from(REJECTED)
+        }
+    }
+}
+
+/// Prints the digest of one `canon-trigger/1` rule and a newline and exits 0; a document that is
+/// not a valid rule prints one `error[<code>]: <field>: <why>` line per error, as `validate` does,
+/// and exits 1; a file that cannot be read exits 2.
+pub fn digest(path: &Path) -> ExitCode {
+    let source = match crate::read_text(path) {
+        Ok(source) => source,
+        Err(error) => return crate::unreadable(path, error),
+    };
+    match trigger::read(&source) {
+        Ok(rule) => {
+            println!("{}", trigger::digest(&rule));
+            ExitCode::SUCCESS
+        }
+        Err(problems) => {
+            for problem in &problems {
+                eprintln!("error[{}]: {problem}", problem.code);
+            }
+            ExitCode::from(REJECTED)
+        }
+    }
+}
+
+/// Prints the `canon-trigger-index/1` index of a rule set that passes its checks against the
+/// published index and the protocols, and exits 0. Reads each rule file in sorted order of its
+/// path, a path resolving to a file already read left out, then the index and the protocols: the
+/// first file that cannot be read exits 2; a rule file that is not a valid rule exits 1 with each
+/// error as `error[<code>]: <path>: <field>: <why>`, and an index or protocols document that does
+/// not read as its format as `error[malformed-input]: <path>: <why>`. A set that fails exits 1
+/// with one `error[<code>]: <rule key>: <why>` line per failure.
+pub fn check_set(paths: &[PathBuf], published: &Path, protocols: &Path) -> ExitCode {
+    let mut rules = Vec::new();
+    for path in members(paths) {
+        let source = match crate::read_text(path) {
+            Ok(source) => source,
+            Err(error) => return crate::unreadable(path, error),
+        };
+        match trigger::read(&source) {
+            Ok(rule) => rules.push((path.display().to_string(), rule)),
+            Err(problems) => {
+                for problem in &problems {
+                    eprintln!("error[{}]: {}: {problem}", problem.code, shown(path));
+                }
+                return ExitCode::from(REJECTED);
+            }
+        }
+    }
+    let published = match document(published, trigger::read_index) {
+        Ok(published) => published,
+        Err(code) => return code,
+    };
+    let protocols = match document(protocols, trigger::read_protocols) {
+        Ok(protocols) => protocols,
+        Err(code) => return code,
+    };
+    match trigger::check_set(&rules, &published, &protocols) {
+        Ok(index) => {
+            print!("{}", trigger::render_index(&index));
+            ExitCode::SUCCESS
+        }
+        Err(failures) => {
+            for failure in &failures {
+                eprintln!("error[{}]: {failure}", failure.code);
+            }
             ExitCode::from(REJECTED)
         }
     }

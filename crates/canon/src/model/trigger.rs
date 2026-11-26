@@ -32,7 +32,9 @@
 //! `canon-trigger-protocols/1` document `canon trigger protocols` prints
 //! (story:protocol-access-class), and of the documents `canon trigger evaluate` reads and prints
 //! (story:trigger-evaluate): the `canon-trigger-set/1` rule set, the `canon-trigger-snapshot/1`
-//! snapshot, the `canon-trigger-history/1` history and the `canon-trigger-plan/1` plan.
+//! snapshot, the `canon-trigger-history/1` history and the `canon-trigger-plan/1` plan, and of the
+//! `canon-trigger-index/1` index `canon trigger check-set` reads and prints
+//! (story:trigger-rule-publication).
 
 use std::fmt;
 
@@ -58,6 +60,10 @@ pub const TRIGGER_HISTORY_FORMAT: &str = "canon-trigger-history/1";
 
 /// The plan format `canon trigger evaluate` prints (story:trigger-evaluate).
 pub const TRIGGER_PLAN_FORMAT: &str = "canon-trigger-plan/1";
+
+/// The index format `canon trigger check-set --published` reads and `canon trigger check-set`
+/// prints (story:trigger-rule-publication).
+pub const TRIGGER_INDEX_FORMAT: &str = "canon-trigger-index/1";
 
 identifier!(
     /// Identifies a trigger rule; with its version, the rule key `<id>@<version>`.
@@ -537,6 +543,8 @@ pub enum TriggerReason {
     WriteUnapproved,
     /// The row has no `entered_at` under `once_per_state_entry`.
     EnteredAtMissing,
+    /// The value of an input the protocol declares is not among the input's values.
+    InputValueNotAllowed,
     /// A firing with the entry's firing id is in the history.
     AlreadyFired,
     /// The rule's firings on the UTC day of the evaluation instant have reached its cap.
@@ -556,10 +564,27 @@ impl TriggerReason {
             TriggerReason::AccessMismatch => "access-mismatch",
             TriggerReason::WriteUnapproved => "write-unapproved",
             TriggerReason::EnteredAtMissing => "entered-at-missing",
+            TriggerReason::InputValueNotAllowed => "input-value-not-allowed",
             TriggerReason::AlreadyFired => "already-fired",
             TriggerReason::CapReached => "cap-reached",
         }
     }
+}
+
+/// The `canon-trigger-index/1` document `canon trigger check-set --published` reads, and the one
+/// it prints for a set that passes (story:trigger-rule-publication): each published rule key with
+/// the digest of its document (`crate::trigger::digest`). The index is the caller's; Canon stores
+/// nothing.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerIndex {
+    /// The document format, [`TRIGGER_INDEX_FORMAT`].
+    #[serde(deserialize_with = "super::present::required")]
+    pub format: String,
+    /// Each rule key, `<id>@<version>`, with the digest of its document, `sha256:` and 64
+    /// lowercase hexadecimal digits.
+    #[serde(deserialize_with = "super::present::required")]
+    pub rules: Declarations<String, String>,
 }
 
 /// An input as written: each form a key, exactly one of them present.

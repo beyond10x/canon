@@ -82,7 +82,7 @@ pub fn read_protocols(source: &str) -> Result<TriggerProtocols, Refusal> {
 
 /// Reads one document of `format` from YAML or JSON text: refused as `malformed-input` when it does
 /// not read as one, or names another format.
-fn read<T: DeserializeOwned>(
+pub(super) fn read<T: DeserializeOwned>(
     source: &str,
     format: &str,
     format_of: impl Fn(&T) -> &str,
@@ -101,7 +101,7 @@ fn read<T: DeserializeOwned>(
 }
 
 /// Refuses a document whose `format` is not `format`, naming it by `what` when not empty.
-fn expect_format(what: &str, found: &str, format: &str) -> Result<(), Refusal> {
+pub(super) fn expect_format(what: &str, found: &str, format: &str) -> Result<(), Refusal> {
     if found == format {
         return Ok(());
     }
@@ -259,7 +259,7 @@ pub fn evaluate(
 
 /// Each protocol of the protocols by id; refuses a protocol id listed twice
 /// (`duplicate-protocol-id`), checked in id order.
-fn protocols_by_id(
+pub(super) fn protocols_by_id(
     protocols: &TriggerProtocols,
 ) -> Result<BTreeMap<&ProtocolId, &TriggerProtocol>, Refusal> {
     let mut by_id = BTreeMap::new();
@@ -649,7 +649,9 @@ fn firing_id(rule: &TriggerRule, key: &str, row: &TriggerRow) -> Option<String> 
 /// protocol is guarded and the mode `auto` (`guarded-auto`); the rule's `access` is not the
 /// protocol's class (`access-mismatch`); the `access` is `write`, the mode `auto` and the rule key
 /// has no approval (`write-unapproved`); a row without `entered_at` under `once_per_state_entry`
-/// (`entered-at-missing`).
+/// (`entered-at-missing`); the value of an input the protocol declares, the row's value of a
+/// `{field}` input or a `{const}` input's string, not among the input's values
+/// (`input-value-not-allowed`): a value that is absent, null or not a string is not among them.
 fn refusal(
     entry: &RuleEntry,
     protocol: Option<&TriggerProtocol>,
@@ -678,8 +680,20 @@ fn refusal(
     if rule.access == TriggerAccess::Write && auto && !approved {
         return Some(TriggerReason::WriteUnapproved);
     }
-    (rule.refire == TriggerRefire::OncePerStateEntry && row.entered_at.is_none())
-        .then_some(TriggerReason::EnteredAtMissing)
+    if rule.refire == TriggerRefire::OncePerStateEntry && row.entered_at.is_none() {
+        return Some(TriggerReason::EnteredAtMissing);
+    }
+    let allowed = rule.start.input.iter().all(|(name, input)| {
+        let Some(values) = protocol.inputs.get(name) else {
+            return true;
+        };
+        let value = match input {
+            TriggerInput::Field(field) => row.fields.get(field).and_then(Json::as_str),
+            TriggerInput::Const(value) => Some(value.as_str()),
+        };
+        value.is_some_and(|value| values.iter().any(|allowed| allowed.as_str() == value))
+    });
+    (!allowed).then_some(TriggerReason::InputValueNotAllowed)
 }
 
 /// Whether the rule key's latest activation is at or after the row's `entered_at` (compared by

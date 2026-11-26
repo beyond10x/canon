@@ -159,7 +159,8 @@ fn the_documented_example_scenario_parses() {
             "no-evidence",
             "owner-missing",
             "every-action-read-only",
-            "auto-and-offer"
+            "auto-and-offer",
+            "edited-key-republished"
         ]
     );
 }
