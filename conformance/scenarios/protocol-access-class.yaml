@@ -89,7 +89,7 @@ steps:
           protocol: {id: look-up, revision: 1}
           case:
             inputs:
-              region: {values: [west, east, west]}
+              region: {values: [west, east]}
           evidence_kinds:
             looked_up: {}
           claims:

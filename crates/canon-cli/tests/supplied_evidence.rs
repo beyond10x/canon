@@ -29,7 +29,7 @@ const SUPPLIED_LINE: &str = "    supplied_by: investigation.review\n";
 /// The digest of `unsupplied.yaml`'s `canon-ir/1` as canon 0.9.0 compiled it at `be2c861`, before
 /// the field existed.
 const UNSUPPLIED_DIGEST_BEFORE: &str =
-    "sha256:6bc8605cc7a5c2fd25d5529373e3b08ba126a9355f0440e0add781c2f020c137";
+    "sha256:b886bdd66ee95dcd56317c937c116687e2e3591b41727f3a56e7ef010c4b397c";
 
 /// Read at run time, not compile time: a test binary reused from a shared build directory must
 /// still read this tree's scenarios and fixtures.

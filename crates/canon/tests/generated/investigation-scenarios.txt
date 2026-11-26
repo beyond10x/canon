@@ -1,4 +1,4 @@
-digest: f59ff22a60acc289b94fc189374b75528ac7b01e7775a0905392792c2c1cb16f
+digest: 2e5bbcad053eaeec47324a7e7b7ea5b445dabf844e7cc887ae2bedac04f308c8
 regenerate: task regenerate-scenarios
 === fixture fixtures/investigation/action-admissibility.yaml
 === scenario action.publish_finding.blocked.yaml

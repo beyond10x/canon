@@ -19,6 +19,7 @@ steps:
     expect:
       canon-ir: |
         {
+          "access_class": "write",
           "actions": {
             "build": {
               "description": "Build the epic once every child story case about the spec's current revision ended delivered.",
@@ -89,6 +90,7 @@ steps:
             }
           },
           "format": "canon-ir/1",
+          "guarded": true,
           "obligations": {},
           "outcomes": {
             "built": {

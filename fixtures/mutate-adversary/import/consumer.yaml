@@ -8,7 +8,7 @@ protocol:
 imports:
   shared:
     revision: 1
-    digest: sha256:6b211ec22b4ad627b44823888fd5403460e03dc2ddc760e1f59960568db7a658
+    digest: sha256:a1e811898dbb9bd297fd6563b89f832dfa9f1d792bd651085e9616323a7b35b4
 
 outcomes:
   accepted:

@@ -47,13 +47,60 @@
 //! optional field is tested with its `present_<type>` function; `canon-expr/1` compares it with
 //! nothing else. `$row.<field>` reaches a field whose name is letters, digits and `_`, not starting
 //! with a digit. Absent, `where` is true for every row in the state.
+//!
+//! # The protocols a rule is checked against
+//!
+//! A rule's `access` is checked against the protocol it starts, never its source
+//! (story:protocol-access-class, `docs/design/trigger-rules.md` § 5). Each action of `protocol/1`
+//! may declare `access: read_only` or `access: write`, absent meaning `write`; `canon validate`
+//! refuses `read_only` on an action that `revises` an artifact or has a `case_open`
+//! (`read-only-action-writes`). A protocol's class is `read_only` when every action is, a
+//! protocol without actions included, else `write`; it is guarded when one of its actions
+//! `requires` a capability, since it cannot run that action until an authority decision grants
+//! the capability. `canon-ir/1` carries both at its top level, as `access_class` and `guarded`.
+//!
+//! `canon trigger protocols --path <file> ...` compiles each `protocol/1` file on its own and
+//! prints [`protocols`] of the set as a `canon-trigger-protocols/1` document
+//! ([`render_protocols`]), the `protocols` argument a trigger evaluation reads:
+//!
+//! ```json
+//! {
+//!   "format": "canon-trigger-protocols/1",
+//!   "protocols": {
+//!     "send-reminder": {
+//!       "class": "write",
+//!       "guarded": false,
+//!       "inputs": {
+//!         "channel": [
+//!           "email",
+//!           "letter"
+//!         ]
+//!       }
+//!     }
+//!   }
+//! }
+//! ```
+//!
+//! One entry per protocol, keyed by protocol id; `inputs` holds the case inputs the protocol
+//! declares, each with its values, sorted, each once. The files are read in sorted order of their
+//! paths, a path that resolves to a file already read is that file once, and the output is the
+//! same whatever order the paths are given in. Refused, exit 1, naming the file: a document that
+//! does not parse (`parse`), that has imports (`protocol-imports`: a protocol with imports
+//! compiles only with the documents it imports) or that does not compile (each problem with its
+//! code); and two files that declare one protocol id (`duplicate-protocol-id`, naming the id and
+//! every file that declares it), since a rule names a protocol by id alone. The first file refused
+//! in sorted order decides; a file that cannot be read exits 2.
 
 use std::collections::BTreeMap;
 use std::fmt;
 
 use canon_expr::{Builtin, Catalog, CheckedExpr, Diagnostic, Function, Implementation, Parameter};
 
-use crate::model::{self, TRIGGER_FORMAT, TriggerFieldType, TriggerInput, TriggerRule};
+use crate::ir::{self, json::Value};
+use crate::model::{
+    self, Declarations, ProtocolId, TRIGGER_FORMAT, TRIGGER_PROTOCOLS_FORMAT, TriggerFieldType,
+    TriggerInput, TriggerProtocol, TriggerProtocols, TriggerRule,
+};
 
 /// The name `$row` has in a rule's `where`.
 pub const ROW: &str = "row";
@@ -469,6 +516,124 @@ pub fn compile_where(rule: &TriggerRule) -> Result<Option<CheckedExpr>, Diagnost
     let parsed = canon_expr::parse(source)?;
     let context = BTreeMap::from([(ROW.to_owned(), row_type(rule))]);
     canon_expr::check(parsed, &catalog(rule), &context).map(Some)
+}
+
+/// What a trigger rule is checked against in one compiled protocol: its access class, whether it
+/// is guarded, and its case inputs with their values, sorted, each once
+/// (story:protocol-access-class).
+pub fn protocol(compiled: &ir::Ir) -> TriggerProtocol {
+    TriggerProtocol {
+        class: compiled.access_class(),
+        guarded: compiled.guarded(),
+        inputs: Declarations::new(
+            compiled
+                .inputs
+                .iter()
+                .map(|(id, input)| (id.clone(), input.values.clone()))
+                .collect(),
+        ),
+    }
+}
+
+/// A set of protocols that holds two of one protocol id: `canon-trigger-protocols/1` is keyed by
+/// protocol id, so the set is refused (`duplicate-protocol-id`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DuplicateProtocolId {
+    /// The protocol id.
+    pub id: ProtocolId,
+    /// The names of every member that declares it, sorted.
+    pub sources: Vec<String>,
+}
+
+impl DuplicateProtocolId {
+    /// The stable code of the refusal.
+    pub const CODE: &'static str = "duplicate-protocol-id";
+}
+
+impl fmt::Display for DuplicateProtocolId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let sources: Vec<String> = self
+            .sources
+            .iter()
+            .map(|source| model::one_line(source))
+            .collect();
+        write!(
+            f,
+            "protocol `{}` is declared by {}",
+            model::one_line(self.id.as_str()),
+            sources.join(" and ")
+        )
+    }
+}
+
+/// The `canon-trigger-protocols/1` document of a set of compiled protocols, each named by its
+/// source: one entry per protocol, keyed by protocol id, in id order whatever order the set is
+/// given in. A set with two members of one id is refused, the least such id named.
+pub fn protocols<'a>(
+    set: impl IntoIterator<Item = (&'a str, &'a ir::Ir)>,
+) -> Result<TriggerProtocols, DuplicateProtocolId> {
+    let mut by_id: BTreeMap<&ProtocolId, Vec<(&str, &ir::Ir)>> = BTreeMap::new();
+    for (source, compiled) in set {
+        by_id
+            .entry(&compiled.protocol.id)
+            .or_default()
+            .push((source, compiled));
+    }
+    let mut entries = Vec::with_capacity(by_id.len());
+    for (id, members) in by_id {
+        if let [(_, compiled)] = members.as_slice() {
+            entries.push((id.clone(), protocol(compiled)));
+        } else {
+            let mut sources: Vec<String> = members
+                .iter()
+                .map(|(source, _)| (*source).to_owned())
+                .collect();
+            sources.sort();
+            return Err(DuplicateProtocolId {
+                id: id.clone(),
+                sources,
+            });
+        }
+    }
+    Ok(TriggerProtocols {
+        format: TRIGGER_PROTOCOLS_FORMAT.to_owned(),
+        protocols: Declarations::new(entries),
+    })
+}
+
+/// The canonical JSON of a `canon-trigger-protocols/1` document, as `canon-ir/1` is written: keys
+/// in code-point order, two-space indent, one trailing newline. An entry repeated in
+/// `protocols` or `inputs` is written once, as first given.
+pub fn render_protocols(document: &TriggerProtocols) -> String {
+    let entries = document.protocols.iter().map(|(id, entry)| {
+        let inputs = entry.inputs.iter().map(|(input, values)| {
+            let values = values
+                .iter()
+                .map(|value| Value::string(value.as_str()))
+                .collect();
+            (input.as_str().to_owned(), Value::Array(values))
+        });
+        let entry = Value::object([
+            ("class", Value::string(entry.class.as_str())),
+            ("guarded", Value::Bool(entry.guarded)),
+            ("inputs", first_of_each(inputs)),
+        ]);
+        (id.as_str().to_owned(), entry)
+    });
+    Value::object([
+        ("format", Value::string(document.format.as_str())),
+        ("protocols", first_of_each(entries)),
+    ])
+    .render()
+}
+
+/// An object of the entries, a key given twice keeping its first value.
+fn first_of_each(entries: impl Iterator<Item = (String, Value)>) -> Value {
+    let mut object = BTreeMap::new();
+    for (key, value) in entries {
+        object.entry(key).or_insert(value);
+    }
+    Value::Object(object)
 }
 
 #[cfg(test)]

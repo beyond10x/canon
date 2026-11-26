@@ -8,7 +8,7 @@ protocol:
 imports:
   investigation.evidence:
     revision: 1
-    digest: sha256:b25d25193ad45afd4bb182d0124f6ec8546a6c95dfb084049fb70dcef402d255
+    digest: sha256:1a8703c9dd47430bc2bca4ecfa3fa76eb2aacfe991a19119a4f071bc66429ba2
 
 case:
   inputs:

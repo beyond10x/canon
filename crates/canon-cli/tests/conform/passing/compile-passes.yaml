@@ -8,6 +8,7 @@ steps:
     expect:
       canon-ir: |
         {
+          "access_class": "write",
           "actions": {
             "attempt_falsification": {
               "description": "Try to refute the explanation.",
@@ -71,6 +72,7 @@ steps:
             }
           },
           "format": "canon-ir/1",
+          "guarded": false,
           "obligations": {},
           "outcomes": {
             "supported": {

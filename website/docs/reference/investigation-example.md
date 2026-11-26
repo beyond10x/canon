@@ -108,6 +108,7 @@ None declared.
 
 ```json
 {
+  "access_class": "write",
   "actions": {
     "attempt_falsification": {
       "description": "Try to refute the explanation.",
@@ -171,6 +172,7 @@ None declared.
     }
   },
   "format": "canon-ir/1",
+  "guarded": false,
   "obligations": {},
   "outcomes": {
     "supported": {

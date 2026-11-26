@@ -10,7 +10,7 @@ protocol:
 imports:
   investigation.review:
     revision: 2
-    digest: sha256:c6d83c4df1df604739d517d82d470b8d399f29a42d59cdd0789c9f71176ee060
+    digest: sha256:a9fb3b60e9273d62dba066655cdc016ee03bad1b6292d3a6eddd3d37b0d0ee2b
 
 claims:
   peer.approved:

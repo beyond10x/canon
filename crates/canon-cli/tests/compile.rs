@@ -37,6 +37,7 @@ fn text(bytes: &[u8]) -> &str {
 
 /// The `canon-ir/1` the base investigation fixture compiles to.
 const BASE_IR: &str = r#"{
+  "access_class": "write",
   "actions": {
     "attempt_falsification": {
       "description": "Try to refute the explanation.",
@@ -100,6 +101,7 @@ const BASE_IR: &str = r#"{
     }
   },
   "format": "canon-ir/1",
+  "guarded": false,
   "obligations": {},
   "outcomes": {
     "supported": {

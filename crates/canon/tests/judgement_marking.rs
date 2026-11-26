@@ -96,6 +96,7 @@ fn generated(ir: &Ir, source: &str) -> Vec<(String, String)> {
 /// `canon compile fixtures/investigation/protocol.yaml` at `557e75b`, before the three fields
 /// existed. The fixture has not changed since `2dc2d881`.
 const INVESTIGATION_IR: &str = r#"{
+  "access_class": "write",
   "actions": {
     "attempt_falsification": {
       "description": "Try to refute the explanation.",
@@ -159,6 +160,7 @@ const INVESTIGATION_IR: &str = r#"{
     }
   },
   "format": "canon-ir/1",
+  "guarded": false,
   "obligations": {},
   "outcomes": {
     "supported": {

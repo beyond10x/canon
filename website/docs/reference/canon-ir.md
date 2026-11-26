@@ -30,7 +30,7 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
 - **Explicit defaults.** Every field is present. An absent description or effect is `null`; an
   evidence match without a result has `"result": null`; a claim test without `is` has
   `"is": "true"`; an action without a precondition has the precondition `{"all": []}`, which is
-  true; absent lists and sections are empty. The twenty exceptions are an artifact's
+  true; absent lists and sections are empty. The twenty-one exceptions are an artifact's
   `revised_by`, an evidence kind's `max_age`, its `supplied_by` and its `required_at_open`
   (story:supplied-evidence-required-at-open; written only as `"required_at_open": true`, so
   `false` compiles to no key), the `when` of an outcome's
@@ -38,7 +38,8 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   `children` form, an evidence match's `independent_on`, an obligation's `applicable_when`, an
   action's `runs_only_when` (story:ordering-guards-provable-by-check; normalized like every
   predicate, and read by `canon check` alone), an action's `arguments`, an action's
-  `case_open`, an action's `author` and its `revises`, an action's `records_together`, the
+  `case_open`, an action's `author` and its `revises`, an action's `records_together`, its
+  `access` (story:protocol-access-class), the
   `decided_by` of an evidence kind an action may produce, the `scope` of a capability
   requirement, the `revision` of a `children` form, the `invalidation` section, the `case`
   section and the `independence_dimensions` section: each written only when it is declared (a
@@ -67,7 +68,15 @@ is valid, returns its `Ir`. The IR differs from the source in exactly these ways
   (story:children-form-counts-unopened-children); two forms that differ only in it are two
   members, no count first, then the smaller. An action's `case_open` is `{"protocol": …, "subject": …}`, as declared (story:case-composition).
   An action's `arguments` is its JSON Schema as declared, the same JSON value, its object keys
-  sorted like every object's (story:action-arguments).
+  sorted like every object's (story:action-arguments). An action's `access`
+  (story:protocol-access-class) is written only as `"access": "read_only"`, so `access: write`
+  compiles to no key.
+- **Derived class and guard.** Every IR carries, at its top level, the protocol's access class
+  `"access_class"` (`Ir::access_class`): `"read_only"` when every action is read-only, a
+  protocol without actions included, else `"write"`; and `"guarded"` (`Ir::guarded`): `true`
+  when some action requires a capability, else `false` (story:protocol-access-class). They are
+  derived from the actions, never declared, so the IR of a protocol written before `access`
+  existed is the IR it compiled to then with these two keys added. No evaluation reads them.
 - **No authoring sugar.** A claim test is always `{"claim": {"id": …, "is": …}}`, whichever way
   it was written, and an input test `{"input": {"id": …, "in": [...]}}`. An outcome that
   requires an explicit decision has the requirement `{"decision": <name>}`, as written, with

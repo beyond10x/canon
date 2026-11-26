@@ -73,7 +73,7 @@ fn scratch(name: &str) -> PathBuf {
 /// The digest `root.yaml` pins `investigation.falsification` to, which is the digest of
 /// `falsification.yaml` compiled with `evidence.yaml`.
 const FALSIFICATION_DIGEST: &str =
-    "sha256:1a2cc72944b479e53776adc362125e87607f587ce05b3d1cee4d95186ba0ab68";
+    "sha256:2bc09ab698b6146c79a3d89543b2879bf0c19b9f36d2e6909ef2e4b8cc86aaa6";
 
 #[test]
 fn imports_compose_into_closed_ir() {
@@ -374,8 +374,8 @@ fn a_refined_redeclaration_settles_two_imports_that_conflict() {
         std::fs::read_to_string(repository_root().join(fixture("invalid/root-conflict.yaml")))
             .expect("root reads");
     let refined = source
-        .replace("ee060\n", "ee060\n    refines: [peer_review]\n")
-        .replace("ca7e1cb\n", "ca7e1cb\n    refines: [peer_review]\n")
+        .replace("d0ee2b\n", "d0ee2b\n    refines: [peer_review]\n")
+        .replace("e4ac929\n", "e4ac929\n    refines: [peer_review]\n")
         + "\nevidence_kinds:\n  peer_review:\n    description: The review of the finding by a peer.\n";
     assert_eq!(refined.matches("refines: [peer_review]").count(), 2);
     let dir = scratch("refined-conflict");

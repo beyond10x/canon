@@ -16,6 +16,7 @@ steps:
     expect:
       canon-ir: |
         {
+          "access_class": "read_only",
           "actions": {},
           "artifacts": {
             "dataset": {
@@ -73,6 +74,7 @@ steps:
             }
           },
           "format": "canon-ir/1",
+          "guarded": false,
           "obligations": {},
           "outcomes": {},
           "protocol": {

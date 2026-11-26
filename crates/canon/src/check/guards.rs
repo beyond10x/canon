@@ -17,7 +17,7 @@ use super::{
     witness,
 };
 use crate::ir::{self, Ir};
-use crate::model::{ActionId, Author, one_line};
+use crate::model::{AccessClass, ActionId, Author, one_line};
 
 /// `ir` with each guard lowered to an action of its own, and each guarded action with the
 /// position of its own status and of its guard's among the actions of that protocol.
@@ -64,6 +64,7 @@ pub(super) fn lower(ir: &Ir) -> Option<Lowered> {
                 revises: Vec::new(),
                 arguments: None,
                 case_open: None,
+                access: AccessClass::Write,
             },
         );
         names.push(((*id).clone(), name));

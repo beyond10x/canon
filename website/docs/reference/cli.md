@@ -28,6 +28,7 @@ Generated from the clap definition of the `canon` command line in [`crates/canon
 | [`canon conform run`](#canon-conform-run) | Run every `canon-conformance/1` scenario of a registry directory and report each |
 | [`canon trigger`](#canon-trigger) | Trigger rules: `canon-trigger/1` documents, each saying when rows of a kind in a state start a protocol |
 | [`canon trigger validate`](#canon-trigger-validate) | Validate one `canon-trigger/1` document field by field and print `valid: trigger rule `&lt;id&gt;@&lt;version&gt;``, its rule key. The rule's `where` is compiled with `canon-expr/1` against a catalog of only `contains` over strings and `present_<type>` for the type of each optional declared field, with `$row` the record of the declared fields. A refused document prints one line `error[<code>]: <field>: <why>` per error on standard error, naming the field, and exits 1: `parse` (no field: not well-formed YAML, or not a mapping), `missing-field`, `unknown-field`, `invalid-value`, `undeclared-field` (a state field or an input field `subject.fields` does not declare, or a state field that is not a required string), `invalid-input` (an input that is not `{field}` or `{const}`, such as an expression) and `invalid-where`. A document without the format's shape is reported with its first error, one with the shape with every error. A file that cannot be read exits 2 |
+| [`canon trigger protocols`](#canon-trigger-protocols) | Print the `canon-trigger-protocols/1` document of a set of `protocol/1` documents, the map a trigger evaluation reads: for each protocol, keyed by protocol id, its access class (`read_only` when every action declares `access: read_only`, else `write`), whether it is guarded (some action requires a capability) and its case inputs with their values. Each document is compiled on its own: one that does not parse or compile (a `read_only` action that revises an artifact or opens a case is `read-only-action-writes`), or that has imports, is refused, exit 1, naming its path; two files that declare one protocol id are refused as `duplicate-protocol-id`. The files are read in sorted order of their paths, the first refused deciding the exit status; a file that cannot be read exits 2 |
 
 ## `canon validate`
 
@@ -367,7 +368,7 @@ Options:
 
 Trigger rules: `canon-trigger/1` documents, each saying when rows of a kind in a state start a protocol
 
-Subcommands: [`validate`](#canon-trigger-validate).
+Subcommands: [`validate`](#canon-trigger-validate), [`protocols`](#canon-trigger-protocols).
 
 ```text
 Trigger rules: `canon-trigger/1` documents, each saying when rows of a kind in a state start a protocol
@@ -375,8 +376,9 @@ Trigger rules: `canon-trigger/1` documents, each saying when rows of a kind in a
 Usage: canon trigger <COMMAND>
 
 Commands:
-  validate  Validate one `canon-trigger/1` document field by field and print `valid: trigger rule `<id>@<version>``, its rule key. The rule's `where` is compiled with `canon-expr/1` against a catalog of only `contains` over strings and `present_<type>` for the type of each optional declared field, with `$row` the record of the declared fields. A refused document prints one line `error[<code>]: <field>: <why>` per error on standard error, naming the field, and exits 1: `parse` (no field: not well-formed YAML, or not a mapping), `missing-field`, `unknown-field`, `invalid-value`, `undeclared-field` (a state field or an input field `subject.fields` does not declare, or a state field that is not a required string), `invalid-input` (an input that is not `{field}` or `{const}`, such as an expression) and `invalid-where`. A document without the format's shape is reported with its first error, one with the shape with every error. A file that cannot be read exits 2
-  help      Print this message or the help of the given subcommand(s)
+  validate   Validate one `canon-trigger/1` document field by field and print `valid: trigger rule `<id>@<version>``, its rule key. The rule's `where` is compiled with `canon-expr/1` against a catalog of only `contains` over strings and `present_<type>` for the type of each optional declared field, with `$row` the record of the declared fields. A refused document prints one line `error[<code>]: <field>: <why>` per error on standard error, naming the field, and exits 1: `parse` (no field: not well-formed YAML, or not a mapping), `missing-field`, `unknown-field`, `invalid-value`, `undeclared-field` (a state field or an input field `subject.fields` does not declare, or a state field that is not a required string), `invalid-input` (an input that is not `{field}` or `{const}`, such as an expression) and `invalid-where`. A document without the format's shape is reported with its first error, one with the shape with every error. A file that cannot be read exits 2
+  protocols  Print the `canon-trigger-protocols/1` document of a set of `protocol/1` documents, the map a trigger evaluation reads: for each protocol, keyed by protocol id, its access class (`read_only` when every action declares `access: read_only`, else `write`), whether it is guarded (some action requires a capability) and its case inputs with their values. Each document is compiled on its own: one that does not parse or compile (a `read_only` action that revises an artifact or opens a case is `read-only-action-writes`), or that has imports, is refused, exit 1, naming its path; two files that declare one protocol id are refused as `duplicate-protocol-id`. The files are read in sorted order of their paths, the first refused deciding the exit status; a file that cannot be read exits 2
+  help       Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help
@@ -399,6 +401,27 @@ Usage: canon trigger validate --path <PATH>
 Options:
       --path <PATH>
           The `canon-trigger/1` document, one file
+
+  -h, --help
+          Print help
+```
+
+## `canon trigger protocols`
+
+Print the `canon-trigger-protocols/1` document of a set of `protocol/1` documents, the map a trigger evaluation reads: for each protocol, keyed by protocol id, its access class (`read_only` when every action declares `access: read_only`, else `write`), whether it is guarded (some action requires a capability) and its case inputs with their values. Each document is compiled on its own: one that does not parse or compile (a `read_only` action that revises an artifact or opens a case is `read-only-action-writes`), or that has imports, is refused, exit 1, naming its path; two files that declare one protocol id are refused as `duplicate-protocol-id`. The files are read in sorted order of their paths, the first refused deciding the exit status; a file that cannot be read exits 2
+
+| Option | Required | Default | Meaning |
+|---|---|---|---|
+| `--path <PATH>` | yes | none | A `protocol/1` document of the set. Repeat it once per document, in any order: the order changes no byte of the output, and a path given twice, under two spellings or through a symbolic link, is read once |
+
+```text
+Print the `canon-trigger-protocols/1` document of a set of `protocol/1` documents, the map a trigger evaluation reads: for each protocol, keyed by protocol id, its access class (`read_only` when every action declares `access: read_only`, else `write`), whether it is guarded (some action requires a capability) and its case inputs with their values. Each document is compiled on its own: one that does not parse or compile (a `read_only` action that revises an artifact or opens a case is `read-only-action-writes`), or that has imports, is refused, exit 1, naming its path; two files that declare one protocol id are refused as `duplicate-protocol-id`. The files are read in sorted order of their paths, the first refused deciding the exit status; a file that cannot be read exits 2
+
+Usage: canon trigger protocols --path <PATH>
+
+Options:
+      --path <PATH>
+          A `protocol/1` document of the set. Repeat it once per document, in any order: the order changes no byte of the output, and a path given twice, under two spellings or through a symbolic link, is read once
 
   -h, --help
           Print help

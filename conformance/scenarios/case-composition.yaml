@@ -20,6 +20,7 @@ steps:
     expect:
       canon-ir: |
         {
+          "access_class": "write",
           "actions": {
             "close": {
               "description": "Close the audit once every child case ended accepted or declined.",
@@ -77,6 +78,7 @@ steps:
             }
           },
           "format": "canon-ir/1",
+          "guarded": true,
           "obligations": {},
           "outcomes": {
             "resolved": {

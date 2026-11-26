@@ -85,7 +85,10 @@
 //!    `case_outcome` on an action that opens a child case (a child's outcome arrives when the
 //!    child ends, never with a record of the run that opened it), or else a kind its
 //!    `may_produce` does not list, and then a kind an earlier group of the action names, every
-//!    one naming the action and the group, counted from 1), then those in
+//!    one naming the action and the group, counted from 1), then, when the action declares
+//!    `access: read_only` (story:protocol-access-class) and `revises` an artifact or has a
+//!    `case_open`, `read-only-action-writes`, once, naming the action, every artifact it revises
+//!    and the protocol it opens a case under), then those in
 //!    outcomes (each outcome's requirement, when it is a predicate; when it is a decision, its
 //!    condition `when`, followed by every evidence match, order form and `children` form it holds,
 //!    `evidence-in-decision-condition`, naming the outcome: it tests only claim values and case
@@ -111,7 +114,7 @@ use std::fmt;
 
 use crate::ir::DIGEST_PREFIX;
 use crate::model::{
-    ActionId, ArtifactId, CASE_OUTCOME, CapabilityId, ClaimId, EvidenceKindId, FORMAT,
+    AccessClass, ActionId, ArtifactId, CASE_OUTCOME, CapabilityId, ClaimId, EvidenceKindId, FORMAT,
     IndependenceDimensionId, InputId, InputValue, InvalidationRuleId, OPEN_OUTCOME, ObligationId,
     OutcomeId, Predicate, Protocol, ProtocolId, ScopeKey, is_identifier, one_line,
 };
@@ -341,6 +344,14 @@ pub enum Problem {
         action: ActionId,
         protocol: ProtocolId,
     },
+    /// An action declares `access: read_only` (story:protocol-access-class) but `revises` an
+    /// artifact or opens a case: `revises` lists the artifacts it moves, in the order written, and
+    /// `opens` the protocol of its `case_open`.
+    ReadOnlyActionWrites {
+        action: ActionId,
+        revises: Vec<ArtifactId>,
+        opens: Option<ProtocolId>,
+    },
     /// A group of an action's `records_together` (story:simulate-record-groups) is not one run's
     /// records: `group` counts the action's groups from 1, in the order written.
     InvalidRecordGroup {
@@ -471,6 +482,7 @@ impl Problem {
             Problem::VacuousGuard { .. } => "vacuous-runs-only-when",
             Problem::SelfOpenedCase { .. } => "self-opened-case",
             Problem::InvalidRecordGroup { .. } => "invalid-record-group",
+            Problem::ReadOnlyActionWrites { .. } => "read-only-action-writes",
             Problem::SelfSuppliedEvidence { .. } => "self-supplied-evidence",
             Problem::AtOpenWithoutSupplier { .. } => "at-open-without-supplier",
             Problem::SelfRevisedArtifact { .. } => "self-revised-artifact",
@@ -677,6 +689,40 @@ impl fmt::Display for Problem {
                 one_line(action.as_str()),
                 one_line(protocol.as_str())
             ),
+            Problem::ReadOnlyActionWrites {
+                action,
+                revises,
+                opens,
+            } => {
+                write!(
+                    f,
+                    "action `{}` declares access read_only but ",
+                    one_line(action.as_str())
+                )?;
+                if !revises.is_empty() {
+                    let artifacts: Vec<String> = revises
+                        .iter()
+                        .map(|artifact| format!("`{}`", one_line(artifact.as_str())))
+                        .collect();
+                    let noun = if artifacts.len() == 1 {
+                        "artifact"
+                    } else {
+                        "artifacts"
+                    };
+                    write!(f, "revises {noun} {}", artifacts.join(", "))?;
+                    if opens.is_some() {
+                        f.write_str(" and ")?;
+                    }
+                }
+                if let Some(protocol) = opens {
+                    write!(
+                        f,
+                        "opens a case under protocol `{}`",
+                        one_line(protocol.as_str())
+                    )?;
+                }
+                Ok(())
+            }
             Problem::InvalidRecordGroup {
                 action,
                 group,
@@ -1164,6 +1210,18 @@ pub fn validate(protocol: &Protocol) -> Result<(), Vec<Problem>> {
             }
         }
         record_groups(id, action, &mut problems);
+        if action.access == Some(AccessClass::ReadOnly)
+            && (!action.revises.is_empty() || action.case_open.is_some())
+        {
+            problems.push(Problem::ReadOnlyActionWrites {
+                action: id.clone(),
+                revises: action.revises.clone(),
+                opens: action
+                    .case_open
+                    .as_ref()
+                    .map(|opening| opening.protocol.clone()),
+            });
+        }
     }
     for (id, outcome) in protocol.outcomes.iter() {
         if let Some(requires) = outcome.requires.predicate() {

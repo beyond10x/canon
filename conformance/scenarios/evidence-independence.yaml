@@ -19,6 +19,7 @@ steps:
     expect:
       canon-ir: |
         {
+          "access_class": "write",
           "actions": {
             "merge": {
               "description": "Merge the change once a reviewer independent of its author approved it.",
@@ -70,6 +71,7 @@ steps:
             }
           },
           "format": "canon-ir/1",
+          "guarded": false,
           "independence_dimensions": {
             "different_principal": {
               "description": "The producer is another principal than the one who made the change."

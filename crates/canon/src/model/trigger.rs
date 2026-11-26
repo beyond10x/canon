@@ -28,17 +28,22 @@
 //! ```
 //!
 //! What the rule's fields must hold beyond their shape, and how `where` is compiled, is
-//! `crate::trigger`'s; this file is the document's shape.
+//! `crate::trigger`'s; this file is the document's shape, and the shape of the
+//! `canon-trigger-protocols/1` document `canon trigger protocols` prints
+//! (story:protocol-access-class).
 
 use std::fmt;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-use super::Declarations;
-use super::ids::{InputId, ProtocolId};
+use super::ids::{InputId, InputValue, ProtocolId};
+use super::{AccessClass, Declarations};
 
 /// The trigger rule format `canon trigger validate` reads.
 pub const TRIGGER_FORMAT: &str = "canon-trigger/1";
+
+/// The format `canon trigger protocols` prints (story:protocol-access-class).
+pub const TRIGGER_PROTOCOLS_FORMAT: &str = "canon-trigger-protocols/1";
 
 identifier!(
     /// Identifies a trigger rule; with its version, the rule key `<id>@<version>`.
@@ -217,6 +222,37 @@ pub enum TriggerRefire {
     OncePerStateEntry,
     /// Once for the row, ever.
     OncePerSubject,
+}
+
+/// The `canon-trigger-protocols/1` document `canon trigger protocols` prints
+/// (story:protocol-access-class): what a trigger rule is checked against, for each protocol of a
+/// set, keyed by protocol id. Canon prints it from compiled protocols (`crate::trigger::protocols`);
+/// an evaluator may build it otherwise.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerProtocols {
+    /// The document format, [`TRIGGER_PROTOCOLS_FORMAT`].
+    #[serde(deserialize_with = "super::present::required")]
+    pub format: String,
+    /// One entry per protocol, keyed by protocol id.
+    #[serde(deserialize_with = "super::present::required")]
+    pub protocols: Declarations<ProtocolId, TriggerProtocol>,
+}
+
+/// One protocol as a trigger rule sees it.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerProtocol {
+    /// `read_only` when every action of the protocol is, else `write`.
+    #[serde(deserialize_with = "super::present::required")]
+    pub class: AccessClass,
+    /// Whether some action of the protocol requires a capability.
+    #[serde(deserialize_with = "super::present::required")]
+    pub guarded: bool,
+    /// The case inputs the protocol declares, keyed by input id, each with its values, sorted,
+    /// each once.
+    #[serde(deserialize_with = "super::present::required")]
+    pub inputs: Declarations<InputId, Vec<InputValue>>,
 }
 
 /// An input as written: each form a key, exactly one of them present.

@@ -26,14 +26,10 @@ use crate::{REJECTED, read_text, unreadable};
 /// order. A path that does not resolve is a member of its own, and reading it fails, naming it as
 /// it was typed.
 pub(crate) fn run(paths: &[PathBuf]) -> ExitCode {
-    let mut sorted: Vec<&PathBuf> = paths.iter().collect();
-    sorted.sort();
-    let mut resolved: BTreeSet<PathBuf> = BTreeSet::new();
-    sorted
-        .retain(|path| resolved.insert(fs::canonicalize(path).unwrap_or_else(|_| (*path).clone())));
+    let sorted = members(paths);
     let mut set = Vec::with_capacity(sorted.len());
     for path in sorted {
-        match compiled(path) {
+        match compiled(path, "canon check-set") {
             Ok(compiled) => set.push((path.display().to_string(), compiled)),
             Err(code) => return code,
         }
@@ -47,9 +43,22 @@ pub(crate) fn run(paths: &[PathBuf]) -> ExitCode {
     }
 }
 
-/// Reads, parses and compiles one member of the set, refusing one with imports: a member is
-/// checked as written, and a protocol with imports compiles only with its imported documents.
-fn compiled(path: &Path) -> Result<ir::Ir, ExitCode> {
+/// The members of a set given as paths: in sorted order, a path that resolves to a file an
+/// earlier path resolves to left out (`fs::canonicalize`), and a path that does not resolve a
+/// member of its own.
+pub(crate) fn members(paths: &[PathBuf]) -> Vec<&PathBuf> {
+    let mut sorted: Vec<&PathBuf> = paths.iter().collect();
+    sorted.sort();
+    let mut resolved: BTreeSet<PathBuf> = BTreeSet::new();
+    sorted
+        .retain(|path| resolved.insert(fs::canonicalize(path).unwrap_or_else(|_| (*path).clone())));
+    sorted
+}
+
+/// Reads, parses and compiles one member of the set of `command` (`canon check-set`, `canon
+/// trigger protocols`), refusing one with imports: a member is read as written, and a protocol
+/// with imports compiles only with its imported documents.
+pub(crate) fn compiled(path: &Path, command: &str) -> Result<ir::Ir, ExitCode> {
     let shown = model::one_line(&path.display().to_string());
     let source = read_text(path).map_err(|error| unreadable(path, error))?;
     let protocol = model::parse(&source).map_err(|error| {
@@ -58,9 +67,9 @@ fn compiled(path: &Path) -> Result<ir::Ir, ExitCode> {
     })?;
     if let Some(first) = protocol.imports.ids().next() {
         eprintln!(
-            "error[protocol-imports]: {shown}: the protocol imports `{}`: canon check-set reads \
-             each protocol as written, and a protocol with imports compiles only with the \
-             documents it imports",
+            "error[protocol-imports]: {shown}: the protocol imports `{}`: {command} reads each \
+             protocol as written, and a protocol with imports compiles only with the documents \
+             it imports",
             model::one_line(first.as_str())
         );
         return Err(ExitCode::from(REJECTED));

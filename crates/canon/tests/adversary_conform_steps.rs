@@ -152,5 +152,13 @@ fn the_documented_example_scenario_parses() {
     assert_eq!(scenario.id, "CANON-CLAIM-001");
     assert_eq!(scenario.covers, ["CANON-CLAIM-001", "CANON-CLAIM-002"]);
     let steps: Vec<&str> = scenario.steps.iter().map(|step| step.id.as_str()).collect();
-    assert_eq!(steps, ["compile", "no-evidence", "owner-missing"]);
+    assert_eq!(
+        steps,
+        [
+            "compile",
+            "no-evidence",
+            "owner-missing",
+            "every-action-read-only"
+        ]
+    );
 }

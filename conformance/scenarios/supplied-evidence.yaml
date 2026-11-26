@@ -28,6 +28,7 @@ steps:
     expect:
       canon-ir: |
         {
+          "access_class": "write",
           "actions": {
             "inspect": {
               "description": "Look for observations bearing on the explanation.",
@@ -81,6 +82,7 @@ steps:
             }
           },
           "format": "canon-ir/1",
+          "guarded": false,
           "invalidation": {
             "dataset.revised": {
               "description": "A review of the finding made against an earlier dataset revision no longer approves it.",

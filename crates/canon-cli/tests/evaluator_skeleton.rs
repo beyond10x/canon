@@ -122,6 +122,7 @@ const CLAIMS_DIFFER: &str = r#"{
 /// The `canon-ir/1` `fixtures/investigation/evaluator-skeleton.yaml` compiles to: the base
 /// fixture's, with `establish.explanation` and its discharge predicate under `obligations`.
 const SKELETON_IR: &str = r#"{
+  "access_class": "write",
   "actions": {
     "attempt_falsification": {
       "description": "Try to refute the explanation.",
@@ -185,6 +186,7 @@ const SKELETON_IR: &str = r#"{
     }
   },
   "format": "canon-ir/1",
+  "guarded": false,
   "obligations": {
     "establish.explanation": {
       "description": "Establish whether the explanation is supported.",

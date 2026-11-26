@@ -22,6 +22,7 @@ steps:
     expect:
       canon-ir: |
         {
+          "access_class": "read_only",
           "actions": {},
           "artifacts": {
             "change": {
@@ -69,6 +70,7 @@ steps:
             }
           },
           "format": "canon-ir/1",
+          "guarded": false,
           "obligations": {},
           "outcomes": {
             "red.after": {
