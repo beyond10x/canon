@@ -463,6 +463,13 @@
       "area": "Distribution"
     },
     {
+      "label": "Default Linux archive chosen by measurement",
+      "status": "planned",
+      "detail": "gnu, musl and musl with mimalloc measured side by side (scripts/measure-release.sh, 10 runs per build of conform run and of canon check on the largest accepted fixture); by the rule in docs/design/linux-release.md the musl archive links mimalloc and is the default named first on the installation page.",
+      "href": "/docs/getting-started#linux-binaries",
+      "area": "Distribution"
+    },
+    {
       "label": "Trigger holds and refusals",
       "status": "shipped",
       "detail": "canon trigger evaluate refuses what the rule set does not allow, the first reason that applies: a disabled rule, a protocol not in the protocols (unknown-protocol), a guarded protocol in auto (guarded-auto), an access other than the protocol's class (access-mismatch), a write rule in auto without an approval of its exact rule key in the history (write-unapproved). It holds a match whose firing id the history records (already-fired), and one whose rule has reached its cap of firings on the UTC day of --now, counted from the history and then from the plan's earlier would-start entries (cap-reached). Requirements CANON-TRIGGER-012 to 015.",

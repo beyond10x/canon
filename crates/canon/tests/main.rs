@@ -110,6 +110,7 @@ mod package_checks;
 mod pending_decisions;
 mod planning_only_classifier;
 mod protocol_write;
+mod release_decision;
 mod review_depth_beyond_bound;
 mod review_outcome_reasons_docs;
 mod review_properties;

@@ -13,9 +13,13 @@ path = "src/main.rs"
 name = "main"
 path = "tests/main.rs"
 
+[features]
+mimalloc = ["dep:mimalloc"]
+
 [dependencies]
 b10x-canon = { path = "../canon" }
 clap = { version = "4", features = ["derive"] }
+mimalloc = { version = "0.1.52", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

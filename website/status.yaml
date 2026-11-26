@@ -327,6 +327,11 @@ items:
     story: story:linux-release-archives
     detail: "canon-<version>-x86_64-unknown-linux-gnu.tar.gz, linked against glibc 2.17 at most, and canon-<version>-x86_64-unknown-linux-musl.tar.gz, static, with SHA256SUMS: built by package.yml and task package with cargo-zigbuild, the glibc floor checked with objdump -T and the static link with readelf -l, each archived binary run over the conformance suite. Attached to the GitHub Release from the next release."
     href: /docs/getting-started#linux-binaries
+  - label: Default Linux archive chosen by measurement
+    area: Distribution
+    story: story:musl-workload-measurement
+    detail: "gnu, musl and musl with mimalloc measured side by side (scripts/measure-release.sh, 10 runs per build of conform run and of canon check on the largest accepted fixture); by the rule in docs/design/linux-release.md the musl archive links mimalloc and is the default named first on the installation page."
+    href: /docs/getting-started#linux-binaries
   - label: Trigger holds and refusals
     area: Evaluation
     story: story:trigger-holds-and-refusals
