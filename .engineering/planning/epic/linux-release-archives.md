@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: epic:linux-release-archives
 kind: epic
-status: active
+status: implemented
 title: 'Linux release archives: static musl beside gnu with a glibc 2.17 floor'
 summary: Each release carries x86_64 gnu (glibc <= 2.17) and static musl archives of canon; the default is chosen on a measured workload.
 relations:
 - serves: vision:governed-autonomy
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-26T15:34:04Z", actor: "human:operator", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-26T15:34:04Z", actor: "human:operator", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-26T17:52:01Z", actor: "human:operator", revision: 4}
 ---
 ## Outcome
 

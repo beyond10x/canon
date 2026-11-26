@@ -2,16 +2,17 @@
 format: aep.planning-md/3
 id: epic:trigger-rules
 kind: epic
-status: active
+status: implemented
 title: 'Trigger rules: declare when the world starts a protocol, and simulate it'
 summary: canon-trigger/1 rule documents and a pure evaluate(rule_set, snapshot, protocols, history, now) -> plan; the evaluator lives in beyond10x/runbook.
 relations:
 - serves: vision:O2
 - serves: vision:governed-autonomy
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-26T11:25:20Z", actor: "human:operator", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-26T11:25:20Z", actor: "human:operator", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-26T17:52:01Z", actor: "human:operator", revision: 4}
 ---
 ## Outcome
 
