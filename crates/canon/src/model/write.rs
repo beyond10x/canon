@@ -76,9 +76,9 @@
 //! # Numbers in `arguments`
 //!
 //! `serde_json::Number` holds a double or a 64-bit integer, or, with the crate feature
-//! `arbitrary_precision`, the text of the number. The workspace build has the feature on, because
-//! `b10x-canon-expr` turns it on and cargo unifies features; `cargo build -p b10x-canon` alone has
-//! it off. `write` gives the spelling of the build it runs in, and `parse` always reads a YAML
+//! `arbitrary_precision`, the text of the number. Every build of this crate has the feature on,
+//! because `b10x-canon-expr`, which it depends on since story:trigger-rule-document, turns it on and
+//! cargo unifies features; a build without it is one of this code outside this crate. `write` gives the spelling of the build it runs in, and `parse` always reads a YAML
 //! number as `u64`, `i64` or `f64`, so:
 //!
 //! - In both builds, every number `parse` gives (an integer in `i64` or `u64`, or a finite double)

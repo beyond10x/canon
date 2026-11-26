@@ -3,8 +3,8 @@
 # name with every `-` written `_`, a flag clap does not require an Optional input, a flag clap takes
 # more than once a List input (AGENTS.md § ESS). Every flag takes a path or a text value, so
 # every input is a String; the document a path names is declared in the domains canon.protocol,
-# canon.check and canon.conform, and what a command does with it is Canon's own conformance suite
-# and tests, not this file. crates/canon-cli/tests/ess_commands_match.rs keeps this file and the clap
+# canon.check, canon.conform and canon.trigger, and what a command does with it is Canon's own
+# conformance suite and tests, not this file. crates/canon-cli/tests/ess_commands_match.rs keeps this file and the clap
 # definition equal. `canon-docs` is documentation tooling and is not declared here.
 #
 # Every command answers in one of three ways, the exit statuses of crates/canon-cli/src/lib.rs:20-43:
@@ -14,8 +14,9 @@ domain: canon.cli
 
 summary: >-
   The canon command line: validate, compile, evaluate, digest, check, check-set, simulate,
-  generate, diff, floor, mutate and conform run, each reading files named by its flags and printing its result, or
-  refusing with exit status 1 when a document is rejected and 2 when an input cannot be read.
+  generate, diff, floor, mutate, conform run and trigger validate, each reading files named by its
+  flags and printing its result, or refusing with exit status 1 when a document is rejected and 2
+  when an input cannot be read.
 
 naming:
   wire: cli
@@ -699,4 +700,43 @@ commands:
         error: canon.cli.Rejected
       # read from: crates/canon-cli/src/conform.rs:64-66
       - name: passed
+        returns: true
+
+  # The clap path `trigger validate` (story:trigger-rule-document): read one canon-trigger/1
+  # document, compile its `where` with canon-expr/1 against the catalog built from its declared
+  # fields, and print its rule key, or refuse naming the field of each error.
+  # read from: .engineering/planning/story/trigger-rule-document.md, section "Outcome"
+  # read from: docs/design/trigger-rules.md:78-101
+  - name: canon.cli.TriggerValidate
+    naming:
+      wire: trigger-validate
+      display: Trigger validate
+      summary: >-
+        Validate one canon-trigger/1 document field by field, its where compiled with canon-expr/1,
+        and print its rule key.
+    input:
+      # The canon-trigger/1 document, one file.
+      # read from: docs/design/trigger-rules.md:80-82
+      - name: path
+        type: String
+    response:
+      # `valid: trigger rule `<id>@<version>``.
+      # read from: docs/design/trigger-rules.md:65
+      - name: output
+        type: String
+    outcomes:
+      # read from: docs/design/trigger-rules.md:80-82
+      - name: unreadable
+        external: the file cannot be read
+        error: canon.cli.Unreadable
+      # One `error[<code>]: <field>: <why>` line per error, naming the field.
+      # read from: docs/design/trigger-rules.md:83-101
+      - name: rejected
+        external: >-
+          the document is not well-formed YAML, misses, adds or misspells a field, holds a value
+          the format does not allow, names an undeclared row field, maps an input to anything but
+          a declared field or a constant, or has a where that does not compile against its catalog
+        error: canon.cli.Rejected
+      # read from: docs/design/trigger-rules.md:80-82
+      - name: valid
         returns: true

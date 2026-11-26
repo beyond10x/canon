@@ -133,7 +133,7 @@ fn record_count(scenario: &str) -> usize {
     assert_eq!(parsed.steps.len(), 1, "a witness scenario has one step");
     match &parsed.steps[0].kind {
         conform::StepKind::Evaluate { inputs, .. } => inputs.evidence.len(),
-        conform::StepKind::Compile { .. } => panic!("a witness scenario's step evaluates"),
+        _ => panic!("a witness scenario's step evaluates"),
     }
 }
 

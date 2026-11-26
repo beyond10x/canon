@@ -1,0 +1,362 @@
+format: canon-conformance/1
+id: CANON-TRIGGER-RULE-DOCUMENT
+covers: [CANON-TRIGGER-001, CANON-TRIGGER-002, CANON-TRIGGER-003]
+fixture: fixtures/trigger/send-reminder.yaml
+# The canon-trigger/1 rule document (story:trigger-rule-document, docs/design/trigger-rules.md
+# §§ 3-4). Each step validates one document, as `canon trigger validate` does: a valid one gives
+# its rule key `<id>@<version>`; a refused one names the field of every error, and the step expects
+# exactly that one field. The fixture is the protocol the rules start; validation does not read it.
+# The first step is a document with every field; each later step changes it in one place.
+steps:
+  - id: every-field
+    trigger-validate:
+      document: |
+        format: canon-trigger/1
+        id: stale-invoice-reminder
+        version: 3
+        owner: billing-operations
+        subject:
+          kind: invoice
+          state: {field: status, is: overdue}
+          fields:
+            id: {type: string}
+            status: {type: string}
+            amount: {type: decimal}
+            segment: {type: string}
+            reviewed: {type: bool, optional: true}
+            note: {type: string, optional: true}
+        where: '$row.amount > 100 and not contains(["test", "internal"], $row.segment) and not present_string($row.note)'
+        start:
+          protocol: send-reminder
+          input:
+            invoice: {field: id}
+            channel: {const: email}
+        mode: auto
+        access: write
+        refire: once_per_state_entry
+        cap: 50
+    expect:
+      rule: stale-invoice-reminder@3
+
+  - id: owner-missing
+    trigger-validate:
+      document: |
+        format: canon-trigger/1
+        id: stale-invoice-reminder
+        version: 3
+        subject:
+          kind: invoice
+          state: {field: status, is: overdue}
+          fields:
+            status: {type: string}
+        start:
+          protocol: send-reminder
+        mode: auto
+        access: write
+        refire: once_per_state_entry
+        cap: 50
+    expect:
+      refused: owner
+
+  - id: subject-missing
+    trigger-validate:
+      document: |
+        format: canon-trigger/1
+        id: stale-invoice-reminder
+        version: 3
+        owner: billing-operations
+        start:
+          protocol: send-reminder
+        mode: auto
+        access: write
+        refire: once_per_state_entry
+        cap: 50
+    expect:
+      refused: subject
+
+  - id: start-protocol-missing
+    trigger-validate:
+      document: |
+        format: canon-trigger/1
+        id: stale-invoice-reminder
+        version: 3
+        owner: billing-operations
+        subject:
+          kind: invoice
+          state: {field: status, is: overdue}
+          fields:
+            status: {type: string}
+        start:
+          input:
+            channel: {const: email}
+        mode: auto
+        access: write
+        refire: once_per_state_entry
+        cap: 50
+    expect:
+      refused: start.protocol
+
+  - id: mode-missing
+    trigger-validate:
+      document: |
+        format: canon-trigger/1
+        id: stale-invoice-reminder
+        version: 3
+        owner: billing-operations
+        subject:
+          kind: invoice
+          state: {field: status, is: overdue}
+          fields:
+            status: {type: string}
+        start:
+          protocol: send-reminder
+        access: write
+        refire: once_per_state_entry
+        cap: 50
+    expect:
+      refused: mode
+
+  - id: mode-sometimes
+    trigger-validate:
+      document: |
+        format: canon-trigger/1
+        id: stale-invoice-reminder
+        version: 3
+        owner: billing-operations
+        subject:
+          kind: invoice
+          state: {field: status, is: overdue}
+          fields:
+            status: {type: string}
+        start:
+          protocol: send-reminder
+        mode: sometimes
+        access: write
+        refire: once_per_state_entry
+        cap: 50
+    expect:
+      refused: mode
+
+  - id: access-admin
+    trigger-validate:
+      document: |
+        format: canon-trigger/1
+        id: stale-invoice-reminder
+        version: 3
+        owner: billing-operations
+        subject:
+          kind: invoice
+          state: {field: status, is: overdue}
+          fields:
+            status: {type: string}
+        start:
+          protocol: send-reminder
+        mode: offer
+        access: admin
+        refire: once_per_state_entry
+        cap: 50
+    expect:
+      refused: access
+
+  - id: unknown-field
+    trigger-validate:
+      document: |
+        format: canon-trigger/1
+        id: stale-invoice-reminder
+        version: 3
+        owner: billing-operations
+        subject:
+          kind: invoice
+          colour: red
+          state: {field: status, is: overdue}
+          fields:
+            status: {type: string}
+        start:
+          protocol: send-reminder
+        mode: offer
+        access: write
+        refire: once_per_state_entry
+        cap: 50
+    expect:
+      refused: subject.colour
+
+  - id: where-calls-outside-the-catalog
+    trigger-validate:
+      document: |
+        format: canon-trigger/1
+        id: stale-invoice-reminder
+        version: 3
+        owner: billing-operations
+        subject:
+          kind: invoice
+          state: {field: status, is: overdue}
+          fields:
+            status: {type: string}
+            segment: {type: string}
+        where: 'lookup($row.segment)'
+        start:
+          protocol: send-reminder
+        mode: offer
+        access: write
+        refire: once_per_state_entry
+        cap: 50
+    expect:
+      refused: where
+
+  - id: where-reads-an-undeclared-field
+    trigger-validate:
+      document: |
+        format: canon-trigger/1
+        id: stale-invoice-reminder
+        version: 3
+        owner: billing-operations
+        subject:
+          kind: invoice
+          state: {field: status, is: overdue}
+          fields:
+            status: {type: string}
+        where: '$row.amount > 100'
+        start:
+          protocol: send-reminder
+        mode: offer
+        access: write
+        refire: once_per_state_entry
+        cap: 50
+    expect:
+      refused: where
+
+  - id: where-presence-of-an-undeclared-type
+    trigger-validate:
+      document: |
+        format: canon-trigger/1
+        id: stale-invoice-reminder
+        version: 3
+        owner: billing-operations
+        subject:
+          kind: invoice
+          state: {field: status, is: overdue}
+          fields:
+            status: {type: string}
+            note: {type: string, optional: true}
+        where: 'present_integer($row.note)'
+        start:
+          protocol: send-reminder
+        mode: offer
+        access: write
+        refire: once_per_state_entry
+        cap: 50
+    expect:
+      refused: where
+
+  - id: state-field-undeclared
+    trigger-validate:
+      document: |
+        format: canon-trigger/1
+        id: stale-invoice-reminder
+        version: 3
+        owner: billing-operations
+        subject:
+          kind: invoice
+          state: {field: status, is: overdue}
+          fields:
+            amount: {type: decimal}
+        start:
+          protocol: send-reminder
+        mode: offer
+        access: write
+        refire: once_per_state_entry
+        cap: 50
+    expect:
+      refused: subject.state.field
+
+  - id: input-is-an-expression
+    trigger-validate:
+      document: |
+        format: canon-trigger/1
+        id: stale-invoice-reminder
+        version: 3
+        owner: billing-operations
+        subject:
+          kind: invoice
+          state: {field: status, is: overdue}
+          fields:
+            id: {type: string}
+            status: {type: string}
+        start:
+          protocol: send-reminder
+          input:
+            invoice: '$row.id'
+        mode: offer
+        access: write
+        refire: once_per_state_entry
+        cap: 50
+    expect:
+      refused: start.input.invoice
+
+  - id: input-maps-an-expression
+    trigger-validate:
+      document: |
+        format: canon-trigger/1
+        id: stale-invoice-reminder
+        version: 3
+        owner: billing-operations
+        subject:
+          kind: invoice
+          state: {field: status, is: overdue}
+          fields:
+            id: {type: string}
+            status: {type: string}
+        start:
+          protocol: send-reminder
+          input:
+            invoice: {expression: '$row.id'}
+        mode: offer
+        access: write
+        refire: once_per_state_entry
+        cap: 50
+    expect:
+      refused: start.input.invoice
+
+  - id: input-names-an-undeclared-field
+    trigger-validate:
+      document: |
+        format: canon-trigger/1
+        id: stale-invoice-reminder
+        version: 3
+        owner: billing-operations
+        subject:
+          kind: invoice
+          state: {field: status, is: overdue}
+          fields:
+            status: {type: string}
+        start:
+          protocol: send-reminder
+          input:
+            invoice: {field: '$row.id'}
+        mode: offer
+        access: write
+        refire: once_per_state_entry
+        cap: 50
+    expect:
+      refused: start.input.invoice
+
+  - id: cap-zero
+    trigger-validate:
+      document: |
+        format: canon-trigger/1
+        id: stale-invoice-reminder
+        version: 3
+        owner: billing-operations
+        subject:
+          kind: invoice
+          state: {field: status, is: overdue}
+          fields:
+            status: {type: string}
+        start:
+          protocol: send-reminder
+        mode: offer
+        access: read_only
+        refire: once_per_subject
+        cap: 0
+    expect:
+      refused: cap

@@ -2,8 +2,9 @@
 //! and `canon-decision/1` documents an evaluation reads and writes (`case.rs`, `evidence.rs`,
 //! `decision.rs`), the `canon-authority/1` authority decisions (`authority.rs`) and
 //! `canon-decisions/1` explicit decisions (`explicit.rs`) an evaluation may read, and the
-//! `canon-properties/1` properties `canon check` reads (`properties.rs`), and the
-//! `canon-requirements/1` catalogue `canon conform run --requirements` reads (`catalogue.rs`).
+//! `canon-properties/1` properties `canon check` reads (`properties.rs`), the
+//! `canon-requirements/1` catalogue `canon conform run --requirements` reads (`catalogue.rs`), and
+//! the `canon-trigger/1` rule `canon trigger validate` reads (`trigger.rs`).
 //!
 //! A protocol document declares a protocol id and revision, the case inputs a case gives values for
 //! (`case: inputs:`), artifacts, evidence kinds, claims with their predicates, obligations with
@@ -30,6 +31,7 @@ mod present;
 mod properties;
 mod requirement;
 mod time;
+mod trigger;
 mod write;
 
 use std::fmt;
@@ -68,6 +70,11 @@ pub use properties::{
     PROPERTIES_FORMAT, Properties, Property, PropertyDependency, PropertyId, PropertySubject,
 };
 pub use requirement::{DecisionRequirement, OutcomeRequirement};
+pub use trigger::{
+    TRIGGER_FORMAT, TriggerAccess, TriggerField, TriggerFieldName, TriggerFieldType, TriggerInput,
+    TriggerKind, TriggerMode, TriggerRefire, TriggerRule, TriggerRuleId, TriggerStart,
+    TriggerState, TriggerSubject,
+};
 pub use write::write;
 
 /// A `protocol/1` source document as written.

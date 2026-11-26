@@ -83,9 +83,11 @@
 //! cannot see them at compile time, so it reads once at run time whether `serde_json` writes `0.10`
 //! back as `0.10` (the text is held) or as `0.1` (a double is held).
 //!
-//! - **Text held**: `serde_json` has `arbitrary_precision`, which `b10x-canon-expr` turns on. A
-//!   build of the workspace has it: `cargo build --workspace`, and every command-line test of the
-//!   gate. A number's value is the decimal its text writes, its sign, digits and exponent, of any
+//! - **Text held**: `serde_json` has `arbitrary_precision`, which `b10x-canon-expr` turns on.
+//!   Since story:trigger-rule-document this crate depends on `b10x-canon-expr`, which compiles a
+//!   trigger rule's `where`, so every build of it has it: the workspace, `cargo test -p
+//!   b10x-canon`, the `canon` binary a user installs, and a runner that links this crate. A
+//!   number's value is the decimal its text writes, its sign, digits and exponent, of any
 //!   length: `9007199254740992.5` is above `maximum: 9007199254740992` and not an integer;
 //!   `-9223372036854775809` is below `minimum: -9223372036854775808`; `1e400`, which has no
 //!   finite double, is above every finite bound and below none, an integer, and the same only as a
@@ -95,9 +97,10 @@
 //!   double which is an integer an `i64` or a `u64` holds, and which the text does not write
 //!   exactly, is that integer. A protocol's `1152921504606846976.0` is the double 2^60, written
 //!   `1.152921504606847e+18`, and is compared as 2^60. A document's number is never read so.
-//! - **Double held**: no `arbitrary_precision`. The binary a user installs with
-//!   `cargo install --locked --git … canon-cli` holds doubles, and so does
-//!   `cargo test -p b10x-canon`. A number's value is the 64-bit integer or finite double
+//! - **Double held**: no `arbitrary_precision`. No build of this crate holds doubles since
+//!   story:trigger-rule-document; before it, the binary a user installed with
+//!   `cargo install --locked --git … canon-cli` did, and so did `cargo test -p b10x-canon`. A
+//!   number's value is the 64-bit integer or finite double
 //!   `serde_json` read, compared exactly, so an integer is never rounded to a double. A literal
 //!   with a fraction or an exponent is the nearest double: `9007199254740993.0` is 2^53. An integer
 //!   literal beyond the 64-bit range, below -2^63 or above 2^64 - 1, is the nearest double as well:

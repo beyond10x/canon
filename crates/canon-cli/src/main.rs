@@ -15,6 +15,7 @@ mod floor;
 mod generate;
 mod mutate;
 mod simulate;
+mod trigger;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -22,7 +23,7 @@ use std::process::ExitCode;
 use clap::Parser;
 
 use b10x_canon::{ir, model, validate};
-use canon_cli::{Cli, Command, ConformCommand, REJECTED, UNREADABLE, USAGE};
+use canon_cli::{Cli, Command, ConformCommand, REJECTED, TriggerCommand, UNREADABLE, USAGE};
 
 fn main() -> ExitCode {
     // A usage error exits `USAGE`, not clap's own 2, which the exit-status table gives to an
@@ -77,6 +78,9 @@ fn main() -> ExitCode {
         Command::Generate { path, out } => generate::run(&path, &out),
         Command::Mutate { path, scenarios } => mutate::run(&path, &scenarios),
         Command::CheckSet { path } => check_set::run(&path),
+        Command::Trigger {
+            command: TriggerCommand::Validate { path },
+        } => trigger::validate(&path),
     }
 }
 

@@ -29,6 +29,14 @@
 //!         { ... the exact canon-decision/1 bytes ... }
 //!       # or, instead of `decision`:
 //!       # refusal: <the identifier the refusal names>
+//!   - id: owner-missing
+//!     trigger-validate:
+//!       document: |
+//!         { ... a canon-trigger/1 document ... }
+//!     expect:
+//!       refused: owner                      # the field every error names
+//!       # or, instead of `refused`:
+//!       # rule: stale-invoice-reminder@3    # the key of the valid rule
 //! ```
 //!
 //! - `fixture` is the `protocol/1` document the scenario compiles, as a path relative to the
@@ -49,9 +57,17 @@
 //!   `<path>` does not parse: <kind and position>`, and a composition that is refused as
 //!   `fixture does not compile: <code>: <why>; …`. Absent, the fixture imports nothing.
 //! - `covers` entries are `CANON-` followed by an identifier, each listed once.
-//! - `steps` is an ordered, non-empty list. Each step is exactly one of `compile` or `evaluate`,
-//!   with exactly one expectation of the matching kind: a compile step expects `canon-ir`, an
-//!   evaluate step expects `decision` or `refusal`.
+//! - `steps` is an ordered, non-empty list. Each step is exactly one of `compile`, `evaluate` or
+//!   `trigger-validate`, with exactly one expectation of the matching kind: a compile step expects
+//!   `canon-ir`, an evaluate step expects `decision` or `refusal`, a trigger-validate step expects
+//!   `rule` or `refused`, neither empty.
+//! - A trigger-validate step (story:trigger-rule-document) reads its `document` as
+//!   `canon trigger validate` reads a file (`trigger::read`); it does not read the fixture. It
+//!   passes when the document is a valid rule whose key, `<id>@<version>`, is `rule`, or when the
+//!   document is refused and every error names the field `refused`. Otherwise `<what differed>` is
+//!   `expected rule `<key>`, the document is rule `<key>``, `expected a refusal naming `<field>`,
+//!   the document is rule `<key>``, or `expected … , the document is refused: error[<code>]:
+//!   <field>: <why>; …`, listing every error.
 //! - An expectation is compared byte for byte with the step's output. A YAML literal block (`|`)
 //!   keeps one trailing newline, which is the one `canon compile` prints.
 //! - Unknown keys are refused: a file with one does not parse as a scenario.
@@ -184,7 +200,7 @@ use std::fmt;
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer};
 
-use crate::{eval, ir, model};
+use crate::{eval, ir, model, trigger};
 
 /// The scenario format this module reads.
 pub const FORMAT: &str = "canon-conformance/1";
@@ -219,6 +235,21 @@ pub enum StepKind {
         inputs: EvaluateInputs,
         expected: EvaluateExpectation,
     },
+    /// Read one `canon-trigger/1` document as `canon trigger validate` does; the fixture is not
+    /// read.
+    TriggerValidate {
+        document: String,
+        expected: TriggerExpectation,
+    },
+}
+
+/// What a trigger-validate step expects of its document.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TriggerExpectation {
+    /// The document is a valid rule with this key, `<id>@<version>`.
+    Rule(String),
+    /// The document is refused, and every error names this field.
+    Refused(String),
 }
 
 /// The inputs of an evaluate step, as YAML values; [`run`] reads `case` and `evidence` as
@@ -303,6 +334,8 @@ struct RawStep {
     compile: Option<RawCompile>,
     #[serde(default, deserialize_with = "optional")]
     evaluate: Option<RawEvaluate>,
+    #[serde(rename = "trigger-validate", default, deserialize_with = "optional")]
+    trigger_validate: Option<RawTriggerValidate>,
     #[serde(deserialize_with = "required")]
     expect: RawExpect,
 }
@@ -310,6 +343,13 @@ struct RawStep {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawCompile {}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawTriggerValidate {
+    #[serde(deserialize_with = "required")]
+    document: String,
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -335,6 +375,10 @@ struct RawExpect {
     decision: Option<String>,
     #[serde(default, deserialize_with = "optional")]
     refusal: Option<String>,
+    #[serde(default, deserialize_with = "optional")]
+    rule: Option<String>,
+    #[serde(default, deserialize_with = "optional")]
+    refused: Option<String>,
 }
 
 /// Parses `canon-conformance/1` scenario text.
@@ -401,7 +445,7 @@ pub fn parse(source: &str) -> Result<Scenario, ScenarioError> {
     }
     let mut steps: Vec<Step> = Vec::with_capacity(raw.steps.len());
     for step in raw.steps {
-        let id = step.id;
+        let id = step.id.clone();
         if !model::is_identifier(&id) {
             return refuse(format!(
                 "step id `{}` is not an identifier",
@@ -414,7 +458,7 @@ pub fn parse(source: &str) -> Result<Scenario, ScenarioError> {
                 model::one_line(&id)
             ));
         }
-        let kind = step_kind(&id, step.compile, step.evaluate, step.expect)?;
+        let kind = step_kind(&id, step)?;
         steps.push(Step { id, kind });
     }
     Ok(Scenario {
@@ -445,37 +489,46 @@ pub fn is_confined(path: &str) -> bool {
     !rooted && !drive && !path.split(['/', '\\']).any(|component| component == "..")
 }
 
-fn step_kind(
-    id: &str,
-    compile: Option<RawCompile>,
-    evaluate: Option<RawEvaluate>,
-    expect: RawExpect,
-) -> Result<StepKind, ScenarioError> {
+fn step_kind(id: &str, step: RawStep) -> Result<StepKind, ScenarioError> {
     let id = model::one_line(id);
-    match (compile, evaluate, expect) {
+    let RawStep {
+        compile,
+        evaluate,
+        trigger_validate,
+        expect,
+        id: _,
+    } = step;
+    match (compile, evaluate, trigger_validate, expect) {
         (
             Some(RawCompile {}),
+            None,
             None,
             RawExpect {
                 canon_ir: Some(expected_ir),
                 decision: None,
                 refusal: None,
+                rule: None,
+                refused: None,
             },
         ) => Ok(StepKind::Compile { expected_ir }),
-        (Some(_), None, _) => refuse(format!(
+        (Some(_), None, None, _) => refuse(format!(
             "compile step `{id}` must expect `canon-ir` and nothing else"
         )),
-        (None, Some(evaluate), expect) => {
+        (None, Some(evaluate), None, expect) => {
             let expected = match expect {
                 RawExpect {
                     canon_ir: None,
                     decision: Some(decision),
                     refusal: None,
+                    rule: None,
+                    refused: None,
                 } => EvaluateExpectation::Decision(decision),
                 RawExpect {
                     canon_ir: None,
                     decision: None,
                     refusal: Some(refusal),
+                    rule: None,
+                    refused: None,
                 } if model::is_identifier(&refusal) => EvaluateExpectation::Refusal(refusal),
                 _ => {
                     return refuse(format!(
@@ -494,8 +547,35 @@ fn step_kind(
                 expected,
             })
         }
-        (Some(_), Some(_), _) | (None, None, _) => refuse(format!(
-            "step `{id}` must be exactly one of `compile` or `evaluate`"
+        (None, None, Some(trigger), expect) => {
+            let expected = match expect {
+                RawExpect {
+                    canon_ir: None,
+                    decision: None,
+                    refusal: None,
+                    rule: Some(rule),
+                    refused: None,
+                } if !rule.is_empty() => TriggerExpectation::Rule(rule),
+                RawExpect {
+                    canon_ir: None,
+                    decision: None,
+                    refusal: None,
+                    rule: None,
+                    refused: Some(field),
+                } if !field.is_empty() => TriggerExpectation::Refused(field),
+                _ => {
+                    return refuse(format!(
+                        "trigger-validate step `{id}` must expect exactly one of `rule` or `refused`, not empty"
+                    ));
+                }
+            };
+            Ok(StepKind::TriggerValidate {
+                document: trigger.document,
+                expected,
+            })
+        }
+        _ => refuse(format!(
+            "step `{id}` must be exactly one of `compile`, `evaluate` or `trigger-validate`"
         )),
     }
 }
@@ -536,6 +616,7 @@ fn run_compiled(scenario: &Scenario, compiled: &Result<ir::Ir, String>) -> Verdi
         let failure = match &step.kind {
             StepKind::Compile { expected_ir } => compile_step(compiled, expected_ir),
             StepKind::Evaluate { inputs, expected } => evaluate_step(compiled, inputs, expected),
+            StepKind::TriggerValidate { document, expected } => trigger_step(document, expected),
         };
         if let Some(reason) = failure {
             return Verdict::Failed {
@@ -593,6 +674,46 @@ fn compiled_fixture(
                 .collect();
             format!("fixture does not compile: {}", problems.join("; "))
         })
+}
+
+/// Reads a trigger-validate step's document with [`trigger::read`] and compares it with the
+/// expectation (see the module docs).
+fn trigger_step(document: &str, expected: &TriggerExpectation) -> Option<String> {
+    let refused = |problems: &[trigger::Problem]| {
+        problems
+            .iter()
+            .map(|problem| format!("error[{}]: {problem}", problem.code))
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    match (trigger::read(document), expected) {
+        (Ok(rule), TriggerExpectation::Rule(key)) if rule.key() == *key => None,
+        (Ok(rule), TriggerExpectation::Rule(key)) => Some(format!(
+            "expected rule `{}`, the document is rule `{}`",
+            model::one_line(key),
+            model::one_line(&rule.key())
+        )),
+        (Ok(rule), TriggerExpectation::Refused(field)) => Some(format!(
+            "expected a refusal naming `{}`, the document is rule `{}`",
+            model::one_line(field),
+            model::one_line(&rule.key())
+        )),
+        (Err(problems), TriggerExpectation::Refused(field))
+            if problems.iter().all(|problem| problem.field == *field) =>
+        {
+            None
+        }
+        (Err(problems), TriggerExpectation::Refused(field)) => Some(format!(
+            "expected a refusal naming `{}` alone, the document is refused: {}",
+            model::one_line(field),
+            refused(&problems)
+        )),
+        (Err(problems), TriggerExpectation::Rule(key)) => Some(format!(
+            "expected rule `{}`, the document is refused: {}",
+            model::one_line(key),
+            refused(&problems)
+        )),
+    }
 }
 
 fn compile_step(compiled: &Result<ir::Ir, String>, expected_ir: &str) -> Option<String> {
@@ -1156,6 +1277,68 @@ mod tests {
 
     const HEAD: &str = "format: canon-conformance/1\nid: S\ncovers: []\nfixture: p.yaml\n";
 
+    /// A valid `canon-trigger/1` rule, `r@3`, indented as a step's `document` block.
+    const RULE: &str = "        format: canon-trigger/1\n        id: r\n        version: 3\n        \
+                        owner: o\n        subject:\n          kind: k\n          \
+                        state: {field: s, is: x}\n          fields: {s: {type: string}}\n        \
+                        start: {protocol: p}\n        mode: offer\n        access: write\n        \
+                        refire: once_per_subject\n        cap: 1\n";
+
+    fn trigger_verdict(document: &str, expect: &str) -> Verdict {
+        let source = format!(
+            "{HEAD}steps:\n  - id: t\n    trigger-validate:\n      document: |\n{document}    \
+             expect: {{{expect}}}\n"
+        );
+        run(&parse(&source).expect("parses"), Ok(PROTOCOL))
+    }
+
+    #[test]
+    fn a_trigger_validate_step_compares_the_rule_key_or_the_refused_field() {
+        let failed = |reason: &str| Verdict::Failed {
+            step: "t".to_owned(),
+            reason: reason.to_owned(),
+        };
+        assert_eq!(trigger_verdict(RULE, "rule: r@3"), Verdict::Passed);
+        assert_eq!(
+            trigger_verdict(RULE, "rule: r@4"),
+            failed("expected rule `r@4`, the document is rule `r@3`")
+        );
+        assert_eq!(
+            trigger_verdict(RULE, "refused: owner"),
+            failed("expected a refusal naming `owner`, the document is rule `r@3`")
+        );
+        let no_owner = RULE.replace("        owner: o\n", "");
+        assert_eq!(
+            trigger_verdict(&no_owner, "refused: owner"),
+            Verdict::Passed
+        );
+        assert_eq!(
+            trigger_verdict(&no_owner, "refused: mode"),
+            failed(
+                "expected a refusal naming `mode` alone, the document is refused: \
+                 error[missing-field]: owner: this field is required"
+            )
+        );
+        assert_eq!(
+            trigger_verdict(&no_owner, "rule: r@3"),
+            failed(
+                "expected rule `r@3`, the document is refused: error[missing-field]: owner: this \
+                 field is required"
+            )
+        );
+        let two = RULE
+            .replace("version: 3", "version: 0")
+            .replace("cap: 1", "cap: 0");
+        assert_eq!(
+            trigger_verdict(&two, "refused: cap"),
+            failed(
+                "expected a refusal naming `cap` alone, the document is refused: \
+                 error[invalid-value]: version: the version is a positive integer, not 0; \
+                 error[invalid-value]: cap: the cap is a positive integer, not 0"
+            )
+        );
+    }
+
     #[test]
     fn a_compile_scenario_parses_and_passes_on_its_own_ir() {
         let scenario = parse(&scenario_text("S", &compiled())).expect("parses");
@@ -1217,13 +1400,13 @@ mod tests {
             ),
             (
                 format!("{HEAD}steps:\n  - id: c\n    expect: {{canon-ir: x}}\n"),
-                "step `c` must be exactly one of `compile` or `evaluate`",
+                "step `c` must be exactly one of `compile`, `evaluate` or `trigger-validate`",
             ),
             (
                 format!(
                     "{HEAD}steps:\n  - id: c\n    compile: {{}}\n    evaluate: {{case: {{}}, evidence: []}}\n    expect: {{canon-ir: x}}\n"
                 ),
-                "step `c` must be exactly one of `compile` or `evaluate`",
+                "step `c` must be exactly one of `compile`, `evaluate` or `trigger-validate`",
             ),
             (
                 format!(
@@ -1260,6 +1443,42 @@ mod tests {
                     "{HEAD}steps:\n  - id: e\n    evaluate: {{case: {{}}}}\n    expect: {{refusal: r}}\n"
                 ),
                 "not a canon-conformance/1 scenario at line 7 column 15",
+            ),
+            (
+                format!(
+                    "{HEAD}steps:\n  - id: e\n    evaluate: {{case: {{}}, evidence: []}}\n    expect: {{rule: r@1}}\n"
+                ),
+                "evaluate step `e` must expect exactly one of `decision` or `refusal`",
+            ),
+            (
+                format!(
+                    "{HEAD}steps:\n  - id: t\n    trigger-validate: {{document: x}}\n    expect: {{rule: r@1, refused: owner}}\n"
+                ),
+                "trigger-validate step `t` must expect exactly one of `rule` or `refused`",
+            ),
+            (
+                format!(
+                    "{HEAD}steps:\n  - id: t\n    trigger-validate: {{document: x}}\n    expect: {{refusal: r}}\n"
+                ),
+                "trigger-validate step `t` must expect exactly one of `rule` or `refused`",
+            ),
+            (
+                format!(
+                    "{HEAD}steps:\n  - id: t\n    trigger-validate: {{document: x}}\n    expect: {{refused: ''}}\n"
+                ),
+                "trigger-validate step `t` must expect exactly one of `rule` or `refused`",
+            ),
+            (
+                format!(
+                    "{HEAD}steps:\n  - id: t\n    compile: {{}}\n    trigger-validate: {{document: x}}\n    expect: {{canon-ir: x}}\n"
+                ),
+                "step `t` must be exactly one of `compile`, `evaluate` or `trigger-validate`",
+            ),
+            (
+                format!(
+                    "{HEAD}steps:\n  - id: t\n    trigger-validate: {{}}\n    expect: {{rule: r@1}}\n"
+                ),
+                "not a canon-conformance/1 scenario at line",
             ),
         ];
         for (source, expected) in cases {

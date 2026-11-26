@@ -37,7 +37,9 @@ Canon's ESS specification lives under `ess/`. It specifies the `protocol/1` sour
 `canon-evidence/1`, `canon-decisions/1` and `canon-decision/1` (story:three-valued-claims,
 story:decision-outcomes) and `canon-authority/1` (story:review-hardening-w7) in the domain
 `canon.protocol`, the `canon-properties/1` document `canon check` reads (story:canon-check) in the
-domain `canon.check`, and the `canon` command surface in the domain `canon.cli`
+domain `canon.check`, the `canon-trigger/1` rule document `canon trigger validate` reads
+(story:trigger-rule-document) in the domain `canon.trigger`, and the `canon` command surface in
+the domain `canon.cli`
 (story:ess-command-surface), completing Atlas ADR 0076's data model and command surface.
 
 The commands are declared in `ess/domains/cli.yaml`: one command per leaf subcommand of
@@ -145,7 +147,9 @@ Tests run under cargo-nextest in two lanes; `.config/nextest.toml` holds the run
 test is killed at 60 s and counts as failed in both lanes (`slow-timeout`). The gate lane is `task
 test`, part of `task check`: every test outside the `slow` list, once (the `task ess-gate` tests
 run first and are counted, not run again), plus the `adversary_action_arguments` probes with `-p
-b10x-canon`, the feature set the CLI ships. It prints `nproc`, the ten slowest tests and the summed
+b10x-canon`, the feature set the CLI ships. Since story:trigger-rule-document `b10x-canon` depends
+on `b10x-canon-expr`, so serde_json's `arbitrary_precision` is on in that lane, in the workspace
+lane and in the shipped binary alike. It prints `nproc`, the ten slowest tests and the summed
 test time, and fails when its test runs take over 120 s (`global-timeout` cuts a run there). The
 `slow` lane is `task test-slow`, run by CI after `task check` and before a release: the tests the
 default profile's `default-filter` leaves out, each measured over 5 s. A test that takes more than

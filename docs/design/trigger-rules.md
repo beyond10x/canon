@@ -41,6 +41,12 @@ owner: billing-operations
 subject:
   kind: invoice
   state: {field: status, is: overdue}
+  fields:
+    id: {type: string}
+    status: {type: string}
+    amount: {type: decimal}
+    segment: {type: string}
+    note: {type: string, optional: true}
 where: '$row.amount > 100 and not contains(["test", "internal"], $row.segment)'
 start:
   protocol: send-reminder
@@ -55,35 +61,82 @@ cap: 50               # starts per rule per UTC day
 
 | Field | Rule |
 |---|---|
+| `format` | required; `canon-trigger/1`. |
 | `id`, `version` | `id` is a Canon identifier; `version` a positive integer. The pair is the rule key, written `<id>@<version>`. |
 | `owner` | required, non-empty. Canon does not resolve it. |
 | `subject.kind` | required; a kind name the snapshot uses. |
-| `subject.state` | required; `field` names a row field, `is` a string value it must equal. |
-| `where` | optional; one `canon-expr/1` expression of type Bool (§ 4). Absent: `true`. |
+| `subject.fields` | required; the row fields the rule reads, each `{type: string \| integer \| decimal \| bool, optional: true \| false}`, `optional` `false` when left out. |
+| `subject.state` | required; `field` names a declared field of type `string`, `is` a string value it must equal. |
+| `where` | optional; one `canon-expr/1` expression of type Bool over the declared fields (§ 4). Absent: `true`. |
 | `start.protocol` | required; a protocol id. |
-| `start.input` | map from a case input of P to `{field: <row field>}` or `{const: <string>}`; nothing else. |
+| `start.input` | map from a case input of P to `{field: <declared field>}` or `{const: <string>}`; nothing else. Absent: no input. |
 | `mode` | required; `offer` or `auto`. |
 | `access` | required; `read_only` or `write`. |
 | `refire` | required; `once_per_state_entry` or `once_per_subject`. |
 | `cap` | required; a positive integer. |
 
-Unknown fields are refused. `canon trigger validate <file>` checks one document and names the
-field of each error (acceptance 1). A rule's lifecycle state (`draft`, `active`, `disabled`) is not
-in the document: it is deployment state, passed with the rule to `evaluate` (§ 6).
+The rule declares the row fields it reads (decided 2026-11-26, instead of an open record in
+`canon-expr/1`): `$row` is then a closed record that `canon-expr/1` types as it stands, and a field
+the snapshot names but the rule does not is not read. Unknown fields are refused. `canon trigger
+validate --path <file>` checks one document and names the field of each error (acceptance 1); the
+file is a `--path` flag, as every input of the `canon` command line is a long flag (`AGENTS.md`
+§ ESS). Each error is one line `error[<code>]: <field>: <why>`:
+
+| Code | Field named |
+|---|---|
+| `parse` | none: the text is not well-formed YAML or not a mapping. |
+| `missing-field` | the required field left out (`owner`, `subject.state`, `start.protocol`). |
+| `unknown-field` | the field `canon-trigger/1` does not have (`subject.colour`). |
+| `invalid-value` | the field whose value is not one the table allows (`mode`, `version`, `cap`). |
+| `undeclared-field` | `subject.state.field`, or `start.input.<name>`, naming a field `subject.fields` does not declare, or a state field that is not a required `string`. |
+| `invalid-input` | `start.input.<name>`, for anything but `{field}` or `{const}` (an expression, both keys, neither). |
+| `invalid-where` | `where`, with the `canon-expr/1` diagnostic code and message. |
+
+A document without the shape of the table (a field missing or unknown, a value of the wrong kind
+or outside its enumeration, an input that is not `{field}` or `{const}`) is reported with its first
+error. One with the shape is reported with every error, in the order `format`, `id`, `version`,
+`owner`, `subject.kind`, `subject.state.field`, `where`, `start.protocol`, `start.input` (in input
+order), `cap`. `subject.kind` and `start.protocol` are Canon identifiers. A rule's lifecycle
+state (`draft`, `active`, `disabled`) is not in the document: it is deployment state, passed with
+the rule to `evaluate` (§ 6).
 
 ## 4. The `where` language
 
-`where` reuses `canon-expr/1` (answer to open question 3): comparisons, `and`/`or`/`not`, list
-literals, and the pure builtins `contains` (membership) and `present` (presence). The kernel
-compiles it against a catalog that holds only those `Pure` builtins and no `Observation` provider,
-so a rule can name no call that reaches outside the row; `canon-expr/1` has no loops or assignment.
-A reference to any other function is refused at validation with the field `where` named.
+`where` reuses `canon-expr/1` unchanged (answer to open question 3): comparisons, `and`/`or`/`not`,
+list literals, and two kinds of `Pure` builtin. The kernel compiles it with `canon_expr::check`
+against a catalog it builds for each rule from the declared fields, holding only `Pure` builtins and
+no `Observation` provider or recipe, so a rule can name no call that reaches outside the row;
+`canon-expr/1` has no loops or assignment. The catalog, format `canon-catalog/1`, holds exactly:
 
-The row is the context variable `$row`, a record of the row's fields. A field the row lacks reads
-as absent; a comparison over an absent value is `UNKNOWN` under `canon-expr/1`'s three-valued
-rules. A row whose `where` is `UNKNOWN` is not a match and is not silently dropped: it is listed
-with the verdict `undetermined` (§ 7). That verdict is the one addition to the request's five, and
-it follows Canon's rule that `UNKNOWN` is not `FALSE`.
+| Name | Signature | Implementation | Present when |
+|---|---|---|---|
+| `contains` | `contains(list: List<String>, item: String) -> Bool` | `Pure(Contains)` | always |
+| `present_string` | `present_string(value: Optional<String>) -> Bool` | `Pure(Present)` | an optional field has type `string` |
+| `present_integer` | `present_integer(value: Optional<Integer>) -> Bool` | `Pure(Present)` | an optional field has type `integer` |
+| `present_decimal` | `present_decimal(value: Optional<Decimal>) -> Bool` | `Pure(Present)` | an optional field has type `decimal` |
+| `present_bool` | `present_bool(value: Optional<Bool>) -> Bool` | `Pure(Present)` | an optional field has type `bool` |
+
+`canon-expr/1` gives each catalog function one signature, so presence is one function per field
+type, and `contains` tests strings only. A call to any other name, a parameter of another type, or
+a result that is not Bool is refused at validation with the field `where` named.
+
+The row is the one context variable, `$row`: a `canon-expr/1` `Record` with one entry per declared
+field, its type `String`, `Integer`, `Decimal` or `Bool` for `string`, `integer`, `decimal` or
+`bool`, and `Optional` of that type when the field is optional. A `where` that reads a field the
+rule does not declare (`$row.colour`) or any other variable is refused naming `where`. An optional
+field is tested with its `present_<type>` function; `canon-expr/1` compares it with nothing else.
+`$row.<field>` reaches only a field whose name is letters, digits and `_`, not starting with a
+digit; a declared field with another name may still be the state field or an input.
+
+A missing or wrongly typed value is the kernel's to decide, not `canon-expr/1`'s: at evaluation
+(story:trigger-evaluate) a row that lacks a required declared field, or holds a value of another
+type than its declaration, is listed with the verdict `undetermined` and the reason `field-missing`
+or `field-type`, without calling `canon-expr/1`. A value has its declaration's type when it is a
+string for `string`, a number with no fraction or exponent for `integer`, any number for
+`decimal`, and `true` or `false` for `bool`; an optional field may be absent or null. Every other
+row is bound as `$row`, and its `where` is `true` or `false`. A row that cannot be decided is
+listed, not silently dropped (§ 6). That verdict is the one addition to the request's five, and it
+follows Canon's rule that `UNKNOWN` is not `FALSE`.
 
 ## 5. Protocol access class and guard
 

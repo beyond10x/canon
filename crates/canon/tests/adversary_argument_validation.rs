@@ -468,7 +468,7 @@ fn a_yaml_enum_value_a_double_holds_exactly_is_that_integer() {
 }
 
 /// `1152921504606846976` and `1152921504606846976.0` are one value, so `canon validate` refuses
-/// the second as listed twice, as the shipped binary (no `arbitrary_precision`) does.
+/// the second as listed twice, in either build of `serde_json`.
 #[test]
 fn validate_refuses_an_integer_and_its_exact_double_as_one_value() {
     let lines = validate_lines(

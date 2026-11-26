@@ -1,0 +1,20 @@
+format: canon-trigger/1
+id: stale-invoice-reminder
+version: 0
+owner: ''
+subject:
+  kind: invoice
+  state: {field: amount, is: overdue}
+  fields:
+    amount: {type: decimal}
+    id: {type: string}
+where: 'lookup($row.amount)'
+start:
+  protocol: send-reminder
+  input:
+    invoice: {field: number}
+    channel: {const: email}
+mode: offer
+access: read_only
+refire: once_per_subject
+cap: 0

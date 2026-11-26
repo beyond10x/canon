@@ -2,17 +2,18 @@
 //!
 //! The model under `crates/canon/src/model/` — the `protocol/1` source model and the
 //! `canon-case/1`, `canon-evidence/1`, `canon-authority/1`, `canon-decisions/1`,
-//! `canon-decision/1` and `canon-properties/1` documents and the `canon-requirements/1`
-//! catalogue — is hand-written beside its specification under `ess/`. This test compiles the
-//! specification (`ess specify compile --format json`) and reads the model's Rust source, then
-//! compares, for every entity and value type the specification declares, its fields and their
-//! types and every enum or union variant. A model change that leaves `ess/` behind fails here,
-//! naming what differs.
+//! `canon-decision/1` and `canon-properties/1` documents, the `canon-requirements/1` catalogue
+//! and the `canon-trigger/1` rule — is hand-written beside its specification under `ess/`. This
+//! test compiles the specification (`ess specify compile --format json`) and reads the model's
+//! Rust source, then compares, for every entity and value type the specification declares, its
+//! fields and their types and every enum or union variant. A model change that leaves `ess/`
+//! behind fails here, naming what differs.
 //!
 //! How the Rust model maps onto the specification:
 //!
-//! * A specification type `canon.protocol.X`, `canon.check.X` or `canon.conform.X` (the
-//!   [`DOMAINS`]) is the Rust type `X`; two domains declaring one local name fail the test.
+//! * A specification type `canon.protocol.X`, `canon.check.X`, `canon.conform.X` or
+//!   `canon.trigger.X` (the [`DOMAINS`]) is the Rust type `X`; two domains declaring one local name
+//!   fail the test.
 //! * A type made by a `macro_rules!` macro that defines `struct $name(T)` — `identifier!(X)` — is a
 //!   `newtype` of `T`, read from the macro body; a struct with named fields is a `struct`; an enum
 //!   of unit variants is an `enum`; an enum of one-payload variants is a `union`. A variant's
@@ -29,7 +30,8 @@
 //!   fields. An entity the specification declares and [`ENTITIES`] does not map fails the test.
 //! * The value types compared are those the entities reach, and those [`DOCUMENTS`] reach: the
 //!   evidence record, the authority decision, the explicit decision, the decision, the obligation
-//!   status, the properties and the requirement catalogue, which no entity holds.
+//!   status, the properties, the requirement catalogue and the trigger rule, which no entity
+//!   holds.
 //! * A field written as a raw identifier (`r#in`) is named without `r#` (`in`).
 //! * Only module-level items count. Items inside functions, inline modules (`mod tests { … }`) and
 //!   anything under `#[cfg(test)]` are not the model. Two module-level types with one name, in any
@@ -48,7 +50,12 @@ use serde_yaml_ng::Value;
 
 /// Every domain the specification declares whose types are the Rust model. A type's local name is
 /// its name without the domain, and is unique across them.
-const DOMAINS: &[&str] = &["canon.protocol", "canon.check", "canon.conform"];
+const DOMAINS: &[&str] = &[
+    "canon.protocol",
+    "canon.check",
+    "canon.conform",
+    "canon.trigger",
+];
 
 /// How one entity of the specification is written in the Rust model.
 struct EntityMapping {
@@ -79,9 +86,9 @@ const ENTITIES: &[EntityMapping] = &[
 /// authority decision (`canon-authority/1`) and the explicit decision (`canon-decisions/1`) an
 /// evaluation reads, the decision it writes and the status of an obligation in it (its
 /// `obligations` section is untyped `Json`, so the decision does not reach the status), and the
-/// properties (`canon-properties/1`) `canon check` reads, and the requirement catalogue
-/// (`canon-requirements/1`) `canon conform run --requirements` reads. They, and what they reach,
-/// are compared too.
+/// properties (`canon-properties/1`) `canon check` reads, the requirement catalogue
+/// (`canon-requirements/1`) `canon conform run --requirements` reads, and the trigger rule
+/// (`canon-trigger/1`) `canon trigger validate` reads. They, and what they reach, are compared too.
 const DOCUMENTS: &[&str] = &[
     "EvidenceRecord",
     "AuthorityDecision",
@@ -90,6 +97,7 @@ const DOCUMENTS: &[&str] = &[
     "ObligationStatus",
     "Properties",
     "RequirementCatalogue",
+    "TriggerRule",
 ];
 
 /// `(owner, field)` Integer fields that are never negative although `ess/` cannot say so: ess
@@ -100,6 +108,8 @@ const NON_NEGATIVE: &[(&str, &str)] = &[
     ("ChildOutcomes", "count"),
     ("Decision", "protocol_revision"),
     ("Import", "revision"),
+    ("TriggerRule", "cap"),
+    ("TriggerRule", "version"),
 ];
 
 /// The tree under test, read at run time: a test binary reused from a shared target directory

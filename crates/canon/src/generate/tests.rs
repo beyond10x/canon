@@ -30,7 +30,7 @@ fn kinds(scenario: &Scenario) -> Vec<String> {
             .iter()
             .map(|record| record["kind"].as_str().expect("a kind").to_owned())
             .collect(),
-        conform::StepKind::Compile { .. } => panic!("a witness step evaluates"),
+        _ => panic!("a witness step evaluates"),
     }
 }
 

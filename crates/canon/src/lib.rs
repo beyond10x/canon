@@ -16,4 +16,5 @@ pub mod ir;
 pub mod model;
 pub mod mutate;
 pub mod simulate;
+pub mod trigger;
 pub mod validate;
