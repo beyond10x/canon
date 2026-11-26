@@ -175,15 +175,16 @@ AppArmor restriction of the Ubuntu runner before `task check`).
 
 ## Releases
 
-Releases are source releases at bare-version tags, starting with `0.1.0`. Update the workspace
+Releases are source releases at bare-version tags, starting with `0.1.0`; from the first release
+after `0.16.0` each also carries two Linux x86_64 archives of `canon` (below). Update the workspace
 version, Cargo.lock and CHANGELOG.md, refresh installation/status prose and regenerate documentation.
 Update the expected decision provenance version (`"canon": "<version>"`) wherever a scenario or
 a test pins it: `conformance/scenarios/explanation.yaml`, `pending-decisions.yaml` and
 `evidence-redelivery.yaml`, and `crates/canon-cli/tests/adversary_skel_cli.rs`; find any newer
 one with `git grep -n '"canon": "' -- conformance crates`. Keep their other exact-output
 expectations unchanged.
-`rust-toolchain.toml` pins the one rustc that the local gate and both workflows (`check.yml`,
-`pages.yml`: `rustup toolchain install`) use. Raise it in one commit that changes the file and fixes
+`rust-toolchain.toml` pins the one rustc that the local gate and the workflows (`check.yml`,
+`pages.yml`, `package.yml`: `rustup toolchain install`) use. Raise it in one commit that changes the file and fixes
 what the new compiler's `cargo fmt --all --check` and `cargo clippy --workspace --all-targets
 --locked -- -D warnings` report. `task check` finds the `ess` release of `ess/ess-inputs.yaml` in
 `~/.cache/ess/toolchains/<version>` itself, or stops with one line naming it. `task ci-watch --
@@ -203,8 +204,27 @@ branch policy prohibits the merge"): it reads the merge state without the bot's 
 ruleset that reserves `main` to the bot. `b10x-gates gh` runs `gh` in the repository's directory
 and refuses an argument that holds a home path: give `gh release download` a relative `--dir`
 and move the archives out of the tree afterwards. Verify the peeled tag,
-required source checks, Release and downloadable source archives. There is no binary packaging
-workflow or crates.io publication. Documentation delivery runs asynchronously; report it pending
+required source checks, Release and downloadable source archives.
+The binary archives come from `.github/workflows/package.yml`, which runs on the push of a
+bare-version tag, on demand, and on a pull request that changes it, `scripts/package.sh` or
+`rust-toolchain.toml`. Both it and `task package -- <target>` run `scripts/package.sh <target>`:
+`x86_64-unknown-linux-gnu` is built with `cargo zigbuild --target x86_64-unknown-linux-gnu.2.17`
+and fails when `objdump -T` names a `GLIBC_` version above 2.17, naming the symbol;
+`x86_64-unknown-linux-musl` is built static and fails when `readelf -l` shows an `INTERP`. The
+archived binary of each must print `canon <version>` and pass `conform run --requirements
+conformance/requirements.yaml`; the script writes `target/package/canon-<version>-<target>.tar.gz`
+(the binary, `LICENSE`, `README.md`) and its line in `target/package/SHA256SUMS`. cargo-zigbuild and
+zig are pinned by version and SHA-256 in the script and unpacked under `target/package-tools/`;
+`check-glibc <binary> [floor]` and `check-static <binary>` run one check on any binary
+(`crates/canon/tests/package_checks.rs` holds both, with their negative controls). The workflow
+has no write permission and uploads the files as the artifact `canon-linux-x86_64`; checking that
+the tag is the workspace version is its first step on a tag. After the tag's `package.yml` run
+is green, attach them as the bot, with a directory relative to the checkout:
+`b10x-gates gh run download <run> --name canon-linux-x86_64 --dir <dir>`, then `b10x-gates gh
+release upload <tag> <dir>/canon-<version>-x86_64-unknown-linux-gnu.tar.gz
+<dir>/canon-<version>-x86_64-unknown-linux-musl.tar.gz <dir>/SHA256SUMS`. Verify the three assets
+on the Release (names, sizes, and `sha256sum --check` of a fresh download against `SHA256SUMS`),
+then move the directory out of the tree. There is no crates.io publication. Documentation delivery runs asynchronously; report it pending
 unless its live publication has been verified. A source release does not include Atlas, Website
 or downstream consumer changes.
 
