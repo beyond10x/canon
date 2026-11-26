@@ -25,6 +25,12 @@ use clap::Parser;
 use b10x_canon::{ir, model, validate};
 use canon_cli::{Cli, Command, ConformCommand, REJECTED, TriggerCommand, UNREADABLE, USAGE};
 
+// The musl archive's allocator when `scripts/package.sh` builds it with this feature; off by
+// default, so every other build uses the platform's allocator.
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 fn main() -> ExitCode {
     // A usage error exits `USAGE`, not clap's own 2, which the exit-status table gives to an
     // unreadable input; `--help` and `--version` print to standard output and succeed.

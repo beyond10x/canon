@@ -9,6 +9,10 @@
 #   package.sh check-glibc <binary> [floor]   fail when <binary> needs a GLIBC_ version above
 #                                             floor (default 2.17), naming each such symbol
 #   package.sh check-static <binary>          fail when <binary> has a program interpreter
+#   package.sh binary <target> <allocator> <out>
+#                                             build and check the release binary with allocator
+#                                             `system` or `mimalloc` (musl only) and copy it to
+#                                             <out>; scripts/measure-release.sh uses it
 #
 # <target> is x86_64-unknown-linux-gnu (linked against glibc 2.17 at most) or
 # x86_64-unknown-linux-musl (static). Both build with cargo-zigbuild and zig, pinned below by
@@ -21,6 +25,10 @@ ZIG_SHA256=70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00
 ZIGBUILD_VERSION=0.24.1
 ZIGBUILD_SHA256=f09b180a517af0e4dd4bffc921bb88e5ab705452a9dd948c61e489b3020c68c2
 GLIBC_FLOOR=2.17
+# The allocator of the musl archive: `system` (musl's own) or `mimalloc` (the `mimalloc` feature
+# of canon-cli). The gnu archive always uses glibc's. docs/design/linux-release.md holds the
+# measurement that decides it; crates/canon/tests/release_decision.rs holds this line to it.
+MUSL_ALLOCATOR=system
 
 fail() {
     echo "package: $*" >&2
@@ -107,16 +115,30 @@ fetch() {
     echo "$PWD/$into"
 }
 
-build() {
-    target=$1
-    case "$target" in
+known_target() {
+    case "$1" in
     x86_64-unknown-linux-gnu | x86_64-unknown-linux-musl) ;;
-    *) fail "unknown target \`$target\`: give x86_64-unknown-linux-gnu or x86_64-unknown-linux-musl" ;;
+    *) fail "unknown target \`$1\`: give x86_64-unknown-linux-gnu or x86_64-unknown-linux-musl" ;;
     esac
-    cd "$(dirname "$0")/.."
-    version=$(sed -n '/^\[workspace\.package\]/,/^\[/s/^version = "\(.*\)"$/\1/p' Cargo.toml)
-    [ -n "$version" ] || fail "Cargo.toml has no [workspace.package] version"
+}
 
+# known_allocator <target> <allocator>: `system` for either target, `mimalloc` for musl only.
+known_allocator() {
+    case "$2" in
+    system) ;;
+    mimalloc)
+        [ "$1" = x86_64-unknown-linux-musl ] ||
+            fail "allocator mimalloc is used by only the musl build, not $1"
+        ;;
+    *) fail "unknown allocator \`$2\`: give system or mimalloc" ;;
+    esac
+}
+
+# compile <target> <allocator>: build target/<target>/release/canon with the pinned tools from the
+# repository root, check its linking and that it holds mimalloc exactly when asked for.
+compile() {
+    target=$1
+    allocator=$2
     zig=$(fetch "https://ziglang.org/download/$ZIG_VERSION/zig-x86_64-linux-$ZIG_VERSION.tar.xz" "$ZIG_SHA256")
     zigbuild=$(fetch "https://github.com/rust-cross/cargo-zigbuild/releases/download/v$ZIGBUILD_VERSION/cargo-zigbuild-x86_64-unknown-linux-musl.tar.xz" "$ZIGBUILD_SHA256")
     PATH="$zig/zig-x86_64-linux-$ZIG_VERSION:$zigbuild/cargo-zigbuild-x86_64-unknown-linux-musl:$PATH"
@@ -139,10 +161,29 @@ build() {
         check_glibc "$binary"
         ;;
     x86_64-unknown-linux-musl)
-        cargo zigbuild --locked --release -p canon-cli --target x86_64-unknown-linux-musl
+        set --
+        if [ "$allocator" = mimalloc ]; then set -- --features mimalloc; fi
+        cargo zigbuild --locked --release -p canon-cli --target x86_64-unknown-linux-musl "$@"
         check_static "$binary"
         ;;
     esac
+    # mimalloc's own messages name it; musl's and glibc's allocators do not.
+    if grep -q 'mimalloc' "$binary"; then linked=mimalloc; else linked=system; fi
+    [ "$linked" = "$allocator" ] ||
+        fail "$binary was built with allocator $allocator but holds the $linked allocator"
+    echo "allocator: $binary uses the $allocator allocator"
+}
+
+build() {
+    target=$1
+    known_target "$target"
+    allocator=system
+    if [ "$target" = x86_64-unknown-linux-musl ]; then allocator=$MUSL_ALLOCATOR; fi
+    known_allocator "$target" "$allocator"
+    cd "$(dirname "$0")/.."
+    version=$(sed -n '/^\[workspace\.package\]/,/^\[/s/^version = "\(.*\)"$/\1/p' Cargo.toml)
+    [ -n "$version" ] || fail "Cargo.toml has no [workspace.package] version"
+    compile "$target" "$allocator"
 
     name=canon-$version-$target
     out=target/package
@@ -184,6 +225,17 @@ check-glibc)
 check-static)
     [ $# -ge 2 ] || fail "usage: package.sh check-static <binary>"
     check_static "$2"
+    ;;
+binary)
+    [ $# -eq 4 ] || fail "usage: package.sh binary <target> system|mimalloc <out>"
+    known_target "$2"
+    known_allocator "$2" "$3"
+    case "$4" in /*) out=$4 ;; *) out=$PWD/$4 ;; esac
+    cd "$(dirname "$0")/.."
+    compile "$2" "$3"
+    mkdir -p "$(dirname "$out")"
+    cp "$binary" "$out"
+    echo "binary: $out"
     ;;
 *)
     [ $# -eq 1 ] || fail "usage: package.sh x86_64-unknown-linux-gnu | x86_64-unknown-linux-musl"
